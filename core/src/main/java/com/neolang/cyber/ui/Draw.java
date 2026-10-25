@@ -513,6 +513,25 @@ public class Draw {
         return true;
     }
 
+    /** Generic painted sprite (buildings, props): centred at cx, base at feetY,
+     *  drawn h px tall. Self-contained begin/end. Returns false when texture is
+     *  missing so the caller can fall back to shape drawing. */
+    public static boolean drawSprite(SpriteBatch batch, Texture t, float cx, float feetY, float h) {
+        return drawSpriteTint(batch, t, cx, feetY, h, 1f, 1f, 1f, 1f);
+    }
+
+    /** Same as drawSprite but with a batch colour tint (alpha < 1 = ghosted). */
+    public static boolean drawSpriteTint(SpriteBatch batch, Texture t, float cx, float feetY, float h,
+                                         float r, float g, float b, float a) {
+        if (t == null) return false;
+        batch.begin();
+        batch.setColor(r, g, b, a);
+        drawTex(batch, t, cx, feetY, h, false);
+        batch.setColor(1, 1, 1, 1);
+        batch.end();
+        return true;
+    }
+
     /** Painted full-figure sprite for NPCs (customization-sheet figures), feet at x/y. */
     public static boolean drawFigureSprite(SpriteBatch batch, Assets a, Gender gender, int figIdx,
                                            float x, float y, float scale, float facing,
@@ -550,10 +569,10 @@ public class Draw {
         drawTex(batch, t, x, y + wob * 0.4f, 66, false);
         batch.setColor(1, 1, 1, 1);
         batch.end();
-        if (hpFrac < 1f) {
-            Ui.bar(sr, x - 18, y + 70, 36, 5, hpFrac,
-                new Color(0.1f, 0.05f, 0.08f, 0.8f), new Color(1f, 0.3f, 0.3f, 1));
-        }
+        // HP bar always visible: in the field a monster shows its bar only —
+        // the full name tag is reserved for the focused (nearest / last-hit) one.
+        Ui.bar(sr, x - 18, y + 70, 36, 5, hpFrac,
+            new Color(0.1f, 0.05f, 0.08f, 0.8f), new Color(1f, 0.3f, 0.3f, 1));
     }
 
     // ------------------------------------------------------------------ pet & monsters

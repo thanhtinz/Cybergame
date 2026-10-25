@@ -6,6 +6,7 @@ import com.badlogic.gdx.Screen;
 import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.GL20;
 import com.badlogic.gdx.graphics.OrthographicCamera;
+import com.badlogic.gdx.graphics.Texture;
 import com.badlogic.gdx.graphics.glutils.ShapeRenderer.ShapeType;
 import com.badlogic.gdx.math.Vector2;
 import com.badlogic.gdx.utils.Align;
@@ -305,9 +306,20 @@ public class TownScreen implements Screen {
         game.batch.setProjectionMatrix(cam.combined);
 
         boolean storm = game.state.storm.active;
-        if (game.assets.town != null) {
-            // painted town backdrop stretched over the whole 2800px world (2 tiles),
-            // with a translucent walkable strip so feet meet the street at GROUND.
+        if (game.assets.townPlate != null) {
+            // Layered map: the far plate is ONLY distant scenery (trunk, sky, an
+            // empty wooden floor strip) — no baked-in buildings or people, so the
+            // game's own building sprites, NPCs and name tags never pile onto a
+            // finished painting the way the old full-scene town.jpg did.
+            game.batch.begin();
+            Texture plate = game.assets.townPlate;
+            float tileW = NeoLangGame.VH * plate.getWidth() / (float) plate.getHeight();
+            float off = -((camX * 0.5f) % tileW);
+            for (float bx = camX - viewW / 2 + off - tileW; bx < camX + viewW / 2 + tileW; bx += tileW) {
+                game.batch.draw(plate, bx, 0, tileW, NeoLangGame.VH);
+            }
+            game.batch.end();
+        } else if (game.assets.town != null) {
             game.batch.begin();
             for (float bx = 0; bx < WORLD_W; bx += 1400) {
                 game.batch.draw(game.assets.town, bx, 0, 1400, NeoLangGame.VH);
@@ -325,20 +337,30 @@ public class TownScreen implements Screen {
         }
 
         Spot near = nearestSpot();
-        Draw.drawPod(game.shapes, game.batch, game.assets.fontSmall, 430, GROUND, 230, 215,
-            new Color(1f, 0.55f, 0.35f, 1), "Cafe Pina", near != null && "cafe".equals(near.id), time);
-        Draw.drawPod(game.shapes, game.batch, game.assets.fontSmall, 880, GROUND, 220, 200,
-            new Color(1f, 0.40f, 0.75f, 1), "Thời Trang Miro", near != null && "miro".equals(near.id), time);
-        Draw.drawPod(game.shapes, game.batch, game.assets.fontSmall, 1400, GROUND, 240, 225,
-            new Color(0.35f, 0.95f, 1f, 1), "Trạm Định Hướng", near != null && "station".equals(near.id), time);
-        Draw.drawPod(game.shapes, game.batch, game.assets.fontSmall, 1980, GROUND, 220, 190,
-            new Color(1f, 0.82f, 0.25f, 1), "Ngân Hàng Lá", near != null && "bank".equals(near.id), time);
-        Draw.drawPod(game.shapes, game.batch, game.assets.fontSmall, 2330, GROUND, 220, 190,
-            new Color(0.45f, 0.95f, 0.55f, 1), "Pet Shop", near != null && "pet".equals(near.id), time);
+        // Building sprites stand at the interaction points; feedback is a small
+        // floating name plate + a soft glow at the base — NO dark boxes over art.
+        drawBuilding(game.assets.bldCafe, 545, 216, 430, 230, 215,
+            new Color(1f, 0.55f, 0.35f, 1), "Cafe Pina", near != null && "cafe".equals(near.id));
+        drawBuilding(game.assets.bldFashion, 990, 202, 880, 220, 200,
+            new Color(1f, 0.40f, 0.75f, 1), "Thời Trang Miro", near != null && "miro".equals(near.id));
+        drawBuilding(game.assets.bldStation, 1520, 238, 1400, 240, 225,
+            new Color(0.35f, 0.95f, 1f, 1), "Trạm Định Hướng", near != null && "station".equals(near.id));
+        drawBuilding(game.assets.bldBank, 2090, 198, 1980, 220, 190,
+            new Color(1f, 0.82f, 0.25f, 1), "Ngân Hàng Lá", near != null && "bank".equals(near.id));
+        drawBuilding(game.assets.bldPet, 2440, 208, 2330, 220, 190,
+            new Color(0.45f, 0.95f, 0.55f, 1), "Pet Shop", near != null && "pet".equals(near.id));
 
-        drawGate(40, "Khu Nhà Cành", -1, near != null && "plot".equals(near.id));
-        drawGate(2680, "Bìa Rừng — Farm", 1, near != null && "adv".equals(near.id));
-        drawBoard(near != null && "board".equals(near.id));
+        drawPortalGate(85, "Khu Nhà Cành", -1, near != null && "plot".equals(near.id));
+        drawPortalGate(2725, "Bìa Rừng — Farm", 1, near != null && "adv".equals(near.id));
+        drawQuestBoard(near != null && "board".equals(near.id));
+
+        // sparse painted props as decoration (never blocking the walk line)
+        drawDecor(game.assets.propLamp, 300, 148);
+        drawDecor(game.assets.propLamp, 1330, 148);
+        drawDecor(game.assets.propTable, 452, 60);
+        drawDecor(game.assets.propFlower, 1185, 82);
+        drawDecor(game.assets.propFlower, 1905, 82);
+        drawDecor(game.assets.propChest, 2248, 52);
 
         // NPCs (painted figures; shape hero as fallback)
         for (Npc n : npcs) {
@@ -401,6 +423,100 @@ public class TownScreen implements Screen {
                 game.gotoAdventure();
             }
         }
+    }
+
+    /** Soft contact shadow under a building/prop, plus a warm pulsing glow at
+     *  its base while the player is near (the interaction feedback now that the
+     *  dark shop panels are gone). */
+    private void groundGlow(float cx, float w, boolean active) {
+        game.shapes.begin(ShapeType.Filled);
+        if (active) {
+            float p = 0.5f + 0.5f * (float) Math.sin(time * 5);
+            game.shapes.setColor(1f, 0.85f, 0.3f, 0.15f + 0.13f * p);
+            game.shapes.ellipse(cx - w / 2 - 12, GROUND - 13, w + 24, 26);
+        }
+        game.shapes.setColor(0, 0, 0, 0.22f);
+        game.shapes.ellipse(cx - w / 2, GROUND - 6, w, 13);
+        game.shapes.end();
+    }
+
+    /** Small floating name plate above a building (replaces the old sign band
+     *  baked into the dark pod box). Active = gold trim + bobbing arrow. */
+    private void drawSign(float cx, float topY, String label, Color color, boolean active,
+                          String sub, boolean arrow) {
+        float w = Ui.textWidth(game.assets.fontSmall, label) + 26;
+        float y = topY + 8;
+        game.shapes.begin(ShapeType.Filled);
+        game.shapes.setColor(0.05f, 0.09f, 0.13f, 0.85f);
+        game.shapes.rect(cx - w / 2, y, w, 26);
+        game.shapes.setColor(active ? Ui.GOLD : color);
+        game.shapes.rect(cx - w / 2, y, w, 2);
+        game.shapes.rect(cx - w / 2, y + 24, w, 2);
+        if (active && arrow) {
+            float bob = (float) Math.sin(time * 4) * 4;
+            game.shapes.setColor(1f, 0.8f, 0.25f, 1);
+            float ay = y + 40 + bob;
+            game.shapes.triangle(cx - 10, ay, cx + 10, ay, cx, ay - 12);
+        }
+        game.shapes.end();
+        game.batch.begin();
+        Ui.label(game.batch, game.assets.fontSmall, label, cx, y + 18, Color.WHITE, Align.center);
+        if (sub != null) {
+            Ui.label(game.batch, game.assets.fontSmall, sub, cx, y + 48,
+                active ? Ui.GOLD : Ui.TEXT_DIM, Align.center);
+        }
+        game.batch.end();
+    }
+
+    /** One town building: painted sprite at its interaction point, or the old
+     *  shape pod (same geometry) when the sprite failed to load. */
+    private void drawBuilding(Texture t, float cx, float h, float podX, float podW, float podH,
+                              Color signColor, String label, boolean active) {
+        if (t != null) {
+            float w = h * t.getWidth() / (float) t.getHeight();
+            groundGlow(cx, w, active);
+            Draw.drawSprite(game.batch, t, cx, GROUND - 2, h);
+            drawSign(cx, GROUND + h, label, signColor, active, null, true);
+        } else {
+            Draw.drawPod(game.shapes, game.batch, game.assets.fontSmall, podX, GROUND, podW, podH,
+                signColor, label, active, time);
+        }
+    }
+
+    /** World gates use the painted portal sprite (the flat cyan box is gone). */
+    private void drawPortalGate(float cx, String label, float dir, boolean active) {
+        Texture t = game.assets.bldPortal;
+        if (t != null) {
+            groundGlow(cx, 150, active);
+            Draw.drawSprite(game.batch, t, cx, GROUND - 2, 172);
+            drawSign(cx, GROUND + 172, label, Ui.CYAN, active, null, true);
+        } else {
+            drawGate(cx - 45, label, dir, active);
+        }
+    }
+
+    /** The quest board is a painted prop now, standing by the career station. */
+    private void drawQuestBoard(boolean active) {
+        Texture t = game.assets.propBoard;
+        if (t != null) {
+            groundGlow(1760, 150, active);
+            Draw.drawSprite(game.batch, t, 1760, GROUND - 2, 116);
+            drawSign(1760, GROUND + 116, "Bảng Nhiệm Vụ", Ui.CYAN, active,
+                active ? "Chạm để mở" : "Hologram", false);
+        } else {
+            drawBoard(active);
+        }
+    }
+
+    /** Pure decoration: a painted prop with a soft contact shadow. */
+    private void drawDecor(Texture t, float cx, float h) {
+        if (t == null) return;
+        float w = h * t.getWidth() / (float) t.getHeight();
+        game.shapes.begin(ShapeType.Filled);
+        game.shapes.setColor(0, 0, 0, 0.18f);
+        game.shapes.ellipse(cx - w / 2, GROUND - 5, w, 10);
+        game.shapes.end();
+        Draw.drawSprite(game.batch, t, cx, GROUND - 2, h);
     }
 
     private void drawGate(float x, String label, float dir, boolean highlight) {

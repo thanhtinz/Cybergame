@@ -4,6 +4,7 @@ import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.Screen;
 import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.GL20;
+import com.badlogic.gdx.graphics.Texture;
 import com.badlogic.gdx.graphics.glutils.ShapeRenderer.ShapeType;
 import com.badlogic.gdx.utils.Align;
 import com.badlogic.gdx.utils.viewport.ExtendViewport;
@@ -164,7 +165,7 @@ public class PlotScreen implements Screen {
         Ui.label(game.batch, game.assets.fontSmall,
             p.gameClass == com.neolang.cyber.model.GameClass.BIO_HACKER
                 ? "Drone tưới của Bio-Hacker: cây lớn nhanh hơn thấy rõ." : "Drone tưới tự động của khu vườn.",
-            50, 300, Ui.TEXT_DIM, Align.left);
+            50, 272, Ui.TEXT_DIM, Align.left);
         game.batch.end();
 
         if (seedBed >= 0) drawSeedPanel();
@@ -204,12 +205,46 @@ public class PlotScreen implements Screen {
             boolean ready = planted && game.state.garden.isReady(i, now);
             String seedId = planted ? game.state.garden.plots[i].seedId : null;
             int seedIdx = seedId != null ? Math.abs(seedId.hashCode()) : 0;
-            Draw.drawGardenBed(game.shapes, x, y, BED_W, BED_H, planted, prog, ready, seedIdx, time);
+            // Painted hydroponic pod per growth stage (sprout -> plant -> fruit);
+            // an empty bed shows the pod ghosted/dim. Shape bed stays as fallback.
+            Texture pod = !planted ? game.assets.propPod0
+                : (ready || prog >= 0.8f) ? game.assets.propPod2
+                : prog >= 0.4f ? game.assets.propPod1 : game.assets.propPod0;
+            boolean drewPod = false;
+            if (pod != null) {
+                game.shapes.begin(ShapeType.Filled);
+                game.shapes.setColor(0.08f, 0.13f, 0.12f, 0.55f);
+                game.shapes.rect(x + 3, y + 3, BED_W - 6, BED_H - 6);
+                game.shapes.setColor(0.25f, 0.95f, 1f, 0.5f);
+                game.shapes.rect(x + 3, y + BED_H - 5, BED_W - 6, 2);
+                game.shapes.rect(x + 3, y + 3, BED_W - 6, 2);
+                game.shapes.end();
+                if (!planted) {
+                    drewPod = Draw.drawSpriteTint(game.batch, pod, x + BED_W / 2, y + 5, BED_H - 12,
+                        0.55f, 0.62f, 0.68f, 0.38f);
+                } else {
+                    drewPod = Draw.drawSprite(game.batch, pod, x + BED_W / 2, y + 5, BED_H - 12);
+                }
+                if (ready) {
+                    float pl = 0.5f + 0.5f * (float) Math.sin(time * 5);
+                    game.shapes.begin(ShapeType.Filled);
+                    game.shapes.setColor(1f, 0.85f, 0.3f, 0.35f + 0.35f * pl);
+                    game.shapes.rect(x - 3, y - 3, BED_W + 6, 3);
+                    game.shapes.rect(x - 3, y + BED_H, BED_W + 6, 3);
+                    game.shapes.end();
+                }
+            }
+            if (!drewPod) {
+                Draw.drawGardenBed(game.shapes, x, y, BED_W, BED_H, planted, prog, ready, seedIdx, time);
+            }
+            // short label OUTSIDE the bed (above the top row, below the bottom
+            // row) so it can never spill over the neighbouring bed.
             game.batch.begin();
-            String label = !planted ? "Ô trống — chạm để trồng"
-                : ready ? "Chín rồi — chạm để thu hoạch!"
+            String label = !planted ? "Ô trống — chạm gieo"
+                : ready ? "Chín — chạm hái!"
                 : "Đang lớn: " + (int) (prog * 100) + "%";
-            Ui.label(game.batch, game.assets.fontSmall, label, x + BED_W / 2, y + BED_H - 10, ready ? Ui.GOLD : Ui.TEXT_DIM, Align.center);
+            float labelY = row == 0 ? y + BED_H + 18 : y - 12;
+            Ui.label(game.batch, game.assets.fontSmall, label, x + BED_W / 2, labelY, ready ? Ui.GOLD : Ui.TEXT_DIM, Align.center);
             game.batch.end();
             if (Ui.tapped(vp, x, y, BED_W, BED_H)) {
                 if (!planted) {

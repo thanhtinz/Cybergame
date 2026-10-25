@@ -38,6 +38,13 @@ public class Assets {
     public Texture[][] custFig = new Texture[2][3];
     public Texture petSpr;
     public Texture monBeetle, monBlob, monWraith, monMush, monJelly, monSpike;
+    // Layered-map pass: clean background plates (far layer only, nothing baked in
+    // the foreground) + separate building / prop sprites placed at interaction points.
+    public Texture townPlate;
+    public Texture advPlate;
+    public Texture bldCafe, bldFashion, bldBank, bldPet, bldStation, bldPortal;
+    public Texture propPod0, propPod1, propPod2; // hydroponic pod: sprout / plant / fruit
+    public Texture propBoard, propLamp, propChest, propTable, propFlower;
     public Texture white;
     public float uiScale = 1f;
 
@@ -104,6 +111,22 @@ public class Assets {
         monMush = tex("art/sprites/mon_mush.png");
         monJelly = tex("art/sprites/mon_jelly.png");
         monSpike = tex("art/sprites/mon_spike.png");
+        townPlate = tex("art/town_plate.jpg");
+        advPlate = tex("art/adv_plate.jpg");
+        bldCafe = tex("art/sprites/bld_cafe.png");
+        bldFashion = tex("art/sprites/bld_fashion.png");
+        bldBank = tex("art/sprites/bld_bank.png");
+        bldPet = tex("art/sprites/bld_pet.png");
+        bldStation = tex("art/sprites/bld_station.png");
+        bldPortal = tex("art/sprites/bld_portal.png");
+        propPod0 = tex("art/sprites/prop_pod0.png");
+        propPod1 = tex("art/sprites/prop_pod1.png");
+        propPod2 = tex("art/sprites/prop_pod2.png");
+        propBoard = tex("art/sprites/prop_board.png");
+        propLamp = tex("art/sprites/prop_lamp.png");
+        propChest = tex("art/sprites/prop_chest.png");
+        propTable = tex("art/sprites/prop_table.png");
+        propFlower = tex("art/sprites/prop_flower.png");
         Pixmap pm = new Pixmap(1, 1, Pixmap.Format.RGBA8888);
         pm.setColor(Color.WHITE);
         pm.fill();
@@ -149,7 +172,9 @@ public class Assets {
         if (fontBig != null) fontBig.dispose();
         if (fontSmall != null) fontSmall.dispose();
         Texture[] all = {keyartWide, town, classesTex, adventure, heroMale, heroFemale, customMale, customFemale, createMale, createFemale, plotBg, petSpr,
-            monBeetle, monBlob, monWraith, monMush, monJelly, monSpike, white};
+            monBeetle, monBlob, monWraith, monMush, monJelly, monSpike, white,
+            townPlate, advPlate, bldCafe, bldFashion, bldBank, bldPet, bldStation, bldPortal,
+            propPod0, propPod1, propPod2, propBoard, propLamp, propChest, propTable, propFlower};
         for (Texture t : all) if (t != null) t.dispose();
         for (int i = 0; i < 2; i++) {
             if (heroFront[i] != null) heroFront[i].dispose();

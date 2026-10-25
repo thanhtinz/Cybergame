@@ -100,6 +100,8 @@ public class AdventureScreen implements Screen {
 
     private final List<Mon> mons = new ArrayList<Mon>();
     private final List<Loot> loots = new ArrayList<Loot>();
+    private Mon lastHitMon;   // most recently hit monster: keeps the full name tag briefly
+    private float lastHitT;
 
     public AdventureScreen(NeoLangGame game) {
         this.game = game;
@@ -179,6 +181,8 @@ public class AdventureScreen implements Screen {
         int dmg = Combat.damage((int) (double) p.atk(), (float) mult, (int) (double) m.def.defForLevel(m.lvl), rng);
         m.hp -= dmg;
         m.flash = 0.6f;
+        lastHitMon = m;
+        lastHitT = 2.5f;
         m.x += facing * 8;
         game.sound.play("hit");
         if (m.hp <= 0) killMon(m);
@@ -348,6 +352,8 @@ public class AdventureScreen implements Screen {
         if (Gdx.input.isKeyJustPressed(Input.Keys.NUM_2)) useSkill(1);
         if (Gdx.input.isKeyJustPressed(Input.Keys.NUM_3)) useSkill(2);
 
+        if (lastHitT > 0) lastHitT -= dt;
+
         // monsters
         Iterator<Mon> it = mons.iterator();
         while (it.hasNext()) {
@@ -445,16 +451,17 @@ public class AdventureScreen implements Screen {
 
         boolean storm = game.state.storm.active;
         float dayness = game.state.clock.isNight() ? 0.25f : 0.9f;
-        if (game.assets.adventure != null) {
-            // painted backdrop tiled at full screen height with 0.5x parallax: the
-            // camera can travel the whole 3400px map and the painting never runs out
-            // (the old strip only covered part of the width once the camera went deep).
+        Texture bgPlate = game.assets.advPlate != null ? game.assets.advPlate : game.assets.adventure;
+        if (bgPlate != null) {
+            // Clean far plate (empty forest floor, no baked characters/UI) tiled
+            // at full screen height with 0.5x parallax: the camera can travel the
+            // whole 3400px map and the painting never runs out.
             game.batch.begin();
-            float tileW = NeoLangGame.VH * (1600f / 900f); // keep the painting's aspect
+            float tileW = NeoLangGame.VH * bgPlate.getWidth() / (float) bgPlate.getHeight();
             float startX = camX - viewW / 2;
             float off = -((camX * 0.5f) % tileW);
             for (float bx = startX + off - tileW; bx < startX + viewW + tileW; bx += tileW) {
-                game.batch.draw(game.assets.adventure, bx, 0, tileW, NeoLangGame.VH);
+                game.batch.draw(bgPlate, bx, 0, tileW, NeoLangGame.VH);
             }
             game.batch.end();
             // walkable ground band so feet meet the path at GROUND
@@ -469,16 +476,27 @@ public class AdventureScreen implements Screen {
             Draw.drawTrunkWorld(game.shapes, camX - viewW / 2 - 10, WORLD_W, GROUND, 1, time);
         }
 
-        // exit gate
-        game.shapes.begin(ShapeType.Filled);
-        game.shapes.setColor(0.20f, 0.30f, 0.38f, 1);
-        game.shapes.rect(30, GROUND, 80, 140);
-        game.shapes.setColor(0.35f, 0.85f, 0.95f, 0.6f);
-        game.shapes.rect(38, GROUND + 10, 64, 120);
-        game.shapes.end();
-        game.batch.begin();
-        Ui.label(game.batch, game.assets.fontSmall, "Về Làng", 70, GROUND + 158, Ui.TEXT, Align.center);
-        game.batch.end();
+        // exit gate: painted portal sprite (the flat cyan box is gone)
+        if (game.assets.bldPortal != null) {
+            game.shapes.begin(ShapeType.Filled);
+            game.shapes.setColor(0, 0, 0, 0.25f);
+            game.shapes.ellipse(70 - 62, GROUND - 6, 124, 13);
+            game.shapes.end();
+            Draw.drawSprite(game.batch, game.assets.bldPortal, 70, GROUND - 2, 168);
+            game.batch.begin();
+            Ui.label(game.batch, game.assets.fontSmall, "Về Làng", 70, GROUND + 182, Ui.TEXT, Align.center);
+            game.batch.end();
+        } else {
+            game.shapes.begin(ShapeType.Filled);
+            game.shapes.setColor(0.20f, 0.30f, 0.38f, 1);
+            game.shapes.rect(30, GROUND, 80, 140);
+            game.shapes.setColor(0.35f, 0.85f, 0.95f, 0.6f);
+            game.shapes.rect(38, GROUND + 10, 64, 120);
+            game.shapes.end();
+            game.batch.begin();
+            Ui.label(game.batch, game.assets.fontSmall, "Về Làng", 70, GROUND + 158, Ui.TEXT, Align.center);
+            game.batch.end();
+        }
 
         // loot markers
         game.shapes.begin(ShapeType.Filled);
@@ -491,14 +509,23 @@ public class AdventureScreen implements Screen {
         }
         game.shapes.end();
 
+        // Only ONE monster wears the full name tag: the one just hit, else the
+        // nearest in reach. Every other monster shows just its HP bar, so tags
+        // no longer pile onto each other in a crowd.
+        Mon focusMon = (lastHitMon != null && lastHitT > 0 && mons.contains(lastHitMon))
+            ? lastHitMon : nearestMon(150);
         for (Mon m : mons) {
             Texture mt = monTexture(m);
             if (mt != null) {
                 Draw.drawMonsterSprite(game.batch, game.shapes, mt, m.x, GROUND, m.hp / m.maxHp, time, m.flash);
-                Ui.nameTag(game.batch, game.shapes, game.assets.fontSmall, m.def.displayName + " Lv" + m.lvl, m.x, GROUND + 92);
+                if (m == focusMon) {
+                    Ui.nameTag(game.batch, game.shapes, game.assets.fontSmall, m.def.displayName + " Lv" + m.lvl, m.x, GROUND + 92);
+                }
             } else {
                 Draw.drawMonster(game.shapes, m.x, GROUND, m.def, m.hp / m.maxHp, time, m.flash);
-                Ui.nameTag(game.batch, game.shapes, game.assets.fontSmall, m.def.displayName + " Lv" + m.lvl, m.x, GROUND + 66);
+                if (m == focusMon) {
+                    Ui.nameTag(game.batch, game.shapes, game.assets.fontSmall, m.def.displayName + " Lv" + m.lvl, m.x, GROUND + 66);
+                }
             }
         }
         if (!Draw.drawPetSprite(game.batch, game.assets, petX, GROUND, time, petTier())) {

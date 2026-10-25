@@ -9,6 +9,15 @@ Nguon:
      hang 3 = 3 bo do (figure toan than))
   - ~/workspace/imagine_media/media-generation-monster-sheet-*.webp (luoi 3x2, nen kem)
   - ~/workspace/imagine_media/media-generation-neo-lang-survival-building-*.webp (nen man dat nha)
+  - ~/workspace/imagine_media/media-generation-town-buildings-sheet-*.webp
+    (luoi 3x2: cafe / thoi trang / ngan hang | pet / tram dinh huong / portal — moi o
+     gop MOI thanh phan co tam nam trong o, vi dau chan holo cua pet pod va man hinh
+     holo cua kiosk la thanh phan roi)
+  - ~/workspace/imagine_media/media-generation-props-sheet-*.webp
+    (KHONG phai luoi deu: 8 mon xep 2 hang lech nhau — cat theo hop hat giong,
+     moi thanh phan chi thuoc ve 1 mon dau tien chua tam cua no)
+  - 2 plate nen sach: town-bg-plate -> art/town_plate.jpg, adventure-bg-plate -> art/adv_plate.jpg
+    (chi la JPG phu, khong cat — man dung plate lam nen xa, toa nha/do vat la sprite rieng)
 
 Ky thuat: xoa nen bang flood-fill tu mep anh (chi xoa vung mau-nen lien thong voi mep,
 nen ao trang / vung sang BEN TRONG nhan vat duoc giu nguyen), feather alpha 1px +
@@ -122,6 +131,30 @@ def extract(img, alpha, lab, comp, pad=8, max_h=None):
     return out
 
 
+def extract_group(img, alpha, lab, comps, pad=8, max_h=None):
+    """Nhu extract() nhung gop nhieu thanh phan (toa nha co bo phan roi nhu
+    dau chan holo / man hinh holo; dao cu nhu bo ban ghe gom nhieu manh)."""
+    h, w = alpha.shape
+    keep = np.isin(lab, [c["label"] for c in comps])
+    a = np.where(keep, alpha, 0.0)
+    a = ndimage.gaussian_filter(a, 0.7)
+    a = np.clip(a * 1.6 - 0.3, 0, 1)
+    x0 = max(0, min(c["bbox"][0] for c in comps) - pad)
+    y0 = max(0, min(c["bbox"][1] for c in comps) - pad)
+    x1 = min(w, max(c["bbox"][2] for c in comps) + pad)
+    y1 = min(h, max(c["bbox"][3] for c in comps) + pad)
+    rgb = np.asarray(img.convert("RGB")).astype(np.float32)
+    bleed = np.asarray(img.convert("RGB").filter(ImageFilter.GaussianBlur(10))).astype(np.float32)
+    solid = a > 0.98
+    rgb = np.where(solid[..., None], rgb, bleed)
+    rgba = np.dstack([rgb, (a * 255).astype(np.uint8)]).astype(np.uint8)
+    out = Image.fromarray(rgba, "RGBA").crop((x0, y0, x1, y1))
+    if max_h and out.height > max_h:
+        r = max_h / out.height
+        out = out.resize((round(out.width * r), max_h), Image.LANCZOS)
+    return out
+
+
 def save_sprite(img_rgba, name):
     SPR_OUT.mkdir(parents=True, exist_ok=True)
     p = SPR_OUT / name
@@ -186,6 +219,44 @@ def process_grid(path, prefix, rows, cols, names, max_h):
             save_sprite(spr, names[r][c])
 
 
+def process_grid_group(path, rows, cols, names, max_h, min_area=500):
+    """Nhu process_grid nhung moi o GOP moi thanh phan co tam nam trong o
+    (toa nha: than + bien/dau holo roi deu thuoc ve cung 1 sprite)."""
+    img = Image.open(path).convert("RGB")
+    alpha = alpha_mask(img)
+    lab, comps = components(alpha)
+    comps = [c for c in comps if c["area"] >= min_area]
+    W, H = img.size
+    for r in range(rows):
+        for c in range(cols):
+            cx0, cx1 = W * c / cols, W * (c + 1) / cols
+            cy0, cy1 = H * r / rows, H * (r + 1) / rows
+            inside = [k for k in comps if cx0 - 4 <= k["cx"] <= cx1 + 4 and cy0 - 4 <= k["cy"] <= cy1 + 4]
+            if not inside:
+                raise RuntimeError("%s o (%d,%d) khong co thanh phan" % (path, r, c))
+            save_sprite(extract_group(img, alpha, lab, inside, max_h=max_h), names[r][c])
+
+
+def process_boxes(path, boxes, min_area=200):
+    """Cat sheet khong theo luoi deu: boxes = [(ten, x0, y0, x1, y1, max_h)] theo
+    ti le anh (goc trai-tren). Moi thanh phan chi duoc claim boi hop DAU TIEN
+    chua tam cua no -> thu tu boxes quan trong o vung giao nhau (hoa neon phai
+    claim truoc bang nhiem vu vi canh hoa cham vao hop cua bang)."""
+    img = Image.open(path).convert("RGB")
+    alpha = alpha_mask(img)
+    lab, comps = components(alpha)
+    comps = [c for c in comps if c["area"] >= min_area]
+    W, H = img.size
+    pool = list(comps)
+    for name, fx0, fy0, fx1, fy1, max_h in boxes:
+        mine = [k for k in pool if fx0 * W - 4 <= k["cx"] <= fx1 * W + 4
+                and fy0 * H - 4 <= k["cy"] <= fy1 * H + 4]
+        if not mine:
+            raise RuntimeError("%s hop %s khong co thanh phan" % (path, name))
+        pool = [k for k in pool if k not in mine]
+        save_sprite(extract_group(img, alpha, lab, mine, max_h=max_h), name)
+
+
 def one(pattern):
     hits = sorted(glob.glob(str(MEDIA / pattern)))
     if not hits:
@@ -218,10 +289,34 @@ def main():
         ["mon_mush.png", "mon_jelly.png", "mon_spike.png"],
     ], max_h=460)
 
+    # --- toa nha thi tran: luoi 3x2, moi o gop het thanh phan trong o ---
+    buildings = one("media-generation-town-buildings-sheet-*.webp")
+    process_grid_group(buildings, 2, 3, [
+        ["bld_cafe.png", "bld_fashion.png", "bld_bank.png"],
+        ["bld_pet.png", "bld_station.png", "bld_portal.png"],
+    ], max_h=640)
+
+    # --- dao cu: sheet khong deu, cat theo hop (hoa claim truoc bang) ---
+    props = one("media-generation-props-sheet-*.webp")
+    process_boxes(props, [
+        ("prop_flower.png", 0.79, 0.46, 0.995, 0.99, 520),
+        ("prop_board.png",  0.76, 0.07, 0.995, 0.54, 460),
+        ("prop_pod0.png",   0.02, 0.04, 0.26, 0.54, 520),   # pod mam
+        ("prop_pod1.png",   0.30, 0.01, 0.53, 0.56, 560),   # pod cay
+        ("prop_pod2.png",   0.55, 0.05, 0.76, 0.56, 520),   # pod qua
+        ("prop_lamp.png",   0.01, 0.52, 0.28, 0.99, 560),   # den canh cay
+        ("prop_chest.png",  0.27, 0.58, 0.54, 0.98, 460),   # ruong kim loai
+        ("prop_table.png",  0.52, 0.58, 0.80, 0.97, 460),   # ban ghe cafe
+    ])
+
     # --- jpg thay moi: bang tuy bien v2 + nen dat nha ---
     save_jpg(Image.open(male_v2), "custom_male.jpg", 1400)
     save_jpg(Image.open(female_v2), "custom_female.jpg", 1400)
     save_jpg(Image.open(one("media-generation-neo-lang-survival-building-*.webp")), "plot.jpg", 1600, quality=85)
+
+    # --- plate nen sach (map xay theo lop: plate xa + sprite gan) ---
+    save_jpg(Image.open(one("media-generation-town-bg-plate-*.webp")), "town_plate.jpg", 1920, quality=86)
+    save_jpg(Image.open(one("media-generation-adventure-bg-plate-*.webp")), "adv_plate.jpg", 1920, quality=86)
     print("Xong.")
 
 
