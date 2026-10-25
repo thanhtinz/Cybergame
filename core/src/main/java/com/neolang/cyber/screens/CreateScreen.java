@@ -132,6 +132,27 @@ public class CreateScreen implements Screen, InputProcessor {
         game.shapes.end();
     }
 
+    private int gi() { return gender == Gender.NU ? 1 : 0; }
+
+    /** Painted preview figure for the current gender + outfit selection. */
+    private Texture previewTexture() {
+        int g = gi();
+        Texture t = outfitIdx == 0 ? game.assets.heroFront[g] : game.assets.custFig[g][outfitIdx];
+        if (t == null) t = game.assets.heroFront[g];
+        if (t == null) t = game.assets.custFig[g][0];
+        return t;
+    }
+
+    /** Draw a painted card crop centred at (cx, cy). Returns false when missing. */
+    private boolean cardTex(Texture t, float cx, float cy, float h) {
+        if (t == null) return false;
+        float w = h * t.getWidth() / (float) t.getHeight();
+        game.batch.begin();
+        game.batch.draw(t, cx - w / 2, cy - h / 2, w, h);
+        game.batch.end();
+        return true;
+    }
+
     private void randomize() {
         hairStyle = rng.nextInt(3);
         hair = rng.nextInt(Draw.HAIR.length);
@@ -202,10 +223,27 @@ public class CreateScreen implements Screen, InputProcessor {
         game.shapes.setColor(0.75f, 0.98f, 1f, 0.9f);
         game.shapes.ellipse(platCx - 72, platCy - 11, 144, 22);
         game.shapes.end();
-        // hero big + pet beside
-        Draw.drawHero(game.shapes, game.batch, game.assets.fontSmall, platCx - 18, platCy + 6, 3.0f, gender,
-            suit, hair, hairStyle, eye, skin, Draw.OUTFIT_IDS[outfitIdx], GameClass.NONE, 1, 0, time);
-        Draw.drawPet(game.shapes, platCx + 108, platCy + 2, time, 1);
+        // hero big + pet beside: PAINTED figure for the chosen gender + outfit
+        // (starter outfit = hero-sheet front view; other outfits = sheet figures).
+        // Hair/eye/skin are separate painted options shown on the cards themselves;
+        // the preview figure is a fixed painting, so those picks are not composited.
+        Texture prev = previewTexture();
+        if (prev != null) {
+            float ph = 300, pw2 = ph * prev.getWidth() / (float) prev.getHeight();
+            float bob = (float) Math.sin(time * 2) * 2;
+            game.batch.begin();
+            game.batch.draw(prev, platCx - 18 - pw2 / 2, platCy + 4 + bob, pw2, ph);
+            if (game.assets.petSpr != null) {
+                Texture pt = game.assets.petSpr;
+                float pth = 58, ptw = pth * pt.getWidth() / (float) pt.getHeight();
+                game.batch.draw(pt, platCx + 108 - ptw / 2, platCy + bob * 0.6f, ptw, pth);
+            }
+            game.batch.end();
+        } else {
+            Draw.drawHero(game.shapes, game.batch, game.assets.fontSmall, platCx - 18, platCy + 6, 3.0f, gender,
+                suit, hair, hairStyle, eye, skin, Draw.OUTFIT_IDS[outfitIdx], GameClass.NONE, 1, 0, time);
+            Draw.drawPet(game.shapes, platCx + 108, platCy + 2, time, 1);
+        }
         Ui.nameTag(game.batch, game.shapes, game.assets.font, name.isEmpty() ? "Tân Cư Dân" : name, platCx, podY + 16);
         if (Ui.button(game.batch, game.shapes, game.assets.fontSmall, vp, podX + 90, 40, 220, 38,
             sheetOpen ? "Đóng mẫu thiết kế" : "Xem mẫu thiết kế")) {
@@ -273,15 +311,21 @@ public class CreateScreen implements Screen, InputProcessor {
             boolean sel = (tab == 0 && hairStyle == i) || (tab == 1 && eye == i)
                 || (tab == 2 && skin == i) || (tab == 3 && outfitIdx == i);
             boolean tappedCard = card(cx, cardY, cardW, cardH, sel);
-            // card content
+            // card content: painted crops from the v2 customization sheets
             if (tab == 0) {
-                Draw.drawHero(game.shapes, game.batch, game.assets.fontSmall, cx + cardW / 2f, cardY + 42, 1.5f,
-                    gender, suit, hair, i, eye, skin, Draw.OUTFIT_IDS[outfitIdx], GameClass.NONE, 1, 0, time);
+                if (!cardTex(game.assets.custHead[gi()][i], cx + cardW / 2f, cardY + 102, 106)) {
+                    Draw.drawHero(game.shapes, game.batch, game.assets.fontSmall, cx + cardW / 2f, cardY + 42, 1.5f,
+                        gender, suit, hair, i, eye, skin, Draw.OUTFIT_IDS[outfitIdx], GameClass.NONE, 1, 0, time);
+                }
                 game.batch.begin();
                 Ui.label(game.batch, game.assets.fontSmall, styles[i], cx + cardW / 2f, cardY + 26, Ui.TEXT, Align.center);
                 game.batch.end();
             } else if (tab == 1) {
-                drawFace(cx + cardW / 2f, cardY + 104, 44, Draw.rgb(Player.SKIN_COLORS[skin]), Draw.EYE_COLORS[i]);
+                Texture et = game.assets.custEyes[gi()][i];
+                float eh = et != null ? Math.min(112, (cardW - 20) * et.getHeight() / (float) et.getWidth()) : 0;
+                if (et == null || !cardTex(et, cx + cardW / 2f, cardY + 100, eh)) {
+                    drawFace(cx + cardW / 2f, cardY + 104, 44, Draw.rgb(Player.SKIN_COLORS[skin]), Draw.EYE_COLORS[i]);
+                }
                 game.batch.begin();
                 Ui.label(game.batch, game.assets.fontSmall, Draw.EYE_NAMES[i], cx + cardW / 2f, cardY + 26, Ui.TEXT, Align.center);
                 game.batch.end();
@@ -291,8 +335,10 @@ public class CreateScreen implements Screen, InputProcessor {
                 Ui.label(game.batch, game.assets.fontSmall, Player.SKIN_NAMES[i], cx + cardW / 2f, cardY + 26, Ui.TEXT, Align.center);
                 game.batch.end();
             } else {
-                Draw.drawHero(game.shapes, game.batch, game.assets.fontSmall, cx + cardW / 2f, cardY + 42, 1.5f,
-                    gender, suit, hair, hairStyle, eye, skin, Draw.OUTFIT_IDS[i], GameClass.NONE, 1, 0, time);
+                if (!cardTex(game.assets.custFig[gi()][i], cx + cardW / 2f, cardY + 102, 108)) {
+                    Draw.drawHero(game.shapes, game.batch, game.assets.fontSmall, cx + cardW / 2f, cardY + 42, 1.5f,
+                        gender, suit, hair, hairStyle, eye, skin, Draw.OUTFIT_IDS[i], GameClass.NONE, 1, 0, time);
+                }
                 game.batch.begin();
                 Ui.label(game.batch, game.assets.fontSmall, Draw.OUTFIT_NAMES[i], cx + cardW / 2f, cardY + 26, Ui.TEXT, Align.center);
                 game.batch.end();

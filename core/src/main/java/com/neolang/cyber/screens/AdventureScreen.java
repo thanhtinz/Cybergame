@@ -5,6 +5,7 @@ import com.badlogic.gdx.Input;
 import com.badlogic.gdx.Screen;
 import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.GL20;
+import com.badlogic.gdx.graphics.Texture;
 import com.badlogic.gdx.graphics.OrthographicCamera;
 import com.badlogic.gdx.graphics.glutils.ShapeRenderer.ShapeType;
 import com.badlogic.gdx.math.Vector2;
@@ -52,6 +53,8 @@ public class AdventureScreen implements Screen {
     private String lastNotice;
     private float noticeT = 99;
 
+    private boolean moving; // hero moved this frame (drives side-profile sprite + bob)
+
     private int joyMode; // 0 none, 1 fixed bottom-left stick, 2 floating stick (secondary)
     private final Vector2 joyBase = new Vector2();
     private float joyVec;
@@ -75,6 +78,9 @@ public class AdventureScreen implements Screen {
     private static class Mon {
         MonsterDef def;
         int lvl;
+        /** Sprite variant: 0 = base painting, 1 = malware spike ball (storm wraiths),
+         *  2 = drone jellyfish (high-level beetle-bots). */
+        int variant;
         float hp, maxHp, x, atkCd, flash, wanderT, dir = 1;
     }
 
@@ -116,6 +122,8 @@ public class AdventureScreen implements Screen {
         m.def = all[rng.nextInt(all.length)];
         if (game.state.storm.active && rng.nextFloat() < 0.3f) m.def = MonsterDef.DATA_WRAITH;
         m.lvl = Math.max(1, p.level + rng.nextInt(5) - 2);
+        if (game.state.storm.active && m.def == MonsterDef.DATA_WRAITH) m.variant = 1;
+        if (m.def == MonsterDef.BEETLE_BOT && m.lvl >= 6) m.variant = 2;
         m.maxHp = (float) (double) m.def.hpForLevel(m.lvl);
         if (game.state.clock.isNight()) m.maxHp *= 1.15f;
         m.hp = m.maxHp;
@@ -137,6 +145,23 @@ public class AdventureScreen implements Screen {
         }
         while (list.size() < 3) list.add(new Skill("Đòn Cơ Bản", SkillKind.DAMAGE, 1.3, 0.8f, 0));
         return list;
+    }
+
+    /** Painted sprite for a monster: base painting per type; storm wraiths use the
+     *  malware spike ball, high-level beetle-bots the drone jellyfish. */
+    private Texture monTexture(Mon m) {
+        switch (m.def) {
+            case BEETLE_BOT:
+                return m.variant == 2 && game.assets.monJelly != null ? game.assets.monJelly : game.assets.monBeetle;
+            case DATA_WRAITH:
+                return m.variant == 1 && game.assets.monSpike != null ? game.assets.monSpike : game.assets.monWraith;
+            case GLITCH_BLOB:
+                return game.assets.monBlob;
+            case MUSH_BUG:
+                return game.assets.monMush;
+            default:
+                return null;
+        }
     }
 
     private Mon nearestMon(float range) {
@@ -308,6 +333,7 @@ public class AdventureScreen implements Screen {
             speedFactor = (joyMode == 1 && Math.abs(joyVec) >= 0.85f) ? 1.5f : 1.0f;
         }
 
+        moving = move != 0 || dashT > 0;
         if (dashT > 0) {
             dashT -= dt;
             px = clamp(px + dashDir * 620 * dt, 50, WORLD_W - 50);
@@ -359,6 +385,7 @@ public class AdventureScreen implements Screen {
                 if (wraiths < 4) {
                     Mon m = new Mon();
                     m.def = MonsterDef.DATA_WRAITH;
+                    m.variant = 1; // storm wraiths wear the malware spike-ball sprite
                     m.lvl = Math.max(1, p.level);
                     m.maxHp = (float) (double) m.def.hpForLevel(m.lvl);
                     m.hp = m.maxHp;
@@ -418,26 +445,28 @@ public class AdventureScreen implements Screen {
 
         boolean storm = game.state.storm.active;
         float dayness = game.state.clock.isNight() ? 0.25f : 0.9f;
-        // far parallax art strip
         if (game.assets.adventure != null) {
+            // painted backdrop tiled at full screen height with 0.5x parallax: the
+            // camera can travel the whole 3400px map and the painting never runs out
+            // (the old strip only covered part of the width once the camera went deep).
             game.batch.begin();
-            float tw = 900;
-            float off = -camX * 0.4f % tw;
-            for (float bx = camX - viewW / 2 + off - tw; bx < camX + viewW / 2 + tw; bx += tw) {
-                game.batch.draw(game.assets.adventure, bx, GROUND - 10, tw, 330);
+            float tileW = NeoLangGame.VH * (1600f / 900f); // keep the painting's aspect
+            float startX = camX - viewW / 2;
+            float off = -((camX * 0.5f) % tileW);
+            for (float bx = startX + off - tileW; bx < startX + viewW + tileW; bx += tileW) {
+                game.batch.draw(game.assets.adventure, bx, 0, tileW, NeoLangGame.VH);
             }
             game.batch.end();
-        }
-        Draw.drawSky(game.shapes, camX - viewW / 2 - 10, viewW + 20, dayness, storm, time);
-        if (game.assets.adventure == null) {
-            Draw.drawTrunkWorld(game.shapes, camX - viewW / 2 - 10, WORLD_W, GROUND, 1, time);
-        } else {
+            // walkable ground band so feet meet the path at GROUND
             game.shapes.begin(ShapeType.Filled);
-            game.shapes.setColor(0.16f, 0.12f, 0.08f, 1);
-            game.shapes.rect(camX - viewW / 2 - 10, 0, viewW + 20, GROUND);
+            game.shapes.setColor(0.08f, 0.07f, 0.05f, 0.45f);
+            game.shapes.rect(startX - 10, 0, viewW + 20, GROUND);
             game.shapes.setColor(0.25f, 0.95f, 1f, 0.4f);
-            game.shapes.rect(camX - viewW / 2 - 10, GROUND - 3, viewW + 20, 3);
+            game.shapes.rect(startX - 10, GROUND - 3, viewW + 20, 3);
             game.shapes.end();
+        } else {
+            Draw.drawSky(game.shapes, camX - viewW / 2 - 10, viewW + 20, dayness, storm, time);
+            Draw.drawTrunkWorld(game.shapes, camX - viewW / 2 - 10, WORLD_W, GROUND, 1, time);
         }
 
         // exit gate
@@ -463,10 +492,18 @@ public class AdventureScreen implements Screen {
         game.shapes.end();
 
         for (Mon m : mons) {
-            Draw.drawMonster(game.shapes, m.x, GROUND, m.def, m.hp / m.maxHp, time, m.flash);
-            Ui.nameTag(game.batch, game.shapes, game.assets.fontSmall, m.def.displayName + " Lv" + m.lvl, m.x, GROUND + 66);
+            Texture mt = monTexture(m);
+            if (mt != null) {
+                Draw.drawMonsterSprite(game.batch, game.shapes, mt, m.x, GROUND, m.hp / m.maxHp, time, m.flash);
+                Ui.nameTag(game.batch, game.shapes, game.assets.fontSmall, m.def.displayName + " Lv" + m.lvl, m.x, GROUND + 92);
+            } else {
+                Draw.drawMonster(game.shapes, m.x, GROUND, m.def, m.hp / m.maxHp, time, m.flash);
+                Ui.nameTag(game.batch, game.shapes, game.assets.fontSmall, m.def.displayName + " Lv" + m.lvl, m.x, GROUND + 66);
+            }
         }
-        Draw.drawPet(game.shapes, petX, GROUND, time, petTier());
+        if (!Draw.drawPetSprite(game.batch, game.assets, petX, GROUND, time, petTier())) {
+            Draw.drawPet(game.shapes, petX, GROUND, time, petTier());
+        }
         if (shieldT > 0) {
             game.shapes.begin(ShapeType.Line);
             game.shapes.setColor(0.4f, 0.85f, 1f, 0.6f);
@@ -474,9 +511,12 @@ public class AdventureScreen implements Screen {
             game.shapes.end();
         }
         float heroY = GROUND - (emote == 3 ? 5 : 0);
-        Draw.drawHero(game.shapes, game.batch, game.assets.fontSmall, px, heroY, 1.18f, p.gender,
-            p.suitColorIdx, p.hairColorIdx, p.hairStyleIdx, p.eyeColorIdx, p.skinToneIdx, p.outfitId, p.gameClass,
-            facing, walkPhase, time);
+        if (!Draw.drawHeroSprite(game.batch, game.shapes, game.assets, px, heroY, 1.18f, p.gender,
+                p.outfitId, p.gameClass, facing, moving, walkPhase, time)) {
+            Draw.drawHero(game.shapes, game.batch, game.assets.fontSmall, px, heroY, 1.18f, p.gender,
+                p.suitColorIdx, p.hairColorIdx, p.hairStyleIdx, p.eyeColorIdx, p.skinToneIdx, p.outfitId, p.gameClass,
+                facing, walkPhase, time);
+        }
         if (emote == 1) { // wave: sparkle trail over the raised hand
             game.shapes.begin(ShapeType.Filled);
             for (int i = 0; i < 3; i++) {

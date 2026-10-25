@@ -1,11 +1,13 @@
 package com.neolang.cyber.ui;
 
 import com.badlogic.gdx.graphics.Color;
+import com.badlogic.gdx.graphics.Texture;
 import com.badlogic.gdx.graphics.g2d.BitmapFont;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.graphics.glutils.ShapeRenderer;
 import com.badlogic.gdx.graphics.glutils.ShapeRenderer.ShapeType;
 import com.badlogic.gdx.utils.Align;
+import com.neolang.cyber.Assets;
 import com.neolang.cyber.model.BuildModule;
 import com.neolang.cyber.model.GameClass;
 import com.neolang.cyber.model.Gender;
@@ -454,6 +456,103 @@ public class Draw {
             sr.setColor(0.4f, 0.85f, 1f, p);
             sr.circle(x, gy + 32 * s, 30 * s);
             sr.end();
+        }
+    }
+
+    // ------------------------------------------------------------------ painted sprites
+    /** Gender index into the Assets sprite arrays: 0 = NAM, 1 = NU. */
+    public static int gi(Gender g) { return g == Gender.NU ? 1 : 0; }
+
+    public static int outfitIndex(String outfitId) {
+        for (int i = 0; i < OUTFIT_IDS.length; i++) if (OUTFIT_IDS[i].equals(outfitId)) return i;
+        return 0;
+    }
+
+    /** Draw one painted texture centred at cx with its feet/base at feetY. flip mirrors it. */
+    private static void drawTex(SpriteBatch batch, Texture t, float cx, float feetY, float h, boolean flip) {
+        float w = h * t.getWidth() / (float) t.getHeight();
+        batch.draw(t, cx - w / 2, feetY, w, h, 0, 0, t.getWidth(), t.getHeight(), flip, false);
+    }
+
+    /**
+     * Painted hero sprite (feet at x/y): front view when idle, side profile while moving.
+     * The male side painting faces LEFT, the female side painting faces RIGHT — flips are
+     * resolved per gender. Outfits other than the starter set use the painted full figure
+     * from the customization sheet (front view only, mirrored toward facing). A soft bob
+     * plays while moving; the class-gear overlay is drawn on top when a class is chosen.
+     * Height matches the old shape hero (~74px at scale 1). Returns false when no sprite
+     * is loaded so the caller can fall back to shape drawing.
+     */
+    public static boolean drawHeroSprite(SpriteBatch batch, ShapeRenderer sr, Assets a,
+                                         float x, float y, float scale, Gender gender, String outfitId,
+                                         GameClass gc, float facing, boolean moving,
+                                         float walkPhase, float time) {
+        int g = gi(gender);
+        int oi = outfitIndex(outfitId);
+        Texture t;
+        boolean flip;
+        if (oi > 0 && a.custFig[g][oi] != null) {
+            t = a.custFig[g][oi];
+            flip = facing < 0;
+        } else if (moving && a.heroSide[g] != null) {
+            t = a.heroSide[g];
+            flip = gender == Gender.NAM ? facing > 0 : facing < 0;
+        } else {
+            t = a.heroFront[g] != null ? a.heroFront[g] : a.custFig[g][0];
+            flip = false;
+        }
+        if (t == null) return false;
+        float bob = moving ? Math.abs((float) Math.sin(walkPhase)) * 3f
+                           : (float) Math.sin(time * 2) * 0.8f;
+        batch.begin();
+        drawTex(batch, t, x, y + bob - 2, 74f * scale, flip);
+        batch.end();
+        if (gc != null && gc != GameClass.NONE) {
+            drawClassGear(sr, x, y + bob, scale * 1.12f, gc, facing, time);
+        }
+        return true;
+    }
+
+    /** Painted full-figure sprite for NPCs (customization-sheet figures), feet at x/y. */
+    public static boolean drawFigureSprite(SpriteBatch batch, Assets a, Gender gender, int figIdx,
+                                           float x, float y, float scale, float facing,
+                                           boolean moving, float walkPhase, float time) {
+        Texture t = a.custFig[gi(gender)][Math.abs(figIdx) % 3];
+        if (t == null) return false;
+        float bob = moving ? Math.abs((float) Math.sin(walkPhase)) * 2.4f : 0;
+        batch.begin();
+        drawTex(batch, t, x, y + bob - 2, 72f * scale, facing < 0);
+        batch.end();
+        return true;
+    }
+
+    /** Painted robot-pet sprite, feet/base at x/y with its idle hover bob. */
+    public static boolean drawPetSprite(SpriteBatch batch, Assets a, float x, float y, float time, int tier) {
+        if (a.petSpr == null) return false;
+        float h = 34 + Math.min(3, Math.max(1, tier)) * 5;
+        float bob = (float) Math.sin(time * 3) * 2.5f;
+        batch.begin();
+        drawTex(batch, a.petSpr, x, y + bob - 2, h, false);
+        batch.end();
+        return true;
+    }
+
+    /** Painted monster sprite (feet at x/y, ~66px tall) + HP bar. Flash tints it red. */
+    public static void drawMonsterSprite(SpriteBatch batch, ShapeRenderer sr, Texture t,
+                                          float x, float y, float hpFrac, float time, float hitFlash) {
+        float wob = (float) Math.sin(time * 4 + x * 0.05f) * 2;
+        sr.begin(ShapeType.Filled);
+        sr.setColor(0, 0, 0, 0.28f);
+        sr.ellipse(x - 20, y - 3, 40, 8);
+        sr.end();
+        batch.begin();
+        if (hitFlash > 0) batch.setColor(1f, 1f - 0.55f * hitFlash, 1f - 0.55f * hitFlash, 1f);
+        drawTex(batch, t, x, y + wob * 0.4f, 66, false);
+        batch.setColor(1, 1, 1, 1);
+        batch.end();
+        if (hpFrac < 1f) {
+            Ui.bar(sr, x - 18, y + 70, 36, 5, hpFrac,
+                new Color(0.1f, 0.05f, 0.08f, 0.8f), new Color(1f, 0.3f, 0.3f, 1));
         }
     }
 

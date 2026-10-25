@@ -27,6 +27,17 @@ public class Assets {
     public Texture customFemale;
     public Texture createMale;
     public Texture createFemale;
+    public Texture plotBg;
+    // Painted sprites cut from the design sheets by tools/prep_sprites.py.
+    // Index 0 = NAM, 1 = NU. Any entry may be null -> callers fall back to shape drawing.
+    public Texture[] heroFront = new Texture[2];
+    public Texture[] heroSide = new Texture[2];
+    public Texture[] heroBack = new Texture[2];
+    public Texture[][] custHead = new Texture[2][3];
+    public Texture[][] custEyes = new Texture[2][3];
+    public Texture[][] custFig = new Texture[2][3];
+    public Texture petSpr;
+    public Texture monBeetle, monBlob, monWraith, monMush, monJelly, monSpike;
     public Texture white;
     public float uiScale = 1f;
 
@@ -74,6 +85,25 @@ public class Assets {
         customFemale = tex("art/custom_female.jpg");
         createMale = tex("art/create_male.jpg");
         createFemale = tex("art/create_female.jpg");
+        plotBg = tex("art/plot.jpg");
+        String[] gp = {"m", "f"};
+        for (int i = 0; i < 2; i++) {
+            heroFront[i] = tex("art/sprites/hero_" + gp[i] + "_front.png");
+            heroSide[i] = tex("art/sprites/hero_" + gp[i] + "_side.png");
+            heroBack[i] = tex("art/sprites/hero_" + gp[i] + "_back.png");
+            for (int j = 0; j < 3; j++) {
+                custHead[i][j] = tex("art/sprites/cust_" + gp[i] + "_head" + j + ".png");
+                custEyes[i][j] = tex("art/sprites/cust_" + gp[i] + "_eyes" + j + ".png");
+                custFig[i][j] = tex("art/sprites/cust_" + gp[i] + "_fig" + j + ".png");
+            }
+        }
+        petSpr = tex("art/sprites/pet.png");
+        monBeetle = tex("art/sprites/mon_beetle.png");
+        monBlob = tex("art/sprites/mon_blob.png");
+        monWraith = tex("art/sprites/mon_wraith.png");
+        monMush = tex("art/sprites/mon_mush.png");
+        monJelly = tex("art/sprites/mon_jelly.png");
+        monSpike = tex("art/sprites/mon_spike.png");
         Pixmap pm = new Pixmap(1, 1, Pixmap.Format.RGBA8888);
         pm.setColor(Color.WHITE);
         pm.fill();
@@ -118,7 +148,18 @@ public class Assets {
         if (font != null) font.dispose();
         if (fontBig != null) fontBig.dispose();
         if (fontSmall != null) fontSmall.dispose();
-        Texture[] all = {keyartWide, town, classesTex, adventure, heroMale, heroFemale, customMale, customFemale, createMale, createFemale, white};
+        Texture[] all = {keyartWide, town, classesTex, adventure, heroMale, heroFemale, customMale, customFemale, createMale, createFemale, plotBg, petSpr,
+            monBeetle, monBlob, monWraith, monMush, monJelly, monSpike, white};
         for (Texture t : all) if (t != null) t.dispose();
+        for (int i = 0; i < 2; i++) {
+            if (heroFront[i] != null) heroFront[i].dispose();
+            if (heroSide[i] != null) heroSide[i].dispose();
+            if (heroBack[i] != null) heroBack[i].dispose();
+            for (int j = 0; j < 3; j++) {
+                if (custHead[i][j] != null) custHead[i][j].dispose();
+                if (custEyes[i][j] != null) custEyes[i][j].dispose();
+                if (custFig[i][j] != null) custFig[i][j].dispose();
+            }
+        }
     }
 }

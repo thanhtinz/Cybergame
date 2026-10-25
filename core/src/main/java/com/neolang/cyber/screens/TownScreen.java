@@ -48,6 +48,8 @@ public class TownScreen implements Screen {
     private String lastNotice;
     private float noticeT = 99;
 
+    private boolean moving; // hero moved this frame (drives side-profile sprite + bob)
+
     private int joyMode; // 0 none, 1 fixed bottom-left stick, 2 floating stick (secondary)
     private final Vector2 joyBase = new Vector2();
     private float joyVec;
@@ -74,12 +76,14 @@ public class TownScreen implements Screen {
         float x, home, range, speed, dir = 1, walk;
         Gender gender;
         int suit, hair, style, eye;
+        int fig; // painted customization-sheet figure used as this NPC's sprite
         String[] lines;
         float lineT;
         int lineIdx;
-        Npc(String id, String name, float home, float range, Gender g, int suit, int hair, int style, String... lines) {
+        Npc(String id, String name, float home, float range, Gender g, int suit, int hair, int style, int fig, String... lines) {
             this.id = id; this.name = name; this.home = home; this.x = home; this.range = range;
             this.gender = g; this.suit = suit; this.hair = hair; this.style = style; this.eye = 0;
+            this.fig = fig;
             this.lines = lines; this.speed = 12 + (float) Math.random() * 10;
         }
     }
@@ -95,19 +99,19 @@ public class TownScreen implements Screen {
         Player p = game.state.player;
         playerX = clamp((float) p.x, 70, WORLD_W - 70);
         if (playerX < 70 || playerX > WORLD_W - 70) playerX = 300;
-        npcs.add(new Npc("chief", "Trưởng Trạm Gốc", 1230, 130, Gender.NAM, 1, 1, 0,
+        npcs.add(new Npc("chief", "Trưởng Trạm Gốc", 1230, 130, Gender.NAM, 1, 1, 0, 2,
             "Chào cư dân mới! Neo Làng luôn rộng cửa.",
             "Hoàn thành nhiệm vụ rồi quay lại gặp ta nhé.",
             "Cây Mẹ hôm nay phát sáng đẹp quá..."));
-        npcs.add(new Npc("cafe", "Chủ Cafe Pina", 545, 55, Gender.NU, 3, 3, 0,
+        npcs.add(new Npc("cafe", "Chủ Cafe Pina", 545, 55, Gender.NU, 3, 3, 0, 0,
             "Cafe Lá Non, mời bạn ghé!", "Đói thì qua Pina nhé, đừng để kiệt sức."));
-        npcs.add(new Npc("miro", "Thợ Thời Trang Miro", 990, 55, Gender.NU, 2, 4, 2,
+        npcs.add(new Npc("miro", "Thợ Thời Trang Miro", 990, 55, Gender.NU, 2, 4, 2, 1,
             "Đồ mới về liên tục nè!", "Mặc đẹp thì farm cũng vui hơn."));
-        npcs.add(new Npc("bank", "Thu Ngân Lyn", 2090, 45, Gender.NU, 1, 5, 1,
+        npcs.add(new Npc("bank", "Thu Ngân Lyn", 2090, 45, Gender.NU, 1, 5, 1, 2,
             "Ngân Hàng Lá xin chào.", "Pin đầy thì đời mới vui."));
-        npcs.add(new Npc("pet", "Bé Robot Bán Pet", 2445, 45, Gender.NAM, 4, 2, 2,
+        npcs.add(new Npc("pet", "Bé Robot Bán Pet", 2445, 45, Gender.NAM, 4, 2, 2, 0,
             "Pet khoẻ, chủ vui!", "Nâng cấp pet để nhặt đồ nhanh hơn nhé."));
-        npcs.add(new Npc("station", "Hướng Đạo Viên Rô", 1520, 0, Gender.NAM, 0, 0, 1,
+        npcs.add(new Npc("station", "Hướng Đạo Viên Rô", 1520, 0, Gender.NAM, 0, 0, 1, 1,
             "Cấp 5 và xong nhiệm vụ mở đầu là chọn nghề được.", "Bốn nghề, bốn lối đi — chọn kỹ nhé."));
         chatLog.add("Pina: Chào bạn mới! Ghé cafe khi đói nhé.");
         chatLog.add("Miro: Bộ Street Neon vừa về hàng đó.");
@@ -232,6 +236,7 @@ public class TownScreen implements Screen {
             joyMode = 0;
         }
         stickRun = move != 0 && speedFactor > 1f;
+        moving = move != 0;
 
         if (move != 0) {
             facing = move > 0 ? 1 : -1;
@@ -300,8 +305,24 @@ public class TownScreen implements Screen {
         game.batch.setProjectionMatrix(cam.combined);
 
         boolean storm = game.state.storm.active;
-        Draw.drawSky(game.shapes, camX - viewW / 2 - 10, viewW + 20, dayness(), storm, time);
-        Draw.drawTrunkWorld(game.shapes, camX - viewW / 2 - 10, WORLD_W, GROUND, 0, time);
+        if (game.assets.town != null) {
+            // painted town backdrop stretched over the whole 2800px world (2 tiles),
+            // with a translucent walkable strip so feet meet the street at GROUND.
+            game.batch.begin();
+            for (float bx = 0; bx < WORLD_W; bx += 1400) {
+                game.batch.draw(game.assets.town, bx, 0, 1400, NeoLangGame.VH);
+            }
+            game.batch.end();
+            game.shapes.begin(ShapeType.Filled);
+            game.shapes.setColor(0.07f, 0.10f, 0.10f, 0.42f);
+            game.shapes.rect(camX - viewW / 2 - 10, 0, viewW + 20, GROUND);
+            game.shapes.setColor(0.25f, 0.95f, 1f, 0.55f);
+            game.shapes.rect(camX - viewW / 2 - 10, GROUND - 3, viewW + 20, 3);
+            game.shapes.end();
+        } else {
+            Draw.drawSky(game.shapes, camX - viewW / 2 - 10, viewW + 20, dayness(), storm, time);
+            Draw.drawTrunkWorld(game.shapes, camX - viewW / 2 - 10, WORLD_W, GROUND, 0, time);
+        }
 
         Spot near = nearestSpot();
         Draw.drawPod(game.shapes, game.batch, game.assets.fontSmall, 430, GROUND, 230, 215,
@@ -319,17 +340,25 @@ public class TownScreen implements Screen {
         drawGate(2680, "Bìa Rừng — Farm", 1, near != null && "adv".equals(near.id));
         drawBoard(near != null && "board".equals(near.id));
 
-        // NPCs
+        // NPCs (painted figures; shape hero as fallback)
         for (Npc n : npcs) {
-            Draw.drawHero(game.shapes, game.batch, game.assets.fontSmall, n.x, GROUND, 1.12f, n.gender,
-                n.suit, n.hair, n.style, n.eye, 1, "bo_tan_cu_dan", GameClass.NONE, n.dir, n.walk, time);
+            if (!Draw.drawFigureSprite(game.batch, game.assets, n.gender, n.fig, n.x, GROUND, 1.12f,
+                    n.dir, n.range > 0, n.walk, time)) {
+                Draw.drawHero(game.shapes, game.batch, game.assets.fontSmall, n.x, GROUND, 1.12f, n.gender,
+                    n.suit, n.hair, n.style, n.eye, 1, "bo_tan_cu_dan", GameClass.NONE, n.dir, n.walk, time);
+            }
         }
-        // pet + player
-        Draw.drawPet(game.shapes, playerX - facing * 44, GROUND, time, petTier());
+        // pet + player (painted sprites; shapes as fallback)
+        if (!Draw.drawPetSprite(game.batch, game.assets, playerX - facing * 44, GROUND, time, petTier())) {
+            Draw.drawPet(game.shapes, playerX - facing * 44, GROUND, time, petTier());
+        }
         float heroY = GROUND - (emote == 3 ? 5 : 0);
-        Draw.drawHero(game.shapes, game.batch, game.assets.fontSmall, playerX, heroY, 1.18f, p.gender,
-            p.suitColorIdx, p.hairColorIdx, p.hairStyleIdx, p.eyeColorIdx, p.skinToneIdx, p.outfitId, p.gameClass,
-            facing, walkPhase, time);
+        if (!Draw.drawHeroSprite(game.batch, game.shapes, game.assets, playerX, heroY, 1.18f, p.gender,
+                p.outfitId, p.gameClass, facing, moving, walkPhase, time)) {
+            Draw.drawHero(game.shapes, game.batch, game.assets.fontSmall, playerX, heroY, 1.18f, p.gender,
+                p.suitColorIdx, p.hairColorIdx, p.hairStyleIdx, p.eyeColorIdx, p.skinToneIdx, p.outfitId, p.gameClass,
+                facing, walkPhase, time);
+        }
         if (emote == 1) { // wave: sparkle trail over the raised hand
             game.shapes.begin(ShapeType.Filled);
             for (int i = 0; i < 3; i++) {

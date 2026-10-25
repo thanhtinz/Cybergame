@@ -106,11 +106,23 @@ public class PlotScreen implements Screen {
         game.batch.setProjectionMatrix(vp.getCamera().combined);
 
         float dayness = game.state.clock.isNight() ? 0.3f : 0.95f;
-        Draw.drawSky(game.shapes, 0, NeoLangGame.VW, dayness, game.state.storm.active, time);
-        Draw.drawTrunkWorld(game.shapes, 0, NeoLangGame.VW, 150, 0, time);
+        if (game.assets.plotBg != null) {
+            // painted home-branch backdrop (survival/building scene) under a soft
+            // shade so the beds and build grid stay readable.
+            game.batch.begin();
+            game.batch.draw(game.assets.plotBg, 0, 0, NeoLangGame.VW, NeoLangGame.VH);
+            game.batch.end();
+            game.shapes.begin(ShapeType.Filled);
+            game.shapes.setColor(0.03f, 0.05f, 0.09f, 0.38f);
+            game.shapes.rect(0, 0, NeoLangGame.VW, NeoLangGame.VH);
+            game.shapes.end();
+        } else {
+            Draw.drawSky(game.shapes, 0, NeoLangGame.VW, dayness, game.state.storm.active, time);
+            Draw.drawTrunkWorld(game.shapes, 0, NeoLangGame.VW, 150, 0, time);
+        }
         // house pod backdrop on the right
         game.shapes.begin(ShapeType.Filled);
-        game.shapes.setColor(0.10f, 0.15f, 0.20f, 0.85f);
+        game.shapes.setColor(0.10f, 0.15f, 0.20f, 0.66f);
         game.shapes.rect(640, 150, 610, 420);
         game.shapes.setColor(0.25f, 0.95f, 1f, 0.5f);
         game.shapes.rect(640, 566, 610, 4);
@@ -138,9 +150,14 @@ public class PlotScreen implements Screen {
         drawHomeActions();
 
         // hero + pet idling at home + watering drone over the garden
-        Draw.drawHero(game.shapes, game.batch, game.assets.fontSmall, 330, 168, 1.15f, p.gender,
-            p.suitColorIdx, p.hairColorIdx, p.hairStyleIdx, p.eyeColorIdx, p.skinToneIdx, p.outfitId, p.gameClass, 1, 0, time);
-        Draw.drawPet(game.shapes, 285, 168, time, petTier());
+        if (!Draw.drawHeroSprite(game.batch, game.shapes, game.assets, 330, 168, 1.15f, p.gender,
+                p.outfitId, p.gameClass, 1, false, 0, time)) {
+            Draw.drawHero(game.shapes, game.batch, game.assets.fontSmall, 330, 168, 1.15f, p.gender,
+                p.suitColorIdx, p.hairColorIdx, p.hairStyleIdx, p.eyeColorIdx, p.skinToneIdx, p.outfitId, p.gameClass, 1, 0, time);
+        }
+        if (!Draw.drawPetSprite(game.batch, game.assets, 285, 168, time, petTier())) {
+            Draw.drawPet(game.shapes, 285, 168, time, petTier());
+        }
         float droneX = 320 + (float) Math.sin(time * 0.5f) * 240;
         Draw.drawPet(game.shapes, droneX, 600 + (float) Math.sin(time * 2) * 6, time, 1);
         game.batch.begin();
