@@ -52,9 +52,10 @@ public class AdventureScreen implements Screen {
     private String lastNotice;
     private float noticeT = 99;
 
-    private boolean joyActive;
+    private int joyMode; // 0 none, 1 fixed bottom-left stick, 2 floating stick (secondary)
     private final Vector2 joyBase = new Vector2();
     private float joyVec;
+    private static final float JOY_X = 108, JOY_Y = 108; // fixed joystick centre, bottom-left
 
     private static class Mon {
         MonsterDef def;
@@ -256,14 +257,16 @@ public class AdventureScreen implements Screen {
         if (Gdx.input.isKeyPressed(Input.Keys.D) || Gdx.input.isKeyPressed(Input.Keys.RIGHT)) move += 1;
         if (Gdx.input.justTouched()) {
             Vector2 hp = Ui.pointer(hudVp);
-            if (hp.x < 560 && hp.y < 330) { joyActive = true; joyBase.set(hp); joyVec = 0; }
+            float jdx = hp.x - JOY_X, jdy = hp.y - JOY_Y;
+            if (jdx * jdx + jdy * jdy <= 120 * 120) { joyMode = 1; joyBase.set(JOY_X, JOY_Y); joyVec = 0; }
+            else if (hp.x < 560 && hp.y < 330) { joyMode = 2; joyBase.set(hp); joyVec = 0; }
         }
-        if (joyActive && Gdx.input.isTouched()) {
+        if (joyMode > 0 && Gdx.input.isTouched()) {
             Vector2 hp = Ui.pointer(hudVp);
             joyVec = clamp((hp.x - joyBase.x) / 55f, -1, 1);
             if (Math.abs(joyVec) > 0.22f) move = joyVec;
         }
-        if (!Gdx.input.isTouched()) { joyActive = false; joyVec = 0; }
+        if (!Gdx.input.isTouched()) { joyMode = 0; joyVec = 0; }
 
         if (dashT > 0) {
             dashT -= dt;
@@ -516,15 +519,19 @@ public class AdventureScreen implements Screen {
             game.batch.end();
         }
 
-        // joystick visual
-        if (joyActive) {
-            game.shapes.begin(ShapeType.Filled);
+        // joystick visual: fixed stick bottom-left (same layout as town) + floating stick
+        game.shapes.begin(ShapeType.Filled);
+        game.shapes.setColor(1, 1, 1, joyMode == 1 ? 0.22f : 0.12f);
+        game.shapes.circle(JOY_X, JOY_Y, 56);
+        game.shapes.setColor(0.35f, 0.95f, 1f, joyMode == 1 ? 0.6f : 0.35f);
+        game.shapes.circle(joyMode == 1 ? JOY_X + joyVec * 38 : JOY_X, JOY_Y, 24);
+        if (joyMode == 2) {
             game.shapes.setColor(1, 1, 1, 0.15f);
             game.shapes.circle(joyBase.x, joyBase.y, 52);
             game.shapes.setColor(0.35f, 0.95f, 1f, 0.5f);
             game.shapes.circle(joyBase.x + joyVec * 38, joyBase.y, 22);
-            game.shapes.end();
         }
+        game.shapes.end();
 
         // attack button (big) + skills
         boolean atkTap = Ui.tapped(hudVp, 1130, 30, 120, 120);
@@ -565,7 +572,7 @@ public class AdventureScreen implements Screen {
             }
         }
         game.batch.begin();
-        Ui.label(game.batch, game.assets.fontSmall, "Phím: A/D di chuyển — Space đánh — 1/2/3 kỹ năng", 26, 30, Ui.TEXT_DIM, Align.left);
+        Ui.label(game.batch, game.assets.fontSmall, "Phím: A/D di chuyển — Space đánh — 1/2/3 kỹ năng", 180, 190, Ui.TEXT_DIM, Align.left);
         game.batch.end();
 
         if (lastNotice != null && !lastNotice.isEmpty() && noticeT < 4.5f) {

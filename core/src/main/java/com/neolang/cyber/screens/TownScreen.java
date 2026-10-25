@@ -49,9 +49,10 @@ public class TownScreen implements Screen {
     private String lastNotice;
     private float noticeT = 99;
 
-    private boolean joyActive;
+    private int joyMode; // 0 none, 1 fixed bottom-left stick, 2 floating stick (secondary)
     private final Vector2 joyBase = new Vector2();
     private float joyVec;
+    private static final float JOY_X = 108, JOY_Y = 108; // fixed joystick centre, bottom-left
 
     private int emote; // 0 none, 1 wave, 2 smile, 3 sit
     private float emoteT;
@@ -188,21 +189,27 @@ public class TownScreen implements Screen {
         if (panel == null) {
             if (Gdx.input.isKeyPressed(Input.Keys.A) || Gdx.input.isKeyPressed(Input.Keys.LEFT)) move -= 1;
             if (Gdx.input.isKeyPressed(Input.Keys.D) || Gdx.input.isKeyPressed(Input.Keys.RIGHT)) move += 1;
-            // floating joystick: touch in the lower area
+            // movement sticks: fixed stick bottom-left is primary; a floating stick
+            // anywhere else in the lower area still works as a secondary control.
             if (Gdx.input.justTouched()) {
                 Vector2 hp = Ui.pointer(hudVp);
+                float jdx = hp.x - JOY_X, jdy = hp.y - JOY_Y;
+                boolean onFixedJoy = jdx * jdx + jdy * jdy <= 120 * 120;
                 Spot near = nearestSpot();
-                boolean onInteractBtn = near != null && hp.x > 470 && hp.x < 810 && hp.y > 84 && hp.y < 156;
-                if (hp.y < 330 && !onInteractBtn) { joyActive = true; joyBase.set(hp); joyVec = 0; }
+                boolean onInteractBtn = near != null && hp.x > 1046 && hp.x < 1264 && hp.y > 44 && hp.y < 102;
+                boolean onHud = (hp.x >= 344 && hp.x <= 936 && hp.y <= 138)
+                    || (hp.x >= 232 && hp.x <= 1050 && hp.y >= 42 && hp.y <= 104);
+                if (onFixedJoy) { joyMode = 1; joyBase.set(JOY_X, JOY_Y); joyVec = 0; }
+                else if (hp.y < 330 && !onInteractBtn && !onHud) { joyMode = 2; joyBase.set(hp); joyVec = 0; }
             }
-            if (joyActive && Gdx.input.isTouched()) {
+            if (joyMode > 0 && Gdx.input.isTouched()) {
                 Vector2 hp = Ui.pointer(hudVp);
                 joyVec = clamp((hp.x - joyBase.x) / 55f, -1, 1);
                 if (Math.abs(joyVec) > 0.22f) move = joyVec;
             }
-            if (!Gdx.input.isTouched()) { joyActive = false; joyVec = 0; }
+            if (!Gdx.input.isTouched()) { joyMode = 0; joyVec = 0; }
         } else {
-            joyActive = false;
+            joyMode = 0;
         }
 
         if (move != 0) {
@@ -412,19 +419,20 @@ public class TownScreen implements Screen {
         game.batch.setProjectionMatrix(hudVp.getCamera().combined);
         Player p = game.state.player;
 
-        // top-left buttons
-        if (iconBtn(16, 658, "menu")) { panel = "menu"; game.sound.play("click"); }
-        if (iconBtn(70, 658, "mail")) { panel = "mail"; game.sound.play("click"); }
-        if (iconBtn(124, 658, "chat")) { panel = "chat"; game.sound.play("click"); }
-        // top-right buttons
-        if (iconBtn(1218, 658, "smile")) { panel = "emote"; game.sound.play("click"); }
-        if (iconBtn(1164, 658, "run")) { running = !running; game.sound.play("click"); }
-
+        // ---- top-left: character info panel (name/level, XP, survival, currencies) ----
+        Ui.panel(game.shapes, 16, 594, 300, 110);
         game.batch.begin();
-        Ui.label(game.batch, game.assets.fontSmall, running ? "Đang chạy" : "Đi bộ", 1241, 640, Ui.TEXT_DIM, Align.center);
+        Ui.label(game.batch, game.assets.fontSmall, p.name + " — Cấp " + p.level, 28, 690, Ui.TEXT, Align.left);
+        Ui.label(game.batch, game.assets.fontSmall, "Xu Lá: " + p.xuLa + "    Tinh Thể: " + p.tinhThe, 28, 618, Ui.GOLD, Align.left);
         game.batch.end();
+        Ui.bar(game.shapes, 28, 662, 264, 8, (float) ((double) p.xp / Math.max(1, (double) p.xpNext())),
+            new Color(0.1f, 0.12f, 0.16f, 1), Ui.CYAN);
+        drawMiniBar(28, 638, "No", (double) p.satiety / 100.0, Ui.GREEN);
+        drawMiniBar(118, 638, "Ấm", (double) p.warmth / 100.0, Ui.ACCENT);
+        drawMiniBar(208, 638, "Pin", (double) p.battery / 100.0, Ui.CYAN);
+        if (panel == null && Ui.tapped(hudVp, 16, 594, 300, 110)) { panel = "char"; game.sound.play("click"); }
 
-        // storm banner
+        // storm banner (top centre, clear of the info panel)
         if (game.state.storm.active) {
             Ui.panel(game.shapes, 415, 662, 450, 44, new Color(0.30f, 0.08f, 0.38f, 0.92f));
             game.batch.begin();
@@ -435,38 +443,31 @@ public class TownScreen implements Screen {
             game.batch.end();
         }
 
-        // bottom-left status block (tap -> character panel)
-        Ui.panel(game.shapes, 16, 16, 300, 104);
+        // ---- bottom-left: movement joystick ----
+        drawJoystick();
+
+        // ---- buttons flanking the chat frame: mail + gear on its left, emote + run on its right ----
+        if (iconBtn(240, 50, "mail")) { panel = "mail"; game.sound.play("click"); }
+        if (iconBtn(296, 50, "menu")) { panel = "menu"; game.sound.play("click"); }
+        if (iconBtn(938, 50, "smile")) { panel = "emote"; game.sound.play("click"); }
+        if (iconBtn(992, 50, "run")) { running = !running; game.sound.play("click"); }
         game.batch.begin();
-        Ui.label(game.batch, game.assets.fontSmall, p.name + " — Cấp " + p.level, 28, 106, Ui.TEXT, Align.left);
-        Ui.label(game.batch, game.assets.fontSmall, "Xu Lá: " + p.xuLa + "    Tinh Thể: " + p.tinhThe, 28, 34, Ui.GOLD, Align.left);
+        Ui.label(game.batch, game.assets.fontSmall, running ? "Chạy" : "Đi bộ", 1015, 38, Ui.TEXT_DIM, Align.center);
         game.batch.end();
-        Ui.bar(game.shapes, 150, 84, 150, 9, (float) ((double) p.xp / Math.max(1, (double) p.xpNext())),
-            new Color(0.1f, 0.12f, 0.16f, 1), Ui.CYAN);
-        drawMiniBar(28, 62, "No", (double) p.satiety / 100.0, Ui.GREEN);
-        drawMiniBar(118, 62, "Ấm", (double) p.warmth / 100.0, Ui.ACCENT);
-        drawMiniBar(208, 62, "Pin", (double) p.battery / 100.0, Ui.CYAN);
-        if (panel == null && Ui.tapped(hudVp, 16, 16, 300, 104)) { panel = "char"; game.sound.play("click"); }
 
-        // joystick visual
-        if (joyActive) {
-            game.shapes.begin(ShapeType.Filled);
-            game.shapes.setColor(1, 1, 1, 0.15f);
-            game.shapes.circle(joyBase.x, joyBase.y, 52);
-            game.shapes.setColor(0.35f, 0.95f, 1f, 0.5f);
-            game.shapes.circle(joyBase.x + joyVec * 38, joyBase.y, 22);
-            game.shapes.end();
-        }
+        // ---- bottom-centre: chat frame ----
+        drawChatFrame();
 
-        // interact button
+        // ---- bottom-right: action cluster (context interact) ----
         if (panel == null && near != null) {
-            if (Ui.button(game.batch, game.shapes, game.assets.font, hudVp, 470, 96, 340, 52, near.label)) {
+            game.batch.begin();
+            Ui.label(game.batch, game.assets.fontSmall, fitText(near.label, 250), 1155, 128, Ui.TEXT_DIM, Align.center);
+            Ui.label(game.batch, game.assets.fontSmall, "hoặc phím E", 1155, 112, Ui.TEXT_DIM, Align.center);
+            game.batch.end();
+            if (Ui.button(game.batch, game.shapes, game.assets.font, hudVp, 1046, 44, 218, 58, shortAction(near))) {
                 openSpot(near);
                 if (gone) return;
             }
-            game.batch.begin();
-            Ui.label(game.batch, game.assets.fontSmall, "hoặc phím E", 640, 84, Ui.TEXT_DIM, Align.center);
-            game.batch.end();
         }
 
         // toast
@@ -486,6 +487,75 @@ public class TownScreen implements Screen {
         Ui.label(game.batch, game.assets.fontSmall, name, x, y + 8, Ui.TEXT_DIM, Align.left);
         game.batch.end();
         Ui.bar(game.shapes, x + 26, y, 58, 8, (float) frac, new Color(0.1f, 0.12f, 0.16f, 1), c);
+    }
+
+    /** Fixed movement stick, bottom-left: base always visible, knob follows the drag.
+     *  The floating stick (mode 2) still appears wherever else the player touches low. */
+    private void drawJoystick() {
+        game.shapes.begin(ShapeType.Filled);
+        game.shapes.setColor(1, 1, 1, joyMode == 1 ? 0.22f : 0.12f);
+        game.shapes.circle(JOY_X, JOY_Y, 56);
+        game.shapes.setColor(0.35f, 0.95f, 1f, joyMode == 1 ? 0.6f : 0.35f);
+        game.shapes.circle(joyMode == 1 ? JOY_X + joyVec * 38 : JOY_X, JOY_Y, 24);
+        if (joyMode == 2) {
+            game.shapes.setColor(1, 1, 1, 0.15f);
+            game.shapes.circle(joyBase.x, joyBase.y, 52);
+            game.shapes.setColor(0.35f, 0.95f, 1f, 0.5f);
+            game.shapes.circle(joyBase.x + joyVec * 38, joyBase.y, 22);
+        }
+        game.shapes.end();
+    }
+
+    private Npc nearestNpc() {
+        Npc best = null;
+        float bd = Float.MAX_VALUE;
+        for (Npc n : npcs) {
+            float d = Math.abs(n.x - playerX);
+            if (d < bd) { bd = d; best = n; }
+        }
+        return best;
+    }
+
+    private String fitText(String s, float maxW) {
+        if (s == null) return "";
+        if (Ui.textWidth(game.assets.fontSmall, s) <= maxW) return s;
+        while (s.length() > 4 && Ui.textWidth(game.assets.fontSmall, s + "..") > maxW) {
+            s = s.substring(0, s.length() - 1);
+        }
+        return s + "..";
+    }
+
+    private String shortAction(Spot s) {
+        if ("plot".equals(s.id)) return "Về nhà";
+        if ("adv".equals(s.id)) return "Ra Bìa Rừng";
+        if ("board".equals(s.id)) return "Xem nhiệm vụ";
+        return "Nói chuyện";
+    }
+
+    /** Bottom-centre chat frame: short log (recent chat + nearest NPC's current line)
+     *  over a "tap to chat" strip; tapping the frame opens the full chat panel. */
+    private void drawChatFrame() {
+        Ui.panel(game.shapes, 352, 16, 576, 114, new Color(0.05f, 0.10f, 0.15f, 0.88f));
+        List<String> lines = new ArrayList<String>();
+        int from = Math.max(0, chatLog.size() - 2);
+        for (int i = from; i < chatLog.size(); i++) lines.add(chatLog.get(i));
+        Npc nn = nearestNpc();
+        if (nn != null) lines.add(nn.name + ": " + nn.lines[nn.lineIdx]);
+        game.batch.begin();
+        float y = 114;
+        for (String s : lines) {
+            Ui.label(game.batch, game.assets.fontSmall, fitText(s, 540), 364, y, Ui.TEXT, Align.left);
+            y -= 22;
+        }
+        game.batch.end();
+        game.shapes.begin(ShapeType.Filled);
+        game.shapes.setColor(Ui.BTN);
+        game.shapes.rect(364, 24, 552, 28);
+        game.shapes.end();
+        game.batch.begin();
+        Ui.label(game.batch, game.assets.fontSmall, "Chạm để chat...", 376, 44, Ui.TEXT_DIM, Align.left);
+        game.batch.end();
+        if (panel == null && Ui.tapped(hudVp, 352, 16, 576, 114)) { panel = "chat"; game.sound.play("click"); }
     }
 
     // ------------------------------------------------------------------ panels
@@ -1000,13 +1070,14 @@ public class TownScreen implements Screen {
     }
 
     private void panelEmote() {
-        Ui.panel(game.shapes, 1010, 520, 240, 180);
+        // popup above the emote button beside the chat frame
+        Ui.panel(game.shapes, 856, 112, 248, 176);
         game.batch.begin();
-        Ui.label(game.batch, game.assets.fontSmall, "Cảm xúc", 1130, 676, Ui.CYAN, Align.center);
+        Ui.label(game.batch, game.assets.fontSmall, "Cảm xúc", 980, 268, Ui.CYAN, Align.center);
         game.batch.end();
-        if (btn(1030, 596, 200, 38, "Vẫy tay")) { emote = 1; emoteT = 2; panel = null; }
-        if (btn(1030, 550, 200, 38, "Cười")) { emote = 2; emoteT = 2; panel = null; }
-        if (btn(1030, 504, 200, 38, "Ngồi nghỉ")) { emote = 3; emoteT = 2; panel = null; }
+        if (btn(880, 214, 200, 38, "Vẫy tay")) { emote = 1; emoteT = 2; panel = null; }
+        if (btn(880, 168, 200, 38, "Cười")) { emote = 2; emoteT = 2; panel = null; }
+        if (btn(880, 122, 200, 38, "Ngồi nghỉ")) { emote = 3; emoteT = 2; panel = null; }
     }
 
     @Override public void resize(int w, int h) { worldVp.update(w, h, false); hudVp.update(w, h, true); }
