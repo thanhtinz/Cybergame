@@ -257,6 +257,79 @@ def process_boxes(path, boxes, min_area=200):
         save_sprite(extract_group(img, alpha, lab, mine, max_h=max_h), name)
 
 
+def clear_cream(img_rgba, tol=34.0):
+    """Xoa cac pixel mau kem con sot BEN TRONG sprite (tam rong cua banh rang,
+    long khung vong chan dung): cac vung nay bi kin nen flood-fill tu mep anh
+    khong cham toi duoc. Chi dung cho sprite ma ban than hoa tiet khong chua
+    mau kem (gear vang, khung vong vang/cyan). Mau kem lay tu sac nen chinh
+    cua chinh sprite (vung trong suot quanh no da bi xoa nen mau con lai o
+    mep la mau hoa tiet) -> dung hang so kem cua sheet icon (251,238,210)."""
+    arr = np.asarray(img_rgba).astype(np.float32)
+    cream = np.array([251, 238, 210], np.float32)
+    dist = np.sqrt(((arr[..., :3] - cream) ** 2).sum(axis=2))
+    a = arr[..., 3] / 255.0
+    kill = (dist < tol) & (a > 0.5)
+    a = np.where(kill, 0.0, a)
+    a = ndimage.gaussian_filter(a, 0.7)
+    a = np.clip(a * 1.6 - 0.3, 0, 1)
+    out = np.dstack([arr[..., :3], (a * 255).astype(np.uint8)]).astype(np.uint8)
+    return Image.fromarray(out, "RGBA")
+
+
+def process_icons(path):
+    """Sheet icon HUD 4x4 (1920x1280): cat tung o bang pipeline grid thuong,
+    rieng gear + khung vong phai xoa not phan kem kin o giua."""
+    names = [
+        ["ico_heart.png", "ico_bolt.png", "ico_food.png", "ico_flame.png"],
+        ["ico_battery.png", "ico_coin.png", "ico_crystal.png", "ico_star.png"],
+        ["ico_mail.png", "ico_gear.png", "ico_smile.png", "ico_sword.png"],
+        ["ico_swirl.png", "ico_orb.png", "ico_ring.png", "ico_quest.png"],
+    ]
+    process_grid_group(path, 4, 4, names, 240, min_area=250)
+    for nm in ("ico_gear.png", "ico_ring.png"):
+        p = SPR_OUT / nm
+        fixed = clear_cream(Image.open(p).convert("RGBA"))
+        fixed.save(p, "PNG", optimize=True)
+        b64p = ROOT / "assets-src" / "core/src/main/resources/art/sprites" / (nm + ".b64")
+        b64p.write_text(base64.b64encode(p.read_bytes()).decode("ascii"), encoding="ascii")
+        print("FIXED  %-22s (xoa kem kin o giua)" % nm)
+
+
+def process_face(g):
+    """Chan dung tron cho HUD: crop vung mat tu sprite hero front da cat,
+    ap mask tron mem -> PNG 256x256, tam mat lech len tren mot chut de lay
+    ca tran/toc mai nhu chan dung game mobile."""
+    src = SPR_OUT / ("hero_%s_front.png" % g)
+    img = Image.open(src).convert("RGBA")
+    arr = np.asarray(img).astype(np.int32)
+    solid = arr[..., 3] > 128
+    skin = solid & (arr[..., 0] > 165) & (arr[..., 1] > 105) & (arr[..., 2] > 75) \
+        & ((arr[..., 0] - arr[..., 2]) > 30)
+    skin[int(img.height * 0.45):, :] = False  # dau chi o phan tren sprite
+    lab, n = ndimage.label(skin)
+    if n == 0:
+        raise RuntimeError("%s: khong tim thay vung da mat" % src)
+    sizes = ndimage.sum(skin, lab, range(1, n + 1))
+    face = lab == (int(np.argmax(sizes)) + 1)  # cum da lon nhat = khuon mat
+    ys, xs = np.nonzero(face)
+    cx = float(xs.mean())
+    cy = float(ys.mean())
+    side = max(xs.max() - xs.min(), ys.max() - ys.min()) * 1.65
+    side = min(side, img.width, img.height)
+    ccx = min(max(cx, side / 2), img.width - side / 2)
+    ccy = min(max(cy - side * 0.10, side / 2), img.height - side / 2)
+    box = (int(ccx - side / 2), int(ccy - side / 2), int(ccx + side / 2), int(ccy + side / 2))
+    crop = img.crop(box)
+    chh, cww = crop.height, crop.width
+    yy, xx = np.mgrid[0:chh, 0:cww]
+    r = np.sqrt(((xx - cww / 2.0) / (cww / 2.0)) ** 2 + ((yy - chh / 2.0) / (chh / 2.0)) ** 2)
+    mask = np.clip((1.0 - r) * min(chh, cww) * 0.02, 0, 1)
+    ca = np.asarray(crop).astype(np.float32)
+    ca[..., 3] = ca[..., 3] * mask
+    out = Image.fromarray(ca.astype(np.uint8), "RGBA").resize((256, 256), Image.LANCZOS)
+    save_sprite(out, "hero_%s_face.png" % g)
+
+
 def one(pattern):
     hits = sorted(glob.glob(str(MEDIA / pattern)))
     if not hits:
@@ -265,6 +338,13 @@ def one(pattern):
 
 
 def main():
+    if "--hud" in sys.argv:
+        # Chi icon HUD + chan dung (dung sprite front da cat san lam nguon mat)
+        process_icons(one("media-generation-hud-icons-sheet-*.webp"))
+        process_face("m")
+        process_face("f")
+        print("Xong (hud).")
+        return
     # --- hero: nhan vat chinh + pet ---
     pet_m = process_hero(RES_ART / "hero_male.jpg", "hero_m")
     pet_f = process_hero(RES_ART / "hero_female.jpg", "hero_f")

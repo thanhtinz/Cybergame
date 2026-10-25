@@ -22,6 +22,7 @@ import com.neolang.cyber.model.Player;
 import com.neolang.cyber.model.QuestDef;
 import com.neolang.cyber.model.Survival;
 import com.neolang.cyber.ui.Draw;
+import com.neolang.cyber.ui.Hud;
 import com.neolang.cyber.ui.Ui;
 
 import java.util.ArrayList;
@@ -565,18 +566,20 @@ public class TownScreen implements Screen {
 
     // ------------------------------------------------------------------ HUD
     private boolean iconBtn(float x, float y, String kind) {
-        game.shapes.begin(ShapeType.Filled);
-        game.shapes.setColor(Ui.BTN);
-        game.shapes.rect(x, y, 46, 46);
-        game.shapes.setColor(Ui.PANEL_EDGE);
-        game.shapes.rect(x, y + 44, 46, 2);
-        game.shapes.rect(x, y, 46, 2);
-        game.shapes.end();
-        if ("mail".equals(kind)) Ui.iconMail(game.shapes, x + 23, y + 23, 11, Ui.CYAN);
-        else if ("chat".equals(kind)) Ui.iconChat(game.shapes, x + 23, y + 25, 11, Ui.CYAN);
-        else if ("smile".equals(kind)) Ui.iconSmile(game.shapes, x + 23, y + 23, 11, Ui.CYAN);
-        else Ui.iconGear(game.shapes, x + 23, y + 23, 11, Ui.CYAN);
-        return Ui.tapped(hudVp, x, y, 46, 46);
+        // glass rounded square + PAINTED icon asset (same slot/function as before)
+        Texture t = "mail".equals(kind) ? game.assets.icoMail
+            : "smile".equals(kind) ? game.assets.icoSmile : game.assets.icoGear;
+        if (t == null) {
+            game.shapes.begin(ShapeType.Filled);
+            game.shapes.setColor(Ui.BTN);
+            game.shapes.rect(x, y, 46, 46);
+            game.shapes.end();
+            if ("mail".equals(kind)) Ui.iconMail(game.shapes, x + 23, y + 23, 11, Ui.CYAN);
+            else if ("smile".equals(kind)) Ui.iconSmile(game.shapes, x + 23, y + 23, 11, Ui.CYAN);
+            else Ui.iconGear(game.shapes, x + 23, y + 23, 11, Ui.CYAN);
+            return Ui.tapped(hudVp, x, y, 46, 46);
+        }
+        return Hud.glassIconBtn(game, hudVp, t, x, y, 46);
     }
 
     private void drawHud(Spot near) {
@@ -584,27 +587,26 @@ public class TownScreen implements Screen {
         game.batch.setProjectionMatrix(hudVp.getCamera().combined);
         Player p = game.state.player;
 
-        // ---- top-left: character info panel (name/level, XP, survival, currencies) ----
-        Ui.panel(game.shapes, 16, 594, 300, 110);
-        game.batch.begin();
-        Ui.label(game.batch, game.assets.fontSmall, p.name + " — Cấp " + p.level, 28, 690, Ui.TEXT, Align.left);
-        Ui.label(game.batch, game.assets.fontSmall, "Xu Lá: " + p.xuLa + "    Tinh Thể: " + p.tinhThe, 28, 618, Ui.GOLD, Align.left);
-        game.batch.end();
-        Ui.bar(game.shapes, 28, 662, 264, 8, (float) ((double) p.xp / Math.max(1, (double) p.xpNext())),
-            new Color(0.1f, 0.12f, 0.16f, 1), Ui.CYAN);
-        drawMiniBar(28, 638, "No", (double) p.satiety / 100.0, Ui.GREEN);
-        drawMiniBar(118, 638, "Ấm", (double) p.warmth / 100.0, Ui.ACCENT);
-        drawMiniBar(208, 638, "Pin", (double) p.battery / 100.0, Ui.CYAN);
-        if (panel == null && Ui.tapped(hudVp, 16, 594, 300, 110)) { panel = "char"; game.sound.play("click"); }
+        // ---- top-left: MMORPG character cluster (shared with Adventure) ----
+        // Round painted portrait in the painted ring frame + level badge,
+        // name/class, XP bar with numbers, survival chips, currency pills.
+        float clBottom = Hud.drawCharCluster(game, false, 0);
+        if (panel == null && Ui.tapped(hudVp, Hud.CL_X, clBottom, Hud.CL_W, Hud.CL_TOP - clBottom)) {
+            panel = "char"; game.sound.play("click");
+        }
 
-        // storm banner (top centre, clear of the info panel)
+        // ---- top-right: minimap (building/NPC gold dots, portal dots, player) ----
+        drawMinimap(p);
+
+        // storm banner (top centre, clear of the cluster and the minimap)
         if (game.state.storm.active) {
             Ui.panel(game.shapes, 415, 662, 450, 44, new Color(0.30f, 0.08f, 0.38f, 0.92f));
             game.batch.begin();
+            Hud.icon(game.batch, game.assets.icoQuest, 439, 684, 26);
             Ui.label(game.batch, game.assets.fontSmall,
                 "BÃO DỮ LIỆU — còn " + (int) Math.ceil((double) game.state.storm.activeLeft) + "s — hạ quái: "
                     + game.state.storm.kills + "/" + game.state.storm.objectiveKills,
-                640, 690, new Color(1f, 0.75f, 0.95f, 1), Align.center);
+                652, 690, new Color(1f, 0.75f, 0.95f, 1), Align.center);
             game.batch.end();
         }
 
@@ -634,21 +636,30 @@ public class TownScreen implements Screen {
 
         // toast
         if (lastNotice != null && !lastNotice.isEmpty() && noticeT < 4.5f) {
-            float w = Math.min(760, Ui.textWidth(game.assets.fontSmall, lastNotice) + 36);
-            Ui.panel(game.shapes, 640 - w / 2, 566, w, 40, new Color(0.06f, 0.14f, 0.10f, 0.94f));
+            float w = Math.min(790, Ui.textWidth(game.assets.fontSmall, lastNotice) + 66);
+            Ui.panel(game.shapes, 640 - w / 2, 470, w, 40, new Color(0.06f, 0.14f, 0.10f, 0.94f));
             game.batch.begin();
-            Ui.label(game.batch, game.assets.fontSmall, lastNotice, 640, 592, Ui.GREEN, Align.center);
+            Hud.icon(game.batch, game.assets.icoQuest, 640 - w / 2 + 21, 490, 24);
+            Ui.label(game.batch, game.assets.fontSmall, lastNotice, 655, 496, Ui.GREEN, Align.center);
             game.batch.end();
         }
 
         if (panel != null) drawPanel();
     }
 
-    private void drawMiniBar(float x, float y, String name, double frac, Color c) {
-        game.batch.begin();
-        Ui.label(game.batch, game.assets.fontSmall, name, x, y + 8, Ui.TEXT_DIM, Align.left);
-        game.batch.end();
-        Ui.bar(game.shapes, x + 26, y, 58, 8, (float) frac, new Color(0.1f, 0.12f, 0.16f, 1), c);
+    /** Town minimap: gold dots for the main buildings/NPCs + quest board,
+     *  green dots for the two world portals, white-cyan player marker. */
+    private void drawMinimap(Player p) {
+        Hud.drawMinimapBase(game, "Neo Làng");
+        game.shapes.begin(ShapeType.Filled);
+        Color gold = new Color(1f, 0.8f, 0.3f, 1);
+        float[] spots = {545, 990, 1230, 1520, 1760, 2090, 2445};
+        for (float sx : spots) Hud.dot(game.shapes, Hud.mmX(sx, WORLD_W), Hud.mmGroundY(), 3, gold);
+        Color portal = new Color(0.35f, 1f, 0.75f, 1);
+        Hud.dot(game.shapes, Hud.mmX(70, WORLD_W), Hud.mmGroundY(), 3.6f, portal);
+        Hud.dot(game.shapes, Hud.mmX(2730, WORLD_W), Hud.mmGroundY(), 3.6f, portal);
+        Hud.playerDot(game.shapes, Hud.mmX(p.x, WORLD_W), Hud.mmGroundY(), facing < 0 ? -1 : 1);
+        game.shapes.end();
     }
 
     /** Fixed movement stick, bottom-left: base always visible, knob follows the drag.

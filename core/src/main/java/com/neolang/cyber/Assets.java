@@ -45,6 +45,12 @@ public class Assets {
     public Texture bldCafe, bldFashion, bldBank, bldPet, bldStation, bldPortal;
     public Texture propPod0, propPod1, propPod2; // hydroponic pod: sprout / plant / fruit
     public Texture propBoard, propLamp, propChest, propTable, propFlower;
+    // Painted HUD icons (icon sheet 4x4, cut by prep_sprites.py --hud) + round
+    // face portraits cropped from the hero front sprites. All HUD icons in the
+    // game are these painted assets — never shape-drawn glyphs.
+    public Texture icoHeart, icoBolt, icoFood, icoFlame, icoBattery, icoCoin, icoCrystal, icoStar;
+    public Texture icoMail, icoGear, icoSmile, icoSword, icoSwirl, icoOrb, icoRing, icoQuest;
+    public Texture[] heroFace = new Texture[2];
     public Texture white;
     public float uiScale = 1f;
 
@@ -127,6 +133,24 @@ public class Assets {
         propChest = tex("art/sprites/prop_chest.png");
         propTable = tex("art/sprites/prop_table.png");
         propFlower = tex("art/sprites/prop_flower.png");
+        icoHeart = tex("art/sprites/ico_heart.png");
+        icoBolt = tex("art/sprites/ico_bolt.png");
+        icoFood = tex("art/sprites/ico_food.png");
+        icoFlame = tex("art/sprites/ico_flame.png");
+        icoBattery = tex("art/sprites/ico_battery.png");
+        icoCoin = tex("art/sprites/ico_coin.png");
+        icoCrystal = tex("art/sprites/ico_crystal.png");
+        icoStar = tex("art/sprites/ico_star.png");
+        icoMail = tex("art/sprites/ico_mail.png");
+        icoGear = tex("art/sprites/ico_gear.png");
+        icoSmile = tex("art/sprites/ico_smile.png");
+        icoSword = tex("art/sprites/ico_sword.png");
+        icoSwirl = tex("art/sprites/ico_swirl.png");
+        icoOrb = tex("art/sprites/ico_orb.png");
+        icoRing = tex("art/sprites/ico_ring.png");
+        icoQuest = tex("art/sprites/ico_quest.png");
+        heroFace[0] = tex("art/sprites/hero_m_face.png");
+        heroFace[1] = tex("art/sprites/hero_f_face.png");
         Pixmap pm = new Pixmap(1, 1, Pixmap.Format.RGBA8888);
         pm.setColor(Color.WHITE);
         pm.fill();
@@ -174,7 +198,10 @@ public class Assets {
         Texture[] all = {keyartWide, town, classesTex, adventure, heroMale, heroFemale, customMale, customFemale, createMale, createFemale, plotBg, petSpr,
             monBeetle, monBlob, monWraith, monMush, monJelly, monSpike, white,
             townPlate, advPlate, bldCafe, bldFashion, bldBank, bldPet, bldStation, bldPortal,
-            propPod0, propPod1, propPod2, propBoard, propLamp, propChest, propTable, propFlower};
+            propPod0, propPod1, propPod2, propBoard, propLamp, propChest, propTable, propFlower,
+            icoHeart, icoBolt, icoFood, icoFlame, icoBattery, icoCoin, icoCrystal, icoStar,
+            icoMail, icoGear, icoSmile, icoSword, icoSwirl, icoOrb, icoRing, icoQuest,
+            heroFace[0], heroFace[1]};
         for (Texture t : all) if (t != null) t.dispose();
         for (int i = 0; i < 2; i++) {
             if (heroFront[i] != null) heroFront[i].dispose();

@@ -21,6 +21,7 @@ import com.neolang.cyber.model.Player;
 import com.neolang.cyber.model.SkillKind;
 import com.neolang.cyber.model.Survival;
 import com.neolang.cyber.ui.Draw;
+import com.neolang.cyber.ui.Hud;
 import com.neolang.cyber.ui.Ui;
 
 import java.util.ArrayList;
@@ -579,38 +580,25 @@ public class AdventureScreen implements Screen {
         game.batch.setProjectionMatrix(hudVp.getCamera().combined);
         Player p = game.state.player;
 
-        // top-left: HP + energy + survival minis
-        Ui.panel(game.shapes, 16, 606, 330, 98);
-        game.batch.begin();
-        Ui.label(game.batch, game.assets.fontSmall, "HP", 28, 686, Ui.TEXT_DIM, Align.left);
-        Ui.label(game.batch, game.assets.fontSmall, "NL", 28, 656, Ui.TEXT_DIM, Align.left);
-        game.batch.end();
-        Ui.bar(game.shapes, 62, 672, 268, 13, (float) ((double) p.hp / Math.max(1, (double) p.maxHp())),
-            new Color(0.1f, 0.1f, 0.14f, 1), Ui.RED);
-        Ui.bar(game.shapes, 62, 642, 268, 13, energy / 100f,
-            new Color(0.1f, 0.1f, 0.14f, 1), Ui.CYAN);
-        miniSurv(370, 678, "No", (double) p.satiety / 100.0, Ui.GREEN);
-        miniSurv(370, 648, "Ấm", (double) p.warmth / 100.0, Ui.ACCENT);
-        miniSurv(370, 618, "Pin", (double) p.battery / 100.0, Ui.CYAN);
+        // top-left: shared MMORPG character cluster (round portrait + ring,
+        // HP/NL bars with numbers, survival chips, currency pills) — the old
+        // split HP panel and loose survival minis are merged into it.
+        float clBottom = Hud.drawCharCluster(game, true, energy);
+        if (panel == null && Ui.tapped(hudVp, Hud.CL_X, clBottom, Hud.CL_W, Hud.CL_TOP - clBottom)) {
+            panel = "pause"; game.sound.play("click");
+        }
 
-        // minimap top-right
+        // minimap top-right: red dots = living monsters, green = home portal,
+        // map name inside the frame's top strip (no loose label under the box)
+        Hud.drawMinimapBase(game, "Bìa Rừng Mạch Điện");
         game.shapes.begin(ShapeType.Filled);
-        game.shapes.setColor(0.04f, 0.08f, 0.12f, 0.85f);
-        game.shapes.rect(1052, 646, 212, 58);
-        game.shapes.setColor(Ui.PANEL_EDGE);
-        game.shapes.rect(1052, 702, 212, 2);
-        game.shapes.setColor(1f, 0.3f, 0.3f, 1);
-        for (Mon m : mons) game.shapes.circle(1056 + (m.x / WORLD_W) * 204, 668, 2.4f);
-        game.shapes.setColor(0.3f, 0.95f, 0.4f, 1);
-        game.shapes.circle(1056 + (30f / WORLD_W) * 204, 668, 3);
-        game.shapes.setColor(Color.WHITE);
-        game.shapes.circle(1056 + (px / WORLD_W) * 204, 668, 3.4f);
+        Color monDot = new Color(1f, 0.32f, 0.32f, 1);
+        for (Mon m : mons) if (m.hp > 0) Hud.dot(game.shapes, Hud.mmX(m.x, WORLD_W), Hud.mmGroundY(), 2.6f, monDot);
+        Hud.dot(game.shapes, Hud.mmX(30, WORLD_W), Hud.mmGroundY(), 3.6f, new Color(0.35f, 1f, 0.75f, 1));
+        Hud.playerDot(game.shapes, Hud.mmX(px, WORLD_W), Hud.mmGroundY(), facing < 0 ? -1 : 1);
         game.shapes.end();
-        game.batch.begin();
-        Ui.label(game.batch, game.assets.fontSmall, "Bìa Rừng Mạch Điện", 1158, 640, Ui.TEXT_DIM, Align.center);
-        game.batch.end();
 
-        if (panel == null && Ui.button(game.batch, game.shapes, game.assets.fontSmall, hudVp, 1090, 560, 174, 40, "Về Làng")) {
+        if (panel == null && Hud.glassPillBtn(game, hudVp, "Về Làng", Hud.MM_X, Hud.MM_Y - 50, Hud.MM_W, 40)) {
             p.x = 2600;
             game.saveGame();
             gone = true;
@@ -632,9 +620,10 @@ public class AdventureScreen implements Screen {
                 game.saveGame();
             }
         } else if (game.state.storm.active) {
+            String stormTxt = "BÃO DỮ LIỆU — hạ quái: " + game.state.storm.kills + "/" + game.state.storm.objectiveKills;
             game.batch.begin();
-            Ui.label(game.batch, game.assets.fontSmall,
-                "BÃO DỮ LIỆU — hạ quái: " + game.state.storm.kills + "/" + game.state.storm.objectiveKills,
+            Hud.icon(game.batch, game.assets.icoQuest, 640 - Ui.textWidth(game.assets.fontSmall, stormTxt) / 2 - 20, 694, 24);
+            Ui.label(game.batch, game.assets.fontSmall, stormTxt,
                 640, 700, new Color(1f, 0.75f, 0.95f, 1), Align.center);
             game.batch.end();
         }
@@ -674,7 +663,8 @@ public class AdventureScreen implements Screen {
         game.shapes.circle(1190, 90, 48);
         game.shapes.end();
         game.batch.begin();
-        Ui.label(game.batch, game.assets.fontSmall, "Đánh", 1190, 96, Color.WHITE, Align.center);
+        Hud.icon(game.batch, game.assets.icoSword, 1190, 102, 54);
+        Ui.label(game.batch, game.assets.fontSmall, "Đánh", 1190, 62, Color.WHITE, Align.center);
         game.batch.end();
         if (atkTap && panel == null) doAttack();
 
@@ -707,14 +697,19 @@ public class AdventureScreen implements Screen {
             if (cds[i] > 0) {
                 Ui.label(game.batch, game.assets.font, String.format("%.0f", Math.ceil(cds[i])), cx, cy + 10, Ui.RED, Align.center);
             } else {
+                // painted skill icon in the disc's upper half (sword = basic /
+                // damage, swirl = dash, orb = energy & other kinds)
+                Texture sIco = list.get(i).kind == SkillKind.DASH ? game.assets.icoSwirl
+                    : i == 0 ? game.assets.icoSword : game.assets.icoOrb;
+                if (sIco != null) Hud.icon(game.batch, sIco, cx, cy + 18, 33);
                 Color nameCol = ready ? Ui.TEXT : Ui.TEXT_DIM;
                 if (lines.length == 1) {
-                    Ui.label(game.batch, game.assets.fontSmall, lines[0], cx, cy + 13, nameCol, Align.center);
+                    Ui.label(game.batch, game.assets.fontSmall, lines[0], cx, cy - 1, nameCol, Align.center);
                 } else {
-                    Ui.label(game.batch, game.assets.fontSmall, lines[0], cx, cy + 21, nameCol, Align.center);
-                    Ui.label(game.batch, game.assets.fontSmall, lines[1], cx, cy + 5, nameCol, Align.center);
+                    Ui.label(game.batch, game.assets.fontSmall, lines[0], cx, cy + 3, nameCol, Align.center);
+                    Ui.label(game.batch, game.assets.fontSmall, lines[1], cx, cy - 13, nameCol, Align.center);
                 }
-                Ui.label(game.batch, game.assets.fontSmall, "NL " + (int) list.get(i).cost, cx, cy - 15, Ui.CYAN, Align.center);
+                Ui.label(game.batch, game.assets.fontSmall, "NL " + (int) list.get(i).cost, cx, cy - 27, Ui.CYAN, Align.center);
             }
             game.batch.end();
             game.assets.fontSmall.getData().setScale(fs);
@@ -724,10 +719,11 @@ public class AdventureScreen implements Screen {
         game.batch.end();
 
         if (lastNotice != null && !lastNotice.isEmpty() && noticeT < 4.5f) {
-            float w = Math.min(760, Ui.textWidth(game.assets.fontSmall, lastNotice) + 36);
-            Ui.panel(game.shapes, 640 - w / 2, 540, w, 40, new Color(0.06f, 0.14f, 0.10f, 0.94f));
+            float w = Math.min(790, Ui.textWidth(game.assets.fontSmall, lastNotice) + 66);
+            Ui.panel(game.shapes, 640 - w / 2, 470, w, 40, new Color(0.06f, 0.14f, 0.10f, 0.94f));
             game.batch.begin();
-            Ui.label(game.batch, game.assets.fontSmall, lastNotice, 640, 566, Ui.GREEN, Align.center);
+            Hud.icon(game.batch, game.assets.icoQuest, 640 - w / 2 + 21, 490, 24);
+            Ui.label(game.batch, game.assets.fontSmall, lastNotice, 655, 496, Ui.GREEN, Align.center);
             game.batch.end();
         }
 
@@ -743,17 +739,20 @@ public class AdventureScreen implements Screen {
     }
 
     private boolean iconBtn(float x, float y, String kind) {
-        game.shapes.begin(ShapeType.Filled);
-        game.shapes.setColor(Ui.BTN);
-        game.shapes.rect(x, y, 46, 46);
-        game.shapes.setColor(Ui.PANEL_EDGE);
-        game.shapes.rect(x, y + 44, 46, 2);
-        game.shapes.rect(x, y, 46, 2);
-        game.shapes.end();
-        if ("mail".equals(kind)) Ui.iconMail(game.shapes, x + 23, y + 23, 11, Ui.CYAN);
-        else if ("smile".equals(kind)) Ui.iconSmile(game.shapes, x + 23, y + 23, 11, Ui.CYAN);
-        else Ui.iconGear(game.shapes, x + 23, y + 23, 11, Ui.CYAN);
-        return Ui.tapped(hudVp, x, y, 46, 46);
+        // glass rounded square + PAINTED icon asset (same slot/function as before)
+        Texture t = "mail".equals(kind) ? game.assets.icoMail
+            : "smile".equals(kind) ? game.assets.icoSmile : game.assets.icoGear;
+        if (t == null) {
+            game.shapes.begin(ShapeType.Filled);
+            game.shapes.setColor(Ui.BTN);
+            game.shapes.rect(x, y, 46, 46);
+            game.shapes.end();
+            if ("mail".equals(kind)) Ui.iconMail(game.shapes, x + 23, y + 23, 11, Ui.CYAN);
+            else if ("smile".equals(kind)) Ui.iconSmile(game.shapes, x + 23, y + 23, 11, Ui.CYAN);
+            else Ui.iconGear(game.shapes, x + 23, y + 23, 11, Ui.CYAN);
+            return Ui.tapped(hudVp, x, y, 46, 46);
+        }
+        return Hud.glassIconBtn(game, hudVp, t, x, y, 46);
     }
 
     private String fitText(String s, float maxW) {
@@ -885,13 +884,6 @@ public class AdventureScreen implements Screen {
             gone = true;
             game.gotoTown();
         }
-    }
-
-    private void miniSurv(float x, float y, String name, double frac, Color c) {
-        game.batch.begin();
-        Ui.label(game.batch, game.assets.fontSmall, name, x, y + 10, Ui.TEXT_DIM, Align.left);
-        game.batch.end();
-        Ui.bar(game.shapes, x + 30, y, 64, 9, (float) frac, new Color(0.1f, 0.12f, 0.16f, 1), c);
     }
 
     @Override public void resize(int w, int h) { worldVp.update(w, h, false); hudVp.update(w, h, true); }

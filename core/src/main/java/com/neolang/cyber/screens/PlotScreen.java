@@ -16,6 +16,7 @@ import com.neolang.cyber.model.ObjectiveType;
 import com.neolang.cyber.model.Player;
 import com.neolang.cyber.model.Survival;
 import com.neolang.cyber.ui.Draw;
+import com.neolang.cyber.ui.Hud;
 import com.neolang.cyber.ui.Ui;
 
 import java.util.ArrayList;
@@ -173,10 +174,11 @@ public class PlotScreen implements Screen {
         if (selCx >= 0) drawCellPanel();
 
         if (lastNotice != null && !lastNotice.isEmpty() && noticeT < 4.5f) {
-            float w = Math.min(760, Ui.textWidth(game.assets.fontSmall, lastNotice) + 36);
+            float w = Math.min(790, Ui.textWidth(game.assets.fontSmall, lastNotice) + 66);
             Ui.panel(game.shapes, 640 - w / 2, 116, w, 40, new Color(0.06f, 0.14f, 0.10f, 0.94f));
             game.batch.begin();
-            Ui.label(game.batch, game.assets.fontSmall, lastNotice, 640, 142, Ui.GREEN, Align.center);
+            Hud.icon(game.batch, game.assets.icoQuest, 640 - w / 2 + 21, 136, 24);
+            Ui.label(game.batch, game.assets.fontSmall, lastNotice, 655, 142, Ui.GREEN, Align.center);
             game.batch.end();
         }
 
