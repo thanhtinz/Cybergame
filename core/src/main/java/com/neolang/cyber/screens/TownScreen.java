@@ -40,7 +40,6 @@ public class TownScreen implements Screen {
     private float playerX = 300;
     private float facing = 1;
     private float walkPhase;
-    private boolean running;
     private String panel; // null | menu bag mail chat char quest settings pause chief cafe miro bank pet station emote
     private float saveT;
     private int shotFrames;
@@ -52,6 +51,7 @@ public class TownScreen implements Screen {
     private int joyMode; // 0 none, 1 fixed bottom-left stick, 2 floating stick (secondary)
     private final Vector2 joyBase = new Vector2();
     private float joyVec;
+    private boolean stickRun; // moving at run speed (full stick tilt or Shift held)
     private static final float JOY_X = 108, JOY_Y = 108; // fixed joystick centre, bottom-left
 
     private int emote; // 0 none, 1 wave, 2 smile, 3 sit
@@ -186,9 +186,17 @@ public class TownScreen implements Screen {
         if (emoteT > 0) { emoteT -= dt; if (emoteT <= 0) emote = 0; }
 
         float move = 0;
+        float speedFactor = 1f; // 1 = walk, 1.5 = run
+        stickRun = false;
         if (panel == null) {
-            if (Gdx.input.isKeyPressed(Input.Keys.A) || Gdx.input.isKeyPressed(Input.Keys.LEFT)) move -= 1;
-            if (Gdx.input.isKeyPressed(Input.Keys.D) || Gdx.input.isKeyPressed(Input.Keys.RIGHT)) move += 1;
+            boolean shift = Gdx.input.isKeyPressed(Input.Keys.SHIFT_LEFT)
+                || Gdx.input.isKeyPressed(Input.Keys.SHIFT_RIGHT);
+            if (Gdx.input.isKeyPressed(Input.Keys.A) || Gdx.input.isKeyPressed(Input.Keys.LEFT)) {
+                move -= 1; if (shift) speedFactor = 1.5f;
+            }
+            if (Gdx.input.isKeyPressed(Input.Keys.D) || Gdx.input.isKeyPressed(Input.Keys.RIGHT)) {
+                move += 1; if (shift) speedFactor = 1.5f;
+            }
             // movement sticks: fixed stick bottom-left is primary; a floating stick
             // anywhere else in the lower area still works as a secondary control.
             if (Gdx.input.justTouched()) {
@@ -205,18 +213,31 @@ public class TownScreen implements Screen {
             if (joyMode > 0 && Gdx.input.isTouched()) {
                 Vector2 hp = Ui.pointer(hudVp);
                 joyVec = clamp((hp.x - joyBase.x) / 55f, -1, 1);
-                if (Math.abs(joyVec) > 0.22f) move = joyVec;
             }
             if (!Gdx.input.isTouched()) { joyMode = 0; joyVec = 0; }
+            // Screenshot self-test: hold the fixed stick at full tilt through the
+            // capture frame (shotFrames hits 90 in render) so the shot shows the
+            // run state: knob at the rim, gold, hero moving at run speed.
+            if (game.screenshotDir != null && shotFrames >= 20 && shotFrames < 90) {
+                joyMode = 1; joyBase.set(JOY_X, JOY_Y); joyVec = 1f;
+            }
+            // Walk/run comes from stick deflection, there is no run toggle button:
+            // small dead zone at the centre, partial tilt = walk, tilt to the rim
+            // (>= 85% of radius) = run. The floating secondary stick always walks.
+            if (joyMode > 0 && Math.abs(joyVec) > 0.22f) {
+                move = Math.signum(joyVec);
+                speedFactor = (joyMode == 1 && Math.abs(joyVec) >= 0.85f) ? 1.5f : 1.0f;
+            }
         } else {
             joyMode = 0;
         }
+        stickRun = move != 0 && speedFactor > 1f;
 
         if (move != 0) {
             facing = move > 0 ? 1 : -1;
-            double spd = p.speed() * (running ? 1.5 : 1.0);
+            double spd = p.speed() * speedFactor;
             playerX = clamp(playerX + (float) (move * spd * dt), 50, WORLD_W - 50);
-            walkPhase += dt * 11;
+            walkPhase += dt * (stickRun ? 15 : 11);
         }
         p.x = playerX;
 
@@ -408,7 +429,6 @@ public class TownScreen implements Screen {
         game.shapes.end();
         if ("mail".equals(kind)) Ui.iconMail(game.shapes, x + 23, y + 23, 11, Ui.CYAN);
         else if ("chat".equals(kind)) Ui.iconChat(game.shapes, x + 23, y + 25, 11, Ui.CYAN);
-        else if ("run".equals(kind)) Ui.iconRun(game.shapes, x + 23, y + 23, 11, running ? Ui.GOLD : Ui.CYAN);
         else if ("smile".equals(kind)) Ui.iconSmile(game.shapes, x + 23, y + 23, 11, Ui.CYAN);
         else Ui.iconGear(game.shapes, x + 23, y + 23, 11, Ui.CYAN);
         return Ui.tapped(hudVp, x, y, 46, 46);
@@ -446,14 +466,11 @@ public class TownScreen implements Screen {
         // ---- bottom-left: movement joystick ----
         drawJoystick();
 
-        // ---- buttons flanking the chat frame: mail + gear on its left, emote + run on its right ----
+        // ---- buttons flanking the chat frame: mail + gear on its left, emote on its right ----
+        // (no walk/run toggle: speed comes from joystick deflection)
         if (iconBtn(240, 50, "mail")) { panel = "mail"; game.sound.play("click"); }
         if (iconBtn(296, 50, "menu")) { panel = "menu"; game.sound.play("click"); }
         if (iconBtn(938, 50, "smile")) { panel = "emote"; game.sound.play("click"); }
-        if (iconBtn(992, 50, "run")) { running = !running; game.sound.play("click"); }
-        game.batch.begin();
-        Ui.label(game.batch, game.assets.fontSmall, running ? "Chạy" : "Đi bộ", 1015, 38, Ui.TEXT_DIM, Align.center);
-        game.batch.end();
 
         // ---- bottom-centre: chat frame ----
         drawChatFrame();
@@ -495,7 +512,8 @@ public class TownScreen implements Screen {
         game.shapes.begin(ShapeType.Filled);
         game.shapes.setColor(1, 1, 1, joyMode == 1 ? 0.22f : 0.12f);
         game.shapes.circle(JOY_X, JOY_Y, 56);
-        game.shapes.setColor(0.35f, 0.95f, 1f, joyMode == 1 ? 0.6f : 0.35f);
+        if (stickRun) game.shapes.setColor(1f, 0.82f, 0.25f, 0.8f); // gold knob at full tilt = running
+        else game.shapes.setColor(0.35f, 0.95f, 1f, joyMode == 1 ? 0.6f : 0.35f);
         game.shapes.circle(joyMode == 1 ? JOY_X + joyVec * 38 : JOY_X, JOY_Y, 24);
         if (joyMode == 2) {
             game.shapes.setColor(1, 1, 1, 0.15f);
@@ -504,6 +522,11 @@ public class TownScreen implements Screen {
             game.shapes.circle(joyBase.x + joyVec * 38, joyBase.y, 22);
         }
         game.shapes.end();
+        if (stickRun) {
+            game.batch.begin();
+            Ui.label(game.batch, game.assets.fontSmall, "Chạy", JOY_X, JOY_Y - 64, Ui.GOLD, Align.center);
+            game.batch.end();
+        }
     }
 
     private Npc nearestNpc() {
