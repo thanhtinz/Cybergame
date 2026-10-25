@@ -1,0 +1,9 @@
+rootProject.name = 'neo-lang-cyber-grove'
+include 'core', 'desktop'
+// Android module is part of the build by default. In restricted sandboxes where
+// Google Maven is unreachable, pass -PskipAndroid=true to build core/desktop only.
+if (providers.gradleProperty('skipAndroid').map { it.toBoolean() }.getOrElse(false)) {
+    println 'settings: bo qua module android theo -PskipAndroid=true'
+} else {
+    include 'android'
+}

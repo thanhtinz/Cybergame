@@ -1,0 +1,12 @@
+sourceCompatibility = 17
+targetCompatibility = 17
+[compileJava, compileTestJava]*.options*.encoding = 'UTF-8'
+sourceSets.main.java.srcDirs = ['src/main/java']
+sourceSets.main.resources.srcDirs = ['src/main/resources']
+
+// Headless logic verification: runs the pure-model test main (no GDX runtime needed).
+task verifyLogic(type: JavaExec) {
+    dependsOn classes
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = 'com.neolang.cyber.verify.VerifyMain'
+}

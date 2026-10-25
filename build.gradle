@@ -1,0 +1,34 @@
+allprojects {
+    version = '1.0.0'
+    ext {
+        appName = 'NeoLang'
+        gdxVersion = '1.12.1'
+    }
+    repositories {
+        mavenCentral()
+        google()
+        maven { url 'https://oss.sonatype.org/content/repositories/snapshots/' }
+    }
+}
+
+project(':core') {
+    apply plugin: 'java-library'
+    dependencies {
+        api "com.badlogicgames.gdx:gdx:$gdxVersion"
+        api "com.badlogicgames.gdx:gdx-freetype:$gdxVersion"
+    }
+}
+
+project(':desktop') {
+    apply plugin: 'java'
+    apply plugin: 'application'
+    dependencies {
+        implementation project(':core')
+        implementation "com.badlogicgames.gdx:gdx-backend-lwjgl3:$gdxVersion"
+        implementation "com.badlogicgames.gdx:gdx-platform:$gdxVersion:natives-desktop"
+        implementation "com.badlogicgames.gdx:gdx-freetype-platform:$gdxVersion:natives-desktop"
+    }
+}
+
+// The android module is fully configured in android/build.gradle
+// (its buildscript block declares the AGP classpath).
