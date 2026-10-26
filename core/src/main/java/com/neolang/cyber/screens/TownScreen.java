@@ -66,7 +66,7 @@ public class TownScreen implements Screen {
     private int chatReplyIdx;
     private static final String[] CHAT_REPLIES = {
         "Hôm nay mạch cây chạy êm lắm, bạn thấy không?",
-        "Nghe nói Khu Vành Đai Neon có nhiều Nhựa Sáng rơi sau bão đó.",
+        "Nghe nói Bìa Rừng Lá Non có nhiều Nhựa Sáng rơi sau bão đó.",
         "Cafe Pina vừa có món mới, ghé thử đi!",
         "Đạt cấp 5 là qua Trạm Định Hướng chọn nghề được rồi.",
         "Pet của bạn trông khoẻ đấy, cho nó ăn pin chưa?"
@@ -141,7 +141,7 @@ public class TownScreen implements Screen {
         s.add(new Spot("plot", "Về Khu Nhà Cành", 70));
         for (Npc n : npcs) s.add(new Spot(n.id, "Nói chuyện: " + n.name, n.x));
         s.add(new Spot("board", "Bảng Nhiệm Vụ", 1760));
-        s.add(new Spot("adv", "Tới Khu Vành Đai Neon", 2730));
+        s.add(new Spot("adv", "Tới Bìa Rừng Lá Non", 2730));
         return s;
     }
 
@@ -330,7 +330,7 @@ public class TownScreen implements Screen {
             game.shapes.begin(ShapeType.Filled);
             game.shapes.setColor(0.07f, 0.10f, 0.10f, 0.42f);
             game.shapes.rect(camX - viewW / 2 - 10, 0, viewW + 20, GROUND);
-            game.shapes.setColor(0.25f, 0.95f, 1f, 0.55f);
+            game.shapes.setColor(0.95f, 0.80f, 0.50f, 0.55f);
             game.shapes.rect(camX - viewW / 2 - 10, GROUND - 3, viewW + 20, 3);
             game.shapes.end();
         } else {
@@ -342,18 +342,18 @@ public class TownScreen implements Screen {
         // Building sprites stand at the interaction points; feedback is a small
         // floating name plate + a soft glow at the base — NO dark boxes over art.
         drawBuilding(game.assets.bldCafe, 545, 216, 430, 230, 215,
-            new Color(1f, 0.55f, 0.35f, 1), "Cafe Pina", near != null && "cafe".equals(near.id));
+            new Color(0.85f, 0.45f, 0.25f, 1), "Cafe Pina", near != null && "cafe".equals(near.id));
         drawBuilding(game.assets.bldFashion, 990, 202, 880, 220, 200,
-            new Color(1f, 0.40f, 0.75f, 1), "Thời Trang Miro", near != null && "miro".equals(near.id));
+            new Color(0.80f, 0.35f, 0.55f, 1), "Thời Trang Miro", near != null && "miro".equals(near.id));
         drawBuilding(game.assets.bldStation, 1520, 238, 1400, 240, 225,
-            new Color(0.35f, 0.95f, 1f, 1), "Trạm Định Hướng", near != null && "station".equals(near.id));
+            new Color(0.20f, 0.55f, 0.45f, 1), "Trạm Định Hướng", near != null && "station".equals(near.id));
         drawBuilding(game.assets.bldBank, 2090, 198, 1980, 220, 190,
-            new Color(1f, 0.82f, 0.25f, 1), "Ngân Hàng Lá", near != null && "bank".equals(near.id));
+            new Color(0.85f, 0.60f, 0.15f, 1), "Ngân Hàng Lá", near != null && "bank".equals(near.id));
         drawBuilding(game.assets.bldPet, 2440, 208, 2330, 220, 190,
-            new Color(0.45f, 0.95f, 0.55f, 1), "Pet Shop", near != null && "pet".equals(near.id));
+            new Color(0.35f, 0.65f, 0.30f, 1), "Pet Shop", near != null && "pet".equals(near.id));
 
         drawPortalGate(85, "Khu Nhà Cành", -1, near != null && "plot".equals(near.id));
-        drawPortalGate(2725, "Khu Vành Đai Neon — Farm", 1, near != null && "adv".equals(near.id));
+        drawPortalGate(2725, "Bìa Rừng Lá Non — Farm", 1, near != null && "adv".equals(near.id));
         drawQuestBoard(near != null && "board".equals(near.id));
 
         // sparse painted props as decoration (never blocking the walk line)
@@ -387,7 +387,7 @@ public class TownScreen implements Screen {
             game.shapes.begin(ShapeType.Filled);
             for (int i = 0; i < 3; i++) {
                 float a = 0.5f + 0.5f * (float) Math.sin(time * 8 + i);
-                game.shapes.setColor(0.35f, 0.95f, 1f, a);
+                game.shapes.setColor(1f, 0.80f, 0.30f, a);
                 game.shapes.circle(playerX + facing * (20 + i * 6), GROUND + 82 + i * 5, 2.4f);
             }
             game.shapes.end();
@@ -444,13 +444,14 @@ public class TownScreen implements Screen {
     }
 
     /** Small floating name plate above a building (replaces the old sign band
-     *  baked into the dark pod box). Active = gold trim + bobbing arrow. */
+     *  baked into the dark pod box). COZY: cream plate, warm-brown trim (gold
+     *  when active) + bobbing arrow. */
     private void drawSign(float cx, float topY, String label, Color color, boolean active,
                           String sub, boolean arrow) {
         float w = Ui.textWidth(game.assets.fontSmall, label) + 26;
         float y = topY + 8;
         game.shapes.begin(ShapeType.Filled);
-        game.shapes.setColor(0.05f, 0.09f, 0.13f, 0.85f);
+        game.shapes.setColor(0.98f, 0.93f, 0.82f, 0.92f);
         game.shapes.rect(cx - w / 2, y, w, 26);
         game.shapes.setColor(active ? Ui.GOLD : color);
         game.shapes.rect(cx - w / 2, y, w, 2);
@@ -463,7 +464,7 @@ public class TownScreen implements Screen {
         }
         game.shapes.end();
         game.batch.begin();
-        Ui.label(game.batch, game.assets.fontSmall, label, cx, y + 18, Color.WHITE, Align.center);
+        Ui.label(game.batch, game.assets.fontSmall, label, cx, y + 18, Ui.TEXT, Align.center);
         if (sub != null) {
             Ui.label(game.batch, game.assets.fontSmall, sub, cx, y + 48,
                 active ? Ui.GOLD : Ui.TEXT_DIM, Align.center);
@@ -525,9 +526,9 @@ public class TownScreen implements Screen {
     private void drawGate(float x, String label, float dir, boolean highlight) {
         float p = 0.5f + 0.5f * (float) Math.sin(time * 4);
         game.shapes.begin(ShapeType.Filled);
-        game.shapes.setColor(0.20f, 0.30f, 0.38f, 1);
+        game.shapes.setColor(0.45f, 0.40f, 0.35f, 1);
         game.shapes.rect(x, GROUND, 90, 150);
-        game.shapes.setColor(0.35f, 0.85f, 0.95f, 0.5f + 0.3f * p);
+        game.shapes.setColor(0.55f, 0.75f, 0.85f, 0.5f + 0.3f * p);
         game.shapes.rect(x + 8, GROUND + 10, 74, 130);
         game.shapes.setColor(1f, 0.85f, 0.3f, 1);
         float ax = x + 45 + dir * (6 + p * 5);
@@ -540,12 +541,12 @@ public class TownScreen implements Screen {
 
     private void drawBoard(boolean highlight) {
         game.shapes.begin(ShapeType.Filled);
-        game.shapes.setColor(0.10f, 0.16f, 0.24f, 1);
+        game.shapes.setColor(0.45f, 0.32f, 0.20f, 1);
         game.shapes.rect(1690, GROUND, 140, 120);
         float p = 0.5f + 0.5f * (float) Math.sin(time * 3);
-        game.shapes.setColor(0.30f, 0.90f, 1f, 0.35f + 0.3f * p);
+        game.shapes.setColor(0.95f, 0.88f, 0.70f, 0.75f + 0.25f * p);
         game.shapes.rect(1698, GROUND + 34, 124, 78);
-        game.shapes.setColor(0.4f, 0.45f, 0.5f, 1);
+        game.shapes.setColor(0.4f, 0.35f, 0.3f, 1);
         game.shapes.rect(1752, GROUND - 2, 16, 36);
         game.shapes.end();
         game.batch.begin();
@@ -648,7 +649,7 @@ public class TownScreen implements Screen {
         // toast
         if (lastNotice != null && !lastNotice.isEmpty() && noticeT < 4.5f) {
             float w = Math.min(790, Ui.textWidth(game.assets.fontSmall, lastNotice) + 66);
-            Ui.panel(game.shapes, 640 - w / 2, 470, w, 40, new Color(0.06f, 0.14f, 0.10f, 0.94f));
+            Ui.panel(game.shapes, 640 - w / 2, 470, w, 40);
             game.batch.begin();
             Hud.icon(game.batch, game.assets.icoQuest, 640 - w / 2 + 21, 490, 24);
             Ui.label(game.batch, game.assets.fontSmall, lastNotice, 655, 496, Ui.GREEN, Align.center);
@@ -663,10 +664,10 @@ public class TownScreen implements Screen {
     private void drawMinimap(Player p) {
         Hud.drawMinimapBase(game, "Neo Làng");
         game.shapes.begin(ShapeType.Filled);
-        Color gold = new Color(1f, 0.8f, 0.3f, 1);
+        Color gold = new Color(0.80f, 0.45f, 0.12f, 1);
         float[] spots = {545, 990, 1230, 1520, 1760, 2090, 2445};
         for (float sx : spots) Hud.dot(game.shapes, Hud.mmX(sx, WORLD_W), Hud.mmGroundY(), 3, gold);
-        Color portal = new Color(0.35f, 1f, 0.75f, 1);
+        Color portal = new Color(0.20f, 0.60f, 0.30f, 1);
         Hud.dot(game.shapes, Hud.mmX(70, WORLD_W), Hud.mmGroundY(), 3.6f, portal);
         Hud.dot(game.shapes, Hud.mmX(2730, WORLD_W), Hud.mmGroundY(), 3.6f, portal);
         Hud.playerDot(game.shapes, Hud.mmX(p.x, WORLD_W), Hud.mmGroundY(), facing < 0 ? -1 : 1);
@@ -701,7 +702,7 @@ public class TownScreen implements Screen {
 
     private String shortAction(Spot s) {
         if ("plot".equals(s.id)) return "Về nhà";
-        if ("adv".equals(s.id)) return "Ra Vành Đai Neon";
+        if ("adv".equals(s.id)) return "Ra Bìa Rừng";
         if ("board".equals(s.id)) return "Xem nhiệm vụ";
         return "Nói chuyện";
     }
@@ -709,7 +710,7 @@ public class TownScreen implements Screen {
     /** Bottom-centre chat frame: short log (recent chat + nearest NPC's current line)
      *  over a "tap to chat" strip; tapping the frame opens the full chat panel. */
     private void drawChatFrame() {
-        Ui.panel(game.shapes, 352, 16, 576, 114, new Color(0.05f, 0.10f, 0.15f, 0.88f));
+        Ui.panel(game.shapes, 352, 16, 576, 114);
         List<String> lines = new ArrayList<String>();
         int from = Math.max(0, chatLog.size() - 2);
         for (int i = from; i < chatLog.size(); i++) lines.add(chatLog.get(i));
@@ -789,7 +790,7 @@ public class TownScreen implements Screen {
             shown++;
             if (y < 210) break;
         }
-        if (shown == 0) Ui.label(game.batch, game.assets.fontSmall, "Túi trống. Farm ở Vành Đai Neon hoặc ghé Cafe Pina nhé.", 420, y, Ui.TEXT_DIM, Align.left);
+        if (shown == 0) Ui.label(game.batch, game.assets.fontSmall, "Túi trống. Farm ở Bìa Rừng Lá Non hoặc ghé Cafe Pina nhé.", 420, y, Ui.TEXT_DIM, Align.left);
         game.batch.end();
         if (closeBtn(735, 168)) panel = null;
     }
@@ -1123,7 +1124,7 @@ public class TownScreen implements Screen {
                 game.state.notice = "Đã đổi được 1 Tinh Thể Mạch.";
             } else {
                 game.sound.play("error");
-                game.state.notice = "Cần 5 Nhựa Sáng (ra Vành Đai Neon farm quái nhé).";
+                game.state.notice = "Cần 5 Nhựa Sáng (ra Bìa Rừng Lá Non farm quái nhé).";
             }
         }
         if (closeBtn(795, 198)) panel = null;
@@ -1134,7 +1135,7 @@ public class TownScreen implements Screen {
         Ui.panel(game.shapes, 360, 160, 560, 400);
         game.batch.begin();
         Ui.label(game.batch, game.assets.font, "Pet Shop — Bé Robot", 640, 532, Ui.CYAN, Align.center);
-        Ui.label(game.batch, game.assets.fontSmall, "Pet của bạn: cấp " + petTier() + " — nhặt đồ ở Vành Đai Neon nhanh hơn theo cấp.", 390, 494, Ui.TEXT, Align.left);
+        Ui.label(game.batch, game.assets.fontSmall, "Pet của bạn: cấp " + petTier() + " — nhặt đồ ở Bìa Rừng Lá Non nhanh hơn theo cấp.", 390, 494, Ui.TEXT, Align.left);
         Ui.label(game.batch, game.assets.fontSmall, "Xu Lá: " + p.xuLa, 390, 462, Ui.GOLD, Align.left);
         game.batch.end();
         float y = 402;
@@ -1194,7 +1195,7 @@ public class TownScreen implements Screen {
             Ui.label(game.batch, game.assets.fontSmall,
                 "Cần hoàn thành nhiệm vụ giới thiệu mở đầu (gặp Trưởng Trạm Gốc).", 640, 508, Ui.TEXT, Align.center);
             Ui.label(game.batch, game.assets.fontSmall,
-                "Hãy làm nhiệm vụ chính và farm ở Vành Đai Neon để lên cấp nhé.", 640, 480, Ui.TEXT_DIM, Align.center);
+                "Hãy làm nhiệm vụ chính và farm ở Bìa Rừng Lá Non để lên cấp nhé.", 640, 480, Ui.TEXT_DIM, Align.center);
             game.batch.end();
         } else {
             game.batch.begin();
@@ -1230,7 +1231,7 @@ public class TownScreen implements Screen {
                     if (r == ClassChoice.Result.OK) {
                         game.state.quests.onEvent(ObjectiveType.CHOOSE_CLASS, 1);
                         game.sound.play("levelup");
-                        game.state.notice = "Đã chọn nghề " + gc.displayName + "! Ra Vành Đai Neon thử kỹ năng mới nhé.";
+                        game.state.notice = "Đã chọn nghề " + gc.displayName + "! Ra Bìa Rừng Lá Non thử kỹ năng mới nhé.";
                         game.saveGame();
                     } else {
                         game.sound.play("error");

@@ -26,7 +26,7 @@ public class TitleScreen implements Screen {
     @Override
     public void render(float dt) {
         time += dt;
-        Gdx.gl.glClearColor(0.03f, 0.05f, 0.10f, 1);
+        Gdx.gl.glClearColor(0.20f, 0.14f, 0.08f, 1);
         Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT);
         Gdx.gl.glEnable(GL20.GL_BLEND);
         Gdx.gl.glBlendFunc(GL20.GL_SRC_ALPHA, GL20.GL_ONE_MINUS_SRC_ALPHA);
@@ -46,7 +46,7 @@ public class TitleScreen implements Screen {
             Draw.drawTrunkWorld(game.shapes, 0, NeoLangGame.VW, 170, 0, time);
         }
         game.shapes.begin(com.badlogic.gdx.graphics.glutils.ShapeRenderer.ShapeType.Filled);
-        game.shapes.setColor(0.02f, 0.04f, 0.08f, 0.38f);
+        game.shapes.setColor(0.15f, 0.10f, 0.05f, 0.28f);
         game.shapes.rect(0, 0, NeoLangGame.VW, NeoLangGame.VH);
         game.shapes.end();
 
@@ -58,11 +58,14 @@ public class TitleScreen implements Screen {
         Ui.nameTag(game.batch, game.shapes, game.assets.fontSmall, "Cư Dân Mới", 235, 330);
         Ui.nameTag(game.batch, game.shapes, game.assets.fontSmall, "Cư Dân Mới", 1045, 330);
 
+        // cream sign board behind the title: the key art's canopy is dark, so
+        // the brown title text needs the pale board to stay readable (COZY).
+        Ui.panel(game.shapes, NeoLangGame.VW / 2f - 265, 552, 530, 118);
         game.batch.begin();
         Ui.label(game.batch, game.assets.fontBig, "NEO LÀNG", NeoLangGame.VW / 2f, 640,
-            new Color(0.45f, 1f, 0.95f, 1), Align.center);
+            new Color(0.35f, 0.22f, 0.12f, 1), Align.center);
         Ui.label(game.batch, game.assets.font, "Cyber Grove — Làng trên Cây Mẹ", NeoLangGame.VW / 2f, 585,
-            new Color(1f, 0.85f, 0.55f, 1), Align.center);
+            new Color(0.55f, 0.35f, 0.15f, 1), Align.center);
         Ui.label(game.batch, game.assets.fontSmall, "Game 2D chibi — Java + LibGDX", NeoLangGame.VW / 2f, 42,
             Ui.TEXT_DIM, Align.center);
         game.batch.end();

@@ -29,7 +29,7 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Random;
 
-/** Neon belt farm zone (city outskirts): joystick + attack/skill buttons, monsters, pet loot pickup, data storm. */
+/** Cozy forest-edge farm zone ("Bia Rung La Non"): joystick + attack/skill buttons, monsters, pet loot pickup, data storm. */
 public class AdventureScreen implements Screen {
     public static final float WORLD_W = 3400;
     public static final float GROUND = 170;
@@ -69,7 +69,7 @@ public class AdventureScreen implements Screen {
     private int chatReplyIdx;
     private static final String[] CHAT_REPLIES = {
         "Hôm nay mạch cây chạy êm lắm, bạn thấy không?",
-        "Nghe nói Khu Vành Đai Neon có nhiều Nhựa Sáng rơi sau bão đó.",
+        "Nghe nói Bìa Rừng Lá Non có nhiều Nhựa Sáng rơi sau bão đó.",
         "Cafe Pina vừa có món mới, ghé thử đi!",
         "Đạt cấp 5 là qua Trạm Định Hướng chọn nghề được rồi.",
         "Pet của bạn trông khoẻ đấy, cho nó ăn pin chưa?"
@@ -288,7 +288,7 @@ public class AdventureScreen implements Screen {
             p.warmth += (100 - (double) p.warmth) * 0.4;
             p.battery += (100 - (double) p.battery) * 0.4;
             p.x = 2600;
-            game.state.notice = "Bạn gục ở Vành Đai Neon — pet kéo bạn về làng, không mất đồ gì cả.";
+            game.state.notice = "Bạn gục ở Bìa Rừng Lá Non — pet kéo bạn về làng, không mất đồ gì cả.";
             game.saveGame();
             gone = true;
             game.gotoTown();
@@ -467,9 +467,9 @@ public class AdventureScreen implements Screen {
             game.batch.end();
             // walkable ground band so feet meet the path at GROUND
             game.shapes.begin(ShapeType.Filled);
-            game.shapes.setColor(0.08f, 0.07f, 0.05f, 0.45f);
+            game.shapes.setColor(0.10f, 0.08f, 0.05f, 0.38f);
             game.shapes.rect(startX - 10, 0, viewW + 20, GROUND);
-            game.shapes.setColor(0.25f, 0.95f, 1f, 0.4f);
+            game.shapes.setColor(0.95f, 0.80f, 0.50f, 0.45f);
             game.shapes.rect(startX - 10, GROUND - 3, viewW + 20, 3);
             game.shapes.end();
         } else {
@@ -484,14 +484,12 @@ public class AdventureScreen implements Screen {
             game.shapes.ellipse(70 - 62, GROUND - 6, 124, 13);
             game.shapes.end();
             Draw.drawSprite(game.batch, game.assets.bldPortal, 70, GROUND - 2, 168);
-            game.batch.begin();
-            Ui.label(game.batch, game.assets.fontSmall, "Về Làng", 70, GROUND + 182, Ui.TEXT, Align.center);
-            game.batch.end();
+            Ui.nameTag(game.batch, game.shapes, game.assets.fontSmall, "Về Làng", 70, GROUND + 178);
         } else {
             game.shapes.begin(ShapeType.Filled);
-            game.shapes.setColor(0.20f, 0.30f, 0.38f, 1);
+            game.shapes.setColor(0.45f, 0.40f, 0.35f, 1);
             game.shapes.rect(30, GROUND, 80, 140);
-            game.shapes.setColor(0.35f, 0.85f, 0.95f, 0.6f);
+            game.shapes.setColor(0.55f, 0.75f, 0.85f, 0.6f);
             game.shapes.rect(38, GROUND + 10, 64, 120);
             game.shapes.end();
             game.batch.begin();
@@ -534,7 +532,7 @@ public class AdventureScreen implements Screen {
         }
         if (shieldT > 0) {
             game.shapes.begin(ShapeType.Line);
-            game.shapes.setColor(0.4f, 0.85f, 1f, 0.6f);
+            game.shapes.setColor(0.45f, 0.70f, 0.90f, 0.6f);
             game.shapes.circle(px, GROUND + 34, 34);
             game.shapes.end();
         }
@@ -549,7 +547,7 @@ public class AdventureScreen implements Screen {
             game.shapes.begin(ShapeType.Filled);
             for (int i = 0; i < 3; i++) {
                 float a = 0.5f + 0.5f * (float) Math.sin(time * 8 + i);
-                game.shapes.setColor(0.35f, 0.95f, 1f, a);
+                game.shapes.setColor(1f, 0.80f, 0.30f, a);
                 game.shapes.circle(px + facing * (20 + i * 6), GROUND + 82 + i * 5, 2.4f);
             }
             game.shapes.end();
@@ -589,11 +587,11 @@ public class AdventureScreen implements Screen {
 
         // minimap top-right: red dots = living monsters, green = home portal,
         // map name inside the frame's top strip (no loose label under the box)
-        Hud.drawMinimapBase(game, "Khu Vành Đai Neon");
+        Hud.drawMinimapBase(game, "Bìa Rừng Lá Non");
         game.shapes.begin(ShapeType.Filled);
-        Color monDot = new Color(1f, 0.32f, 0.32f, 1);
+        Color monDot = new Color(0.85f, 0.22f, 0.18f, 1);
         for (Mon m : mons) if (m.hp > 0) Hud.dot(game.shapes, Hud.mmX(m.x, WORLD_W), Hud.mmGroundY(), 2.6f, monDot);
-        Hud.dot(game.shapes, Hud.mmX(30, WORLD_W), Hud.mmGroundY(), 3.6f, new Color(0.35f, 1f, 0.75f, 1));
+        Hud.dot(game.shapes, Hud.mmX(30, WORLD_W), Hud.mmGroundY(), 3.6f, new Color(0.20f, 0.60f, 0.30f, 1));
         Hud.playerDot(game.shapes, Hud.mmX(px, WORLD_W), Hud.mmGroundY(), facing < 0 ? -1 : 1);
         game.shapes.end();
 
@@ -707,7 +705,7 @@ public class AdventureScreen implements Screen {
 
         if (lastNotice != null && !lastNotice.isEmpty() && noticeT < 4.5f) {
             float w = Math.min(790, Ui.textWidth(game.assets.fontSmall, lastNotice) + 66);
-            Ui.panel(game.shapes, 640 - w / 2, 470, w, 40, new Color(0.06f, 0.14f, 0.10f, 0.94f));
+            Ui.panel(game.shapes, 640 - w / 2, 470, w, 40);
             game.batch.begin();
             Hud.icon(game.batch, game.assets.icoQuest, 640 - w / 2 + 21, 490, 24);
             Ui.label(game.batch, game.assets.fontSmall, lastNotice, 655, 496, Ui.GREEN, Align.center);
@@ -775,7 +773,7 @@ public class AdventureScreen implements Screen {
     /** Bottom-centre chat frame (slightly narrower than town's so the skill arc
      *  keeps its space): short log over a "tap to chat" strip; tap opens chat panel. */
     private void drawChatFrame() {
-        Ui.panel(game.shapes, 400, 16, 480, 114, new Color(0.05f, 0.10f, 0.15f, 0.88f));
+        Ui.panel(game.shapes, 400, 16, 480, 114);
         game.batch.begin();
         float y = 114;
         int from = Math.max(0, chatLog.size() - 3);

@@ -22,7 +22,7 @@ import com.neolang.cyber.ui.Ui;
 import java.util.ArrayList;
 import java.util.List;
 
-/** Home branch: 6 glass hydroponic beds (left) + a 10x6 building grid (right) on one fixed screen. */
+/** Home branch: 6 cozy wooden planter beds (left) + a 10x6 building grid (right) on one fixed screen. */
 public class PlotScreen implements Screen {
     private final NeoLangGame game;
     private final ExtendViewport vp = new ExtendViewport(NeoLangGame.VW, NeoLangGame.VH);
@@ -109,29 +109,38 @@ public class PlotScreen implements Screen {
 
         float dayness = game.state.clock.isNight() ? 0.3f : 0.95f;
         if (game.assets.plotBg != null) {
-            // painted home-branch backdrop (survival/building scene) under a soft
-            // shade so the beds and build grid stay readable.
+            // painted cozy home-terrace backdrop under a soft warm shade so the
+            // beds and build grid stay readable.
             game.batch.begin();
             game.batch.draw(game.assets.plotBg, 0, 0, NeoLangGame.VW, NeoLangGame.VH);
             game.batch.end();
             game.shapes.begin(ShapeType.Filled);
-            game.shapes.setColor(0.03f, 0.05f, 0.09f, 0.38f);
+            game.shapes.setColor(0.25f, 0.18f, 0.10f, 0.22f);
             game.shapes.rect(0, 0, NeoLangGame.VW, NeoLangGame.VH);
             game.shapes.end();
         } else {
             Draw.drawSky(game.shapes, 0, NeoLangGame.VW, dayness, game.state.storm.active, time);
             Draw.drawTrunkWorld(game.shapes, 0, NeoLangGame.VW, 150, 0, time);
         }
-        // house pod backdrop on the right
+        // house area backdrop on the right: warm cream wash + brown top trim
         game.shapes.begin(ShapeType.Filled);
-        game.shapes.setColor(0.10f, 0.15f, 0.20f, 0.66f);
+        game.shapes.setColor(0.98f, 0.93f, 0.82f, 0.55f);
         game.shapes.rect(640, 150, 610, 420);
-        game.shapes.setColor(0.25f, 0.95f, 1f, 0.5f);
+        game.shapes.setColor(0.55f, 0.38f, 0.22f, 0.8f);
         game.shapes.rect(640, 566, 610, 4);
         game.shapes.end();
 
-        // header
+        // header (cream backing so the text stays readable over the busy plate)
         int houseLv = 1 + game.state.build.countModules() / 3;
+        game.shapes.begin(ShapeType.Filled);
+        game.shapes.setColor(0.98f, 0.93f, 0.82f, 0.78f);
+        game.shapes.rect(28, 618, 600, 96);
+        game.shapes.setColor(0.55f, 0.38f, 0.22f, 0.8f);
+        game.shapes.rect(28, 711, 600, 3);
+        game.shapes.rect(28, 618, 600, 3);
+        game.shapes.rect(28, 618, 3, 96);
+        game.shapes.rect(625, 618, 3, 96);
+        game.shapes.end();
         game.batch.begin();
         Ui.label(game.batch, game.assets.font, "Khu Nhà Cành — Nhà cấp " + houseLv, 40, 700, Ui.CYAN, Align.left);
         Ui.label(game.batch, game.assets.fontSmall, "Xu Lá: " + p.xuLa + "   Tinh Thể: " + p.tinhThe, 40, 668, Ui.GOLD, Align.left);
@@ -175,7 +184,7 @@ public class PlotScreen implements Screen {
 
         if (lastNotice != null && !lastNotice.isEmpty() && noticeT < 4.5f) {
             float w = Math.min(790, Ui.textWidth(game.assets.fontSmall, lastNotice) + 66);
-            Ui.panel(game.shapes, 640 - w / 2, 116, w, 40, new Color(0.06f, 0.14f, 0.10f, 0.94f));
+            Ui.panel(game.shapes, 640 - w / 2, 116, w, 40);
             game.batch.begin();
             Hud.icon(game.batch, game.assets.icoQuest, 640 - w / 2 + 21, 136, 24);
             Ui.label(game.batch, game.assets.fontSmall, lastNotice, 655, 142, Ui.GREEN, Align.center);
@@ -207,25 +216,27 @@ public class PlotScreen implements Screen {
             boolean ready = planted && game.state.garden.isReady(i, now);
             String seedId = planted ? game.state.garden.plots[i].seedId : null;
             int seedIdx = seedId != null ? Math.abs(seedId.hashCode()) : 0;
-            // Painted hydroponic pod per growth stage (sprout -> plant -> fruit);
-            // an empty bed shows the pod ghosted/dim. Shape bed stays as fallback.
+            // Painted COZY wooden planter per growth stage (soil -> sprout ->
+            // fruit plant); an empty bed shows the planter ghosted/dim. The
+            // planters are wide, so they are fitted inside the bed box instead
+            // of by height. Shape bed stays as fallback.
             Texture pod = !planted ? game.assets.propPod0
                 : (ready || prog >= 0.8f) ? game.assets.propPod2
                 : prog >= 0.4f ? game.assets.propPod1 : game.assets.propPod0;
             boolean drewPod = false;
             if (pod != null) {
                 game.shapes.begin(ShapeType.Filled);
-                game.shapes.setColor(0.08f, 0.13f, 0.12f, 0.55f);
+                game.shapes.setColor(0.30f, 0.20f, 0.12f, 0.30f);
                 game.shapes.rect(x + 3, y + 3, BED_W - 6, BED_H - 6);
-                game.shapes.setColor(0.25f, 0.95f, 1f, 0.5f);
+                game.shapes.setColor(0.55f, 0.38f, 0.22f, 0.55f);
                 game.shapes.rect(x + 3, y + BED_H - 5, BED_W - 6, 2);
                 game.shapes.rect(x + 3, y + 3, BED_W - 6, 2);
                 game.shapes.end();
                 if (!planted) {
-                    drewPod = Draw.drawSpriteTint(game.batch, pod, x + BED_W / 2, y + 5, BED_H - 12,
-                        0.55f, 0.62f, 0.68f, 0.38f);
+                    drewPod = Draw.drawSpriteBoxTint(game.batch, pod, x + BED_W / 2, y + 5, BED_W - 10, BED_H - 12,
+                        0.72f, 0.66f, 0.58f, 0.55f);
                 } else {
-                    drewPod = Draw.drawSprite(game.batch, pod, x + BED_W / 2, y + 5, BED_H - 12);
+                    drewPod = Draw.drawSpriteBox(game.batch, pod, x + BED_W / 2, y + 5, BED_W - 10, BED_H - 12);
                 }
                 if (ready) {
                     float pl = 0.5f + 0.5f * (float) Math.sin(time * 5);
@@ -301,7 +312,7 @@ public class PlotScreen implements Screen {
         }
         if (!any) {
             game.batch.begin();
-            Ui.label(game.batch, game.assets.fontSmall, "Chưa có hạt giống. Farm quái ở Vành Đai Neon để nhặt hạt nhé.", 640, 400, Ui.TEXT_DIM, Align.center);
+            Ui.label(game.batch, game.assets.fontSmall, "Chưa có hạt giống. Farm quái ở Bìa Rừng Lá Non để nhặt hạt nhé.", 640, 400, Ui.TEXT_DIM, Align.center);
             game.batch.end();
         }
         if (btn(790, 228, 90, 36, "Đóng")) seedBed = -1;
@@ -314,7 +325,7 @@ public class PlotScreen implements Screen {
                 float y = GRID_Y + cy * CELL;
                 int v = game.state.build.moduleAt(cx, cy);
                 game.shapes.begin(ShapeType.Filled);
-                game.shapes.setColor(v == 0 ? new Color(0.14f, 0.18f, 0.22f, 0.9f) : new Color(0.20f, 0.26f, 0.30f, 1));
+                game.shapes.setColor(v == 0 ? new Color(0.80f, 0.68f, 0.50f, 0.85f) : new Color(0.72f, 0.58f, 0.40f, 1));
                 game.shapes.rect(x + 1, y + 1, CELL - 2, CELL - 2);
                 if (selCx == cx && selCy == cy) {
                     game.shapes.setColor(Ui.GOLD);

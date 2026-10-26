@@ -21,7 +21,7 @@ import java.util.Random;
 
 /**
  * Man tao nhan vat theo bo cuc mockup da duyet:
- * TRAI = nhan vat lon tren be vong sang trong pod kinh (nen than cay cyber) + pet robot.
+ * TRAI = nhan vat lon tren be vong sang am trong o trung bay go (nen key art lang cozy) + pet robot.
  * PHAI = panel: toggle NAM/NU tren cung, 4 tab (Toc / Mat / Da / Trang phuc),
  * luoi 3 the lon cua tab dang chon (the chon co vien cyan + dau tick),
  * o nhap ten + nut xuc xac ngau nhien, nut XAC NHAN cam lon duoi cung.
@@ -67,10 +67,10 @@ public class CreateScreen implements Screen, InputProcessor {
         game.shapes.end();
     }
 
-    /** Dau tick o goc the da chon: vong tron cyan + dau check trang ve bang 2 doan line. */
+    /** Dau tick o goc the da chon: vong tron cam + dau check trang ve bang 2 doan line. */
     private void tick(float cx, float cy) {
         game.shapes.begin(ShapeType.Filled);
-        game.shapes.setColor(Ui.CYAN);
+        game.shapes.setColor(Ui.ACCENT);
         game.shapes.circle(cx, cy, 13);
         game.shapes.end();
         Gdx.gl.glLineWidth(3);
@@ -84,9 +84,9 @@ public class CreateScreen implements Screen, InputProcessor {
 
     private boolean card(float x, float y, float w, float h, boolean selected) {
         Ui.panel(game.shapes, x, y, w, h, selected
-            ? new Color(0.06f, 0.20f, 0.24f, 0.97f) : new Color(0.05f, 0.10f, 0.15f, 0.93f));
+            ? new Color(0.99f, 0.90f, 0.74f, 0.98f) : Ui.PANEL);
         if (selected) {
-            border(x, y, w, h, Ui.CYAN, 3);
+            border(x, y, w, h, Ui.ACCENT, 3);
             tick(x + w - 20, y + h - 20);
         }
         return Ui.tapped(vp, x, y, w, h);
@@ -95,7 +95,7 @@ public class CreateScreen implements Screen, InputProcessor {
     private boolean swatch(float x, float y, float size, Color c, boolean selected) {
         game.shapes.begin(ShapeType.Filled);
         if (selected) {
-            game.shapes.setColor(Ui.CYAN);
+            game.shapes.setColor(Ui.ACCENT);
             game.shapes.rect(x - 3, y - 3, size + 6, size + 6);
         }
         game.shapes.setColor(c);
@@ -183,15 +183,26 @@ public class CreateScreen implements Screen, InputProcessor {
     @Override
     public void render(float dt) {
         time += dt;
-        Gdx.gl.glClearColor(0.03f, 0.06f, 0.10f, 1);
+        Gdx.gl.glClearColor(0.20f, 0.14f, 0.08f, 1);
         Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT);
         Gdx.gl.glEnable(GL20.GL_BLEND);
         Gdx.gl.glBlendFunc(GL20.GL_SRC_ALPHA, GL20.GL_ONE_MINUS_SRC_ALPHA);
         vp.apply();
         game.batch.setProjectionMatrix(vp.getCamera().combined);
 
-        Draw.drawSky(game.shapes, 0, NeoLangGame.VW, 0.8f, false, time);
-        Draw.drawTrunkWorld(game.shapes, 0, NeoLangGame.VW, 120, 0, time);
+        // COZY village key art as the backdrop (shape sky/trunk stays as fallback)
+        if (game.assets.keyartWide != null) {
+            game.batch.begin();
+            game.batch.draw(game.assets.keyartWide, 0, 0, NeoLangGame.VW, NeoLangGame.VH);
+            game.batch.end();
+            game.shapes.begin(ShapeType.Filled);
+            game.shapes.setColor(0.98f, 0.93f, 0.82f, 0.16f);
+            game.shapes.rect(0, 0, NeoLangGame.VW, NeoLangGame.VH);
+            game.shapes.end();
+        } else {
+            Draw.drawSky(game.shapes, 0, NeoLangGame.VW, 0.8f, false, time);
+            Draw.drawTrunkWorld(game.shapes, 0, NeoLangGame.VW, 120, 0, time);
+        }
 
         if (Ui.button(game.batch, game.shapes, game.assets.fontSmall, vp, 24, 664, 110, 36, "Quay lại")) {
             game.sound.play("click");
@@ -199,28 +210,28 @@ public class CreateScreen implements Screen, InputProcessor {
             return;
         }
 
-        // ================= LEFT: glass pod + glowing platform + hero + pet =================
+        // ================= LEFT: wooden display nook + warm platform + hero + pet =================
         float podX = 48, podY = 92, podW = 400, podH = 548;
-        // pod frame + glass
+        // nook frame + warm glass
         game.shapes.begin(ShapeType.Filled);
-        game.shapes.setColor(0.10f, 0.22f, 0.28f, 0.95f);
+        game.shapes.setColor(0.45f, 0.32f, 0.20f, 0.95f);
         game.shapes.rect(podX - 8, podY - 8, podW + 16, podH + 16);
-        game.shapes.setColor(0.55f, 0.85f, 0.92f, 0.20f);
+        game.shapes.setColor(0.98f, 0.93f, 0.82f, 0.35f);
         game.shapes.rect(podX, podY, podW, podH);
         game.shapes.setColor(1, 1, 1, 0.13f);
         game.shapes.triangle(podX + 26, podY + podH - 30, podX + 120, podY + podH - 30, podX + 26, podY + 210);
         game.shapes.triangle(podX + 140, podY + podH - 30, podX + 190, podY + podH - 30, podX + 60, podY + 300);
         game.shapes.end();
-        border(podX - 8, podY - 8, podW + 16, podH + 16, new Color(0.25f, 0.95f, 1f, 0.85f), 3);
-        // glowing circular platform
+        border(podX - 8, podY - 8, podW + 16, podH + 16, Ui.PANEL_EDGE, 3);
+        // warm glowing circular platform
         float platCx = podX + podW / 2f, platCy = podY + 66;
         float pulse = 0.75f + 0.25f * (float) Math.sin(time * 2.4f);
         game.shapes.begin(ShapeType.Filled);
-        game.shapes.setColor(0.20f, 0.90f, 1f, 0.25f * pulse);
+        game.shapes.setColor(1f, 0.72f, 0.30f, 0.25f * pulse);
         game.shapes.ellipse(platCx - 128, platCy - 24, 256, 48);
-        game.shapes.setColor(0.30f, 0.95f, 1f, 0.55f * pulse);
+        game.shapes.setColor(1f, 0.78f, 0.38f, 0.55f * pulse);
         game.shapes.ellipse(platCx - 100, platCy - 17, 200, 34);
-        game.shapes.setColor(0.75f, 0.98f, 1f, 0.9f);
+        game.shapes.setColor(1f, 0.90f, 0.65f, 0.9f);
         game.shapes.ellipse(platCx - 72, platCy - 11, 144, 22);
         game.shapes.end();
         // hero big + pet beside: PAINTED figure for the chosen gender + outfit
@@ -269,12 +280,12 @@ public class CreateScreen implements Screen, InputProcessor {
 
         // --- gender toggle on top ---
         float gx = px + pw - 316, gy = 580;
-        border(gx, gy, 140, 44, gender == Gender.NAM ? Ui.CYAN : Ui.PANEL_EDGE, gender == Gender.NAM ? 3 : 1);
+        border(gx, gy, 140, 44, gender == Gender.NAM ? Ui.ACCENT : Ui.PANEL_EDGE, gender == Gender.NAM ? 3 : 1);
         if (Ui.button(game.batch, game.shapes, game.assets.font, vp, gx, gy, 140, 44, "NAM")) {
             gender = Gender.NAM;
             game.sound.play("click");
         }
-        border(gx + 152, gy, 140, 44, gender == Gender.NU ? Ui.CYAN : Ui.PANEL_EDGE, gender == Gender.NU ? 3 : 1);
+        border(gx + 152, gy, 140, 44, gender == Gender.NU ? Ui.ACCENT : Ui.PANEL_EDGE, gender == Gender.NU ? 3 : 1);
         if (Ui.button(game.batch, game.shapes, game.assets.font, vp, gx + 152, gy, 140, 44, "NỮ")) {
             gender = Gender.NU;
             game.sound.play("click");
@@ -286,10 +297,10 @@ public class CreateScreen implements Screen, InputProcessor {
             float tx = px + 24 + i * (tabW + 8);
             boolean sel = tab == i;
             game.shapes.begin(ShapeType.Filled);
-            game.shapes.setColor(sel ? new Color(0.10f, 0.42f, 0.48f, 1) : new Color(0.07f, 0.16f, 0.20f, 1));
+            game.shapes.setColor(sel ? new Color(0.88f, 0.72f, 0.50f, 1) : new Color(0.93f, 0.85f, 0.70f, 1));
             game.shapes.rect(tx, tabY, tabW, 42);
             if (sel) {
-                game.shapes.setColor(Ui.CYAN);
+                game.shapes.setColor(Ui.ACCENT);
                 game.shapes.rect(tx, tabY, tabW, 4);
             }
             game.shapes.end();
@@ -380,7 +391,7 @@ public class CreateScreen implements Screen, InputProcessor {
         game.batch.begin();
         Ui.label(game.batch, game.assets.fontSmall, "Tên cư dân", px + 24, 240, Ui.TEXT_DIM, Align.left);
         game.batch.end();
-        Ui.panel(game.shapes, px + 24, 186, pw - 48 - 70, 46, new Color(0.04f, 0.08f, 0.12f, 0.95f));
+        Ui.panel(game.shapes, px + 24, 186, pw - 48 - 70, 46, new Color(1f, 0.99f, 0.96f, 0.95f));
         game.batch.begin();
         boolean blink = (time % 1f) < 0.55f;
         String shown = name.isEmpty() ? "Tân Cư Dân" : name;
@@ -390,7 +401,7 @@ public class CreateScreen implements Screen, InputProcessor {
         // dice button
         float diceX = px + pw - 24 - 56, diceY = 186;
         game.shapes.begin(ShapeType.Filled);
-        game.shapes.setColor(0.10f, 0.34f, 0.40f, 1);
+        game.shapes.setColor(0.88f, 0.72f, 0.50f, 1);
         game.shapes.rect(diceX, diceY, 56, 46);
         game.shapes.setColor(1, 1, 1, 1);
         float[][] pips = {{14, 32}, {42, 32}, {28, 23}, {14, 14}, {42, 14}};
