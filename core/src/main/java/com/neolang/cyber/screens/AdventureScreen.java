@@ -315,7 +315,7 @@ public class AdventureScreen implements Screen {
         if (Gdx.input.justTouched()) {
             Vector2 hp = Ui.pointer(hudVp);
             float jdx = hp.x - JOY_X, jdy = hp.y - JOY_Y;
-            boolean onChat = hp.x >= 270 && hp.y <= 145; // chat cluster bottom-centre: don't steal its taps
+            boolean onChat = hp.x >= 338 && hp.y <= 138; // chat cluster bottom-centre (frame + snug button columns): don't steal its taps
             if (jdx * jdx + jdy * jdy <= 120 * 120) { joyMode = 1; joyBase.set(JOY_X, JOY_Y); joyVec = 0; }
             else if (hp.x < 560 && hp.y < 330 && !onChat) { joyMode = 2; joyBase.set(hp); joyVec = 0; }
         }
@@ -635,10 +635,10 @@ public class AdventureScreen implements Screen {
 
         // chat cluster, same layout as town: LEFT column mail on TOP of settings,
         // RIGHT column emote on TOP of the bag
-        if (iconBtn(288, 78, "mail")) { panel = "mail"; game.sound.play("click"); }
-        if (iconBtn(288, 24, "menu")) { panel = "pause"; game.sound.play("click"); }
-        if (iconBtn(890, 78, "smile")) { panel = "emote"; game.sound.play("click"); }
-        if (iconBtn(890, 24, "bag")) { panel = "bag"; game.sound.play("click"); }
+        if (iconBtn(346, 78, "mail")) { panel = "mail"; game.sound.play("click"); }
+        if (iconBtn(346, 24, "menu")) { panel = "pause"; game.sound.play("click"); }
+        if (iconBtn(888, 78, "smile")) { panel = "emote"; game.sound.play("click"); }
+        if (iconBtn(888, 24, "bag")) { panel = "bag"; game.sound.play("click"); }
         drawChatFrame();
 
         // attack button (big) + skills

@@ -31,19 +31,29 @@ public final class Hud {
     private Hud() { }
 
     // ---- character cluster geometry (virtual 1280x720, origin bottom-left)
-    public static final float CL_X = 10, CL_TOP = 708, CL_W = 372;
-    private static final float PCX = CL_X + 62, PCY = CL_TOP - 62;   // portrait centre
-    private static final float RX = CL_X + 140;                       // right column x
-    private static final float RW = CL_W - 140 - 10;                  // right column width
-    // Cyber frame is drawn 132 tall; its inner hole measures 174/256 of the
-    // sprite height (prep_sprites.py --hud-assets), so the hole is ~90px here
-    // and the face disc is drawn ~6% wider to tuck under the rim bevel.
-    private static final float FRAME_H = 132;
+    // Compact card: 276 wide total, portrait frame 76 across — the user asked
+    // for a slimmer card twice, so every row is packed tight (12-14px bars).
+    public static final float CL_X = 10, CL_TOP = 708, CL_W = 276;
+    private static final float PCX = CL_X + 44, PCY = CL_TOP - 46;   // portrait centre
+    private static final float RX = CL_X + 92;                        // right column x
+    private static final float RW = CL_W - 92 - 8;                    // right column width
+    // Cyber frame's inner hole measures 174/256 of the sprite height
+    // (prep_sprites.py --hud-assets); the face disc is drawn ~6% wider than
+    // the hole to tuck under the rim bevel.
+    private static final float FRAME_H = 76;
     private static final float FACE_D = FRAME_H * (174f / 256f) * 1.06f;
 
-    // ---- minimap geometry
-    public static final float MM_X = 1078, MM_Y = 568, MM_W = 190, MM_H = 140;
-    private static final float MM_GROUND = MM_Y + 34;                 // ground line y
+    // ---- minimap geometry: painted frame asset drawn at its native aspect
+    // (443x256 -> 228x132), top edge flush with the character card's top.
+    // The glass pane rect inside the sprite was measured by
+    // prep_sprites.py --hud-frame (fractions of the sprite: left .0655,
+    // right .9323, bottom .1172, top .8789); markers map into it exactly.
+    public static final float MM_X = 1042, MM_Y = 576, MM_W = 228, MM_H = 132;
+    private static final float MM_GX = MM_X + MM_W * 0.0655f;         // glass left
+    private static final float MM_GW = MM_W * (0.9323f - 0.0655f);    // glass width
+    private static final float MM_GY = MM_Y + MM_H * 0.1172f;         // glass bottom
+    private static final float MM_GH = MM_H * (0.8789f - 0.1172f);    // glass height
+    private static final float MM_GROUND = MM_GY + 13;                // ground line y
 
     private static final Color GLASS = new Color(0.03f, 0.07f, 0.11f, 0.60f);
     private static final Color GLASS_EDGE = new Color(0.45f, 0.85f, 1f, 0.55f);
@@ -147,32 +157,32 @@ public final class Hud {
         ShapeRenderer sr = game.shapes;
         SpriteBatch batch = game.batch;
 
-        // rows walked down from the top
-        float bar1Y = CL_TOP - 75;                       // HP (adv) / XP (town)
-        float bar2Y = CL_TOP - 99;                       // NL (adventure only)
-        float bottom = PCY - FRAME_H / 2 - 8;            // card ends under the frame
-        float chipsY = bottom - 34;                      // loose chip row under the card
+        // rows walked down from the top (compact: 13px bars, tight padding)
+        float bar1Y = CL_TOP - 64;                       // HP (adv) / XP (town)
+        float bar2Y = CL_TOP - 83;                       // NL (adventure only)
+        float bottom = PCY - FRAME_H / 2 - 6;            // card ends under the frame
+        float chipsY = bottom - 30;                      // loose chip row under the card
         float chipW = (CL_W - 16) / 3f;
 
         // ---------- shapes pass ----------
         sr.begin(ShapeType.Filled);
-        glass(sr, CL_X, bottom, CL_W, CL_TOP - bottom, 14);
+        glass(sr, CL_X, bottom, CL_W, CL_TOP - bottom, 12);
         // portrait glow + fallback disc under the painted frame
         sr.setColor(0.20f, 0.75f, 0.95f, 0.30f);
-        sr.circle(PCX, PCY, 52);
+        sr.circle(PCX, PCY, 30);
         sr.setColor(0.10f, 0.16f, 0.22f, 0.9f);
-        sr.circle(PCX, PCY, 50);
+        sr.circle(PCX, PCY, 28);
         // bars (icon sits at the head of each bar, so bars start after it)
-        float bx = RX + 28, bw = RW - 28;
+        float bx = RX + 24, bw = RW - 24;
         if (adventure) {
-            pillBarShape(sr, bx, bar1Y, bw, 17, p.hp / Math.max(1, p.maxHp()), HP_C);
-            pillBarShape(sr, bx, bar2Y, bw, 17, energy / 100f, NL_C);
+            pillBarShape(sr, bx, bar1Y, bw, 13, p.hp / Math.max(1, p.maxHp()), HP_C);
+            pillBarShape(sr, bx, bar2Y, bw, 13, energy / 100f, NL_C);
         } else {
-            pillBarShape(sr, bx, bar1Y + 1, bw, 15, (float) ((double) p.xp / Math.max(1, (double) p.xpNext())), XP_C);
+            pillBarShape(sr, bx, bar1Y, bw, 13, (float) ((double) p.xp / Math.max(1, (double) p.xpNext())), XP_C);
         }
         // survival chips: separate small glass pills, NOT part of the card
         for (int i = 0; i < 3; i++) {
-            glass(sr, CL_X + i * (chipW + 8), chipsY, chipW, 26, 13);
+            glass(sr, CL_X + i * (chipW + 8), chipsY, chipW, 22, 11);
         }
         sr.end();
 
@@ -189,25 +199,25 @@ public final class Hud {
         // name + class line
         shadowLabel(batch, a.font, fit(a.font, p.name, RW), RX, CL_TOP - 18, Ui.TEXT, Align.left);
         String cls = p.gameClass == GameClass.NONE ? "Tân Cư Dân" : p.gameClass.displayName;
-        shadowLabel(batch, a.fontSmall, cls, RX, CL_TOP - 42, CLASS_C, Align.left);
+        shadowLabel(batch, a.fontSmall, cls, RX, CL_TOP - 40, CLASS_C, Align.left);
         // bar icons + numbers
         if (adventure) {
-            icon(batch, a.icoHeart, RX + 13, bar1Y + 8.5f, 24);
-            icon(batch, a.icoBolt, RX + 13, bar2Y + 8.5f, 24);
-            barText(batch, a, bx, bar1Y, bw, 17, (int) p.hp + "/" + p.maxHp());
-            barText(batch, a, bx, bar2Y, bw, 17, (int) energy + "/100");
+            icon(batch, a.icoHeart, RX + 10, bar1Y + 6.5f, 20);
+            icon(batch, a.icoBolt, RX + 10, bar2Y + 6.5f, 20);
+            barText(batch, a, bx, bar1Y, bw, 13, (int) p.hp + "/" + p.maxHp());
+            barText(batch, a, bx, bar2Y, bw, 13, (int) energy + "/100");
         } else {
-            icon(batch, a.icoStar, RX + 13, bar1Y + 8.5f, 23);
-            barText(batch, a, bx, bar1Y + 1, bw, 15, p.xp + "/" + p.xpNext());
+            icon(batch, a.icoStar, RX + 10, bar1Y + 6.5f, 20);
+            barText(batch, a, bx, bar1Y, bw, 13, p.xp + "/" + p.xpNext());
         }
         // chips under the card: painted icon + percent
         Texture[] chipIco = {a.icoFood, a.icoFlame, a.icoBattery};
         double[] chipVal = {p.satiety, p.warmth, p.battery};
-        a.fontSmall.getData().setScale(0.92f);
+        a.fontSmall.getData().setScale(0.85f);
         for (int i = 0; i < 3; i++) {
             float cxp = CL_X + i * (chipW + 8);
-            icon(batch, chipIco[i], cxp + 15, chipsY + 13, 19);
-            Ui.label(batch, a.fontSmall, (int) chipVal[i] + "%", cxp + 27, chipsY + 17.5f, Ui.TEXT, Align.left);
+            icon(batch, chipIco[i], cxp + 13, chipsY + 11, 16);
+            Ui.label(batch, a.fontSmall, (int) chipVal[i] + "%", cxp + 23, chipsY + 15, Ui.TEXT, Align.left);
         }
         a.fontSmall.getData().setScale(1f);
         batch.end();
@@ -219,13 +229,13 @@ public final class Hud {
         // the bottom-right stays clear of it.
         sr.begin(ShapeType.Filled);
         sr.setColor(0.45f, 0.30f, 0.05f, 1);
-        sr.circle(PCX + 46, PCY - 46, 15);
+        sr.circle(PCX + 27, PCY - 27, 11.5f);
         sr.setColor(GOLD);
-        sr.circle(PCX + 46, PCY - 46, 13.5f);
+        sr.circle(PCX + 27, PCY - 27, 10.2f);
         sr.end();
         batch.begin();
-        a.font.getData().setScale(0.72f);
-        shadowLabel(batch, a.font, String.valueOf(p.level), PCX + 46, PCY - 46 + 5.5f, BADGE_TXT, Align.center);
+        a.font.getData().setScale(0.6f);
+        shadowLabel(batch, a.font, String.valueOf(p.level), PCX + 27, PCY - 27 + 4.5f, BADGE_TXT, Align.center);
         a.font.getData().setScale(1f);
         batch.end();
         return bottom;
@@ -297,32 +307,44 @@ public final class Hud {
     }
 
     // ---------------------------------------------------------------- minimap
-    /** Frame + title strip + ground line. Markers are drawn by the caller with dot(). */
+    /**
+     * Painted frame asset (metal rim + navy glass pane) + title strip + ground
+     * line, all INSIDE the measured glass rect (MM_GX/MM_GY/MM_GW/MM_GH).
+     * Markers are drawn by the caller with dot(). If the frame asset is
+     * missing, a shape-drawn frame in the same rect is the fallback.
+     */
     public static void drawMinimapBase(NeoLangGame game, String title) {
         ShapeRenderer sr = game.shapes;
+        float glassTop = MM_GY + MM_GH;
+        if (game.assets.minimapFrame != null) {
+            game.batch.begin();
+            game.batch.draw(game.assets.minimapFrame, MM_X, MM_Y, MM_W, MM_H);
+            game.batch.end();
+        }
         sr.begin(ShapeType.Filled);
-        // metal rim + dark glass
-        roundRect(sr, MM_X, MM_Y, MM_W, MM_H, 12, new Color(0.42f, 0.55f, 0.68f, 0.95f));
-        roundRect(sr, MM_X + 1.5f, MM_Y + 1.5f, MM_W - 3, MM_H - 3, 10.5f, new Color(0.02f, 0.06f, 0.10f, 0.78f));
-        // title strip inside the top edge
+        if (game.assets.minimapFrame == null) {
+            roundRect(sr, MM_X, MM_Y, MM_W, MM_H, 12, new Color(0.42f, 0.55f, 0.68f, 0.95f));
+            roundRect(sr, MM_GX, MM_GY, MM_GW, MM_GH, 6, new Color(0.02f, 0.06f, 0.10f, 0.92f));
+        }
+        // title strip inside the top edge of the glass
         sr.setColor(0.02f, 0.05f, 0.08f, 0.65f);
-        sr.rect(MM_X + 3, MM_Y + MM_H - 25, MM_W - 6, 22);
-        // ground band + line
+        sr.rect(MM_GX + 2, glassTop - 19, MM_GW - 4, 18);
+        // ground band + line, clipped to the glass
         sr.setColor(0.30f, 0.22f, 0.12f, 0.55f);
-        sr.rect(MM_X + 8, MM_Y + 12, MM_W - 16, MM_GROUND - MM_Y - 12);
+        sr.rect(MM_GX + 3, MM_GY + 2, MM_GW - 6, MM_GROUND - MM_GY - 2);
         sr.setColor(0.55f, 0.85f, 0.95f, 0.5f);
-        sr.rect(MM_X + 8, MM_GROUND, MM_W - 16, 1.6f);
+        sr.rect(MM_GX + 3, MM_GROUND, MM_GW - 6, 1.6f);
         sr.end();
         game.batch.begin();
         game.assets.fontSmall.getData().setScale(0.95f);
-        shadowLabel(game.batch, game.assets.fontSmall, title, MM_X + MM_W / 2, MM_Y + MM_H - 8, Ui.CYAN, Align.center);
+        shadowLabel(game.batch, game.assets.fontSmall, title, MM_X + MM_W / 2, glassTop - 5, Ui.CYAN, Align.center);
         game.assets.fontSmall.getData().setScale(1f);
         game.batch.end();
     }
 
-    /** World x -> minimap x (full map width squeezed into the frame). */
+    /** World x -> minimap x (full map width squeezed into the glass pane). */
     public static float mmX(float worldX, float worldW) {
-        return MM_X + 10 + (worldX / worldW) * (MM_W - 20);
+        return MM_GX + 6 + (worldX / worldW) * (MM_GW - 12);
     }
 
     /** Plain position dot (markers are not icons). Call inside a Filled shapes pass. */
@@ -340,7 +362,7 @@ public final class Hud {
         sr.triangle(cx + facing * 5.5f, cy - 3, cx + facing * 5.5f, cy + 3, cx + facing * 10, cy);
     }
 
-    public static float mmGroundY() { return MM_GROUND + 5; }
+    public static float mmGroundY() { return MM_GROUND + 4; }
 
     // ---------------------------------------------------------------- buttons
     /** Glass rounded-square button with a PAINTED icon inside (chat-flank buttons). */
@@ -354,6 +376,29 @@ public final class Hud {
         icon(game.batch, iconTex, x + size / 2, y + size / 2, size * 0.68f);
         game.batch.end();
         return Ui.tapped(hudVp, x, y, size, size);
+    }
+
+    /**
+     * Round PAINTED action button (town context interact): the painted disc
+     * asset with the context label under it in small shadowed text, like the
+     * labels under the adventure skill buttons. Tap area = the disc's
+     * bounding square. Falls back to a plain glass disc if the asset is gone.
+     */
+    public static boolean roundActionBtn(NeoLangGame game, Viewport hudVp, Texture tex,
+                                         float cx, float cy, float d, String label) {
+        SpriteBatch batch = game.batch;
+        if (tex == null) {
+            ShapeRenderer sr = game.shapes;
+            sr.begin(ShapeType.Filled);
+            sr.setColor(Ui.BTN);
+            sr.circle(cx, cy, d / 2);
+            sr.end();
+        }
+        batch.begin();
+        if (tex != null) icon(batch, tex, cx, cy, d);
+        if (label != null) shadowLabel(batch, game.assets.fontSmall, label, cx, cy - d / 2 - 7, Ui.TEXT, Align.center);
+        batch.end();
+        return Ui.tapped(hudVp, cx - d / 2, cy - d / 2, d, d);
     }
 
     /** Glass pill button (e.g. "Về Làng" under the adventure minimap). */

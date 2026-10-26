@@ -54,6 +54,10 @@ public class Assets {
     // old fantasy ring, and the painted joystick base/knob pair.
     public Texture framePortrait;
     public Texture joyBase, joyKnob;
+    // Round painted interact button (teal disc + chat bubble) and the painted
+    // minimap frame (metal rim + navy glass pane kept whole as the map surface).
+    public Texture btnTalk;
+    public Texture minimapFrame;
     public Texture[] heroFace = new Texture[2];
     public Texture white;
     public float uiScale = 1f;
@@ -156,6 +160,8 @@ public class Assets {
         framePortrait = tex("art/sprites/frame_portrait.png");
         joyBase = tex("art/sprites/joy_base.png");
         joyKnob = tex("art/sprites/joy_knob.png");
+        btnTalk = tex("art/sprites/btn_talk.png");
+        minimapFrame = tex("art/sprites/minimap_frame.png");
         heroFace[0] = tex("art/sprites/hero_m_face.png");
         heroFace[1] = tex("art/sprites/hero_f_face.png");
         Pixmap pm = new Pixmap(1, 1, Pixmap.Format.RGBA8888);
@@ -208,7 +214,7 @@ public class Assets {
             propPod0, propPod1, propPod2, propBoard, propLamp, propChest, propTable, propFlower,
             icoHeart, icoBolt, icoFood, icoFlame, icoBattery, icoCoin, icoCrystal, icoStar,
             icoMail, icoGear, icoSmile, icoSword, icoSwirl, icoOrb, icoQuest, icoBag,
-            framePortrait, joyBase, joyKnob,
+            framePortrait, joyBase, joyKnob, btnTalk, minimapFrame,
             heroFace[0], heroFace[1]};
         for (Texture t : all) if (t != null) t.dispose();
         for (int i = 0; i < 2; i++) {

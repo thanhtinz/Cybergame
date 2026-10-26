@@ -210,9 +210,9 @@ public class TownScreen implements Screen {
                 float jdx = hp.x - JOY_X, jdy = hp.y - JOY_Y;
                 boolean onFixedJoy = jdx * jdx + jdy * jdy <= 120 * 120;
                 Spot near = nearestSpot();
-                boolean onInteractBtn = near != null && hp.x > 1046 && hp.x < 1264 && hp.y > 44 && hp.y < 102;
+                boolean onInteractBtn = near != null && hp.x > 1098 && hp.x < 1212 && hp.y > 28 && hp.y < 176;
                 boolean onHud = (hp.x >= 344 && hp.x <= 936 && hp.y <= 138)
-                    || (hp.x >= 232 && hp.x <= 992 && hp.y >= 16 && hp.y <= 132);
+                    || (hp.x >= 290 && hp.x <= 990 && hp.y >= 16 && hp.y <= 132);
                 if (onFixedJoy) { joyMode = 1; joyBase.set(JOY_X, JOY_Y); joyVec = 0; }
                 else if (hp.y < 330 && !onInteractBtn && !onHud) { joyMode = 2; joyBase.set(hp); joyVec = 0; }
             }
@@ -620,21 +620,25 @@ public class TownScreen implements Screen {
         // ---- button columns flanking the chat frame (user layout): LEFT column
         // mail on TOP of settings, RIGHT column emote on TOP of the bag ----
         // (no walk/run toggle: speed comes from joystick deflection)
-        if (iconBtn(240, 78, "mail")) { panel = "mail"; game.sound.play("click"); }
-        if (iconBtn(240, 24, "menu")) { panel = "menu"; game.sound.play("click"); }
-        if (iconBtn(938, 78, "smile")) { panel = "emote"; game.sound.play("click"); }
-        if (iconBtn(938, 24, "bag")) { panel = "bag"; game.sound.play("click"); }
+        if (iconBtn(298, 78, "mail")) { panel = "mail"; game.sound.play("click"); }
+        if (iconBtn(298, 24, "menu")) { panel = "menu"; game.sound.play("click"); }
+        if (iconBtn(936, 78, "smile")) { panel = "emote"; game.sound.play("click"); }
+        if (iconBtn(936, 24, "bag")) { panel = "bag"; game.sound.play("click"); }
 
         // ---- bottom-centre: chat frame ----
         drawChatFrame();
 
-        // ---- bottom-right: action cluster (context interact) ----
+        // ---- bottom-right: context interact as a ROUND painted button (same
+        // family as the adventure attack button): full target hint above the
+        // disc, short action label under it, tiny keyboard hint last ----
         if (panel == null && near != null) {
             game.batch.begin();
-            Ui.label(game.batch, game.assets.fontSmall, fitText(near.label, 250), 1155, 128, Ui.TEXT_DIM, Align.center);
-            Ui.label(game.batch, game.assets.fontSmall, "hoặc phím E", 1155, 112, Ui.TEXT_DIM, Align.center);
+            Ui.label(game.batch, game.assets.fontSmall, fitText(near.label, 250), 1155, 192, Ui.TEXT_DIM, Align.center);
+            game.assets.fontSmall.getData().setScale(0.8f);
+            Ui.label(game.batch, game.assets.fontSmall, "hoặc phím E", 1155, 42, Ui.TEXT_DIM, Align.center);
+            game.assets.fontSmall.getData().setScale(1f);
             game.batch.end();
-            if (Ui.button(game.batch, game.shapes, game.assets.font, hudVp, 1046, 44, 218, 58, shortAction(near))) {
+            if (Hud.roundActionBtn(game, hudVp, game.assets.btnTalk, 1155, 118, 104, shortAction(near))) {
                 openSpot(near);
                 if (gone) return;
             }

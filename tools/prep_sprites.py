@@ -364,6 +364,36 @@ def process_portrait_frame(path):
              (y0 + y1) / 2.0, spr.width, spr.height))
 
 
+def process_minimap_frame(path):
+    """Khung minimap asset: khung kim loai teal 4 goc neon + LONG KINH navy la
+    mot sprite duy nhat — long kinh la be mat ban do, KHONG xoa; kem chi xoa
+    o ngoai khung (flood-fill tu mep nhu pipeline thuong, kinh navy khong
+    trung mau nen nen duoc giu nguyen trong thanh phan lon nhat). Do rect
+    long kinh (cum pixel navy toi lon nhat) va in ti le theo sprite de
+    Hud.java anh xa cham danh dau + duong mat dat vao dung long kinh."""
+    img = Image.open(path).convert("RGB")
+    alpha = alpha_mask(img)
+    lab, comps = components(alpha)
+    comps = [c for c in comps if c["area"] >= 900]
+    best = max(comps, key=lambda c: c["area"])
+    spr = extract(img, alpha, lab, best, max_h=256)
+    save_sprite(spr, "minimap_frame.png")
+    arr = np.asarray(spr.convert("RGB")).astype(np.int32)
+    navy = (arr[..., 2] > arr[..., 0] + 18) & (arr[..., 2] < 170) & (arr[..., 0] < 95)
+    nlab, n = ndimage.label(navy)
+    if n == 0:
+        raise RuntimeError("minimap frame: khong tim thay long kinh navy")
+    sizes = ndimage.sum(navy, nlab, range(1, n + 1))
+    g = nlab == (int(np.argmax(sizes)) + 1)
+    ys, xs = np.nonzero(g)
+    gx0, gx1, gy0, gy1 = int(xs.min()), int(xs.max()), int(ys.min()), int(ys.max())
+    W, H = spr.width, spr.height
+    print("MMFRAME sprite %dx%d ti le %.3f | kinh px x %d..%d, y(tren) %d..%d | "
+          "frac trai=%.4f phai=%.4f day=%.4f dinh=%.4f"
+          % (W, H, W / float(H), gx0, gx1, gy0, gy1,
+             gx0 / W, (gx1 + 1) / W, 1 - (gy1 + 1) / H, 1 - gy0 / H))
+
+
 def process_single(path, name, max_h):
     """Anh don le tren nen kem (de / num joystick): lay thanh phan lon nhat."""
     img = Image.open(path).convert("RGB")
@@ -395,6 +425,13 @@ def main():
         process_single(one("media-generation-joystick-base-*.webp"), "joy_base.png", 240)
         process_single(one("media-generation-joystick-knob-*.webp"), "joy_knob.png", 160)
         print("Xong (hud-assets).")
+        return
+    if "--hud-frame" in sys.argv:
+        # Nut tuong tac TRON (asset don le nen kem nhu joystick) + khung
+        # minimap asset (khung + long kinh giu nguyen, chi xoa kem ben ngoai)
+        process_single(one("media-generation-btn-talk-*.webp"), "btn_talk.png", 256)
+        process_minimap_frame(one("media-generation-minimap-frame-*.webp"))
+        print("Xong (hud-frame).")
         return
     if "--city" in sys.argv:
         # Doi boi canh sang THANH PHO cyberpunk (user chot: cyberpunk la thanh
