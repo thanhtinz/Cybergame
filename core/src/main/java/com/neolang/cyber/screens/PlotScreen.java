@@ -301,7 +301,7 @@ public class PlotScreen implements Screen {
         }
         if (!any) {
             game.batch.begin();
-            Ui.label(game.batch, game.assets.fontSmall, "Chưa có hạt giống. Farm quái ở Bìa Rừng để nhặt hạt nhé.", 640, 400, Ui.TEXT_DIM, Align.center);
+            Ui.label(game.batch, game.assets.fontSmall, "Chưa có hạt giống. Farm quái ở Vành Đai Neon để nhặt hạt nhé.", 640, 400, Ui.TEXT_DIM, Align.center);
             game.batch.end();
         }
         if (btn(790, 228, 90, 36, "Đóng")) seedBed = -1;

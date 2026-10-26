@@ -49,7 +49,7 @@ public class Assets {
     // face portraits cropped from the hero front sprites. All HUD icons in the
     // game are these painted assets — never shape-drawn glyphs.
     public Texture icoHeart, icoBolt, icoFood, icoFlame, icoBattery, icoCoin, icoCrystal, icoStar;
-    public Texture icoMail, icoGear, icoSmile, icoSword, icoSwirl, icoOrb, icoQuest;
+    public Texture icoMail, icoGear, icoSmile, icoSword, icoSwirl, icoOrb, icoQuest, icoBag;
     // Cyber portrait frame (teal ring + cyan circuits, large hole) replacing the
     // old fantasy ring, and the painted joystick base/knob pair.
     public Texture framePortrait;
@@ -152,6 +152,7 @@ public class Assets {
         icoSwirl = tex("art/sprites/ico_swirl.png");
         icoOrb = tex("art/sprites/ico_orb.png");
         icoQuest = tex("art/sprites/ico_quest.png");
+        icoBag = tex("art/sprites/ico_bag.png");
         framePortrait = tex("art/sprites/frame_portrait.png");
         joyBase = tex("art/sprites/joy_base.png");
         joyKnob = tex("art/sprites/joy_knob.png");
@@ -206,7 +207,7 @@ public class Assets {
             townPlate, advPlate, bldCafe, bldFashion, bldBank, bldPet, bldStation, bldPortal,
             propPod0, propPod1, propPod2, propBoard, propLamp, propChest, propTable, propFlower,
             icoHeart, icoBolt, icoFood, icoFlame, icoBattery, icoCoin, icoCrystal, icoStar,
-            icoMail, icoGear, icoSmile, icoSword, icoSwirl, icoOrb, icoQuest,
+            icoMail, icoGear, icoSmile, icoSword, icoSwirl, icoOrb, icoQuest, icoBag,
             framePortrait, joyBase, joyKnob,
             heroFace[0], heroFace[1]};
         for (Texture t : all) if (t != null) t.dispose();

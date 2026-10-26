@@ -396,6 +396,16 @@ def main():
         process_single(one("media-generation-joystick-knob-*.webp"), "joy_knob.png", 160)
         print("Xong (hud-assets).")
         return
+    if "--city" in sys.argv:
+        # Doi boi canh sang THANH PHO cyberpunk (user chot: cyberpunk la thanh
+        # pho, kieu rung khong hop): plate thi tran = quang truong lat gach +
+        # skyline, plate phieu luu = khu vanh dai neon ve dem. Chi la JPG phu
+        # nhu plate cu; kem theo icon balo cho nut tui do canh khung chat.
+        save_jpg(Image.open(one("media-generation-town-city-plate-*.webp")), "town_plate.jpg", 1920, quality=86)
+        save_jpg(Image.open(one("media-generation-adventure-city-plate-*.webp")), "adv_plate.jpg", 1920, quality=86)
+        process_single(one("media-generation-icon-backpack-*.webp"), "ico_bag.png", 240)
+        print("Xong (city).")
+        return
     # --- hero: nhan vat chinh + pet ---
     pet_m = process_hero(RES_ART / "hero_male.jpg", "hero_m")
     pet_f = process_hero(RES_ART / "hero_female.jpg", "hero_f")

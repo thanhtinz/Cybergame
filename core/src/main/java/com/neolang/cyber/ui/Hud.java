@@ -259,28 +259,26 @@ public final class Hud {
     /**
      * Painted joystick (shared Town + Adventure visuals): teal metal base
      * asset at (jx, jy), knob asset following the drag offset. Mode 1 = fixed
-     * stick, mode 2 = floating stick at base. While running, a warm orange
-     * glow sits behind the knob (the knob asset itself never changes colour)
-     * and the "Chạy" label shows under the fixed stick. Movement logic and
-     * the 0.22 dead zone / 0.85 run threshold live in the screens, unchanged.
+     * stick, mode 2 = floating stick at base. ASSET ONLY — no ShapeRenderer
+     * anywhere in this draw (an earlier version painted a flat glow disc
+     * behind the knob, which read as a leftover shape-drawn stick under the
+     * asset and was removed at the user's direction). While running, the
+     * knob asset itself warms up (tint) and swells slightly, and the "Chạy"
+     * label shows under the fixed stick. Movement logic and the 0.22 dead
+     * zone / 0.85 run threshold live in the screens, unchanged.
      */
     public static void drawJoystick(NeoLangGame game, float jx, float jy, int mode,
                                     Vector2 base, float vec, boolean running) {
         Assets a = game.assets;
         float knobX = mode == 1 ? jx + vec * 38 : jx;
-        if (running) {
-            ShapeRenderer sr = game.shapes;
-            sr.begin(ShapeType.Filled);
-            sr.setColor(1f, 0.60f, 0.22f, 0.38f);
-            sr.circle(knobX, jy, 38);
-            sr.end();
-        }
         SpriteBatch batch = game.batch;
         batch.begin();
         batch.setColor(1, 1, 1, 0.95f);
         icon(batch, a.joyBase, jx, jy, 116);
+        if (running) batch.setColor(1f, 0.80f, 0.52f, 1f);
+        else batch.setColor(1, 1, 1, 1);
+        icon(batch, a.joyKnob, knobX, jy, running ? 58 : 54);
         batch.setColor(1, 1, 1, 1);
-        icon(batch, a.joyKnob, knobX, jy, 54);
         if (mode == 2) {
             batch.setColor(1, 1, 1, 0.95f);
             icon(batch, a.joyBase, base.x, base.y, 108);

@@ -40,7 +40,7 @@ có mạch neon, cư dân sống trong các pod kim loại – kính gắn trên
    - **Bio-Hacker** — hồi phục/buff, vận hành vườn kính thủy canh bằng drone.
    - **Engineer** — khiên năng lượng, tháp hỗ trợ, nghề chế tạo.
    Đổi nghề miễn phí tại trạm từ cấp 10.
-5. **Bìa Rừng Mạch Điện (map phiêu lưu):** HUD chiến đấu riêng (HP/năng lượng,
+5. **Khu Vành Đai Neon (map phiêu lưu):** HUD chiến đấu riêng (HP/năng lượng,
    minimap, joystick, nút kỹ năng), quái glitch robot – bọ, rơi Linh Kiện / Nhựa Sáng.
 6. **Sinh tồn nhẹ:** 3 chỉ số *No bụng – Ấm áp – Pin thiết bị*; về 0 chỉ bị pet kéo
    về nhà, **không mất đồ, không tụt cấp**.

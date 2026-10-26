@@ -45,7 +45,7 @@ Tài liệu này là phần đã khóa và đã triển khai trong code.*
   Trạm Định Hướng, bảng nhiệm vụ hologram. Tên trên đầu, bong bóng chat, mũi tên
   "Vào" phát sáng ở cửa shop. HUD thị trấn tối giản (Menu, Thư, Chat trên-trái;
   Chạy + Cảm xúc trên-phải).
-- Bìa Rừng Mạch Điện (farm): HUD chiến đấu (HP/năng lượng trên-trái, minimap
+- Khu Vành Đai Neon (farm): HUD chiến đấu (HP/năng lượng trên-trái, minimap
   trên-phải, joystick dưới-trái, kỹ năng dưới-phải), quái glitch theo cấp.
 - Khu Nhà Cành (cá nhân): vườn kính 6 ô + lưới xây 10×6.
 - Ngày–đêm: 1 ngày game = 480 giây. Bão Dữ Liệu: chu kỳ ~5 phút chờ / 90 giây bão,

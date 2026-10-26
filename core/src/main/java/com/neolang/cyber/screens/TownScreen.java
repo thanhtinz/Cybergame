@@ -66,7 +66,7 @@ public class TownScreen implements Screen {
     private int chatReplyIdx;
     private static final String[] CHAT_REPLIES = {
         "Hôm nay mạch cây chạy êm lắm, bạn thấy không?",
-        "Nghe nói Bìa Rừng có nhiều Nhựa Sáng rơi sau bão đó.",
+        "Nghe nói Khu Vành Đai Neon có nhiều Nhựa Sáng rơi sau bão đó.",
         "Cafe Pina vừa có món mới, ghé thử đi!",
         "Đạt cấp 5 là qua Trạm Định Hướng chọn nghề được rồi.",
         "Pet của bạn trông khoẻ đấy, cho nó ăn pin chưa?"
@@ -141,7 +141,7 @@ public class TownScreen implements Screen {
         s.add(new Spot("plot", "Về Khu Nhà Cành", 70));
         for (Npc n : npcs) s.add(new Spot(n.id, "Nói chuyện: " + n.name, n.x));
         s.add(new Spot("board", "Bảng Nhiệm Vụ", 1760));
-        s.add(new Spot("adv", "Tới Bìa Rừng Mạch Điện", 2730));
+        s.add(new Spot("adv", "Tới Khu Vành Đai Neon", 2730));
         return s;
     }
 
@@ -212,7 +212,7 @@ public class TownScreen implements Screen {
                 Spot near = nearestSpot();
                 boolean onInteractBtn = near != null && hp.x > 1046 && hp.x < 1264 && hp.y > 44 && hp.y < 102;
                 boolean onHud = (hp.x >= 344 && hp.x <= 936 && hp.y <= 138)
-                    || (hp.x >= 232 && hp.x <= 1050 && hp.y >= 42 && hp.y <= 104);
+                    || (hp.x >= 232 && hp.x <= 992 && hp.y >= 16 && hp.y <= 132);
                 if (onFixedJoy) { joyMode = 1; joyBase.set(JOY_X, JOY_Y); joyVec = 0; }
                 else if (hp.y < 330 && !onInteractBtn && !onHud) { joyMode = 2; joyBase.set(hp); joyVec = 0; }
             }
@@ -308,10 +308,11 @@ public class TownScreen implements Screen {
 
         boolean storm = game.state.storm.active;
         if (game.assets.townPlate != null) {
-            // Layered map: the far plate is ONLY distant scenery (trunk, sky, an
-            // empty wooden floor strip) — no baked-in buildings or people, so the
-            // game's own building sprites, NPCs and name tags never pile onto a
-            // finished painting the way the old full-scene town.jpg did.
+            // Layered map: the far plate is ONLY distant scenery (city skyline
+            // on the trunk, sky, an empty tiled plaza) — no baked-in buildings
+            // or people, so the game's own building sprites, NPCs and name tags
+            // never pile onto a finished painting the way the old full-scene
+            // town.jpg did.
             game.batch.begin();
             Texture plate = game.assets.townPlate;
             float tileW = NeoLangGame.VH * plate.getWidth() / (float) plate.getHeight();
@@ -352,7 +353,7 @@ public class TownScreen implements Screen {
             new Color(0.45f, 0.95f, 0.55f, 1), "Pet Shop", near != null && "pet".equals(near.id));
 
         drawPortalGate(85, "Khu Nhà Cành", -1, near != null && "plot".equals(near.id));
-        drawPortalGate(2725, "Bìa Rừng — Farm", 1, near != null && "adv".equals(near.id));
+        drawPortalGate(2725, "Khu Vành Đai Neon — Farm", 1, near != null && "adv".equals(near.id));
         drawQuestBoard(near != null && "board".equals(near.id));
 
         // sparse painted props as decoration (never blocking the walk line)
@@ -568,7 +569,8 @@ public class TownScreen implements Screen {
     private boolean iconBtn(float x, float y, String kind) {
         // glass rounded square + PAINTED icon asset (same slot/function as before)
         Texture t = "mail".equals(kind) ? game.assets.icoMail
-            : "smile".equals(kind) ? game.assets.icoSmile : game.assets.icoGear;
+            : "smile".equals(kind) ? game.assets.icoSmile
+            : "bag".equals(kind) ? game.assets.icoBag : game.assets.icoGear;
         if (t == null) {
             game.shapes.begin(ShapeType.Filled);
             game.shapes.setColor(Ui.BTN);
@@ -576,7 +578,7 @@ public class TownScreen implements Screen {
             game.shapes.end();
             if ("mail".equals(kind)) Ui.iconMail(game.shapes, x + 23, y + 23, 11, Ui.CYAN);
             else if ("smile".equals(kind)) Ui.iconSmile(game.shapes, x + 23, y + 23, 11, Ui.CYAN);
-            else Ui.iconGear(game.shapes, x + 23, y + 23, 11, Ui.CYAN);
+            else if (!"bag".equals(kind)) Ui.iconGear(game.shapes, x + 23, y + 23, 11, Ui.CYAN);
             return Ui.tapped(hudVp, x, y, 46, 46);
         }
         return Hud.glassIconBtn(game, hudVp, t, x, y, 46);
@@ -615,11 +617,13 @@ public class TownScreen implements Screen {
         // ---- bottom-left: movement joystick ----
         drawJoystick();
 
-        // ---- buttons flanking the chat frame: mail + gear on its left, emote on its right ----
+        // ---- button columns flanking the chat frame (user layout): LEFT column
+        // mail on TOP of settings, RIGHT column emote on TOP of the bag ----
         // (no walk/run toggle: speed comes from joystick deflection)
-        if (iconBtn(240, 50, "mail")) { panel = "mail"; game.sound.play("click"); }
-        if (iconBtn(296, 50, "menu")) { panel = "menu"; game.sound.play("click"); }
-        if (iconBtn(938, 50, "smile")) { panel = "emote"; game.sound.play("click"); }
+        if (iconBtn(240, 78, "mail")) { panel = "mail"; game.sound.play("click"); }
+        if (iconBtn(240, 24, "menu")) { panel = "menu"; game.sound.play("click"); }
+        if (iconBtn(938, 78, "smile")) { panel = "emote"; game.sound.play("click"); }
+        if (iconBtn(938, 24, "bag")) { panel = "bag"; game.sound.play("click"); }
 
         // ---- bottom-centre: chat frame ----
         drawChatFrame();
@@ -692,7 +696,7 @@ public class TownScreen implements Screen {
 
     private String shortAction(Spot s) {
         if ("plot".equals(s.id)) return "Về nhà";
-        if ("adv".equals(s.id)) return "Ra Bìa Rừng";
+        if ("adv".equals(s.id)) return "Ra Vành Đai Neon";
         if ("board".equals(s.id)) return "Xem nhiệm vụ";
         return "Nói chuyện";
     }
@@ -780,7 +784,7 @@ public class TownScreen implements Screen {
             shown++;
             if (y < 210) break;
         }
-        if (shown == 0) Ui.label(game.batch, game.assets.fontSmall, "Túi trống. Ra Bìa Rừng farm hoặc ghé Cafe Pina nhé.", 420, y, Ui.TEXT_DIM, Align.left);
+        if (shown == 0) Ui.label(game.batch, game.assets.fontSmall, "Túi trống. Farm ở Vành Đai Neon hoặc ghé Cafe Pina nhé.", 420, y, Ui.TEXT_DIM, Align.left);
         game.batch.end();
         if (closeBtn(735, 168)) panel = null;
     }
@@ -1114,7 +1118,7 @@ public class TownScreen implements Screen {
                 game.state.notice = "Đã đổi được 1 Tinh Thể Mạch.";
             } else {
                 game.sound.play("error");
-                game.state.notice = "Cần 5 Nhựa Sáng (ra Bìa Rừng farm quái nhé).";
+                game.state.notice = "Cần 5 Nhựa Sáng (ra Vành Đai Neon farm quái nhé).";
             }
         }
         if (closeBtn(795, 198)) panel = null;
@@ -1125,7 +1129,7 @@ public class TownScreen implements Screen {
         Ui.panel(game.shapes, 360, 160, 560, 400);
         game.batch.begin();
         Ui.label(game.batch, game.assets.font, "Pet Shop — Bé Robot", 640, 532, Ui.CYAN, Align.center);
-        Ui.label(game.batch, game.assets.fontSmall, "Pet của bạn: cấp " + petTier() + " — nhặt đồ ở Bìa Rừng nhanh hơn theo cấp.", 390, 494, Ui.TEXT, Align.left);
+        Ui.label(game.batch, game.assets.fontSmall, "Pet của bạn: cấp " + petTier() + " — nhặt đồ ở Vành Đai Neon nhanh hơn theo cấp.", 390, 494, Ui.TEXT, Align.left);
         Ui.label(game.batch, game.assets.fontSmall, "Xu Lá: " + p.xuLa, 390, 462, Ui.GOLD, Align.left);
         game.batch.end();
         float y = 402;
@@ -1185,7 +1189,7 @@ public class TownScreen implements Screen {
             Ui.label(game.batch, game.assets.fontSmall,
                 "Cần hoàn thành nhiệm vụ giới thiệu mở đầu (gặp Trưởng Trạm Gốc).", 640, 508, Ui.TEXT, Align.center);
             Ui.label(game.batch, game.assets.fontSmall,
-                "Hãy làm nhiệm vụ chính và farm ở Bìa Rừng để lên cấp nhé.", 640, 480, Ui.TEXT_DIM, Align.center);
+                "Hãy làm nhiệm vụ chính và farm ở Vành Đai Neon để lên cấp nhé.", 640, 480, Ui.TEXT_DIM, Align.center);
             game.batch.end();
         } else {
             game.batch.begin();
@@ -1221,7 +1225,7 @@ public class TownScreen implements Screen {
                     if (r == ClassChoice.Result.OK) {
                         game.state.quests.onEvent(ObjectiveType.CHOOSE_CLASS, 1);
                         game.sound.play("levelup");
-                        game.state.notice = "Đã chọn nghề " + gc.displayName + "! Ra Bìa Rừng thử kỹ năng mới nhé.";
+                        game.state.notice = "Đã chọn nghề " + gc.displayName + "! Ra Vành Đai Neon thử kỹ năng mới nhé.";
                         game.saveGame();
                     } else {
                         game.sound.play("error");

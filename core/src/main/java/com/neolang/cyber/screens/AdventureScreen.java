@@ -29,7 +29,7 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Random;
 
-/** Forest edge farm zone: joystick + attack/skill buttons, monsters, pet loot pickup, data storm. */
+/** Neon belt farm zone (city outskirts): joystick + attack/skill buttons, monsters, pet loot pickup, data storm. */
 public class AdventureScreen implements Screen {
     public static final float WORLD_W = 3400;
     public static final float GROUND = 170;
@@ -69,7 +69,7 @@ public class AdventureScreen implements Screen {
     private int chatReplyIdx;
     private static final String[] CHAT_REPLIES = {
         "Hôm nay mạch cây chạy êm lắm, bạn thấy không?",
-        "Nghe nói Bìa Rừng có nhiều Nhựa Sáng rơi sau bão đó.",
+        "Nghe nói Khu Vành Đai Neon có nhiều Nhựa Sáng rơi sau bão đó.",
         "Cafe Pina vừa có món mới, ghé thử đi!",
         "Đạt cấp 5 là qua Trạm Định Hướng chọn nghề được rồi.",
         "Pet của bạn trông khoẻ đấy, cho nó ăn pin chưa?"
@@ -288,7 +288,7 @@ public class AdventureScreen implements Screen {
             p.warmth += (100 - (double) p.warmth) * 0.4;
             p.battery += (100 - (double) p.battery) * 0.4;
             p.x = 2600;
-            game.state.notice = "Bạn gục ở Bìa Rừng — pet kéo bạn về làng, không mất đồ gì cả.";
+            game.state.notice = "Bạn gục ở Vành Đai Neon — pet kéo bạn về làng, không mất đồ gì cả.";
             game.saveGame();
             gone = true;
             game.gotoTown();
@@ -454,7 +454,7 @@ public class AdventureScreen implements Screen {
         float dayness = game.state.clock.isNight() ? 0.25f : 0.9f;
         Texture bgPlate = game.assets.advPlate != null ? game.assets.advPlate : game.assets.adventure;
         if (bgPlate != null) {
-            // Clean far plate (empty forest floor, no baked characters/UI) tiled
+            // Clean far plate (empty night street, no baked characters/UI) tiled
             // at full screen height with 0.5x parallax: the camera can travel the
             // whole 3400px map and the painting never runs out.
             game.batch.begin();
@@ -589,7 +589,7 @@ public class AdventureScreen implements Screen {
 
         // minimap top-right: red dots = living monsters, green = home portal,
         // map name inside the frame's top strip (no loose label under the box)
-        Hud.drawMinimapBase(game, "Bìa Rừng Mạch Điện");
+        Hud.drawMinimapBase(game, "Khu Vành Đai Neon");
         game.shapes.begin(ShapeType.Filled);
         Color monDot = new Color(1f, 0.32f, 0.32f, 1);
         for (Mon m : mons) if (m.hp > 0) Hud.dot(game.shapes, Hud.mmX(m.x, WORLD_W), Hud.mmGroundY(), 2.6f, monDot);
@@ -633,10 +633,12 @@ public class AdventureScreen implements Screen {
         // joystick visual: painted base + knob assets, shared with town
         Hud.drawJoystick(game, JOY_X, JOY_Y, joyMode, joyBase, joyVec, stickRun);
 
-        // chat cluster, same as town: mail + gear left of the frame, emote right of it
-        if (iconBtn(288, 50, "mail")) { panel = "mail"; game.sound.play("click"); }
-        if (iconBtn(344, 50, "menu")) { panel = "pause"; game.sound.play("click"); }
-        if (iconBtn(890, 50, "smile")) { panel = "emote"; game.sound.play("click"); }
+        // chat cluster, same layout as town: LEFT column mail on TOP of settings,
+        // RIGHT column emote on TOP of the bag
+        if (iconBtn(288, 78, "mail")) { panel = "mail"; game.sound.play("click"); }
+        if (iconBtn(288, 24, "menu")) { panel = "pause"; game.sound.play("click"); }
+        if (iconBtn(890, 78, "smile")) { panel = "emote"; game.sound.play("click"); }
+        if (iconBtn(890, 24, "bag")) { panel = "bag"; game.sound.play("click"); }
         drawChatFrame();
 
         // attack button (big) + skills
@@ -726,7 +728,8 @@ public class AdventureScreen implements Screen {
     private boolean iconBtn(float x, float y, String kind) {
         // glass rounded square + PAINTED icon asset (same slot/function as before)
         Texture t = "mail".equals(kind) ? game.assets.icoMail
-            : "smile".equals(kind) ? game.assets.icoSmile : game.assets.icoGear;
+            : "smile".equals(kind) ? game.assets.icoSmile
+            : "bag".equals(kind) ? game.assets.icoBag : game.assets.icoGear;
         if (t == null) {
             game.shapes.begin(ShapeType.Filled);
             game.shapes.setColor(Ui.BTN);
@@ -734,7 +737,7 @@ public class AdventureScreen implements Screen {
             game.shapes.end();
             if ("mail".equals(kind)) Ui.iconMail(game.shapes, x + 23, y + 23, 11, Ui.CYAN);
             else if ("smile".equals(kind)) Ui.iconSmile(game.shapes, x + 23, y + 23, 11, Ui.CYAN);
-            else Ui.iconGear(game.shapes, x + 23, y + 23, 11, Ui.CYAN);
+            else if (!"bag".equals(kind)) Ui.iconGear(game.shapes, x + 23, y + 23, 11, Ui.CYAN);
             return Ui.tapped(hudVp, x, y, 46, 46);
         }
         return Hud.glassIconBtn(game, hudVp, t, x, y, 46);
@@ -801,6 +804,7 @@ public class AdventureScreen implements Screen {
             case "chat": panelChat(); break;
             case "mail": panelMail(); break;
             case "emote": panelEmote(); break;
+            case "bag": panelBag(); break;
             case "pause": panelPause(); break;
             default: panel = null; break;
         }
@@ -852,6 +856,27 @@ public class AdventureScreen implements Screen {
         if (btn(830, 214, 200, 38, "Vẫy tay")) { emote = 1; emoteT = 2; panel = null; }
         if (btn(830, 168, 200, 38, "Cười")) { emote = 2; emoteT = 2; panel = null; }
         if (btn(830, 122, 200, 38, "Ngồi nghỉ")) { emote = 3; emoteT = 2; panel = null; }
+    }
+
+    /** Same bag panel as town (the game's one inventory view): item counts
+     *  from the player's bag, read-only here — using/eating stays in town. */
+    private void panelBag() {
+        Ui.panel(game.shapes, 390, 150, 500, 440);
+        game.batch.begin();
+        Ui.label(game.batch, game.assets.font, "Túi đồ", 640, 562, Ui.CYAN, Align.center);
+        float y = 516;
+        int shown = 0;
+        for (com.neolang.cyber.model.ItemDef d : Items.ALL.values()) {
+            int n = game.state.player.countItem(d.id);
+            if (n <= 0) continue;
+            Ui.label(game.batch, game.assets.fontSmall, d.name + "  x" + n, 420, y, Ui.TEXT, Align.left);
+            y -= 26;
+            shown++;
+            if (y < 210) break;
+        }
+        if (shown == 0) Ui.label(game.batch, game.assets.fontSmall, "Túi trống. Farm quái ở đây hoặc ghé Cafe Pina nhé.", 420, y, Ui.TEXT_DIM, Align.left);
+        game.batch.end();
+        if (closeBtn(735, 168)) panel = null;
     }
 
     private void panelPause() {
