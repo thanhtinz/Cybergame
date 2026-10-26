@@ -400,7 +400,8 @@ public class TownScreen implements Screen {
             Ui.nameTag(game.batch, game.shapes, game.assets.fontSmall, n.name, n.x, GROUND + 84);
             drawBubble(n.x, GROUND + 138, n.lines[n.lineIdx]);
         }
-        Ui.nameTag(game.batch, game.shapes, game.assets.fontSmall, p.name + " — Cấp " + p.level, playerX, GROUND + 88);
+        String pTitle = p.gameClass == GameClass.NONE ? "Tân Cư Dân" : p.gameClass.displayName;
+        Ui.playerTag(game.batch, game.shapes, game.assets.fontSmall, pTitle, p.name + " — Cấp " + p.level, playerX, GROUND + 88);
 
         // night + storm overlays
         float nightA = game.state.clock.isNight() ? 0.32f : 0f;

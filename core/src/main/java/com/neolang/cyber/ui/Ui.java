@@ -127,6 +127,40 @@ public class Ui {
         batch.end();
     }
 
+    /** Player name tag: the player's title (current class line) stacked ABOVE the name
+     *  line inside one taller pill. Title is smaller, bright cyan, with a text shadow.
+     *  y anchors the name line exactly like nameTag; the pill grows upward. */
+    public static void playerTag(SpriteBatch batch, ShapeRenderer sr, BitmapFont font,
+                                 String title, String name, float cx, float y) {
+        if (title == null) title = "";
+        float nameW = textWidth(font, name);
+        float nameLineH = font.getLineHeight();
+        float capH = font.getCapHeight();
+        font.getData().setScale(0.8f);
+        float titleW = textWidth(font, title);
+        float titleLineH = font.getLineHeight();
+        float titleCapH = font.getCapHeight();
+        font.getData().setScale(1f);
+        float w = Math.max(nameW, titleW) + 16;
+        float bottom = y - 4;
+        float titleBaseline = y + nameLineH + titleCapH + 3;
+        float pillTop = titleBaseline + (titleLineH - titleCapH) + 4;
+        sr.begin(ShapeType.Filled);
+        sr.setColor(0, 0, 0, 0.45f);
+        sr.rect(cx - w / 2, bottom, w, pillTop - bottom);
+        sr.end();
+        batch.begin();
+        label(batch, font, name, cx, y + capH, TEXT, Align.center);
+        font.getData().setScale(0.8f);
+        font.setColor(0, 0, 0, 0.55f);
+        font.draw(batch, title, cx + 1, titleBaseline - 1, 0, Align.center, false);
+        font.setColor(CYAN);
+        font.draw(batch, title, cx, titleBaseline, 0, Align.center, false);
+        font.setColor(Color.WHITE);
+        font.getData().setScale(1f);
+        batch.end();
+    }
+
     // ---- shape icons (no emoji) ----
     public static void iconMail(ShapeRenderer sr, float cx, float cy, float s, Color c) {
         sr.begin(ShapeType.Filled);
