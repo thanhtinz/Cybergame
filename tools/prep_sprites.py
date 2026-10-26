@@ -18,6 +18,10 @@ Nguon:
      moi thanh phan chi thuoc ve 1 mon dau tien chua tam cua no)
   - 2 plate nen sach: town-bg-plate -> art/town_plate.jpg, adventure-bg-plate -> art/adv_plate.jpg
     (chi la JPG phu, khong cat — man dung plate lam nen xa, toa nha/do vat la sprite rieng)
+  - media-generation-portrait-frame-cyber-*.webp (khung chan dung cyber: vong teal +
+    mach cyan, lo lon — thay khung vong fantasy cat tu sheet icon) va
+    media-generation-joystick-{base,knob}-*.webp (de / num joystick asset):
+    cat bang che do --hud-assets
 
 Ky thuat: xoa nen bang flood-fill tu mep anh (chi xoa vung mau-nen lien thong voi mep,
 nen ao trang / vung sang BEN TRONG nhan vat duoc giu nguyen), feather alpha 1px +
@@ -330,6 +334,46 @@ def process_face(g):
     save_sprite(out, "hero_%s_face.png" % g)
 
 
+def process_portrait_frame(path):
+    """Khung chan dung cyber (thay khung vong fantasy cu): vong kim loai teal,
+    mach neon cyan, lo giua LON. Kem ngoai bi flood-fill xoa theo alpha_mask;
+    phan kem kin trong lo xoa bang clear_cream nhu khung cu. In ti le lo +
+    lech tam de Hud.java can duong kinh mat khop lo."""
+    img = Image.open(path).convert("RGB")
+    alpha = alpha_mask(img)
+    lab, comps = components(alpha)
+    best = max(comps, key=lambda c: c["area"])
+    spr = clear_cream(extract(img, alpha, lab, best, max_h=256))
+    save_sprite(spr, "frame_portrait.png")
+    a = np.asarray(spr)[..., 3] > 128
+
+    def hole_run(mask, c):
+        lo = c
+        while lo > 0 and not mask[lo - 1]:
+            lo -= 1
+        hi = c
+        while hi < len(mask) - 1 and not mask[hi + 1]:
+            hi += 1
+        return lo, hi
+
+    cy, cx = spr.height // 2, spr.width // 2
+    x0, x1 = hole_run(a[cy], cx)
+    y0, y1 = hole_run(a[:, cx], cy)
+    print("FRAME  lo ngang %d..%d d=%d tam=%.1f | lo doc %d..%d d=%d tam=%.1f | sprite %dx%d"
+          % (x0, x1, x1 - x0 + 1, (x0 + x1) / 2.0, y0, y1, y1 - y0 + 1,
+             (y0 + y1) / 2.0, spr.width, spr.height))
+
+
+def process_single(path, name, max_h):
+    """Anh don le tren nen kem (de / num joystick): lay thanh phan lon nhat."""
+    img = Image.open(path).convert("RGB")
+    alpha = alpha_mask(img)
+    lab, comps = components(alpha)
+    comps = [c for c in comps if c["area"] >= 900]
+    best = max(comps, key=lambda c: c["area"])
+    save_sprite(extract(img, alpha, lab, best, max_h=max_h), name)
+
+
 def one(pattern):
     hits = sorted(glob.glob(str(MEDIA / pattern)))
     if not hits:
@@ -344,6 +388,13 @@ def main():
         process_face("m")
         process_face("f")
         print("Xong (hud).")
+        return
+    if "--hud-assets" in sys.argv:
+        # Khung chan dung cyber + de/num joystick (asset don le, nen kem)
+        process_portrait_frame(one("media-generation-portrait-frame-cyber-*.webp"))
+        process_single(one("media-generation-joystick-base-*.webp"), "joy_base.png", 240)
+        process_single(one("media-generation-joystick-knob-*.webp"), "joy_knob.png", 160)
+        print("Xong (hud-assets).")
         return
     # --- hero: nhan vat chinh + pet ---
     pet_m = process_hero(RES_ART / "hero_male.jpg", "hero_m")

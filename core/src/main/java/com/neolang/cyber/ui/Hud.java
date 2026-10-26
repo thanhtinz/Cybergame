@@ -6,6 +6,7 @@ import com.badlogic.gdx.graphics.g2d.BitmapFont;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.graphics.glutils.ShapeRenderer;
 import com.badlogic.gdx.graphics.glutils.ShapeRenderer.ShapeType;
+import com.badlogic.gdx.math.Vector2;
 import com.badlogic.gdx.utils.Align;
 import com.badlogic.gdx.utils.viewport.Viewport;
 import com.neolang.cyber.Assets;
@@ -16,13 +17,15 @@ import com.neolang.cyber.model.Player;
 
 /**
  * Shared MMORPG-style HUD pieces for Town + Adventure: the top-left character
- * cluster (round painted portrait in the painted ring frame, level badge,
- * name/class, rounded stat bars WITH numbers, survival chips, currency pills —
- * all on one compact glass panel) and the top-right minimap frame.
+ * card (round painted portrait in the painted cyber frame, level badge,
+ * name/class and the main stat bars WITH numbers — kept slim like a mobile
+ * MMO card), a loose row of survival chips hanging under the card, the
+ * top-right minimap frame with the currency pills under it, and the painted
+ * joystick.
  *
- * Every icon here is a PAINTED asset from the HUD icon sheet (Assets.ico*) —
- * no shape-drawn glyphs. Minimap markers stay plain dots on purpose: they are
- * position markers, not icons.
+ * Every icon here is a PAINTED asset (Assets.ico*, framePortrait, joyBase,
+ * joyKnob) — no shape-drawn glyphs. Minimap markers stay plain dots on
+ * purpose: they are position markers, not icons.
  */
 public final class Hud {
     private Hud() { }
@@ -32,6 +35,11 @@ public final class Hud {
     private static final float PCX = CL_X + 62, PCY = CL_TOP - 62;   // portrait centre
     private static final float RX = CL_X + 140;                       // right column x
     private static final float RW = CL_W - 140 - 10;                  // right column width
+    // Cyber frame is drawn 132 tall; its inner hole measures 174/256 of the
+    // sprite height (prep_sprites.py --hud-assets), so the hole is ~90px here
+    // and the face disc is drawn ~6% wider to tuck under the rim bevel.
+    private static final float FRAME_H = 132;
+    private static final float FACE_D = FRAME_H * (174f / 256f) * 1.06f;
 
     // ---- minimap geometry
     public static final float MM_X = 1078, MM_Y = 568, MM_W = 190, MM_H = 140;
@@ -125,9 +133,13 @@ public final class Hud {
 
     // ------------------------------------------------------- character cluster
     /**
-     * Draws the whole top-left cluster and returns the panel's bottom y (the
-     * cluster rect is CL_X..CL_X+CL_W × bottom..CL_TOP for tap tests).
-     * adventure=true shows HP + NL bars; town shows the thin XP bar instead.
+     * Draws the slim top-left character card (portrait + level badge, name,
+     * class line, main bars only) plus the loose survival-chip row hanging
+     * under it, and returns the CARD's bottom y (the card rect is
+     * CL_X..CL_X+CL_W × bottom..CL_TOP for tap tests; the chip row below the
+     * card is display-only). Currency lives under the minimap instead
+     * (drawCurrency). adventure=true shows HP + NL bars; town shows the thin
+     * XP bar instead.
      */
     public static float drawCharCluster(NeoLangGame game, boolean adventure, float energy) {
         Player p = game.state.player;
@@ -138,9 +150,9 @@ public final class Hud {
         // rows walked down from the top
         float bar1Y = CL_TOP - 75;                       // HP (adv) / XP (town)
         float bar2Y = CL_TOP - 99;                       // NL (adventure only)
-        float chipsY = adventure ? CL_TOP - 136 : CL_TOP - 110;
-        float pillsY = chipsY - 34;
-        float bottom = pillsY - 12;
+        float bottom = PCY - FRAME_H / 2 - 8;            // card ends under the frame
+        float chipsY = bottom - 34;                      // loose chip row under the card
+        float chipW = (CL_W - 16) / 3f;
 
         // ---------- shapes pass ----------
         sr.begin(ShapeType.Filled);
@@ -158,30 +170,21 @@ public final class Hud {
         } else {
             pillBarShape(sr, bx, bar1Y + 1, bw, 15, (float) ((double) p.xp / Math.max(1, (double) p.xpNext())), XP_C);
         }
-        // survival chips
-        float chipW = (RW - 16) / 3f;
+        // survival chips: separate small glass pills, NOT part of the card
         for (int i = 0; i < 3; i++) {
-            roundRect(sr, RX + i * (chipW + 8), chipsY, chipW, 26, 13, TRACK);
+            glass(sr, CL_X + i * (chipW + 8), chipsY, chipW, 26, 13);
         }
-        // currency pills
-        float pillW = (RW - 8) / 2f;
-        roundRect(sr, RX, pillsY, pillW, 26, 13, TRACK);
-        roundRect(sr, RX + pillW + 8, pillsY, pillW, 26, 13, TRACK);
-        // level badge: gold disc on the portrait's bottom-right
-        sr.setColor(0.45f, 0.30f, 0.05f, 1);
-        sr.circle(PCX + 46, PCY - 46, 15);
-        sr.setColor(GOLD);
-        sr.circle(PCX + 46, PCY - 46, 13.5f);
         sr.end();
 
         // ---------- batch pass ----------
         batch.begin();
-        // portrait: painted face under the painted ring frame (frame hole ≈ 66px)
+        // portrait: painted face disc sized to the cyber frame's hole (see
+        // FACE_D) under the painted frame itself
         Texture face = a.heroFace[p.gender == Gender.NU ? 1 : 0];
-        if (face != null) batch.draw(face, PCX - 50, PCY - 50, 100, 100);
-        if (a.icoRing != null) {
-            float rh = 132, rw = rh * a.icoRing.getWidth() / a.icoRing.getHeight();
-            batch.draw(a.icoRing, PCX - rw / 2, PCY - rh / 2, rw, rh);
+        if (face != null) batch.draw(face, PCX - FACE_D / 2, PCY - FACE_D / 2, FACE_D, FACE_D);
+        if (a.framePortrait != null) {
+            float fw = FRAME_H * a.framePortrait.getWidth() / a.framePortrait.getHeight();
+            batch.draw(a.framePortrait, PCX - fw / 2, PCY - FRAME_H / 2, fw, FRAME_H);
         }
         // name + class line
         shadowLabel(batch, a.font, fit(a.font, p.name, RW), RX, CL_TOP - 18, Ui.TEXT, Align.left);
@@ -197,27 +200,96 @@ public final class Hud {
             icon(batch, a.icoStar, RX + 13, bar1Y + 8.5f, 23);
             barText(batch, a, bx, bar1Y + 1, bw, 15, p.xp + "/" + p.xpNext());
         }
-        // chips: painted icon + percent
+        // chips under the card: painted icon + percent
         Texture[] chipIco = {a.icoFood, a.icoFlame, a.icoBattery};
         double[] chipVal = {p.satiety, p.warmth, p.battery};
         a.fontSmall.getData().setScale(0.92f);
         for (int i = 0; i < 3; i++) {
-            float cxp = RX + i * (chipW + 8);
+            float cxp = CL_X + i * (chipW + 8);
             icon(batch, chipIco[i], cxp + 15, chipsY + 13, 19);
             Ui.label(batch, a.fontSmall, (int) chipVal[i] + "%", cxp + 27, chipsY + 17.5f, Ui.TEXT, Align.left);
         }
-        // currency pills: painted icon + amount
-        icon(batch, a.icoCoin, RX + 15, pillsY + 13, 21);
-        Ui.label(batch, a.fontSmall, String.valueOf(p.xuLa), RX + 28, pillsY + 17.5f, Ui.TEXT, Align.left);
-        icon(batch, a.icoCrystal, RX + pillW + 8 + 15, pillsY + 13, 21);
-        Ui.label(batch, a.fontSmall, String.valueOf(p.tinhThe), RX + pillW + 8 + 28, pillsY + 17.5f, Ui.TEXT, Align.left);
         a.fontSmall.getData().setScale(1f);
-        // level number on the badge
+        batch.end();
+
+        // level badge OVER the frame: gold disc on the portrait's bottom-right.
+        // Its centre sits on the rim, so if it were drawn in the shapes pass
+        // before the frame, the frame would clip half the disc and the number.
+        // Bottom-centre of the frame carries a small orange gem; the badge at
+        // the bottom-right stays clear of it.
+        sr.begin(ShapeType.Filled);
+        sr.setColor(0.45f, 0.30f, 0.05f, 1);
+        sr.circle(PCX + 46, PCY - 46, 15);
+        sr.setColor(GOLD);
+        sr.circle(PCX + 46, PCY - 46, 13.5f);
+        sr.end();
+        batch.begin();
         a.font.getData().setScale(0.72f);
         shadowLabel(batch, a.font, String.valueOf(p.level), PCX + 46, PCY - 46 + 5.5f, BADGE_TXT, Align.center);
         a.font.getData().setScale(1f);
         batch.end();
         return bottom;
+    }
+
+    /**
+     * Currency row (Xu Lá / Tinh Thể, painted icons) as its own little cluster
+     * under the minimap: two glass pills side by side, top edge at topY.
+     * Adventure stacks it under the "Về Làng" pill; town directly under the map.
+     */
+    public static void drawCurrency(NeoLangGame game, float topY) {
+        Player p = game.state.player;
+        Assets a = game.assets;
+        ShapeRenderer sr = game.shapes;
+        float y = topY - 26, pillW = (MM_W - 8) / 2f;
+        sr.begin(ShapeType.Filled);
+        glass(sr, MM_X, y, pillW, 26, 13);
+        glass(sr, MM_X + pillW + 8, y, pillW, 26, 13);
+        sr.end();
+        game.batch.begin();
+        a.fontSmall.getData().setScale(0.92f);
+        icon(game.batch, a.icoCoin, MM_X + 15, y + 13, 20);
+        Ui.label(game.batch, a.fontSmall, String.valueOf(p.xuLa), MM_X + 27, y + 17.5f, Ui.TEXT, Align.left);
+        icon(game.batch, a.icoCrystal, MM_X + pillW + 8 + 15, y + 13, 20);
+        Ui.label(game.batch, a.fontSmall, String.valueOf(p.tinhThe), MM_X + pillW + 8 + 27, y + 17.5f, Ui.TEXT, Align.left);
+        a.fontSmall.getData().setScale(1f);
+        game.batch.end();
+    }
+
+    // ------------------------------------------------------------- joystick
+    /**
+     * Painted joystick (shared Town + Adventure visuals): teal metal base
+     * asset at (jx, jy), knob asset following the drag offset. Mode 1 = fixed
+     * stick, mode 2 = floating stick at base. While running, a warm orange
+     * glow sits behind the knob (the knob asset itself never changes colour)
+     * and the "Chạy" label shows under the fixed stick. Movement logic and
+     * the 0.22 dead zone / 0.85 run threshold live in the screens, unchanged.
+     */
+    public static void drawJoystick(NeoLangGame game, float jx, float jy, int mode,
+                                    Vector2 base, float vec, boolean running) {
+        Assets a = game.assets;
+        float knobX = mode == 1 ? jx + vec * 38 : jx;
+        if (running) {
+            ShapeRenderer sr = game.shapes;
+            sr.begin(ShapeType.Filled);
+            sr.setColor(1f, 0.60f, 0.22f, 0.38f);
+            sr.circle(knobX, jy, 38);
+            sr.end();
+        }
+        SpriteBatch batch = game.batch;
+        batch.begin();
+        batch.setColor(1, 1, 1, 0.95f);
+        icon(batch, a.joyBase, jx, jy, 116);
+        batch.setColor(1, 1, 1, 1);
+        icon(batch, a.joyKnob, knobX, jy, 54);
+        if (mode == 2) {
+            batch.setColor(1, 1, 1, 0.95f);
+            icon(batch, a.joyBase, base.x, base.y, 108);
+            batch.setColor(1, 1, 1, 1);
+            icon(batch, a.joyKnob, base.x + vec * 38, base.y, 50);
+        }
+        if (running) Ui.label(batch, a.fontSmall, "Chạy", jx, jy - 64, Ui.GOLD, Align.center);
+        batch.end();
+        batch.setColor(1, 1, 1, 1);
     }
 
     private static void barText(SpriteBatch batch, Assets a, float x, float y, float w, float h, String text) {

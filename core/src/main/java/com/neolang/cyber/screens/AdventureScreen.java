@@ -580,9 +580,8 @@ public class AdventureScreen implements Screen {
         game.batch.setProjectionMatrix(hudVp.getCamera().combined);
         Player p = game.state.player;
 
-        // top-left: shared MMORPG character cluster (round portrait + ring,
-        // HP/NL bars with numbers, survival chips, currency pills) — the old
-        // split HP panel and loose survival minis are merged into it.
+        // top-left: shared slim character card (portrait in the cyber frame,
+        // HP/NL bars with numbers) + loose survival-chip row under the card.
         float clBottom = Hud.drawCharCluster(game, true, energy);
         if (panel == null && Ui.tapped(hudVp, Hud.CL_X, clBottom, Hud.CL_W, Hud.CL_TOP - clBottom)) {
             panel = "pause"; game.sound.play("click");
@@ -605,6 +604,9 @@ public class AdventureScreen implements Screen {
             game.gotoTown();
             return;
         }
+        // currency pills under the "Về Làng" pill (right cluster: minimap ->
+        // Về Làng -> currency)
+        Hud.drawCurrency(game, Hud.MM_Y - 58);
         if (px < 130) {
             game.batch.begin();
             Ui.label(game.batch, game.assets.fontSmall, "Lại gần cổng hoặc bấm Về Làng", 640, 210, Ui.TEXT_DIM, Align.center);
@@ -628,25 +630,8 @@ public class AdventureScreen implements Screen {
             game.batch.end();
         }
 
-        // joystick visual: fixed stick bottom-left (same layout as town) + floating stick
-        game.shapes.begin(ShapeType.Filled);
-        game.shapes.setColor(1, 1, 1, joyMode == 1 ? 0.22f : 0.12f);
-        game.shapes.circle(JOY_X, JOY_Y, 56);
-        if (stickRun) game.shapes.setColor(1f, 0.82f, 0.25f, 0.8f); // gold knob at full tilt = running
-        else game.shapes.setColor(0.35f, 0.95f, 1f, joyMode == 1 ? 0.6f : 0.35f);
-        game.shapes.circle(joyMode == 1 ? JOY_X + joyVec * 38 : JOY_X, JOY_Y, 24);
-        if (joyMode == 2) {
-            game.shapes.setColor(1, 1, 1, 0.15f);
-            game.shapes.circle(joyBase.x, joyBase.y, 52);
-            game.shapes.setColor(0.35f, 0.95f, 1f, 0.5f);
-            game.shapes.circle(joyBase.x + joyVec * 38, joyBase.y, 22);
-        }
-        game.shapes.end();
-        if (stickRun) {
-            game.batch.begin();
-            Ui.label(game.batch, game.assets.fontSmall, "Chạy", JOY_X, JOY_Y - 64, Ui.GOLD, Align.center);
-            game.batch.end();
-        }
+        // joystick visual: painted base + knob assets, shared with town
+        Hud.drawJoystick(game, JOY_X, JOY_Y, joyMode, joyBase, joyVec, stickRun);
 
         // chat cluster, same as town: mail + gear left of the frame, emote right of it
         if (iconBtn(288, 50, "mail")) { panel = "mail"; game.sound.play("click"); }

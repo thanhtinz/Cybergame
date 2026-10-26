@@ -587,16 +587,18 @@ public class TownScreen implements Screen {
         game.batch.setProjectionMatrix(hudVp.getCamera().combined);
         Player p = game.state.player;
 
-        // ---- top-left: MMORPG character cluster (shared with Adventure) ----
-        // Round painted portrait in the painted ring frame + level badge,
-        // name/class, XP bar with numbers, survival chips, currency pills.
+        // ---- top-left: slim character card (shared with Adventure) ----
+        // Portrait in the painted cyber frame + level badge, name/class, XP bar
+        // with numbers; survival chips hang in a loose row under the card.
         float clBottom = Hud.drawCharCluster(game, false, 0);
         if (panel == null && Ui.tapped(hudVp, Hud.CL_X, clBottom, Hud.CL_W, Hud.CL_TOP - clBottom)) {
             panel = "char"; game.sound.play("click");
         }
 
-        // ---- top-right: minimap (building/NPC gold dots, portal dots, player) ----
+        // ---- top-right: minimap (building/NPC gold dots, portal dots, player)
+        // with the currency pills as their own row under the frame ----
         drawMinimap(p);
+        Hud.drawCurrency(game, Hud.MM_Y - 8);
 
         // storm banner (top centre, clear of the cluster and the minimap)
         if (game.state.storm.active) {
@@ -662,27 +664,11 @@ public class TownScreen implements Screen {
         game.shapes.end();
     }
 
-    /** Fixed movement stick, bottom-left: base always visible, knob follows the drag.
-     *  The floating stick (mode 2) still appears wherever else the player touches low. */
+    /** Fixed movement stick, bottom-left: painted base + knob assets (shared
+     *  with Adventure via Hud). The floating stick (mode 2) still appears
+     *  wherever else the player touches low. */
     private void drawJoystick() {
-        game.shapes.begin(ShapeType.Filled);
-        game.shapes.setColor(1, 1, 1, joyMode == 1 ? 0.22f : 0.12f);
-        game.shapes.circle(JOY_X, JOY_Y, 56);
-        if (stickRun) game.shapes.setColor(1f, 0.82f, 0.25f, 0.8f); // gold knob at full tilt = running
-        else game.shapes.setColor(0.35f, 0.95f, 1f, joyMode == 1 ? 0.6f : 0.35f);
-        game.shapes.circle(joyMode == 1 ? JOY_X + joyVec * 38 : JOY_X, JOY_Y, 24);
-        if (joyMode == 2) {
-            game.shapes.setColor(1, 1, 1, 0.15f);
-            game.shapes.circle(joyBase.x, joyBase.y, 52);
-            game.shapes.setColor(0.35f, 0.95f, 1f, 0.5f);
-            game.shapes.circle(joyBase.x + joyVec * 38, joyBase.y, 22);
-        }
-        game.shapes.end();
-        if (stickRun) {
-            game.batch.begin();
-            Ui.label(game.batch, game.assets.fontSmall, "Chạy", JOY_X, JOY_Y - 64, Ui.GOLD, Align.center);
-            game.batch.end();
-        }
+        Hud.drawJoystick(game, JOY_X, JOY_Y, joyMode, joyBase, joyVec, stickRun);
     }
 
     private Npc nearestNpc() {
