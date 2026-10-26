@@ -50,12 +50,12 @@ public class Assets {
     // game are these painted assets — never shape-drawn glyphs.
     public Texture icoHeart, icoBolt, icoFood, icoFlame, icoBattery, icoCoin, icoCrystal, icoStar;
     public Texture icoMail, icoGear, icoSmile, icoSword, icoSwirl, icoOrb, icoQuest, icoBag;
-    // Cyber portrait frame (teal ring + cyan circuits, large hole) replacing the
-    // old fantasy ring, and the painted joystick base/knob pair.
+    // COZY wooden leaf-carved portrait frame (large hole) replacing the
+    // old cyber ring, and the painted wooden joystick base / amber-orb knob pair.
     public Texture framePortrait;
     public Texture joyBase, joyKnob;
-    // Round painted interact button (teal disc + chat bubble) and the painted
-    // minimap frame (metal rim + navy glass pane kept whole as the map surface).
+    // Round painted interact button (wooden ring + cream chat bubble) and the painted
+    // minimap frame (wood rim + parchment pane kept whole as the map surface).
     public Texture btnTalk;
     public Texture minimapFrame;
     public Texture[] heroFace = new Texture[2];

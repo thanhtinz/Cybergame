@@ -404,6 +404,142 @@ def process_single(path, name, max_h):
     save_sprite(extract(img, alpha, lab, best, max_h=max_h), name)
 
 
+def process_cozy_portrait_frame(path):
+    """Khung chan dung GO khac la (sheet UI kit cozy, o hang 1 cot 1): vong go,
+    lo giua mau kem kin -> clear_cream nhu khung cu. In ti le lo de Hud.java
+    can duong kinh mat (FACE_D) khop lo go."""
+    img = Image.open(path).convert("RGB")
+    alpha = alpha_mask(img)
+    lab, comps = components(alpha)
+    W, H = img.size
+    cell = [c for c in comps if c["area"] >= 900
+            and c["cx"] < W / 3 and c["cy"] < H / 2]
+    best = max(cell, key=lambda c: c["area"])
+    spr = clear_cream(extract(img, alpha, lab, best, max_h=256))
+    save_sprite(spr, "frame_portrait.png")
+    a = np.asarray(spr)[..., 3] > 128
+
+    def hole_run(mask, c):
+        lo = c
+        while lo > 0 and not mask[lo - 1]:
+            lo -= 1
+        hi = c
+        while hi < len(mask) - 1 and not mask[hi + 1]:
+            hi += 1
+        return lo, hi
+
+    cy, cx = spr.height // 2, spr.width // 2
+    x0, x1 = hole_run(a[cy], cx)
+    y0, y1 = hole_run(a[:, cx], cy)
+    print("COZY-FRAME lo ngang %d..%d d=%d | lo doc %d..%d d=%d | sprite %dx%d | "
+          "ti le lo/chieu cao sprite = %.4f"
+          % (x0, x1, x1 - x0 + 1, y0, y1, y1 - y0 + 1, spr.width, spr.height,
+             (y1 - y0 + 1) / float(spr.height)))
+
+
+def process_cozy_minimap(path):
+    """Khung minimap GO + long giay da kem (sheet UI kit cozy, o hang 1 cot 2):
+    giay da la be mat ban do, GIU NGUYEN trong sprite nhu long kinh navy cu;
+    chi xoa kem BEN NGOAI khung. Do rect long giay (cum pixel kem sang lon
+    nhat) va in ti le de Hud.java anh xa cham danh dau vao dung long giay."""
+    img = Image.open(path).convert("RGB")
+    alpha = alpha_mask(img)
+    lab, comps = components(alpha)
+    W, H = img.size
+    cell = [c for c in comps if c["area"] >= 900
+            and W / 3 <= c["cx"] < 2 * W / 3 and c["cy"] < H / 2]
+    best = max(cell, key=lambda c: c["area"])
+    spr = extract(img, alpha, lab, best, max_h=256)
+    save_sprite(spr, "minimap_frame.png")
+    arr = np.asarray(spr.convert("RGB")).astype(np.int32)
+    al = np.asarray(spr)[..., 3] > 128
+    parch = al & (arr.min(axis=2) > 195) & ((arr.max(axis=2) - arr.min(axis=2)) < 42)
+    nlab, n = ndimage.label(parch)
+    if n == 0:
+        raise RuntimeError("cozy minimap: khong tim thay long giay da")
+    sizes = ndimage.sum(parch, nlab, range(1, n + 1))
+    g = nlab == (int(np.argmax(sizes)) + 1)
+    ys, xs = np.nonzero(g)
+    gx0, gx1, gy0, gy1 = int(xs.min()), int(xs.max()), int(ys.min()), int(ys.max())
+    w2, h2 = spr.width, spr.height
+    print("COZY-MM sprite %dx%d ti le %.3f | giay px x %d..%d, y(tren) %d..%d | "
+          "frac trai=%.4f phai=%.4f day=%.4f dinh=%.4f"
+          % (w2, h2, w2 / float(h2), gx0, gx1, gy0, gy1,
+             gx0 / w2, (gx1 + 1) / w2, 1 - (gy1 + 1) / h2, 1 - gy0 / h2))
+
+
+def process_cozy_knob(path):
+    """Num joystick = QUA CAU ho phach tren be go (sheet UI kit cozy, o hang 2
+    cot 1): CHI lay qua cau, bo be. Tim cum pixel mau ho phach (cam sat, R cao,
+    B thap) lon nhat trong o, cat hinh vuong quanh tam cau roi ap mask tron
+    mem — cau la hinh tron hoan hao nen mask tron khop tranh."""
+    img = Image.open(path).convert("RGB")
+    W, H = img.size
+    cell = img.crop((0, H // 2, W // 3, H))
+    arr = np.asarray(cell).astype(np.int32)
+    amber = (arr[..., 0] > 165) & (arr[..., 1] > 80) & (arr[..., 1] < 185) \
+        & (arr[..., 2] < 110) & ((arr[..., 0] - arr[..., 2]) > 90)
+    lab, n = ndimage.label(amber)
+    if n == 0:
+        raise RuntimeError("cozy knob: khong tim thay qua cau ho phach")
+    sizes = ndimage.sum(amber, lab, range(1, n + 1))
+    g = lab == (int(np.argmax(sizes)) + 1)
+    ys, xs = np.nonzero(g)
+    cx = (xs.min() + xs.max()) / 2.0
+    cy = (ys.min() + ys.max()) / 2.0
+    r = max(xs.max() - xs.min(), ys.max() - ys.min()) / 2.0
+    side = int(r * 2 * 1.04)
+    x0 = int(min(max(cx - side / 2, 0), cell.width - side))
+    y0 = int(min(max(cy - side / 2, 0), cell.height - side))
+    crop = cell.crop((x0, y0, x0 + side, y0 + side)).convert("RGBA")
+    yy, xx = np.mgrid[0:side, 0:side]
+    rr = np.sqrt(((xx - side / 2.0) / (side / 2.0)) ** 2 + ((yy - side / 2.0) / (side / 2.0)) ** 2)
+    mask = np.clip((1.0 - rr) * side * 0.03, 0, 1)
+    ca = np.asarray(crop).astype(np.float32)
+    ca[..., 3] = mask * 255
+    out = Image.fromarray(ca.astype(np.uint8), "RGBA").resize((160, 160), Image.LANCZOS)
+    save_sprite(out, "joy_knob.png")
+    print("COZY-KNOB tam o (%.0f,%.0f) r=%.0f -> vuong %d" % (cx, cy, r, side))
+
+
+def process_cozy():
+    """Doi toan bo hinh anh sang phong cach COZY (user chot 2026-10-25):
+    plate lang/san am, nha go mai ngoi, HUD go + giay da kem. Ten file giu
+    nguyen nen Assets.java khong phai sua."""
+    kit = one("media-generation-cozy-ui-kit-sheet-*.webp")
+    # --- plate + jpg phu (cung ten file nhu ban cyber) ---
+    save_jpg(Image.open(one("media-generation-cozy-town-plate-*.webp")), "town_plate.jpg", 1920, quality=86)
+    save_jpg(Image.open(one("media-generation-cozy-adventure-plate-*.webp")), "adv_plate.jpg", 1920, quality=86)
+    save_jpg(Image.open(one("media-generation-cozy-plot-plate-*.webp")), "plot.jpg", 1600, quality=85)
+    save_jpg(Image.open(one("media-generation-cozy-keyart-*.webp")), "keyart_wide.jpg", 1920, quality=86)
+    # --- 6 sprite nha/portal go (sheet 3x2, moi o gop het thanh phan) ---
+    process_grid_group(one("media-generation-cozy-buildings-sheet-*.webp"), 2, 3, [
+        ["bld_cafe.png", "bld_fashion.png", "bld_bank.png"],
+        ["bld_pet.png", "bld_station.png", "bld_portal.png"],
+    ], max_h=640)
+    # --- HUD go: khung chan dung + khung minimap (ham rieng, co do lo/long) ---
+    process_cozy_portrait_frame(kit)
+    process_cozy_minimap(kit)
+    # de joystick go (o hang 1 cot 3) + nut noi chuyen go (o hang 2 cot 2)
+    img = Image.open(kit).convert("RGB")
+    alpha = alpha_mask(img)
+    lab, comps = components(alpha)
+    W, H = img.size
+    for (r, c, name, mh) in ((0, 2, "joy_base.png", 240), (1, 1, "btn_talk.png", 256)):
+        inside = [k for k in comps if k["area"] >= 900
+                  and W * c / 3 - 4 <= k["cx"] <= W * (c + 1) / 3 + 4
+                  and H * r / 2 - 4 <= k["cy"] <= H * (r + 1) / 2 + 4]
+        if not inside:
+            raise RuntimeError("cozy kit o (%d,%d) khong co thanh phan" % (r, c))
+        save_sprite(extract_group(img, alpha, lab, inside, max_h=mh), name)
+    process_cozy_knob(kit)
+    # --- 3 chau go vuon (sheet 1 hang 3 chau) -> prop_pod0/1/2 ---
+    process_grid(one("media-generation-cozy-pots-sheet-*.webp"), "pod", 1, 3, [
+        ["prop_pod0.png", "prop_pod1.png", "prop_pod2.png"],
+    ], max_h=520)
+    print("Xong (cozy).")
+
+
 def one(pattern):
     hits = sorted(glob.glob(str(MEDIA / pattern)))
     if not hits:
@@ -432,6 +568,10 @@ def main():
         process_single(one("media-generation-btn-talk-*.webp"), "btn_talk.png", 256)
         process_minimap_frame(one("media-generation-minimap-frame-*.webp"))
         print("Xong (hud-frame).")
+        return
+    if "--cozy" in sys.argv:
+        # Doi toan bo sang COZY: plate + nha go + HUD go/giay da + chau vuon
+        process_cozy()
         return
     if "--city" in sys.argv:
         # Doi boi canh sang THANH PHO cyberpunk (user chot: cyberpunk la thanh

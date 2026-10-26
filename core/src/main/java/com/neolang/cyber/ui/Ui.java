@@ -16,18 +16,22 @@ import com.neolang.cyber.NeoLangGame;
  *  icons are drawn with shapes. Buttons report a click on the frame the touch is released-tapped
  *  (justTouched inside bounds). */
 public class Ui {
-    public static final Color PANEL = new Color(0.05f, 0.10f, 0.15f, 0.93f);
-    public static final Color PANEL_EDGE = new Color(0.15f, 0.85f, 0.90f, 0.9f);
-    public static final Color BTN = new Color(0.07f, 0.22f, 0.28f, 0.97f);
-    public static final Color BTN_HOVER = new Color(0.10f, 0.34f, 0.40f, 0.97f);
-    public static final Color BTN_OFF = new Color(0.16f, 0.18f, 0.20f, 0.9f);
-    public static final Color TEXT = new Color(0.92f, 0.98f, 1f, 1f);
-    public static final Color TEXT_DIM = new Color(0.62f, 0.75f, 0.80f, 1f);
+    // COZY palette (user-approved restyle 2026-10-25): cream panels, warm brown
+    // edges, dark-brown text. TEXT_LIGHT is only for labels sitting on the dark
+    // warm-brown name-tag pills / dark world overlays.
+    public static final Color PANEL = new Color(0.98f, 0.93f, 0.82f, 0.96f);
+    public static final Color PANEL_EDGE = new Color(0.55f, 0.38f, 0.22f, 0.95f);
+    public static final Color BTN = new Color(0.93f, 0.83f, 0.65f, 0.98f);
+    public static final Color BTN_HOVER = new Color(0.99f, 0.90f, 0.74f, 0.98f);
+    public static final Color BTN_OFF = new Color(0.80f, 0.72f, 0.60f, 0.9f);
+    public static final Color TEXT = new Color(0.30f, 0.20f, 0.12f, 1f);
+    public static final Color TEXT_LIGHT = new Color(1f, 0.98f, 0.94f, 1f);
+    public static final Color TEXT_DIM = new Color(0.52f, 0.42f, 0.31f, 1f);
     public static final Color ACCENT = new Color(1f, 0.62f, 0.15f, 1f);
-    public static final Color CYAN = new Color(0.25f, 0.95f, 1f, 1f);
-    public static final Color GREEN = new Color(0.35f, 0.95f, 0.45f, 1f);
-    public static final Color RED = new Color(1f, 0.32f, 0.30f, 1f);
-    public static final Color GOLD = new Color(1f, 0.82f, 0.25f, 1f);
+    public static final Color CYAN = new Color(0.10f, 0.50f, 0.42f, 1f);
+    public static final Color GREEN = new Color(0.25f, 0.58f, 0.24f, 1f);
+    public static final Color RED = new Color(0.85f, 0.25f, 0.20f, 1f);
+    public static final Color GOLD = new Color(0.88f, 0.60f, 0.12f, 1f);
 
     private static final GlyphLayout LAYOUT = new GlyphLayout();
     private static final Vector2 TMP = new Vector2();
@@ -115,15 +119,15 @@ public class Ui {
         sr.end();
     }
 
-    /** Name tag: soft dark pill + centered text. Caller manages nothing; own begin/end. */
+    /** Name tag: warm-brown translucent pill + light text. Caller manages nothing; own begin/end. */
     public static void nameTag(SpriteBatch batch, ShapeRenderer sr, BitmapFont font, String name, float cx, float y) {
         float w = textWidth(font, name) + 16;
         sr.begin(ShapeType.Filled);
-        sr.setColor(0, 0, 0, 0.45f);
+        sr.setColor(0.25f, 0.16f, 0.09f, 0.55f);
         sr.rect(cx - w / 2, y - 4, w, font.getLineHeight() + 6);
         sr.end();
         batch.begin();
-        label(batch, font, name, cx, y + font.getCapHeight(), TEXT, Align.center);
+        label(batch, font, name, cx, y + font.getCapHeight(), TEXT_LIGHT, Align.center);
         batch.end();
     }
 
@@ -146,15 +150,15 @@ public class Ui {
         float titleBaseline = y + nameLineH + titleCapH + 3;
         float pillTop = titleBaseline + (titleLineH - titleCapH) + 4;
         sr.begin(ShapeType.Filled);
-        sr.setColor(0, 0, 0, 0.45f);
+        sr.setColor(0.25f, 0.16f, 0.09f, 0.55f);
         sr.rect(cx - w / 2, bottom, w, pillTop - bottom);
         sr.end();
         batch.begin();
-        label(batch, font, name, cx, y + capH, TEXT, Align.center);
+        label(batch, font, name, cx, y + capH, TEXT_LIGHT, Align.center);
         font.getData().setScale(0.8f);
         font.setColor(0, 0, 0, 0.55f);
         font.draw(batch, title, cx + 1, titleBaseline - 1, 0, Align.center, false);
-        font.setColor(CYAN);
+        font.setColor(1f, 0.85f, 0.45f, 1f);
         font.draw(batch, title, cx, titleBaseline, 0, Align.center, false);
         font.setColor(Color.WHITE);
         font.getData().setScale(1f);

@@ -17,7 +17,7 @@ import com.neolang.cyber.model.Player;
 
 /**
  * Shared MMORPG-style HUD pieces for Town + Adventure: the top-left character
- * card (round painted portrait in the painted cyber frame, level badge,
+ * card (round painted portrait in the painted wooden leaf frame, level badge,
  * name/class and the main stat bars WITH numbers — kept slim like a mobile
  * MMO card), a loose row of survival chips hanging under the card, the
  * top-right minimap frame with the currency pills under it, and the painted
@@ -37,33 +37,34 @@ public final class Hud {
     private static final float PCX = CL_X + 44, PCY = CL_TOP - 46;   // portrait centre
     private static final float RX = CL_X + 92;                        // right column x
     private static final float RW = CL_W - 92 - 8;                    // right column width
-    // Cyber frame's inner hole measures 174/256 of the sprite height
-    // (prep_sprites.py --hud-assets); the face disc is drawn ~6% wider than
-    // the hole to tuck under the rim bevel.
+    // COZY wooden leaf-carved frame's inner hole measures 140/256 of the
+    // sprite height (prep_sprites.py --cozy); the face disc is drawn ~6%
+    // wider than the hole to tuck under the rim bevel.
     private static final float FRAME_H = 76;
-    private static final float FACE_D = FRAME_H * (174f / 256f) * 1.06f;
+    private static final float FACE_D = FRAME_H * (140f / 256f) * 1.06f;
 
-    // ---- minimap geometry: painted frame asset drawn at its native aspect
-    // (443x256 -> 228x132), top edge flush with the character card's top.
-    // The glass pane rect inside the sprite was measured by
-    // prep_sprites.py --hud-frame (fractions of the sprite: left .0655,
-    // right .9323, bottom .1172, top .8789); markers map into it exactly.
-    public static final float MM_X = 1042, MM_Y = 576, MM_W = 228, MM_H = 132;
-    private static final float MM_GX = MM_X + MM_W * 0.0655f;         // glass left
-    private static final float MM_GW = MM_W * (0.9323f - 0.0655f);    // glass width
-    private static final float MM_GY = MM_Y + MM_H * 0.1172f;         // glass bottom
-    private static final float MM_GH = MM_H * (0.8789f - 0.1172f);    // glass height
+    // ---- minimap geometry: painted COZY frame asset (wood rim + parchment
+    // pane, sprite 327x256) drawn at its native aspect 169x132, right edge
+    // flush where the old frame's right edge was, top edge flush with the
+    // character card's top. The parchment rect inside the sprite was measured
+    // by prep_sprites.py --cozy (fractions of the sprite: left .2202,
+    // right .8104, bottom .2305, top .7461); markers map into it exactly.
+    public static final float MM_X = 1101, MM_Y = 576, MM_W = 169, MM_H = 132;
+    private static final float MM_GX = MM_X + MM_W * 0.2202f;         // parchment left
+    private static final float MM_GW = MM_W * (0.8104f - 0.2202f);    // parchment width
+    private static final float MM_GY = MM_Y + MM_H * 0.2305f;         // parchment bottom
+    private static final float MM_GH = MM_H * (0.7461f - 0.2305f);    // parchment height
     private static final float MM_GROUND = MM_GY + 13;                // ground line y
 
-    private static final Color GLASS = new Color(0.03f, 0.07f, 0.11f, 0.60f);
-    private static final Color GLASS_EDGE = new Color(0.45f, 0.85f, 1f, 0.55f);
-    private static final Color TRACK = new Color(0.04f, 0.07f, 0.11f, 0.88f);
+    private static final Color GLASS = new Color(0.98f, 0.93f, 0.82f, 0.88f);
+    private static final Color GLASS_EDGE = new Color(0.55f, 0.38f, 0.22f, 0.75f);
+    private static final Color TRACK = new Color(0.85f, 0.76f, 0.62f, 0.9f);
     private static final Color HP_C = new Color(0.93f, 0.26f, 0.22f, 1);
-    private static final Color NL_C = new Color(0.16f, 0.76f, 0.96f, 1);
+    private static final Color NL_C = new Color(0.30f, 0.62f, 0.80f, 1);
     private static final Color XP_C = new Color(1f, 0.78f, 0.25f, 1);
     private static final Color GOLD = new Color(1f, 0.80f, 0.25f, 1);
     private static final Color BADGE_TXT = new Color(0.25f, 0.16f, 0.02f, 1);
-    private static final Color CLASS_C = new Color(0.72f, 0.90f, 1f, 1);
+    private static final Color CLASS_C = new Color(0.45f, 0.32f, 0.18f, 1);
 
     // ------------------------------------------------------------------ shapes
     public static void roundRect(ShapeRenderer sr, float x, float y, float w, float h, float r, Color c) {
@@ -168,9 +169,9 @@ public final class Hud {
         sr.begin(ShapeType.Filled);
         glass(sr, CL_X, bottom, CL_W, CL_TOP - bottom, 12);
         // portrait glow + fallback disc under the painted frame
-        sr.setColor(0.20f, 0.75f, 0.95f, 0.30f);
+        sr.setColor(1f, 0.75f, 0.35f, 0.35f);
         sr.circle(PCX, PCY, 30);
-        sr.setColor(0.10f, 0.16f, 0.22f, 0.9f);
+        sr.setColor(0.96f, 0.90f, 0.78f, 0.95f);
         sr.circle(PCX, PCY, 28);
         // bars (icon sits at the head of each bar, so bars start after it)
         float bx = RX + 24, bw = RW - 24;
@@ -188,7 +189,7 @@ public final class Hud {
 
         // ---------- batch pass ----------
         batch.begin();
-        // portrait: painted face disc sized to the cyber frame's hole (see
+        // portrait: painted face disc sized to the wooden frame's hole (see
         // FACE_D) under the painted frame itself
         Texture face = a.heroFace[p.gender == Gender.NU ? 1 : 0];
         if (face != null) batch.draw(face, PCX - FACE_D / 2, PCY - FACE_D / 2, FACE_D, FACE_D);
@@ -267,7 +268,7 @@ public final class Hud {
 
     // ------------------------------------------------------------- joystick
     /**
-     * Painted joystick (shared Town + Adventure visuals): teal metal base
+     * Painted joystick (shared Town + Adventure visuals): wooden disc base
      * asset at (jx, jy), knob asset following the drag offset. Mode 1 = fixed
      * stick, mode 2 = floating stick at base. ASSET ONLY — no ShapeRenderer
      * anywhere in this draw (an earlier version painted a flat glow disc
@@ -301,14 +302,20 @@ public final class Hud {
     }
 
     private static void barText(SpriteBatch batch, Assets a, float x, float y, float w, float h, String text) {
+        // Dark-brown numbers with a light halo: readable both on the coloured
+        // fill and on the pale tan track of the COZY bars.
         a.fontSmall.getData().setScale(0.85f);
-        shadowLabel(batch, a.fontSmall, text, x + w / 2, y + h / 2 + 5f, Color.WHITE, Align.center);
+        a.fontSmall.setColor(1f, 0.99f, 0.95f, 0.85f);
+        a.fontSmall.draw(batch, text, x + w / 2 + 1, y + h / 2 + 4f, 0, Align.center, false);
+        a.fontSmall.setColor(0.30f, 0.20f, 0.12f, 1f);
+        a.fontSmall.draw(batch, text, x + w / 2, y + h / 2 + 5f, 0, Align.center, false);
+        a.fontSmall.setColor(1, 1, 1, 1);
         a.fontSmall.getData().setScale(1f);
     }
 
     // ---------------------------------------------------------------- minimap
     /**
-     * Painted frame asset (metal rim + navy glass pane) + title strip + ground
+     * Painted COZY frame asset (wood rim + parchment pane) + title strip + ground
      * line, all INSIDE the measured glass rect (MM_GX/MM_GY/MM_GW/MM_GH).
      * Markers are drawn by the caller with dot(). If the frame asset is
      * missing, a shape-drawn frame in the same rect is the fallback.
@@ -323,21 +330,22 @@ public final class Hud {
         }
         sr.begin(ShapeType.Filled);
         if (game.assets.minimapFrame == null) {
-            roundRect(sr, MM_X, MM_Y, MM_W, MM_H, 12, new Color(0.42f, 0.55f, 0.68f, 0.95f));
-            roundRect(sr, MM_GX, MM_GY, MM_GW, MM_GH, 6, new Color(0.02f, 0.06f, 0.10f, 0.92f));
+            roundRect(sr, MM_X, MM_Y, MM_W, MM_H, 12, new Color(0.62f, 0.45f, 0.28f, 0.95f));
+            roundRect(sr, MM_GX, MM_GY, MM_GW, MM_GH, 6, new Color(0.96f, 0.90f, 0.76f, 0.95f));
         }
-        // title strip inside the top edge of the glass
-        sr.setColor(0.02f, 0.05f, 0.08f, 0.65f);
+        // title strip inside the top edge of the parchment
+        sr.setColor(0.35f, 0.24f, 0.14f, 0.45f);
         sr.rect(MM_GX + 2, glassTop - 19, MM_GW - 4, 18);
-        // ground band + line, clipped to the glass
-        sr.setColor(0.30f, 0.22f, 0.12f, 0.55f);
+        // ground band + line, clipped to the parchment
+        sr.setColor(0.55f, 0.42f, 0.25f, 0.50f);
         sr.rect(MM_GX + 3, MM_GY + 2, MM_GW - 6, MM_GROUND - MM_GY - 2);
-        sr.setColor(0.55f, 0.85f, 0.95f, 0.5f);
+        sr.setColor(0.45f, 0.32f, 0.18f, 0.6f);
         sr.rect(MM_GX + 3, MM_GROUND, MM_GW - 6, 1.6f);
         sr.end();
         game.batch.begin();
         game.assets.fontSmall.getData().setScale(0.95f);
-        shadowLabel(game.batch, game.assets.fontSmall, title, MM_X + MM_W / 2, glassTop - 5, Ui.CYAN, Align.center);
+        shadowLabel(game.batch, game.assets.fontSmall, title, MM_X + MM_W / 2, glassTop - 5,
+            new Color(1f, 0.96f, 0.88f, 1), Align.center);
         game.assets.fontSmall.getData().setScale(1f);
         game.batch.end();
     }
@@ -353,9 +361,10 @@ public final class Hud {
         sr.circle(cx, cy, r);
     }
 
-    /** Player marker: cyan ring, white core, facing tick. Filled shapes pass. */
+    /** Player marker: dark-amber ring (reads on the cream parchment), white core,
+     *  facing tick. Filled shapes pass. */
     public static void playerDot(ShapeRenderer sr, float cx, float cy, int facing) {
-        sr.setColor(0.25f, 0.95f, 1f, 1);
+        sr.setColor(0.85f, 0.45f, 0.12f, 1);
         sr.circle(cx, cy, 5.5f);
         sr.setColor(1, 1, 1, 1);
         sr.circle(cx, cy, 3.2f);

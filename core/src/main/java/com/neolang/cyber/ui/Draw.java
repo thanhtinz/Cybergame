@@ -126,26 +126,27 @@ public class Draw {
         sr.end();
     }
 
-    /** A metal-glass shop pod with a glowing sign. highlight = player nearby (pulsing arrow + border). */
+    /** A wooden shop hut with a warm window. highlight = player nearby (pulsing arrow + border).
+     *  Shape fallback for the painted cozy building sprites. */
     public static void drawPod(ShapeRenderer sr, SpriteBatch batch, BitmapFont font,
                                float x, float groundY, float w, float h, Color signColor,
                                String label, boolean highlight, float time) {
         sr.begin(ShapeType.Filled);
-        sr.setColor(0.13f, 0.18f, 0.24f, 1);
+        sr.setColor(0.45f, 0.32f, 0.20f, 1);
         sr.rect(x, groundY, w, h);
-        sr.setColor(0.45f, 0.60f, 0.70f, 1);
+        sr.setColor(0.60f, 0.45f, 0.28f, 1);
         sr.rect(x, groundY + h - 8, w, 8);
         sr.rect(x, groundY, 6, h);
         sr.rect(x + w - 6, groundY, 6, h);
-        // glass front
-        sr.setColor(0.35f, 0.75f, 0.85f, 0.55f);
+        // warm window front
+        sr.setColor(0.95f, 0.85f, 0.60f, 0.55f);
         sr.rect(x + 14, groundY + 12, w - 28, h - 64);
         sr.setColor(1, 1, 1, 0.20f);
         sr.triangle(x + 20, groundY + h - 60, x + 54, groundY + h - 60, x + 20, groundY + 30);
         // door
-        sr.setColor(0.05f, 0.08f, 0.12f, 1);
+        sr.setColor(0.25f, 0.17f, 0.10f, 1);
         sr.rect(x + w / 2 - 16, groundY, 32, 52);
-        sr.setColor(CYAN);
+        sr.setColor(1f, 0.82f, 0.25f, 1);
         sr.circle(x + w / 2 + 9, groundY + 26, 2.2f);
         // sign band
         sr.setColor(signColor);
@@ -532,6 +533,28 @@ public class Draw {
         return true;
     }
 
+    /** Painted sprite fitted INSIDE a maxW x maxH box (aspect preserved, centred
+     *  at cx, base at feetY) — for sprites whose natural aspect is wider than
+     *  the slot they live in (the cozy wooden planters in the garden beds). */
+    public static boolean drawSpriteBox(SpriteBatch batch, Texture t, float cx, float feetY,
+                                        float maxW, float maxH) {
+        return drawSpriteBoxTint(batch, t, cx, feetY, maxW, maxH, 1f, 1f, 1f, 1f);
+    }
+
+    public static boolean drawSpriteBoxTint(SpriteBatch batch, Texture t, float cx, float feetY,
+                                            float maxW, float maxH,
+                                            float r, float g, float b, float a) {
+        if (t == null) return false;
+        float s = Math.min(maxW / t.getWidth(), maxH / t.getHeight());
+        float w = t.getWidth() * s, h = t.getHeight() * s;
+        batch.begin();
+        batch.setColor(r, g, b, a);
+        batch.draw(t, cx - w / 2, feetY, w, h);
+        batch.setColor(1, 1, 1, 1);
+        batch.end();
+        return true;
+    }
+
     /** Painted full-figure sprite for NPCs (customization-sheet figures), feet at x/y. */
     public static boolean drawFigureSprite(SpriteBatch batch, Assets a, Gender gender, int figIdx,
                                            float x, float y, float scale, float facing,
@@ -697,18 +720,18 @@ public class Draw {
     public static void drawGardenBed(ShapeRenderer sr, float x, float y, float w, float h,
                                      boolean planted, float progress, boolean ready, int seedIdx, float time) {
         sr.begin(ShapeType.Filled);
-        // glass box
-        sr.setColor(0.45f, 0.85f, 0.95f, 0.16f);
+        // COZY wooden planter box (shape fallback for the painted planters)
+        sr.setColor(0.55f, 0.38f, 0.22f, 0.95f);
         sr.rect(x, y, w, h);
-        sr.setColor(0.25f, 0.95f, 1f, 0.9f);
+        sr.setColor(0.72f, 0.55f, 0.35f, 1);
         sr.rect(x, y + h - 3, w, 3);
         sr.rect(x, y, w, 3);
         sr.rect(x, y, 3, h);
         sr.rect(x + w - 3, y, 3, h);
-        // hydroponic soil / gel
-        sr.setColor(0.16f, 0.30f, 0.22f, 1);
+        // soil bed
+        sr.setColor(0.30f, 0.20f, 0.12f, 1);
         sr.rect(x + 6, y + 6, w - 12, 20);
-        sr.setColor(0.25f, 0.95f, 1f, 0.35f);
+        sr.setColor(0.45f, 0.65f, 0.75f, 0.45f);
         sr.rect(x + 6, y + 24, w - 12, 2);
         if (planted) {
             Color leaf = new Color(0.30f, 0.85f, 0.35f, 1);
@@ -743,9 +766,9 @@ public class Draw {
         sr.begin(ShapeType.Filled);
         switch (m) {
             case POD_TRON:
-                sr.setColor(0.55f, 0.65f, 0.75f, 1);
+                sr.setColor(0.65f, 0.52f, 0.38f, 1);
                 sr.circle(cx, cy, r);
-                sr.setColor(0.45f, 0.80f, 0.90f, 0.8f);
+                sr.setColor(0.92f, 0.86f, 0.70f, 0.85f);
                 sr.circle(cx, cy + r * 0.15f, r * 0.55f);
                 break;
             case GIUONG:
@@ -771,18 +794,18 @@ public class Draw {
                 sr.rect(cx - r * 0.1f, cy - r * 0.5f, r * 0.2f, r * 0.6f);
                 break;
             case TRAM_SAC: {
-                sr.setColor(0.30f, 0.35f, 0.45f, 1);
+                sr.setColor(0.45f, 0.36f, 0.26f, 1);
                 sr.rect(cx - r * 0.6f, cy - r * 0.85f, r * 1.2f, r * 1.7f);
                 float p = 0.6f + 0.4f * (float) Math.sin(time * 6);
-                sr.setColor(0.30f, 0.95f, 1f, p);
+                sr.setColor(1f, 0.75f, 0.25f, p);
                 sr.triangle(cx + r * 0.12f, cy + r * 0.55f, cx - r * 0.22f, cy - r * 0.05f, cx + r * 0.02f, cy - r * 0.05f);
                 sr.triangle(cx + r * 0.02f, cy - r * 0.05f, cx - r * 0.12f, cy - r * 0.55f, cx + r * 0.22f, cy - r * 0.05f);
                 break;
             }
             case DOCK_PET:
-                sr.setColor(0.45f, 0.50f, 0.60f, 1);
+                sr.setColor(0.55f, 0.45f, 0.34f, 1);
                 sr.ellipse(cx - r, cy - r * 0.45f, r * 2, r * 0.9f);
-                sr.setColor(0.25f, 0.95f, 1f, 0.7f);
+                sr.setColor(0.55f, 0.70f, 0.75f, 0.7f);
                 sr.ellipse(cx - r * 0.6f, cy - r * 0.25f, r * 1.2f, r * 0.5f);
                 break;
             case DEN_MACH: {
@@ -794,10 +817,10 @@ public class Draw {
                 break;
             }
             case BAN_HOLO: {
-                sr.setColor(0.25f, 0.30f, 0.38f, 1);
+                sr.setColor(0.45f, 0.34f, 0.24f, 1);
                 sr.rect(cx - r * 0.9f, cy - r * 0.7f, r * 1.8f, r * 0.35f);
                 float p = 0.35f + 0.15f * (float) Math.sin(time * 2.5f);
-                sr.setColor(0.30f, 0.90f, 1f, p);
+                sr.setColor(0.95f, 0.88f, 0.70f, p + 0.25f);
                 sr.rect(cx - r * 0.7f, cy - r * 0.3f, r * 1.4f, r * 1.1f);
                 break;
             }
