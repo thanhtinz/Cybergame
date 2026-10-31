@@ -14,7 +14,10 @@ import java.io.File;
  *  NPC + bong bóng chat, (2) zoom nhân vật lắp từ part so với ảnh đối chiếu gốc,
  *  (3) map nông trại 25. Chạy: xvfb-run -a gradle --offline :desktop:shot */
 public class ScreenshotMain {
+    private static boolean tourMode = false;
+
     public static void main(String[] args) {
+        tourMode = args.length > 0 && args[0].equals("tour");
         Lwjgl3ApplicationConfiguration cfg = new Lwjgl3ApplicationConfiguration();
         cfg.setTitle("AvatarDK Screenshot");
         cfg.setWindowedMode(1280, 720);
@@ -23,12 +26,21 @@ public class ScreenshotMain {
             AvatarDkGame game;
             int stage = -1, frame;
             WorldScreen world;
+            java.util.List<Integer> tourIds;
+            int tourIdx = 0;
             @Override public void create() {
                 game = new AvatarDkGame();
                 game.create();
                 world = game.world;
-                world.debugSetPlayer(455f, 95f); // đứng gần NPC đấu giá (410,48) để nút Tương tác sáng
-                world.debugChat("Xin chào, AvatarDK đã chạy bằng Java!");
+                if (tourMode) {
+                    game.setScreen(world);
+                    tourIds = world.mapIds();
+                    world.debugSetMap(tourIds.get(0));
+                } else {
+                    tourIds = java.util.List.of();
+                    world.debugSetPlayer(455f, 95f); // đứng gần NPC đấu giá (410,48) để nút Tương tác sáng
+                    world.debugChat("Xin chào, AvatarDK đã chạy bằng Java!");
+                }
             }
             @Override public void resize(int width, int height) {
                 if (game != null) game.resize(width, height);
@@ -37,6 +49,16 @@ public class ScreenshotMain {
                 frame++;
                 float dt = Math.min(Gdx.graphics.getDeltaTime(), 0.05f);
                 game.getScreen().render(dt);
+                if (tourMode) {
+                    if (frame == 22) {
+                        shot("tour/map-" + world.currentMapId() + ".png");
+                        tourIdx++;
+                        if (tourIdx >= tourIds.size()) { Gdx.app.exit(); return; }
+                        world.debugSetMap(tourIds.get(tourIdx));
+                        frame = 0;
+                    }
+                    return;
+                }
                 switch (stage) {
                     case -1:
                         if (frame == 25) {
@@ -125,6 +147,32 @@ public class ScreenshotMain {
                     case 9:
                         if (frame == 25) {
                             shot("shot-map1.png");
+                            world.debugSetMap(10);
+                            world.debugSetPlayer(455f, 95f);
+                            world.debugOpenMenu();
+                            stage++; frame = 0;
+                        }
+                        break;
+                    case 10:
+                        if (frame == 25) {
+                            shot("shot-menu-grid.png");
+                            world.debugCloseMenu();
+                            world.debugOpenCityMap();
+                            stage++; frame = 0;
+                        }
+                        break;
+                    case 11:
+                        if (frame == 25) {
+                            shot("shot-citymap.png");
+                            world.debugCloseCityMap();
+                            world.applyFeel(10);        // mặt cười to
+                            world.debugOpenFeel();
+                            stage++; frame = 0;
+                        }
+                        break;
+                    case 12:
+                        if (frame == 25) {
+                            shot("shot-feel.png");
                             Gdx.app.exit();
                         }
                         break;
@@ -148,7 +196,9 @@ public class ScreenshotMain {
                     dst.put(row);
                 }
                 dst.rewind();
-                com.badlogic.gdx.graphics.PixmapIO.writePNG(Gdx.files.absolute(new File(name).getAbsolutePath()), flipped);
+                File out = new File(name);
+                if (out.getParentFile() != null) out.getParentFile().mkdirs();
+                com.badlogic.gdx.graphics.PixmapIO.writePNG(Gdx.files.absolute(out.getAbsolutePath()), flipped);
                 flipped.dispose();
                 System.out.println("Đã chụp " + name);
             }

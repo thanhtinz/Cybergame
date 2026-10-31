@@ -72,6 +72,8 @@ public class WorldScreen extends ScreenAdapter {
         new Color(0x5D / 255f, 0xBC / 255f, 0xE7 / 255f, 1f),
         new Color(0f, 0f, 0x15 / 255f, 1f),
     };
+    /** Màu tô phẳng cho map không nền (LoadMap.paintBackGround khi imgBG == null). */
+    private static final Color NO_BG_FILL = new Color(0.02f, 0.02f, 0.03f, 1f);
     /** x0_imgTreeBg theo số nền (đơn vị hd): bg0=20, bg1=25, bg2=10, bg3=33 (×hd). */
     private static final int[] X0_TREE_HD = {20, 25, 10, 33};
     /** x0_imgBG theo số nền (đơn vị hd): bg0=2, bg1=20, bg2=15, bg3=0 (×hd). */
@@ -138,7 +140,10 @@ public class WorldScreen extends ScreenAdapter {
         displayLevel = "Lv." + p.levelMain;
         java.util.List<Integer> parts = new ArrayList<>();
         for (int id : p.wearing) parts.add(id);
+        playerParts.clear();
+        playerParts.addAll(parts);
         playerDoll = game.newDoll(parts);
+        if (playerFeel != 4) applyFeel(playerFeel);
         addChatLog(TAB_SYSTEM, null, "Đăng nhập thành công: " + p.username
             + " (cấp " + p.levelMain + ")", true);
     }
@@ -171,13 +176,37 @@ public class WorldScreen extends ScreenAdapter {
     }
     private final StringBuilder typeBuffer = new StringBuilder();
     private boolean menuOpen = false;
-    private int menuPage = 0;
-    // Panel chọn map trong menu burger: danh sách map dựng được, 8 map/trang
+    // Menu burger xổ xuống dạng LƯỚI Ô (yêu cầu của chủ dự án): mỗi ô là một
+    // tính năng với icon gốc trong hd/iconmenu. Map mở bản đồ thành phố; các ô
+    // còn lại mở ở các đợt port tương ứng (Thư, Balo...).
+    private static final String[][] MENU_ITEMS = {
+        {"50", "Map"}, {"msg0", "Thư"}, {"30", "Balo"},
+        {"40", "Bạn bè"}, {"20", "Cá nhân"}, {"action0", "Hành động"},
+    };
     private static final float MENU_PX = Ui.W - 330f, MENU_PW = 312f;
-    private static final float MENU_HEADER = 42f, MENU_ROW_H = 30f, MENU_FOOTER = 38f;
-    private static final int MENU_PER_PAGE = 8;
-    private static final float MENU_PH = MENU_HEADER + MENU_PER_PAGE * MENU_ROW_H + MENU_FOOTER;
+    private static final float MENU_HEADER = 40f, MENU_CELL = 96f, MENU_CELL_H = 92f;
+    private static final float MENU_PH = MENU_HEADER + 2 * MENU_CELL_H + 14f;
     private static final float MENU_PY = Ui.H - 84 - MENU_PH;
+    // Bản đồ thành phố (MiniMap của gốc): ảnh minimap.png + lưới citiMap 50x26,
+    // ô 69 = điểm vùng theo thứ tự quét; tên vùng T.nameRegion; đích là map park
+    // theo MapScr.doJoin (server {0,13,20,9,23,11,17} -> client +1), vùng cuối
+    // là Nông trại (client 25).
+    private static final String[] REGION_NAMES = {
+        "Khu nhà ở", "Khu sinh thái", "Sân bay", "Khu giải trí",
+        "Khu mua sắm", "Công viên", "Khu ngoại ô", "Nông trại"};
+    private static final int[] REGION_DEST = {1, 14, 21, 10, 24, 12, 18, 25};
+    private final List<int[]> regionCells = new ArrayList<>(); // {col, row}
+    private boolean cityMapOpen = false;
+    private Texture minimapTex;
+    // Biểu cảm (feel của gốc): nút mặt cười feel0 đặt KẾ BÊN khung chat, mở hàng
+    // chọn 8 mặt {4..11} (MapScr.doFeel); chọn mặt = thay part zOrder 40 của
+    // người chơi bằng part mặt đó (Avatar.paint của gốc).
+    private static final int[] FEEL_IDS = {4, 5, 6, 7, 8, 9, 10, 11};
+    private boolean feelOpen = false;
+    private int playerFeel = 4;
+    private final List<Integer> playerParts = new ArrayList<>(AvatarDkGame.SON_PARTS);
+    private final List<PaperDoll> feelDolls = new ArrayList<>();
+    private static final float FEEL_BTN_X = 962f, FEEL_BTN_Y = 62f, FEEL_BTN_S = 56f;
     private NpcFigure nearestNpc = null;
 
     // --- Hub theo spec của chủ dự án (2026-10-31) ---
@@ -204,6 +233,14 @@ public class WorldScreen extends ScreenAdapter {
             Gdx.files.internal("data/maps.json").readString("UTF-8"));
         for (MapDef d : all) if (d.strips > 0) maps.add(d);
         maps.sort((a, b) -> Integer.compare(a.id, b.id));
+        // lưới bản đồ thành phố: byte 69 = điểm vùng, thứ tự quét trên->dưới, trái->phải
+        byte[] grid = Gdx.files.internal("data/citymap.bin").readBytes();
+        for (int i = 0; i < 26 && i * 50 < grid.length; i++)
+            for (int j = 0; j < 50 && i * 50 + j < grid.length; j++)
+                if (grid[i * 50 + j] == 69) regionCells.add(new int[]{j, i});
+        // doll xem trước cho hàng chọn biểu cảm: mặt nền (part 0) + part mặt (gốc
+        // CommandFeel.paint cũng vẽ đúng hai lớp này)
+        for (int fid : FEEL_IDS) feelDolls.add(game.newDoll(java.util.List.of(0, fid)));
         loadMap(findMap(10));
     }
 
@@ -217,13 +254,15 @@ public class WorldScreen extends ScreenAdapter {
         mapBottomPx = def.hmap * 24 * AvatarDkGame.HD;
         strips.clear(); stripLefts.clear(); daydien.clear();
         float acc = -1f;
-        worldH = 0f;
+        // Chiều cao thế giới = chiều cao LƯỚI của gốc (Hmap * 24 * hd), KHÔNG phải
+        // chiều cao ảnh dải: dải cao hơn lưới thì phần thừa nhô lên trên (gốc vẽ ở
+        // y âm), dải thấp hơn thì nền trời phủ phần còn lại — xem LoadMap.paintCreateMap.
+        worldH = mapBottomPx;
         for (int i = 0; i < def.strips; i++) {
             Texture t = game.texture("imagemap/" + def.id + "/" + i + ".png");
             strips.add(t);
             stripLefts.add(acc);
             acc += t.getWidth() - 2;
-            worldH = Math.max(worldH, t.getHeight());
         }
         worldW = acc + 1f;
         if (def.daydien) {
@@ -240,12 +279,30 @@ public class WorldScreen extends ScreenAdapter {
         playerY = MathUtils.clamp(playerY, 36, Math.max(60, def.hmap * 24 - 30));
     }
 
+    /** Map không có nền (bg = null trong maps.json: bg bảng = -1 hoặc TYPEMAP
+     *  ngoài bảng 0–25): LoadMap.loadBG trả imgBG = null và paintBackGround chỉ
+     *  tô phẳng một màu tối (setColor(1)) — không trời, không mây, không silhouette. */
+    private boolean centerVertically() {
+        int typeMap = mapDef.id - 1;
+        return typeMap == 57 || typeMap == 58 || typeMap == 59
+            || (mapDef.bg == null && typeMap < 26);
+    }
+
     /** Nạp lớp nền đúng LoadMap.loadBG: status theo giờ máy (18h–6h = đêm),
      *  ảnh trời bghd/may<num><status> và ảnh silhouette bghd/<num><status>,
      *  mây trôi effect/cl<anchor><status>. */
     private void loadBackground(MapDef def) {
         int hour = java.time.LocalTime.now().getHour();
         bgStatus = (hour >= 18 || hour < 6) ? 1 : 0;
+        if (def.bg == null) {
+            bgSkyTex = null;
+            bgLineTex = null;
+            cloudTex[0] = null;
+            cloudTex[1] = null;
+            clouds.clear();
+            ensureWhiteTex();
+            return;
+        }
         bgSkyTex = game.texture("bghd/may" + def.bgNum() + bgStatus + ".png");
         bgLineTex = game.texture("bghd/" + def.bgNum() + bgStatus + ".png");
         cloudTex[0] = game.texture("effect/cl0" + bgStatus + ".png");
@@ -261,6 +318,10 @@ public class WorldScreen extends ScreenAdapter {
             c.speed = 900 + rnd.nextFloat() * 900; // đơn vị x100/giây (~9–18 px/giây)
             clouds.add(c);
         }
+        ensureWhiteTex();
+    }
+
+    private void ensureWhiteTex() {
         if (whiteTex == null) {
             com.badlogic.gdx.graphics.Pixmap pm =
                 new com.badlogic.gdx.graphics.Pixmap(1, 1, com.badlogic.gdx.graphics.Pixmap.Format.RGBA8888);
@@ -296,6 +357,31 @@ public class WorldScreen extends ScreenAdapter {
         spawnPlayer();
     }
 
+    /** Hình học panel bản đồ thành phố dùng chung cho vẽ + chạm:
+     *  {px, py, iw, ih, ix, iy} = panel trái/dưới, ảnh rộng/cao, ảnh trái/dưới. */
+    private float[] cityMapGeom() {
+        float pw = 940f, ph = 600f;
+        float px = (Ui.W - pw) / 2f, py = (Ui.H - ph) / 2f;
+        float iw = pw - 48, ih = iw * 900f / 1600f;
+        return new float[]{px, py, iw, ih, px + 24, py + ph - 64 - ih};
+    }
+
+    /** Đổi biểu cảm: thay part zOrder 40 (mắt/mặt) của người chơi bằng part mặt
+     *  được chọn — đúng cơ chế feel của Avatar.paint gốc (mặc định 4). */
+    public void applyFeel(int feelId) {
+        playerFeel = feelId;
+        List<Integer> parts = new ArrayList<>(playerParts);
+        boolean replaced = false;
+        for (int i = 0; i < parts.size(); i++) {
+            com.avatardk.game.data.PartData pd = game.data.part(parts.get(i));
+            if (pd != null && pd.zorder == 40) { parts.set(i, feelId); replaced = true; break; }
+        }
+        if (!replaced) parts.add(feelId);
+        playerParts.clear();
+        playerParts.addAll(parts);
+        playerDoll = game.newDoll(parts);
+    }
+
     /** Đặt người chơi ở điểm vào map khi chuyển map qua menu: x = 200 medium,
      *  y ở 72% chiều cao map (điểm đứng trên đường đi của từng map; khi online,
      *  toạ độ vào map do server cấp trong gói join). */
@@ -303,15 +389,24 @@ public class WorldScreen extends ScreenAdapter {
         playerX = Math.min(200f, worldW / AvatarDkGame.HD - 40);
         playerY = mapDef.hmap * 24 * 0.72f;
     }
-    public void debugMenuPage(int page) { menuPage = page; }
     public void debugOpenMenu() { menuOpen = true; }
     public void debugCloseMenu() { menuOpen = false; }
+    public void debugOpenCityMap() { cityMapOpen = true; }
+    public void debugCloseCityMap() { cityMapOpen = false; }
+    public void debugOpenFeel() { feelOpen = true; }
     public void debugInteract() { interact(); }
     public void debugSetPlayer(float mediumX, float mediumY) { playerX = mediumX; playerY = mediumY; }
     public void debugChat(String text) { showBubble(text); }
     public void debugChatTab(int tab) { activeChatTab = tab; }
     public int mapId() { return mapDef.id; }
     public int npcCount() { return npcFigures.size(); }
+    /** Danh sách id các map dựng được (cho công cụ chụp tour kiểm chứng). */
+    public java.util.List<Integer> mapIds() {
+        java.util.List<Integer> ids = new ArrayList<>();
+        for (MapDef d : maps) ids.add(d.id);
+        return ids;
+    }
+    public int currentMapId() { return mapDef.id; }
     public String debugInfo() {
         StringBuilder sb = new StringBuilder();
         sb.append("map=").append(mapDef.id).append(" strips=");
@@ -384,29 +479,63 @@ public class WorldScreen extends ScreenAdapter {
     }
 
     private void onTouch(float x, float y, int pointer) {
+        // bản đồ thành phố đang mở là lớp trên cùng: X đóng / chạm vùng để đi
+        if (cityMapOpen) {
+            float[] g = cityMapGeom();
+            float px = g[0], py = g[1], iw = g[2], ih = g[3], ix = g[4], iy = g[5];
+            if (x >= px + 900 - 40 && x <= px + 940 && y >= py + 600 - 52 && y <= py + 600) { cityMapOpen = false; return; }
+            for (int r = 0; r < regionCells.size() && r < REGION_NAMES.length; r++) {
+                int[] cell = regionCells.get(r);
+                float cx = ix + (cell[0] + 0.5f) / 50f * iw;
+                float cy = iy + ih - (cell[1] + 0.5f) / 26f * ih;
+                if (Math.abs(x - cx) <= 30 && Math.abs(y - cy) <= 30) {
+                    cityMapOpen = false;
+                    loadMap(findMap(REGION_DEST[r]));
+                    spawnPlayer();
+                    return;
+                }
+            }
+            if (x < px || x > px + 940 || y < py || y > py + 600) cityMapOpen = false;
+            return;
+        }
         // nút burger (phải trên): mở/đóng panel kính
         if (x >= BURGER_X && x <= BURGER_X + BURGER_S && y >= BURGER_Y && y <= BURGER_Y + BURGER_S) {
             menuOpen = !menuOpen;
             return;
         }
-        // panel burger đang mở: chọn map / chuyển trang / chạm ra ngoài thì đóng
+        // nút mặt cười kế bên khung chat: mở/đóng hàng chọn biểu cảm
+        if (x >= FEEL_BTN_X && x <= FEEL_BTN_X + FEEL_BTN_S && y >= FEEL_BTN_Y && y <= FEEL_BTN_Y + FEEL_BTN_S) {
+            feelOpen = !feelOpen;
+            return;
+        }
+        // hàng chọn biểu cảm đang mở: chạm một mặt để đổi
+        if (feelOpen) {
+            float cell = 58f, pw = cell * FEEL_IDS.length + 16, ph = 76f;
+            float px = FEEL_BTN_X + FEEL_BTN_S - pw, py = FEEL_BTN_Y + FEEL_BTN_S + 10;
+            if (x >= px && x <= px + pw && y >= py && y <= py + ph) {
+                int idx = (int) ((x - px - 8) / cell);
+                if (idx >= 0 && idx < FEEL_IDS.length) applyFeel(FEEL_IDS[idx]);
+                feelOpen = false;
+                return;
+            }
+            feelOpen = false;
+            return;
+        }
+        // panel burger đang mở: lưới ô tính năng; chạm ra ngoài thì đóng
         if (menuOpen) {
             float px = MENU_PX, pw = MENU_PW, ph = MENU_PH, py = MENU_PY;
             if (x >= px && x <= px + pw && y >= py && y <= py + ph) {
-                int pages = (maps.size() + MENU_PER_PAGE - 1) / MENU_PER_PAGE;
-                if (y <= py + MENU_FOOTER) {
-                    if (x <= px + 56) menuPage = Math.max(0, menuPage - 1);
-                    else if (x >= px + pw - 56) menuPage = Math.min(pages - 1, menuPage + 1);
-                    return;
-                }
-                for (int i = 0; i < MENU_PER_PAGE; i++) {
-                    int idx = menuPage * MENU_PER_PAGE + i;
-                    if (idx >= maps.size()) break;
-                    float rowTop = py + ph - MENU_HEADER - i * MENU_ROW_H;
-                    if (y <= rowTop && y >= rowTop - MENU_ROW_H) {
-                        loadMap(maps.get(idx));
-                        spawnPlayer();
+                for (int i = 0; i < MENU_ITEMS.length; i++) {
+                    int col = i % 3, row = i / 3;
+                    float cx = px + 10 + col * MENU_CELL;
+                    float cy = py + ph - MENU_HEADER - (row + 1) * MENU_CELL_H + 6;
+                    if (x >= cx && x <= cx + MENU_CELL && y >= cy && y <= cy + MENU_CELL_H) {
                         menuOpen = false;
+                        if (i == 0) {
+                            cityMapOpen = true;
+                        } else {
+                            addChatLog(TAB_SYSTEM, null, "Tính năng " + MENU_ITEMS[i][1] + " đang được port ở đợt tiếp theo.", true);
+                        }
                         return;
                     }
                 }
@@ -534,7 +663,8 @@ public class WorldScreen extends ScreenAdapter {
         // Đặt lại glViewport về đúng backbuffer mỗi frame: FitViewport của HUD ở frame
         // trước có thể đã thu viewport (đặc biệt khi resize chưa được chuyển tiếp).
         Gdx.gl.glViewport(0, 0, Gdx.graphics.getBackBufferWidth(), Gdx.graphics.getBackBufferHeight());
-        Color sky = SKY_COLOR[bgStatus];
+        // Map không nền: gốc tô phẳng màu tối (setColor(1)) thay cho màu trời.
+        Color sky = mapDef.bg == null ? NO_BG_FILL : SKY_COLOR[bgStatus];
         Gdx.gl.glClearColor(sky.r, sky.g, sky.b, 1f);
         Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT);
 
@@ -542,8 +672,16 @@ public class WorldScreen extends ScreenAdapter {
         float playerFeetY = mapBottomPx - playerY * AvatarDkGame.HD;
         // camera bám người chơi, kẹp biên thế giới
         float camX = MathUtils.clamp(playerFeetX, Ui.W / 2f, Math.max(Ui.W / 2f, worldW - Ui.W / 2f));
-        // map thấp hơn màn hình: neo đáy map vào đáy màn hình (phần trên nhường cho nền trời)
-        float camY = worldH <= Ui.H ? Ui.H / 2f : MathUtils.clamp(playerFeetY + 120, Ui.H / 2f, worldH - Ui.H / 2f);
+        // Camera dọc theo AvCamera của gốc: mặc định NEO ĐÁY map vào đáy màn hình
+        // (yTo = Hmap*w - hCan). Ngoại lệ căn giữa dọc: TYPEMAP 57/58/59 (client
+        // 58/59/60) trong AvCamera.init và các map không nền (bg = -1) trong setLimit.
+        float camY;
+        if (worldH <= Ui.H) {
+            // neo đáy: camY = H/2 (đáy map ở đáy màn hình); căn giữa: camY = tâm map
+            camY = centerVertically() ? worldH / 2f : Ui.H / 2f;
+        } else {
+            camY = MathUtils.clamp(playerFeetY + 120, Ui.H / 2f, worldH - Ui.H / 2f);
+        }
         if (worldW <= Ui.W) camX = worldW / 2f;
         worldCam.position.set(camX, camY, 0);
         worldCam.update();
@@ -570,7 +708,25 @@ public class WorldScreen extends ScreenAdapter {
         if (chatBubble != null) drawBubble(playerDoll, playerAnim, playerFeetX, playerFeetY, chatBubble);
         batch.end();
 
+        drawSideBars(camX);
         drawHud(playerFeetX, playerFeetY);
+    }
+
+    /** Hai cột ĐEN hai bên khi map hẹp hơn màn hình — cuối paintM của gốc:
+     *  phần ngoài chiều rộng map được tô đen (setColor(0)) thay vì để nền trời. */
+    private void drawSideBars(float camX) {
+        if (worldW >= Ui.W || whiteTex == null) return;
+        float visLeft = camX - Ui.W / 2f;
+        float mapLeftOnScreen = -visLeft;
+        float mapRightOnScreen = worldW - visLeft;
+        hudViewport.apply();
+        batch.setProjectionMatrix(hudViewport.getCamera().combined);
+        batch.begin();
+        batch.setColor(0f, 0f, 0f, 1f);
+        if (mapLeftOnScreen > 0) batch.draw(whiteTex, 0, 0, mapLeftOnScreen, Ui.H);
+        if (mapRightOnScreen < Ui.W) batch.draw(whiteTex, mapRightOnScreen, 0, Ui.W - mapRightOnScreen, Ui.H);
+        batch.setColor(Color.WHITE);
+        batch.end();
     }
 
     /** Vẽ nền theo paintBackGround của gốc, tính theo không gian màn hình:
@@ -642,6 +798,8 @@ public class WorldScreen extends ScreenAdapter {
         drawJoystick();
         drawInteractButton();
         drawChatFrame();
+        drawFeelUi();
+        if (cityMapOpen) drawCityMap();
         batch.end();
     }
 
@@ -653,7 +811,7 @@ public class WorldScreen extends ScreenAdapter {
      *  Hệ thống = gói SERVER_MESSAGE (-9) của gốc. */
     private void drawChatFrame() {
         batch.draw(Ui.roundedRect((int) CHAT_W, (int) CHAT_H, 14,
-            new Color(0.04f, 0.09f, 0.15f, 0.62f), GLASS_RIM), CHAT_X, CHAT_Y);
+            new Color(0.04f, 0.09f, 0.15f, 0.82f), GLASS_RIM), CHAT_X, CHAT_Y);
         // hàng tab
         float tx = CHAT_X + 10;
         float ty = CHAT_Y + CHAT_H - CHAT_TAB_H + 3;
@@ -661,10 +819,12 @@ public class WorldScreen extends ScreenAdapter {
             boolean active = i == activeChatTab;
             layout.setText(Ui.fontSmall, CHAT_TABS[i]);
             float tw = layout.width + 24;
+            // Tab phải RÕ (phản hồi của chủ dự án: bản trước mờ quá): tab chưa chọn
+            // nền slate đặc + chữ trắng 90%; tab chọn nền cam đặc + chữ trắng.
             batch.draw(Ui.roundedRect((int) tw, (int) (CHAT_TAB_H - 6), 9,
-                active ? new Color(0.55f, 0.38f, 0.10f, 0.9f) : new Color(1f, 1f, 1f, 0.14f),
-                active ? new Color(1f, 0.8f, 0.35f, 0.95f) : GLASS_RIM), tx, ty);
-            Ui.fontSmall.setColor(active ? Color.WHITE : new Color(1f, 1f, 1f, 0.65f));
+                active ? new Color(0.85f, 0.45f, 0.08f, 0.98f) : new Color(0.13f, 0.20f, 0.30f, 0.95f),
+                active ? new Color(1f, 0.85f, 0.4f, 1f) : new Color(0.55f, 0.68f, 0.85f, 0.9f)), tx, ty);
+            Ui.fontSmall.setColor(active ? Color.WHITE : new Color(1f, 1f, 1f, 0.92f));
             Ui.fontSmall.draw(batch, CHAT_TABS[i], tx + 12, ty + CHAT_TAB_H - 13);
             tx += tw + 8;
         }
@@ -784,35 +944,82 @@ public class WorldScreen extends ScreenAdapter {
         float px = MENU_PX, pw = MENU_PW, ph = MENU_PH, py = MENU_PY;
         batch.draw(Ui.roundedRect((int) pw, (int) ph, 14, GLASS_FILL_DARK, GLASS_RIM), px, py);
         Ui.fontSmall.setColor(1f, 0.85f, 0.45f, 1f);
-        Ui.fontSmall.draw(batch, "CHỌN MAP", px + 18, py + ph - 24);
-        int pages = (maps.size() + MENU_PER_PAGE - 1) / MENU_PER_PAGE;
-        menuPage = MathUtils.clamp(menuPage, 0, pages - 1);
-        for (int i = 0; i < MENU_PER_PAGE; i++) {
-            int idx = menuPage * MENU_PER_PAGE + i;
-            if (idx >= maps.size()) break;
-            MapDef m = maps.get(idx);
-            float rowTop = py + ph - MENU_HEADER - i * MENU_ROW_H;
-            boolean current = m.id == mapDef.id;
-            if (current) {
-                batch.draw(Ui.roundedRect((int) (pw - 24), (int) (MENU_ROW_H - 5), 8,
-                    new Color(0.55f, 0.38f, 0.10f, 0.85f), new Color(1f, 0.8f, 0.35f, 0.9f)),
-                    px + 12, rowTop - MENU_ROW_H + 4);
-            }
-            Ui.fontSmall.setColor(current ? Color.WHITE : new Color(1f, 1f, 1f, 0.82f));
-            Ui.fontSmall.draw(batch, m.label(), px + 22, rowTop - 10);
-            Ui.fontSmall.setColor(1f, 1f, 1f, 0.45f);
-            String idText = "#" + m.id;
-            layout.setText(Ui.fontSmall, idText);
-            Ui.fontSmall.draw(batch, idText, px + pw - 22 - layout.width, rowTop - 10);
+        Ui.fontSmall.draw(batch, "MENU", px + 18, py + ph - 24);
+        for (int i = 0; i < MENU_ITEMS.length; i++) {
+            int col = i % 3, row = i / 3;
+            float cx = px + 10 + col * MENU_CELL;
+            float cy = py + ph - MENU_HEADER - (row + 1) * MENU_CELL_H + 6;
+            batch.draw(Ui.roundedRect((int) (MENU_CELL - 8), (int) (MENU_CELL_H - 8), 12,
+                new Color(1f, 1f, 1f, 0.10f), GLASS_RIM), cx + 4, cy);
+            Texture icon = game.texture("iconmenu/" + MENU_ITEMS[i][0] + ".png");
+            float is = 46f;
+            batch.draw(icon, cx + MENU_CELL / 2f - is / 2f, cy + MENU_CELL_H - 8 - is - 8, is, is);
+            Ui.fontSmall.setColor(1f, 1f, 1f, 0.92f);
+            layout.setText(Ui.fontSmall, MENU_ITEMS[i][1]);
+            Ui.fontSmall.draw(batch, MENU_ITEMS[i][1], cx + MENU_CELL / 2f - layout.width / 2f, cy + 24);
         }
-        // chân panel: chuyển trang
+    }
+
+    /** Bản đồ thành phố toàn màn hình (MiniMap của gốc): ảnh minimap + các điểm
+     *  vùng theo lưới citiMap; chạm một vùng để di chuyển tới map của vùng đó. */
+    private void drawCityMap() {
+        batch.setColor(0f, 0f, 0f, 0.55f);
+        batch.draw(whiteTex, 0, 0, Ui.W, Ui.H);
+        batch.setColor(Color.WHITE);
+        float[] g = cityMapGeom();
+        float px = g[0], py = g[1], iw = g[2], ih = g[3], ix = g[4], iy = g[5];
+        float pw = 940f, ph = 600f;
+        batch.draw(Ui.roundedRect((int) pw, (int) ph, 16, GLASS_FILL_DARK, GLASS_RIM), px, py);
+        Ui.font.setColor(1f, 0.85f, 0.45f, 1f);
+        Ui.font.draw(batch, "BẢN ĐỒ THÀNH PHỐ", px + 24, py + ph - 20);
         Ui.font.setColor(Color.WHITE);
-        Ui.font.draw(batch, "<", px + 20, py + 27);
-        Ui.font.draw(batch, ">", px + pw - 32, py + 27);
-        Ui.fontSmall.setColor(1f, 1f, 1f, 0.7f);
-        String pg = "Trang " + (menuPage + 1) + "/" + pages;
-        layout.setText(Ui.fontSmall, pg);
-        Ui.fontSmall.draw(batch, pg, px + pw / 2f - layout.width / 2f, py + 24);
+        Ui.font.draw(batch, "X", px + pw - 40, py + ph - 18);
+        if (minimapTex == null) minimapTex = game.texture("minimap.png");
+        batch.draw(minimapTex, ix, iy, iw, ih);
+        Ui.fontSmall.setColor(1f, 1f, 1f, 0.75f);
+        Ui.fontSmall.draw(batch, "Chạm vào một vùng để di chuyển đến đó.", px + 24, py + 30);
+        for (int r = 0; r < regionCells.size() && r < REGION_NAMES.length; r++) {
+            int[] cell = regionCells.get(r);
+            float cx = ix + (cell[0] + 0.5f) / 50f * iw;
+            float cy = iy + ih - (cell[1] + 0.5f) / 26f * ih;
+            boolean current = mapDef.id == REGION_DEST[r];
+            batch.setColor(current ? new Color(0.3f, 0.9f, 0.4f, 1f) : new Color(1f, 0.55f, 0.1f, 1f));
+            batch.draw(whiteTex, cx - 6, cy - 6, 12, 12);
+            batch.setColor(Color.WHITE);
+            layout.setText(Ui.fontSmall, REGION_NAMES[r]);
+            float lx = MathUtils.clamp(cx - layout.width / 2f, px + 8, px + pw - 8 - layout.width);
+            Ui.fontSmall.setColor(1f, 0.95f, 0.6f, 1f);
+            Ui.fontSmall.draw(batch, REGION_NAMES[r], lx, cy + 26);
+        }
+    }
+
+    /** Nút mặt cười (asset iconmenu/feel0 gốc) kế bên khung chat + hàng chọn
+     *  biểu cảm 8 mặt khi mở. */
+    private void drawFeelUi() {
+        Texture icon = game.texture("iconmenu/feel0.png");
+        batch.draw(Ui.roundedRect((int) FEEL_BTN_S, (int) FEEL_BTN_S, (int) (FEEL_BTN_S / 2),
+            feelOpen ? new Color(0.55f, 0.38f, 0.10f, 0.92f) : GLASS_FILL, GLASS_RIM),
+            FEEL_BTN_X, FEEL_BTN_Y);
+        batch.draw(icon, FEEL_BTN_X + 8, FEEL_BTN_Y + 8, FEEL_BTN_S - 16, FEEL_BTN_S - 16);
+        if (!feelOpen) return;
+        float cell = 58f, pw = cell * FEEL_IDS.length + 16, ph = 76f;
+        float px = FEEL_BTN_X + FEEL_BTN_S - pw, py = FEEL_BTN_Y + FEEL_BTN_S + 10;
+        batch.draw(Ui.roundedRect((int) pw, (int) ph, 12, GLASS_FILL_DARK, GLASS_RIM), px, py);
+        for (int i = 0; i < FEEL_IDS.length; i++) {
+            float cx = px + 8 + i * cell;
+            if (FEEL_IDS[i] == playerFeel) {
+                batch.draw(Ui.roundedRect((int) (cell - 4), (int) (ph - 12), 9,
+                    new Color(0.55f, 0.38f, 0.10f, 0.85f), new Color(1f, 0.8f, 0.35f, 0.9f)),
+                    cx + 2, py + 6);
+            }
+            // mặt xem trước: doll chỉ gồm mặt nền + part mặt, căn giữa ô theo bounds
+            PaperDoll fd = feelDolls.get(i);
+            int[] b = fd.bounds(0);
+            float u = Math.min(2.4f, 52f / Math.max(1, b[3] - b[1]));
+            float fx = cx + cell / 2f - (b[0] + b[2]) / 2f * u;
+            float fy = py + ph / 2f + (b[1] + b[3]) / 2f * u;
+            game.dollRenderer.draw(batch, fd, 0, fx, fy, u, false);
+        }
     }
 
     /** Trái dưới — joystick glass. */
