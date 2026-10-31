@@ -21,6 +21,10 @@ public class MapGrids {
         public String g;
         /** Các ô 139 dẹt [x0, y0, x1, y1, ...] theo thứ tự quét; null = không có trạm. */
         public int[] s;
+        /** Vật thể gắn map đã mô phỏng theo LoadMap.setMap: mỗi phần tử
+         *  [imgId, anchorX, anchorY] đơn vị medium, neo đáy–giữa (anchor 33
+         *  của gốc); id âm = SubObject trang trại. Xem docs/mapgrid-spec.md. */
+        public int[][] o;
         private byte[] cells;
 
         public byte[] cells() {

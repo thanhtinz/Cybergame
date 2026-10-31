@@ -256,6 +256,16 @@ public class ScreenshotMain {
                     case 15:
                         if (frame == 25) {
                             shot("shot-bus-stop.png");
+                            // Sân khấu lớp vật thể: map 12 nhiều vật thể nhất (13)
+                            world.debugSetMap(12);
+                            world.debugSetPlayer(560f, 150f);
+                            stage = 16; frame = 0;
+                        }
+                        break;
+                    case 16:
+                        if (frame == 25) {
+                            shot("shot-objects.png");
+                            System.out.println("SCREENSHOT DONE");
                             Gdx.app.exit();
                         }
                         break;

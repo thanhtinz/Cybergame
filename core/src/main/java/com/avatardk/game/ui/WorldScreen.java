@@ -67,8 +67,8 @@ public class WorldScreen extends ScreenAdapter {
         /** Trạm xe buýt từ lưới ô gốc (ô 139, MapGrids): stopX/stopY = điểm
          *  trạm (medium, gốc trên–trái); stopX < 0 = map không có trạm. */
         public int stopX = -1, stopY, stopRow, stopFirstTileX, stopLastTileX;
-        /** Neo biển TeaM 835 (medium): tâm x + đáy y; -1 = map không có. */
-        public int boardX = -1, boardY;
+        /** Vật thể gắn map [imgId, anchorX, anchorY] (medium, neo đáy–giữa). */
+        public final java.util.List<int[]> objects = new java.util.ArrayList<>();
         /** Số nền dùng khi vẽ (map không nền thì tạm dùng 0 cho lớp trời). */
         public int bgNum() { return bg == null ? 0 : bg; }
         public String label() { return name == null || name.isEmpty() ? "Map " + id : name; }
@@ -114,7 +114,18 @@ public class WorldScreen extends ScreenAdapter {
     // xe chạy vào trạm thả người chơi mỗi khi vào map có trạm) ----
     // Thân xe đã vẽ lại cho game mình: hành khách chibi + biển "Thị Trấn Mặt
     // Trời"; biển trạm cũng là asset riêng của game (sprites/busstop.png).
-    private Texture busTex, boardTex;
+    private Texture busTex;
+    /** Cache ảnh vật thể gắn map theo id (null = id không có ảnh offline). */
+    private final java.util.Map<Integer, Texture> objTexCache = new java.util.HashMap<>();
+
+    private Texture objTexture(int id) {
+        if (objTexCache.containsKey(id)) return objTexCache.get(id);
+        Texture t = null;
+        String p = "sprites/obj" + id + ".png";
+        if (Gdx.files.internal(p).exists()) t = game.texture(p);
+        objTexCache.put(id, t);
+        return t;
+    }
     /** 0 = không có xe, 1 = xe đang vào trạm, 2 = đang dừng thả khách, 3 = đang rời trạm. */
     private int busPhase = 0;
     private float busX, busV, busTimer;
@@ -133,6 +144,20 @@ public class WorldScreen extends ScreenAdapter {
         float bubbleTimer = 0f;
     }
     private final List<NpcFigure> npcFigures = new ArrayList<>();
+
+    /** Một món trong lượt vẽ trộn độ sâu (vật thể / NPC / người chơi khác /
+     *  chính mình): sắp theo y đáy trong thế giới, y lớn (cao hơn trên màn
+     *  hình) vẽ trước — đúng thứ tự merge của paintObject gốc. */
+    private static class DrawItem {
+        static final int OBJ = 0, NPC = 1, REMOTE = 2, PLAYER = 3;
+        int kind;
+        float y;
+        float x;
+        Texture tex;
+        NpcFigure npc;
+        RemoteFigure remote;
+    }
+    private final List<DrawItem> drawItems = new ArrayList<>();
 
     // ---- Người chơi khác qua mạng (đợt 2d, docs/park-spec.md) ----
     /** Một người chơi khác trong zone: hình paper-doll lắp từ part server gửi,
@@ -313,15 +338,12 @@ public class WorldScreen extends ScreenAdapter {
                 d.stopRow = g.stopRow();
                 d.stopFirstTileX = g.stopFirstTileX();
                 d.stopLastTileX = g.stopLastTileX();
-                int[] board = g.boardAnchor();
-                if (board != null) {
-                    d.boardX = board[0];
-                    d.boardY = board[1];
+                if (g.o != null) {
+                    for (int[] o : g.o) d.objects.add(o);
                 }
             }
         }
         busTex = game.texture("sprites/bus.png");
-        boardTex = game.texture("sprites/obj835.png");
         // lưới bản đồ thành phố: byte 69 = điểm vùng, thứ tự quét trên->dưới, trái->phải
         byte[] grid = Gdx.files.internal("data/citymap.bin").readBytes();
         for (int i = 0; i < 26 && i * 50 < grid.length; i++)
@@ -1140,30 +1162,70 @@ public class WorldScreen extends ScreenAdapter {
             float bottom = mapBottomPx - 60f;
             for (Texture t : daydien) { batch.draw(t, dx, bottom); dx += t.getWidth(); }
         }
-        // "Trạm xe" theo gốc là tấm biển TeaM 835 đặt theo ô 152 (hai hàng
-        // trên dải điểm dừng 139) — neo đáy–giữa tại tâm dải ô như
-        // addObjTree của LoadMap; vẽ trước nhân vật như thứ tự gốc.
-        if (mapDef.boardX >= 0) {
-            batch.draw(boardTex,
-                mapDef.boardX * AvatarDkGame.HD - boardTex.getWidth() / 2f,
-                mapBottomPx - mapDef.boardY * AvatarDkGame.HD);
+        // Vật thể gắn map + nhân vật vẽ TRỘN THEO ĐỘ SÂU như paintObject
+        // của gốc: đáy/chân ở càng cao trên màn hình (worldY càng lớn) vẽ
+        // càng trước. Vật thể neo đáy–giữa tại (anchorX, anchorY) của lưới.
+        drawItems.clear();
+        for (int[] o : mapDef.objects) {
+            if (o[0] < 0) continue; // SubObject trang trại: đợt farm riêng
+            Texture t = objTexture(o[0]);
+            if (t == null) continue;
+            DrawItem it = new DrawItem();
+            it.kind = DrawItem.OBJ;
+            it.y = mapBottomPx - o[2] * AvatarDkGame.HD;
+            it.tex = t;
+            it.x = o[1] * AvatarDkGame.HD - t.getWidth() / 2f;
+            drawItems.add(it);
         }
-        // NPC trước/người chơi sau không theo độ sâu ở đợt 1: vẽ NPC rồi người chơi
         for (NpcFigure f : npcFigures) {
-            drawFigure(f.doll, f.anim, f.feetX, f.feetY, f.data.name, false);
-            if (f.bubble != null) drawBubble(f.doll, f.anim, f.feetX, f.feetY, f.bubble);
+            DrawItem it = new DrawItem();
+            it.kind = DrawItem.NPC;
+            it.y = f.feetY;
+            it.npc = f;
+            drawItems.add(it);
         }
-        // người chơi khác trong zone (đợt 2d): tên màu xanh nhạt để phân biệt
-        // với NPC (vàng) và chính mình (đỏ)
         for (RemoteFigure f : remotes.values()) {
-            drawFigure(f.doll, f.anim, f.feetX, f.feetY, f.info.name,
-                new Color(0.55f, 0.9f, 1f, 1f));
-            if (f.bubble != null) drawBubble(f.doll, f.anim, f.feetX, f.feetY, f.bubble);
+            DrawItem it = new DrawItem();
+            it.kind = DrawItem.REMOTE;
+            it.y = f.feetY;
+            it.remote = f;
+            drawItems.add(it);
         }
-        // người chơi đang ngồi trên xe (pha 1) thì chưa hiện hình
-        if (busPhase != 1) {
-            drawFigure(playerDoll, playerAnim, playerFeetX, playerFeetY, displayName, true);
-            if (chatBubble != null) drawBubble(playerDoll, playerAnim, playerFeetX, playerFeetY, chatBubble);
+        if (busPhase != 1) { // đang ngồi trên xe (pha 1) thì chưa hiện hình
+            DrawItem it = new DrawItem();
+            it.kind = DrawItem.PLAYER;
+            it.y = playerFeetY;
+            drawItems.add(it);
+        }
+        drawItems.sort((a, b) -> Float.compare(b.y, a.y));
+        for (DrawItem it : drawItems) {
+            switch (it.kind) {
+                case DrawItem.OBJ:
+                    batch.draw(it.tex, it.x, it.y);
+                    break;
+                case DrawItem.NPC:
+                    drawFigure(it.npc.doll, it.npc.anim, it.npc.feetX, it.npc.feetY,
+                        it.npc.data.name, false);
+                    if (it.npc.bubble != null) {
+                        drawBubble(it.npc.doll, it.npc.anim, it.npc.feetX, it.npc.feetY, it.npc.bubble);
+                    }
+                    break;
+                case DrawItem.REMOTE:
+                    // tên người chơi khác màu xanh nhạt (NPC vàng, mình đỏ)
+                    drawFigure(it.remote.doll, it.remote.anim, it.remote.feetX, it.remote.feetY,
+                        it.remote.info.name, new Color(0.55f, 0.9f, 1f, 1f));
+                    if (it.remote.bubble != null) {
+                        drawBubble(it.remote.doll, it.remote.anim, it.remote.feetX, it.remote.feetY,
+                            it.remote.bubble);
+                    }
+                    break;
+                default: // PLAYER
+                    drawFigure(playerDoll, playerAnim, playerFeetX, playerFeetY, displayName, true);
+                    if (chatBubble != null) {
+                        drawBubble(playerDoll, playerAnim, playerFeetX, playerFeetY, chatBubble);
+                    }
+                    break;
+            }
         }
         // xe buýt vẽ sau cùng trong thế giới (ở làn đường, trước mọi nhân vật)
         if (busPhase > 0) {
