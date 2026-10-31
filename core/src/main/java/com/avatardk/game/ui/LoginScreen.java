@@ -6,8 +6,6 @@ import com.badlogic.gdx.InputAdapter;
 import com.badlogic.gdx.ScreenAdapter;
 import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.GL20;
-import com.badlogic.gdx.graphics.Texture;
-import com.badlogic.gdx.graphics.g2d.GlyphLayout;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.math.Vector3;
 import com.badlogic.gdx.utils.viewport.FitViewport;
@@ -18,30 +16,37 @@ import com.avatardk.game.net.PlayerInfo;
 import java.io.DataInputStream;
 
 /**
- * Màn hình đăng nhập / đăng ký / chọn server (đợt 2).
+ * Màn đăng nhập / đăng ký của Thị Trấn Mặt Trời (mockup v3 đã duyệt): panel
+ * gradient xanh đậm trên nền banner mờ, logo mặt trời (glyph Font Awesome),
+ * tab Đăng nhập / Đăng ký dạng thanh trượt, ô nhập có icon FA + mắt hiện mật
+ * khẩu, ô nhớ đăng nhập, nút gradient cam, hai nút Google / Apple (glyph
+ * brands thật). Đăng nhập dùng endpoint của máy chủ đang chọn trong
+ * {@link Servers}; đăng ký dùng gói REQUEST_REGISTER (-30) mà phía server của
+ * bản port đã bổ sung. Đăng nhập thành công → màn chọn máy chủ.
  *
- * Server gốc không có danh sách server động: client gốc gắn cứng host:port
- * (14.225.213.114:19128) nên ở đây ô "Máy chủ" cho sửa host:port tự do, mặc
- * định trỏ về server local 127.0.0.1:19128. Đăng ký dùng gói REQUEST_REGISTER
- * (-30) mà phía server của bản port đã bổ sung (bản gốc không xử lý).
- * Nút "Chơi thử offline" vào thẳng thế giới với nhân vật mẫu như đợt 1.
+ * Google/Apple chưa nối OAuth (ngoài giao thức gốc): bấm vào sẽ báo rõ là
+ * chưa khả dụng thay vì giả vờ đăng nhập.
  */
 public class LoginScreen extends ScreenAdapter {
     private final AvatarDkGame game;
     private final SpriteBatch batch = new SpriteBatch();
     private final FitViewport viewport = new FitViewport(Ui.W, Ui.H);
-    private final GlyphLayout layout = new GlyphLayout();
 
-    private static final Color GLASS_FILL = new Color(0.05f, 0.11f, 0.18f, 0.72f);
-    private static final Color GLASS_RIM = new Color(0.62f, 0.82f, 1f, 0.38f);
-    private static final float PANEL_W = 470f, PANEL_H = 452f;
-    private static final float PANEL_X = Ui.W / 2f - PANEL_W / 2f, PANEL_Y = Ui.H / 2f - PANEL_H / 2f + 10;
+    private static final float PW = 540f, PH = 628f;
+    private static final float PX = Ui.W / 2f - PW / 2f, PY = Ui.H / 2f - PH / 2f;
+    private static final float TOP = PY + PH;
+    private static final Color FIELD_FILL = new Color(0.95f, 0.97f, 0.985f, 1f);
+    private static final Color ICON_GREY = new Color(0.43f, 0.49f, 0.57f, 1f);
+    private static final Color SUB_TEXT = new Color(0.67f, 0.75f, 0.84f, 1f);
+    private static final Color LINK_BLUE = new Color(0.55f, 0.75f, 1f, 1f);
+    private static final Color DARK_TEXT = new Color(0.16f, 0.18f, 0.22f, 1f);
 
-    // 0 = máy chủ, 1 = tài khoản, 2 = mật khẩu
-    private final StringBuilder[] fields = {
-        new StringBuilder("127.0.0.1:19128"), new StringBuilder(), new StringBuilder()};
-    private int focus = 1;
-    private String status = "Nhập tài khoản để đăng nhập, hoặc đăng ký tài khoản mới.";
+    private final StringBuilder[] fields = {new StringBuilder(), new StringBuilder()}; // 0 = user, 1 = pass
+    private int focus = 0;
+    private int tab = 0; // 0 = đăng nhập, 1 = đăng ký
+    private boolean showPass = false;
+    private boolean remember = true;
+    private String status = "";
     private boolean statusError = false;
     private boolean busy = false;
     private boolean pendingRegister = false;
@@ -50,9 +55,7 @@ public class LoginScreen extends ScreenAdapter {
         this.game = game;
     }
 
-    private float fieldY(int i) {
-        return PANEL_Y + PANEL_H - 168 - i * 64;
-    }
+    private float fieldY(int i) { return TOP - 252 - i * 92; } // mép dưới của ô nhập
 
     @Override
     public void show() {
@@ -76,7 +79,7 @@ public class LoginScreen extends ScreenAdapter {
                     return true;
                 }
                 if (keycode == Input.Keys.ENTER) {
-                    submit(false);
+                    submit(tab == 1);
                     return true;
                 }
                 return false;
@@ -92,21 +95,53 @@ public class LoginScreen extends ScreenAdapter {
     }
 
     private void onTouch(float x, float y) {
+        // tab Đăng nhập / Đăng ký
+        float tabY = TOP - 162;
+        if (y >= tabY && y <= tabY + 50 && x >= PX + 32 && x <= PX + PW - 32) {
+            tab = x < Ui.W / 2f ? 0 : 1;
+            return;
+        }
+        // hai ô nhập
         for (int i = 0; i < fields.length; i++) {
             float fy = fieldY(i);
-            if (x >= PANEL_X + 28 && x <= PANEL_X + PANEL_W - 28 && y >= fy && y <= fy + 40) {
-                focus = i;
+            if (x >= PX + 32 && x <= PX + PW - 32 && y >= fy && y <= fy + 48) {
+                if (i == 1 && x >= PX + PW - 84) {
+                    showPass = !showPass;
+                    focus = 1;
+                } else {
+                    focus = i;
+                }
                 return;
             }
         }
-        float by = PANEL_Y + 108;
-        if (y >= by && y <= by + 46) {
-            if (x >= PANEL_X + 28 && x <= PANEL_X + 228) { submit(false); return; }
-            if (x >= PANEL_X + 242 && x <= PANEL_X + PANEL_W - 28) { submit(true); return; }
+        // nhớ đăng nhập / quên mật khẩu
+        if (y >= TOP - 392 && y <= TOP - 356) {
+            if (x >= PX + 32 && x <= PX + 240) {
+                remember = !remember;
+                return;
+            }
+            if (x >= PX + PW - 190 && x <= PX + PW - 32) {
+                setStatus("Hãy liên hệ Hỗ trợ ở màn banner để đặt lại mật khẩu.", false);
+                return;
+            }
         }
-        float oy = PANEL_Y + 52;
-        if (y >= oy && y <= oy + 34 && x >= PANEL_X + 28 && x <= PANEL_X + PANEL_W - 28) {
-            game.setScreen(game.world); // chơi thử offline với nhân vật mẫu
+        // nút chính
+        float by = TOP - 462;
+        if (x >= PX + 32 && x <= PX + PW - 32 && y >= by && y <= by + 58) {
+            submit(tab == 1);
+            return;
+        }
+        // Google / Apple
+        float gy = TOP - 568;
+        if (y >= gy && y <= gy + 52 && x >= PX + 32 && x <= PX + PW - 32) {
+            setStatus("Đăng nhập bằng " + (x < Ui.W / 2f ? "Google" : "Apple")
+                + " chưa nối — sẽ có ở bản online sau. Hãy dùng tài khoản thị trấn.", true);
+            return;
+        }
+        // chơi thử ngay (dưới panel)
+        if (y >= 6 && y <= 38 && x >= Ui.W / 2f - 150 && x <= Ui.W / 2f + 150) {
+            game.playerName = AvatarDkGame.SON_NAME;
+            game.setScreen(game.world);
         }
     }
 
@@ -115,11 +150,10 @@ public class LoginScreen extends ScreenAdapter {
         statusError = error;
     }
 
-    /** Bắt đầu (hoặc dùng lại) kết nối rồi gửi đăng nhập/đăng ký. */
     private void submit(boolean register) {
         if (busy) return;
-        String user = fields[1].toString().trim();
-        String pass = fields[2].toString();
+        String user = fields[0].toString().trim();
+        String pass = fields[1].toString();
         if (user.isEmpty() || pass.isEmpty()) {
             setStatus("Chưa nhập tài khoản hoặc mật khẩu.", true);
             return;
@@ -127,7 +161,9 @@ public class LoginScreen extends ScreenAdapter {
         pendingRegister = register;
         busy = true;
         setStatus(register ? "Đang đăng ký…" : "Đang kết nối máy chủ…", false);
-        final String serverText = fields[0].toString().trim();
+        Servers.Server target = Servers.selected();
+        final String host = target.host;
+        final int port = target.port;
         final GameConnection existing = game.connection;
         if (existing != null && existing.isKeyReady() && !existing.isClosed()) {
             sendAuth(existing, register, user, pass);
@@ -135,13 +171,6 @@ public class LoginScreen extends ScreenAdapter {
         }
         new Thread(() -> {
             try {
-                String host = serverText;
-                int port = 19128;
-                int colon = serverText.lastIndexOf(':');
-                if (colon > 0) {
-                    host = serverText.substring(0, colon);
-                    port = Integer.parseInt(serverText.substring(colon + 1));
-                }
                 GameConnection conn = new GameConnection();
                 conn.connect(host, port);
                 game.connection = conn;
@@ -152,7 +181,7 @@ public class LoginScreen extends ScreenAdapter {
                 }
                 if (!conn.isKeyReady()) {
                     busy = false;
-                    setStatus("Không nối được tới máy chủ " + serverText + ".", true);
+                    setStatus("Không nối được tới máy chủ " + target.label + ".", true);
                     return;
                 }
                 AvatarProtocol.sendIntro(conn, (int) Ui.W, (int) Ui.H);
@@ -176,7 +205,6 @@ public class LoginScreen extends ScreenAdapter {
         }
     }
 
-    /** Quét gói trả lời mỗi frame: -4 = đăng nhập thành công, -9 = thông báo. */
     private void pollReplies() {
         GameConnection conn = game.connection;
         if (conn == null) return;
@@ -186,17 +214,24 @@ public class LoginScreen extends ScreenAdapter {
                 if (m.command == AvatarProtocol.LOGIN_SUCESS) {
                     PlayerInfo p = PlayerInfo.parse(m);
                     game.player = p;
+                    game.playerName = fields[0].toString().trim();
                     busy = false;
                     game.world.applyPlayerInfo(p);
-                    game.setScreen(game.world);
+                    game.setScreen(game.serverSelect);
                     return;
                 } else if (m.command == AvatarProtocol.SERVER_MESSAGE) {
                     DataInputStream r = m.reader();
                     String text = r.readUTF();
                     busy = false;
-                    boolean okReg = pendingRegister && text.contains("thành công");
-                    setStatus(text, !okReg && !pendingRegister);
-                    pendingRegister = false;
+                    if (pendingRegister && text.contains("thành công")) {
+                        pendingRegister = false;
+                        tab = 0;
+                        setStatus("Đăng ký thành công! Đang đăng nhập…", false);
+                        submit(false);
+                    } else {
+                        setStatus(text, true);
+                        pendingRegister = false;
+                    }
                 }
             } catch (Exception e) {
                 busy = false;
@@ -212,68 +247,108 @@ public class LoginScreen extends ScreenAdapter {
     @Override
     public void render(float delta) {
         pollReplies();
-        Gdx.gl.glClearColor(0.36f, 0.74f, 0.91f, 1f); // màu trời ngày của gốc #5DBCE7
+        Gdx.gl.glClearColor(0.05f, 0.08f, 0.14f, 1f);
         Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT);
         viewport.apply();
         batch.setProjectionMatrix(viewport.getCamera().combined);
         batch.begin();
-        // silhouette thành phố của nền gốc ở đáy màn hình
-        Texture bg = game.texture("bghd/00.png");
-        batch.draw(bg, 0, 0, Ui.W, bg.getHeight() * (Ui.W / bg.getWidth()) * 0.5f + 120);
-        // tiêu đề
-        layout.setText(Ui.fontTitle, "AvatarDK");
-        Ui.fontTitle.setColor(Color.WHITE);
-        Ui.fontTitle.draw(batch, "AvatarDK", Ui.W / 2f - layout.width / 2f, PANEL_Y + PANEL_H + 64);
-        // panel kính
-        batch.draw(Ui.roundedRect((int) PANEL_W, (int) PANEL_H, 18, GLASS_FILL, GLASS_RIM), PANEL_X, PANEL_Y);
-        String[] labels = {"Máy chủ", "Tài khoản", "Mật khẩu"};
-        for (int i = 0; i < fields.length; i++) {
-            float fy = fieldY(i);
-            Ui.fontSmall.setColor(1f, 1f, 1f, 0.85f);
-            Ui.fontSmall.draw(batch, labels[i], PANEL_X + 28, fy + 58);
-            Color rim = focus == i ? new Color(1f, 0.8f, 0.35f, 0.95f) : GLASS_RIM;
-            batch.draw(Ui.roundedRect((int) (PANEL_W - 56), 40, 10,
-                new Color(1f, 1f, 1f, 0.94f), rim), PANEL_X + 28, fy);
-            String text = fields[i].toString();
-            if (i == 2) text = "*".repeat(text.length());
-            if (focus == i) text += "|";
-            Ui.fontSmall.setColor(0.1f, 0.1f, 0.12f, 1f);
-            Ui.fontSmall.draw(batch, text, PANEL_X + 42, fy + 26);
-        }
-        // hai nút chính
-        float by = PANEL_Y + 108;
-        batch.draw(Ui.roundedRect(200, 46, 12,
-            new Color(0.85f, 0.45f, 0.08f, 0.97f), new Color(1f, 0.7f, 0.3f, 0.9f)), PANEL_X + 28, by);
-        centerText("Đăng nhập", PANEL_X + 28, 200, by + 30);
-        batch.draw(Ui.roundedRect((int) (PANEL_W - 242 - 28), 46, 12,
-            new Color(1f, 1f, 1f, 0.16f), GLASS_RIM), PANEL_X + 242, by);
-        centerText("Đăng ký", PANEL_X + 242, PANEL_W - 242 - 28, by + 30);
-        // nút offline
-        float oy = PANEL_Y + 52;
-        batch.draw(Ui.roundedRect((int) (PANEL_W - 56), 34, 10,
-            new Color(1f, 1f, 1f, 0.10f), GLASS_RIM), PANEL_X + 28, oy);
-        centerText("Chơi thử offline (không cần tài khoản)", PANEL_X + 28, PANEL_W - 56, oy + 23);
-        // dòng trạng thái
-        Ui.fontSmall.setColor(statusError ? new Color(1f, 0.55f, 0.45f, 1f)
-            : new Color(1f, 0.95f, 0.75f, 1f));
-        layout.setText(Ui.fontSmall, status);
-        float maxW = PANEL_W - 40;
-        String shown = status;
-        if (layout.width > maxW) {
-            while (shown.length() > 0 && layout.width > maxW) {
-                shown = shown.substring(0, shown.length() - 1);
-                layout.setText(Ui.fontSmall, shown + "…");
-            }
-            shown += "…";
-        }
-        Ui.fontSmall.draw(batch, shown, PANEL_X + PANEL_W / 2f - layout.width / 2f, PANEL_Y + 28);
+        EntryUi.drawBanner(batch);
+        batch.draw(Ui.roundedRect((int) Ui.W, (int) Ui.H, 0,
+            new Color(0.01f, 0.03f, 0.06f, 0.45f), null), 0, 0);
+        drawPanel(batch);
+        Ui.centered(batch, Ui.fontSmall, "Chơi thử ngay, không cần tài khoản", Ui.W / 2f, 24,
+            new Color(1f, 1f, 1f, 0.75f));
         batch.end();
     }
 
-    private void centerText(String text, float x, float w, float baselineY) {
-        layout.setText(Ui.font, text);
+    private void drawPanel(SpriteBatch batch) {
+        batch.draw(Ui.gradientRect((int) PW, (int) PH, 24,
+            new Color(0.07f, 0.13f, 0.23f, 0.98f), new Color(0.03f, 0.06f, 0.12f, 0.98f)), PX, PY);
+        batch.draw(Ui.outlineRect((int) PW, (int) PH, 24, EntryUi.PANEL_RIM), PX, PY);
+        // header: mặt trời FA + tên game
+        Ui.faIcon(batch, Ui.fa30, Ui.FA_SUN, PX + 52, TOP - 40, EntryUi.GOLD);
+        Ui.fontBaloo36.setColor(EntryUi.GOLD);
+        Ui.fontBaloo36.draw(batch, EntryUi.GAME_NAME, PX + 78, TOP - 28);
+        Ui.fontSmall.setColor(SUB_TEXT);
+        Ui.fontSmall.draw(batch, "Chào mừng bạn đến với thị trấn", PX + 79, TOP - 56);
+        // thanh tab
+        float tabY = TOP - 162;
+        batch.draw(Ui.roundedRect((int) (PW - 64), 50, 14,
+            new Color(0.06f, 0.11f, 0.18f, 1f), null), PX + 32, tabY);
+        float half = (PW - 72) / 2f;
+        float pillX = tab == 0 ? PX + 36 : PX + 36 + half;
+        batch.draw(Ui.gradientRect((int) half, 42, 11, EntryUi.ORANGE_TOP, EntryUi.ORANGE_BOT),
+            pillX, tabY + 4);
+        Color tabOff = new Color(0.78f, 0.84f, 0.92f, 1f);
+        Ui.centered(batch, Ui.font, "Đăng nhập", PX + 36 + half / 2f, tabY + 33,
+            tab == 0 ? Color.WHITE : tabOff);
+        Ui.centered(batch, Ui.font, "Đăng ký", PX + 36 + half + half / 2f, tabY + 33,
+            tab == 1 ? Color.WHITE : tabOff);
+        // hai ô nhập
+        drawField(batch, 0, "Tài khoản", Ui.FA_USER, "Nhập tài khoản");
+        drawField(batch, 1, "Mật khẩu", Ui.FA_LOCK, "••••••••");
+        // nhớ đăng nhập + quên mật khẩu
+        float ry = TOP - 374;
+        batch.draw(Ui.roundedRect(18, 18, 5, remember ? EntryUi.ORANGE_BOT
+            : new Color(0.9f, 0.93f, 0.97f, 1f), null), PX + 36, ry - 14);
+        if (remember) Ui.faIcon(batch, Ui.fa20, Ui.FA_CHECK, PX + 45, ry - 5, Color.WHITE);
+        Ui.fontSmall.setColor(0.85f, 0.9f, 0.96f, 1f);
+        Ui.fontSmall.draw(batch, "Nhớ đăng nhập", PX + 62, ry);
+        String forgot = "Quên mật khẩu?";
+        Ui.fontSmall.setColor(LINK_BLUE);
+        Ui.fontSmall.draw(batch, forgot, PX + PW - 36 - Ui.textWidth(Ui.fontSmall, forgot), ry);
+        // nút chính
+        float by = TOP - 462;
+        batch.draw(Ui.gradientRect((int) (PW - 64), 58, 14, EntryUi.ORANGE_TOP, EntryUi.ORANGE_BOT),
+            PX + 32, by);
+        Ui.centered(batch, Ui.fontBaloo30, tab == 0 ? "ĐĂNG NHẬP" : "ĐĂNG KÝ", Ui.W / 2f, by + 39, Color.WHITE);
+        // divider
+        float dy = TOP - 492;
+        batch.draw(Ui.roundedRect(138, 2, 1, new Color(0.59f, 0.67f, 0.8f, 0.8f), null), PX + 40, dy);
+        Ui.centered(batch, Ui.fontSmall, "hoặc tiếp tục với", Ui.W / 2f, dy + 6, SUB_TEXT);
+        batch.draw(Ui.roundedRect(138, 2, 1, new Color(0.59f, 0.67f, 0.8f, 0.8f), null), PX + PW - 178, dy);
+        // Google / Apple
+        float gy = TOP - 568;
+        batch.draw(Ui.roundedRect((int) half, 52, 12, Color.WHITE, null), PX + 32, gy);
+        Ui.faIcon(batch, Ui.faBrands26, Ui.FA_GOOGLE, PX + 62, gy + 26, new Color(0.24f, 0.25f, 0.27f, 1f));
+        Ui.font.setColor(DARK_TEXT);
+        Ui.font.draw(batch, "Google", PX + 88, gy + 33);
+        float ax = PX + 40 + half;
+        batch.draw(Ui.roundedRect((int) half, 52, 12, new Color(0.04f, 0.04f, 0.05f, 1f), null), ax, gy);
+        Ui.faIcon(batch, Ui.faBrands30, Ui.FA_APPLE, ax + 30, gy + 26, Color.WHITE);
         Ui.font.setColor(Color.WHITE);
-        Ui.font.draw(batch, text, x + (w - layout.width) / 2f, baselineY);
+        Ui.font.draw(batch, "Apple", ax + 56, gy + 33);
+        // trạng thái + điều khoản
+        if (!status.isEmpty()) {
+            Ui.centered(batch, Ui.fontSmall, status, Ui.W / 2f, PY + 40,
+                statusError ? new Color(1f, 0.55f, 0.45f, 1f) : new Color(1f, 0.85f, 0.55f, 1f));
+        }
+        Ui.centered(batch, Ui.fontTiny, "Tiếp tục nghĩa là bạn đồng ý với Điều khoản & Chính sách bảo mật",
+            Ui.W / 2f, PY + 18, new Color(0.55f, 0.63f, 0.73f, 1f));
+    }
+
+    private void drawField(SpriteBatch batch, int i, String label, String glyph, String placeholder) {
+        float fy = fieldY(i);
+        Ui.fontSmall.setColor(0.76f, 0.84f, 0.94f, 1f);
+        Ui.fontSmall.draw(batch, label, PX + 36, fy + 70);
+        Color rim = focus == i ? new Color(1f, 0.67f, 0.24f, 1f) : null;
+        if (rim != null) {
+            batch.draw(Ui.roundedRect((int) (PW - 64), 48, 13, FIELD_FILL, rim), PX + 32, fy);
+        } else {
+            batch.draw(Ui.roundedRect((int) (PW - 64), 48, 13, FIELD_FILL, null), PX + 32, fy);
+        }
+        Ui.faIcon(batch, Ui.fa20, glyph, PX + 58, fy + 24, ICON_GREY);
+        String text = fields[i].toString();
+        boolean empty = text.isEmpty();
+        if (i == 1 && !showPass) text = "•".repeat(text.length());
+        if (empty) text = placeholder;
+        if (focus == i && !empty) text += "|";
+        Ui.font.setColor(empty ? new Color(0.47f, 0.53f, 0.61f, 1f) : DARK_TEXT);
+        Ui.font.draw(batch, text, PX + 80, fy + 31);
+        if (i == 1) {
+            Ui.faIcon(batch, Ui.fa20, showPass ? Ui.FA_EYE_SLASH : Ui.FA_EYE,
+                PX + PW - 57, fy + 24, ICON_GREY);
+        }
     }
 
     @Override

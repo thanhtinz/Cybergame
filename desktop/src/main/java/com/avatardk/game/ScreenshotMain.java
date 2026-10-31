@@ -39,7 +39,7 @@ public class ScreenshotMain {
                 } else {
                     tourIds = java.util.List.of();
                     world.debugSetPlayer(455f, 95f); // đứng gần NPC đấu giá (410,48) để nút Tương tác sáng
-                    world.debugChat("Xin chào, AvatarDK đã chạy bằng Java!");
+                    world.debugChat("Xin chào, Thị Trấn Mặt Trời đã chạy bằng Java!");
                 }
             }
             @Override public void resize(int width, int height) {
@@ -62,7 +62,29 @@ public class ScreenshotMain {
                 switch (stage) {
                     case -1:
                         if (frame == 25) {
+                            shot("shot-banner.png");
+                            game.setScreen(game.login);
+                            stage = -2; frame = 0;
+                        }
+                        break;
+                    case -2:
+                        if (frame == 25) {
                             shot("shot-login.png");
+                            game.playerName = "Tín";
+                            game.setScreen(game.serverSelect);
+                            stage = -3; frame = 0;
+                        }
+                        break;
+                    case -3:
+                        if (frame == 25) {
+                            shot("shot-server.png");
+                            game.serverSelect.debugOpenPanel();
+                            stage = -4; frame = 0;
+                        }
+                        break;
+                    case -4:
+                        if (frame == 25) {
+                            shot("shot-server-panel.png");
                             game.setScreen(world);
                             stage = 0; frame = 0;
                         }

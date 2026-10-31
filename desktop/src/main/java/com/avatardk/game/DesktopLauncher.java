@@ -7,7 +7,7 @@ import com.avatardk.game.ui.AvatarDkGame;
 public class DesktopLauncher {
     public static void main(String[] args) {
         Lwjgl3ApplicationConfiguration cfg = new Lwjgl3ApplicationConfiguration();
-        cfg.setTitle("AvatarDK");
+        cfg.setTitle("Thị Trấn Mặt Trời (Sunny Town)");
         cfg.setWindowedMode(1280, 720);
         cfg.setForegroundFPS(60);
         new Lwjgl3Application(new AvatarDkGame(), cfg);

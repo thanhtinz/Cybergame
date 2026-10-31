@@ -18,6 +18,12 @@ public class AvatarDkGame extends Game {
     public PaperDollRenderer dollRenderer;
     /** Màn thế giới dùng chung: vào thẳng khi chơi offline, hoặc sau đăng nhập. */
     public WorldScreen world;
+    /** Luồng vào game Thị Trấn Mặt Trời: banner → đăng nhập → chọn máy chủ → thế giới. */
+    public BannerScreen banner;
+    public LoginScreen login;
+    public ServerSelectScreen serverSelect;
+    /** Tên hiển thị của người chơi (tài khoản vừa đăng nhập, hoặc nhân vật mẫu). */
+    public String playerName = "";
     /** Kết nối tới server khi chơi online (null khi offline). */
     public com.avatardk.game.net.GameConnection connection;
     /** Thông tin nhân vật từ gói LOGIN_SUCESS (null khi offline). */
@@ -40,7 +46,18 @@ public class AvatarDkGame extends Game {
             Gdx.files.internal("data/npcs.json").readString("UTF-8"));
         dollRenderer = new PaperDollRenderer(this);
         world = new WorldScreen(this);
-        setScreen(new LoginScreen(this));
+        login = new LoginScreen(this);
+        serverSelect = new ServerSelectScreen(this);
+        banner = new BannerScreen(this);
+        setScreen(banner);
+    }
+
+    /** Xoá cache texture trong bộ nhớ (nút "Xoá cache" ở màn banner): nạp lại ở lần vẽ sau. */
+    public void clearTextureCache() {
+        for (Texture t : atlases.values()) t.dispose();
+        for (Texture t : textures.values()) t.dispose();
+        atlases.clear();
+        textures.clear();
     }
 
     public Texture atlas(int bigId) {
@@ -71,6 +88,7 @@ public class AvatarDkGame extends Game {
         for (Texture t : textures.values()) t.dispose();
         atlases.clear();
         textures.clear();
+        EntryUi.dispose();
         Ui.dispose();
     }
 }
