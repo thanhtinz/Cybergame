@@ -250,7 +250,12 @@ public class WorldScreen extends ScreenAdapter {
     private static final float CHAT_W = 620f, CHAT_X = Ui.W / 2f - CHAT_W / 2f, CHAT_Y = 12f;
     private static final float CHAT_INPUT_H = 36f, CHAT_LOG_LINES = 4, CHAT_LINE_H = 22f;
     private static final float CHAT_SEND_W = 46f;
-    private static final float CHAT_H = CHAT_INPUT_H + CHAT_LOG_LINES * CHAT_LINE_H + 36f;
+    private static final float CHAT_H = CHAT_INPUT_H + CHAT_LOG_LINES * CHAT_LINE_H + 44f;
+    /** Chiều cao panel chat khi bấm nút phóng to (nút FA expand ở góc panel). */
+    private static final float CHAT_H_BIG = 400f;
+    /** Chiều cao panel chat HIỆN TẠI (chạy mượt giữa CHAT_H và CHAT_H_BIG). */
+    private float chatH = CHAT_H;
+    private boolean chatExpanded = false;
     // Tab kiểu "thẻ thư mục": TRUNG TÂM của tab nằm đúng trên đường viền trên
     // của khung (nửa tab nhô lên ngoài, nửa tab lọt vào trong khung — như một
     // khối liền với khung). Cả 3 tab RỘNG BẰNG NHAU; tab đang dùng chỉ CAO
@@ -564,7 +569,7 @@ public class WorldScreen extends ScreenAdapter {
         float pad = 10f;
         float cell = (FEEL_SHEET_W - 2 * pad) / 7f;
         float px = FEEL_BTN_X + FEEL_BTN_S - FEEL_SHEET_W;
-        float py = CHAT_Y + CHAT_H + 12;
+        float py = CHAT_Y + chatH + 12;
         return new float[]{px, py, FEEL_SHEET_W, feelH, cell, pad};
     }
 
@@ -656,6 +661,7 @@ public class WorldScreen extends ScreenAdapter {
         feelScroll = scroll;
     }
     public int feelCount() { return feelIds.size(); }
+    public java.util.List<Integer> debugFeelIds() { return feelIds; }
     public void debugInteract() { interact(); }
     public void debugSetPlayer(float mediumX, float mediumY) { playerX = mediumX; playerY = mediumY; }
     public boolean debugCanStand(float mediumX, float mediumY) { return canStand(mediumX, mediumY); }
@@ -854,6 +860,23 @@ public class WorldScreen extends ScreenAdapter {
         boardStatus = statuses;
         currentArea = area;
         boardOpen = true;
+    }
+    public void debugCloseBoard() { boardOpen = false; }
+    public void debugToggleChatBig() { chatExpanded = !chatExpanded; }
+    /** Nạp vài dòng chat mẫu vào tab Gần đây để kiểm chứng panel chat. */
+    public void debugChatDemo() {
+        String[][] demo = {
+            {"Linh", "Chào Sơn! Map đông vui quá nè"},
+            {"Sơn", "Ừ, khu này đang đông thật"},
+            {"Tuấn", "Ai đi săn boss chung không?"},
+            {"Linh", "Tớ nè, chờ tớ qua cổng cái"},
+            {"Sơn", "Ok đứng ở trạm xe nhé"},
+            {"Tuấn", "Xe buýt sắp tới rồi đó"},
+            {"Linh", "Thấy rồi, lên xe thôi nào"},
+            {"Sơn", "Nhớ đổi khu 2 cho đỡ lag nha"},
+        };
+        for (String[] d : demo) addChatLog(TAB_NEARBY, d[0], d[1], false);
+        activeChatTab = TAB_NEARBY;
     }
     public int debugArea() { return currentArea; }
 
@@ -1118,6 +1141,14 @@ public class WorldScreen extends ScreenAdapter {
             menuOpen = false;
             return;
         }
+        // khung chat: nút phóng to/thu nhỏ ở góc trên phải panel
+        {
+            float ebX = CHAT_X + CHAT_W - 48, ebY = CHAT_Y + chatH - 48;
+            if (x >= ebX && x <= ebX + 38 && y >= ebY && y <= ebY + 38) {
+                chatExpanded = !chatExpanded;
+                return;
+            }
+        }
         // khung chat: tab vắt ngang viền (3 tab rộng bằng nhau, ô chạm theo
         // chiều cao thật — tab đang dùng cao hơn một chút) / nút Gửi / ô nhập
         {
@@ -1125,7 +1156,7 @@ public class WorldScreen extends ScreenAdapter {
             float tx = CHAT_X + 12;
             for (int i = 0; i < CHAT_TABS.length; i++) {
                 float th = i == activeChatTab ? TAB_H_ACTIVE : TAB_H_IDLE;
-                float tabBottom = CHAT_Y + CHAT_H - th / 2f;
+                float tabBottom = CHAT_Y + chatH - th / 2f;
                 if (x >= tx && x <= tx + tw && y >= tabBottom && y <= tabBottom + th) {
                     activeChatTab = i;
                     return;
@@ -1203,6 +1234,10 @@ public class WorldScreen extends ScreenAdapter {
 
     private void update(float dt) {
         if (boardLatch > 0f) boardLatch -= dt;
+        // chiều cao panel chat chạy mượt tới nấc đích khi bấm phóng to/thu nhỏ
+        float chatTarget = chatExpanded ? CHAT_H_BIG : CHAT_H;
+        chatH += (chatTarget - chatH) * Math.min(1f, dt * 12f);
+        if (Math.abs(chatTarget - chatH) < 0.6f) chatH = chatTarget;
         // sheet biểu cảm: chiều cao chạy mượt về nấc đích (trừ lúc đang kéo tay cầm)
         if (feelPointer < 0 || !feelDragHandle) {
             feelH += (feelHTarget - feelH) * Math.min(1f, dt * 14f);
@@ -1306,7 +1341,7 @@ public class WorldScreen extends ScreenAdapter {
         // chỉ áp dụng ở nhánh neo đáy; xe rời trạm xong camera tự trả về.
         float busLift = 0f;
         if (busPhase > 0 && worldH <= Ui.H && !centerVertically()) {
-            busLift = CHAT_H + 20f;
+            busLift = chatH + 20f;
             camY -= busLift; // hạ tâm camera = thế giới nhô lên trên màn hình
         }
         if (worldW <= Ui.W) camX = worldW / 2f;
@@ -1534,7 +1569,7 @@ public class WorldScreen extends ScreenAdapter {
      *  Khi nối server: tab Gần đây = gói chat 55/77, Thế giới = kênh toàn server,
      *  Hệ thống = gói SERVER_MESSAGE (-9) của gốc. */
     private void drawChatFrame() {
-        batch.draw(Ui.roundedRect((int) CHAT_W, (int) CHAT_H, 14,
+        batch.draw(Ui.roundedRect((int) CHAT_W, (int) chatH, 14,
             new Color(0.04f, 0.09f, 0.15f, 0.82f), GLASS_RIM), CHAT_X, CHAT_Y);
         // Hàng tab kiểu "thẻ thư mục" VẮT NGANG ĐƯỜNG VIỀN TRÊN của khung
         // (chủ dự án chốt): trung tâm mỗi tab nằm đúng trên đường viền — nửa
@@ -1549,7 +1584,7 @@ public class WorldScreen extends ScreenAdapter {
             layout.setText(Ui.fontSmall, CHAT_TABS[i]);
             float textX = tx + (tw - layout.width) / 2f;
             float th = active ? TAB_H_ACTIVE : TAB_H_IDLE;
-            float tabBottom = CHAT_Y + CHAT_H - th / 2f;
+            float tabBottom = CHAT_Y + chatH - th / 2f;
             Color fill = active ? new Color(0.10f, 0.17f, 0.26f, 0.97f)
                                 : new Color(0.03f, 0.06f, 0.10f, 0.92f);
             Color rim = active ? new Color(0.62f, 0.82f, 1f, 0.60f)
@@ -1559,12 +1594,15 @@ public class WorldScreen extends ScreenAdapter {
             Ui.fontSmall.draw(batch, CHAT_TABS[i], textX, tabBottom + th - 9);
             tx += tw + 6;
         }
-        // nhật ký của tab đang chọn: dòng mới nhất nằm ngay trên ô nhập
+        // nhật ký của tab đang chọn: dòng mới nhất nằm trên ô nhập, CÁCH
+        // ô nhập một khoảng thoáng (chủ dự án yêu cầu); panel phóng to
+        // thì hiện thêm dòng theo chiều cao thật
         List<ChatLine> log = chatLogs[activeChatTab];
-        int n = Math.min((int) CHAT_LOG_LINES, log.size());
+        int maxLines = (int) CHAT_LOG_LINES + (int) ((chatH - CHAT_H) / CHAT_LINE_H);
+        int n = Math.min(maxLines, log.size());
         for (int i = 0; i < n; i++) {
             ChatLine l = log.get(log.size() - n + i);
-            float ly = CHAT_Y + CHAT_INPUT_H + 6 + (n - 1 - i) * CHAT_LINE_H + 15;
+            float ly = CHAT_Y + CHAT_INPUT_H + 14 + (n - 1 - i) * CHAT_LINE_H + 15;
             if (l.system) {
                 Ui.fontSmall.setColor(1f, 0.62f, 0.35f, 1f);
                 Ui.fontSmall.draw(batch, l.text, CHAT_X + 14, ly);
@@ -1580,7 +1618,7 @@ public class WorldScreen extends ScreenAdapter {
             Ui.fontSmall.setColor(1f, 1f, 1f, 0.45f);
             Ui.fontSmall.draw(batch, activeChatTab == TAB_WORLD
                 ? "Chưa có tin nhắn thế giới nào." : "Chưa có tin nhắn nào.",
-                CHAT_X + 14, CHAT_Y + CHAT_INPUT_H + 27);
+                CHAT_X + 14, CHAT_Y + CHAT_INPUT_H + 35);
         }
         // ô nhập (chừa chỗ cho nút Gửi ở cuối)
         float inputW = CHAT_W - 16 - CHAT_SEND_W - 8;
@@ -1601,6 +1639,13 @@ public class WorldScreen extends ScreenAdapter {
             new Color(0.10f, 0.17f, 0.26f, 0.97f), GLASS_RIM), sendX, CHAT_Y + 7);
         Ui.faIcon(batch, Ui.fa20, Ui.FA_SEND,
             sendX + CHAT_SEND_W / 2f, CHAT_Y + 7 + CHAT_INPUT_H / 2f, Color.WHITE);
+        // nút phóng to / thu nhỏ panel chat (góc trên phải trong panel):
+        // FA expand khi đang nhỏ, FA compress khi đang to
+        float ebX = CHAT_X + CHAT_W - 48, ebY = CHAT_Y + chatH - 48, ebS = 38;
+        batch.draw(Ui.roundedRect((int) ebS, (int) ebS, 9,
+            new Color(0.10f, 0.17f, 0.26f, 0.97f), GLASS_RIM), ebX, ebY);
+        Ui.faIcon(batch, Ui.fa20, chatExpanded ? Ui.FA_COMPRESS : Ui.FA_EXPAND,
+            ebX + ebS / 2f, ebY + ebS / 2f, Color.WHITE);
     }
 
     /** Trái trên — card glass gọn: avatar trong KHUNG VUÔNG (huy hiệu Lv nằm ở góc

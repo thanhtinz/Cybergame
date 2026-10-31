@@ -92,7 +92,8 @@ public class ScreenshotMain {
                         break;
                     case 0:
                         if (frame == 20) world.debugInteract(); // NPC gần nhất cất lời, bong bóng hiện ở frame chụp
-                        if (frame == 29) System.out.println("DEBUG WORLD: " + world.debugInfo());
+                        if (frame == 29) System.out.println("DEBUG WORLD: " + world.debugInfo()
+                            + " feelIds=" + world.debugFeelIds());
                         if (frame == 30) {
                             if (world.npcCount() < 1) throw new IllegalStateException("Map 10 không có NPC nào");
                             shot("shot-city.png");
@@ -301,6 +302,22 @@ public class ScreenshotMain {
                     case 19:
                         if (frame == 25) {
                             shot("shot-board.png");
+                            // Kiểm panel chat: nội dung cách ô nhập + nút phóng to
+                            world.debugCloseBoard();
+                            world.debugChatDemo();
+                            stage = 20; frame = 0;
+                        }
+                        break;
+                    case 20:
+                        if (frame == 25) {
+                            shot("shot-chat.png");
+                            world.debugToggleChatBig();
+                            stage = 21; frame = 0;
+                        }
+                        break;
+                    case 21:
+                        if (frame == 40) {
+                            shot("shot-chat-big.png");
                             System.out.println("SCREENSHOT DONE");
                             Gdx.app.exit();
                         }
