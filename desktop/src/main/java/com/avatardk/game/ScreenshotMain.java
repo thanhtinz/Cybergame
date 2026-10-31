@@ -195,11 +195,72 @@ public class ScreenshotMain {
                     case 12:
                         if (frame == 25) {
                             shot("shot-feel.png");
+                            // Sân khấu online giả (đợt 2d): bơm gói 51/55 qua đúng
+                            // đường xử lý thật của WorldScreen để kiểm chứng hình
+                            // người chơi khác + bong bóng chat của họ.
+                            com.avatardk.game.net.PlayerInfo fake =
+                                new com.avatardk.game.net.PlayerInfo();
+                            fake.id = 999;
+                            fake.username = "Sơn";
+                            game.player = fake;
+                            world.debugSetMap(10);
+                            world.debugSetPlayer(455f, 95f);
+                            world.debugChatTab(2);
+                            try {
+                                int[][] npcParts = new int[2][];
+                                for (int i = 0; i < 2; i++) {
+                                    java.util.List<Integer> items = game.data.npcs.get(i + 3).items;
+                                    npcParts[i] = items.stream().mapToInt(Integer::intValue).toArray();
+                                }
+                                world.debugInjectNet((byte) 51, joinPayload(7, "Linh", npcParts[0], 395, 100));
+                                world.debugInjectNet((byte) 51, joinPayload(8, "Tuấn", npcParts[1], 525, 88));
+                                world.debugInjectNet((byte) 55, chatPayload(7, "Chào Sơn! Map đông vui quá nè"));
+                            } catch (java.io.IOException ioe) {
+                                throw new RuntimeException(ioe);
+                            }
+                            stage++; frame = 0;
+                        }
+                        break;
+                    case 13:
+                        if (frame == 25) {
+                            System.out.println("ONLINE STAGE: remotes=" + world.remoteCount());
+                            if (world.remoteCount() != 2)
+                                throw new IllegalStateException("Kỳ vọng 2 người chơi khác, thấy " + world.remoteCount());
+                            shot("shot-online.png");
                             Gdx.app.exit();
                         }
                         break;
                 }
             }
+            /** Thân gói 51 PLAYER_JOIN_PARK theo docs/park-spec.md. */
+            private byte[] joinPayload(int id, String name, int[] wearing, int x, int y)
+                throws java.io.IOException {
+                java.io.ByteArrayOutputStream bos = new java.io.ByteArrayOutputStream();
+                java.io.DataOutputStream w = new java.io.DataOutputStream(bos);
+                w.writeInt(id);
+                w.writeUTF(name);
+                w.writeByte(wearing.length);
+                for (int p : wearing) w.writeShort(p);
+                w.writeShort(x);
+                w.writeShort(y);
+                w.writeByte(1);   // role: người chơi thật
+                w.writeByte(-1);
+                w.writeShort(-1);
+                w.writeShort(-1);
+                w.flush();
+                return bos.toByteArray();
+            }
+
+            /** Thân gói 55 CHAT_PARK theo docs/park-spec.md. */
+            private byte[] chatPayload(int id, String text) throws java.io.IOException {
+                java.io.ByteArrayOutputStream bos = new java.io.ByteArrayOutputStream();
+                java.io.DataOutputStream w = new java.io.DataOutputStream(bos);
+                w.writeInt(id);
+                w.writeUTF(text);
+                w.flush();
+                return bos.toByteArray();
+            }
+
             private void shot(String name) {
                 // Bắt frame bằng glReadPixels trực tiếp: ScreenUtils.getFrameBufferPixmap
                 // trả về toàn màu clear trong môi trường LWJGL3 + Xvfb này (đã kiểm chứng:

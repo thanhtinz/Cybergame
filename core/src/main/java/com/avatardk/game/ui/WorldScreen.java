@@ -17,9 +17,16 @@ import com.badlogic.gdx.scenes.scene2d.utils.ScissorStack;
 import com.badlogic.gdx.utils.viewport.FitViewport;
 import com.avatardk.game.data.NpcData;
 import com.avatardk.game.data.PaperDoll;
+import com.avatardk.game.net.AvatarProtocol;
+import com.avatardk.game.net.GameConnection;
+import com.avatardk.game.net.Msg;
+import com.avatardk.game.net.ZonePlayers;
 import com.avatardk.game.sim.AvatarAnimator;
+import java.io.IOException;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 /** Màn thế giới đợt 1.
  *
@@ -109,6 +116,34 @@ public class WorldScreen extends ScreenAdapter {
         float bubbleTimer = 0f;
     }
     private final List<NpcFigure> npcFigures = new ArrayList<>();
+
+    // ---- Người chơi khác qua mạng (đợt 2d, docs/park-spec.md) ----
+    /** Một người chơi khác trong zone: hình paper-doll lắp từ part server gửi,
+     *  vị trí hiển thị nội suy về đích (tx, ty) cho mượt. */
+    private static class RemoteFigure {
+        ZonePlayers.RemotePlayer info;
+        PaperDoll doll;
+        AvatarAnimator anim = new AvatarAnimator();
+        float feetX, feetY;   // vị trí vẽ hiện tại (px hd)
+        int tx, ty;           // đích theo server (medium)
+        String bubble = null;
+        float bubbleTimer = 0f;
+    }
+    private final Map<Integer, RemoteFigure> remotes = new LinkedHashMap<>();
+    /** Client map id đã gửi gói join (50); -1 = chưa join / đã rớt mạng. */
+    private int joinedClientMap = -1;
+    private boolean netLossAnnounced = false;
+    private float lastMoveSentAt = 0f, netTime = 0f;
+    private int lastSentX = Integer.MIN_VALUE, lastSentY = Integer.MIN_VALUE;
+    private boolean lastSentLeft = false;
+
+    private boolean online() {
+        return game.connection != null && game.player != null;
+    }
+
+    private int ownId() {
+        return game.player != null ? game.player.id : -1;
+    }
 
     private PaperDoll playerDoll;
     private final AvatarAnimator playerAnim = new AvatarAnimator();
@@ -441,15 +476,173 @@ public class WorldScreen extends ScreenAdapter {
         addChatLog(TAB_NEARBY, displayName, text, false);
     }
 
-    /** Gửi nội dung đang gõ: vào tab Gần đây + bong bóng trên đầu (dùng chung
-     *  cho phím Enter và nút Gửi). */
+    /** Gửi nội dung đang gõ (dùng chung cho phím Enter và nút Gửi). Offline:
+     *  bong bóng + tab Gần đây ngay. Online: gửi gói 55 lên server — bong bóng
+     *  và dòng chat của mình hiện khi server phát lại (echo) như client gốc. */
     private void sendChat() {
         typing = false;
         String msg = typeBuffer.toString().trim();
         typeBuffer.setLength(0);
-        if (!msg.isEmpty()) {
-            activeChatTab = TAB_NEARBY;
+        if (msg.isEmpty()) return;
+        activeChatTab = TAB_NEARBY;
+        if (online()) {
+            try {
+                AvatarProtocol.chatPark(game.connection, msg);
+            } catch (IOException e) {
+                addChatLog(TAB_SYSTEM, null, "Không gửi được tin nhắn (mất kết nối?).", true);
+            }
+        } else {
             showBubble(msg);
+        }
+    }
+
+    // ---------- Mạng: người chơi khác trong zone (đợt 2d) ----------
+
+    private void addRemote(ZonePlayers.RemotePlayer p) {
+        if (p.role == 0 || p.id == ownId()) return; // NPC server đã có hình tĩnh; bỏ chính mình
+        RemoteFigure f = new RemoteFigure();
+        f.info = p;
+        List<Integer> parts = new ArrayList<>();
+        for (int id : p.wearing) parts.add(id);
+        f.doll = game.newDoll(parts);
+        f.tx = p.x;
+        f.ty = p.y;
+        f.feetX = p.x * AvatarDkGame.HD;
+        f.feetY = mapBottomPx - p.y * AvatarDkGame.HD;
+        f.anim.action = AvatarAnimator.STAND;
+        f.anim.facingLeft = p.direct == 2;
+        remotes.put(p.id, f);
+    }
+
+    /** Xử lý một gói park từ server (50/51/53/54/55/77). Cũng là lối vào cho
+     *  ScreenshotMain bơm gói giả để kiểm chứng hình (debugInjectNet). */
+    public void handleNetMsg(Msg m) {
+        try {
+            switch (m.command) {
+                case AvatarProtocol.AVATAR_JOIN_PARK: {
+                    remotes.clear();
+                    for (ZonePlayers.RemotePlayer p : ZonePlayers.parseJoinList(m)) addRemote(p);
+                    break;
+                }
+                case AvatarProtocol.PLAYER_JOIN: {
+                    addRemote(ZonePlayers.parsePlayerJoin(m));
+                    break;
+                }
+                case AvatarProtocol.PLAYER_LEAVE: {
+                    remotes.remove(ZonePlayers.parseLeave(m));
+                    break;
+                }
+                case AvatarProtocol.PLAYER_MOVE: {
+                    int[] mv = ZonePlayers.parseMove(m);
+                    RemoteFigure f = remotes.get(mv[0]);
+                    if (f != null) {
+                        f.tx = mv[1];
+                        f.ty = mv[2];
+                        f.info.direct = mv[3];
+                    }
+                    break;
+                }
+                case AvatarProtocol.CHAT_PARK:
+                case AvatarProtocol.CHAT_FARM: {
+                    ZonePlayers.ChatMsg c = ZonePlayers.parseChat(m);
+                    if (c.id == ownId()) {
+                        showBubble(c.text);
+                    } else {
+                        RemoteFigure f = remotes.get(c.id);
+                        if (f != null) {
+                            f.bubble = c.text;
+                            f.bubbleTimer = 4f;
+                            addChatLog(TAB_NEARBY, f.info.name, c.text, false);
+                        } else {
+                            addChatLog(TAB_NEARBY, "Người chơi", c.text, false);
+                        }
+                    }
+                    break;
+                }
+                default:
+                    break;
+            }
+        } catch (IOException e) {
+            // gói lỗi bỏ qua, không để sập vòng lặp render
+        }
+    }
+
+    /** Bơm gói mạng giả (chỉ dùng cho kiểm chứng/ScreenshotMain). */
+    public void debugInjectNet(byte cmd, byte[] payload) {
+        handleNetMsg(new Msg(cmd, payload));
+    }
+
+    /** Số người chơi khác đang hiển thị (kiểm chứng). */
+    public int remoteCount() {
+        return remotes.size();
+    }
+
+    /** Việc mạng mỗi frame: join khi vào/đổi map, nhận gói, gửi di chuyển,
+     *  nội suy vị trí người chơi khác, phát hiện rớt mạng. */
+    private void updateNet(float dt) {
+        netTime += dt;
+        GameConnection conn = game.connection;
+        if (conn == null || game.player == null) return;
+        if (conn.isClosed()) {
+            if (!netLossAnnounced) {
+                netLossAnnounced = true;
+                addChatLog(TAB_SYSTEM, null, "Mất kết nối tới máy chủ.", true);
+            }
+            joinedClientMap = -1;
+            remotes.clear();
+            return;
+        }
+        netLossAnnounced = false;
+        if (joinedClientMap != mapDef.id) {
+            try {
+                AvatarProtocol.joinPark(conn, mapDef.id, (int) playerX, (int) playerY);
+                joinedClientMap = mapDef.id;
+                remotes.clear();
+                lastSentX = Integer.MIN_VALUE;
+            } catch (IOException e) {
+                // thử lại ở frame sau
+            }
+        }
+        Msg m;
+        while ((m = conn.poll()) != null) handleNetMsg(m);
+        // gửi di chuyển của mình (giới hạn ~8 lần/giây, và khi đổi hướng)
+        int px = Math.round(playerX), py = Math.round(playerY);
+        boolean left = playerAnim.facingLeft;
+        if ((px != lastSentX || py != lastSentY || left != lastSentLeft)
+            && netTime - lastMoveSentAt >= 0.12f) {
+            try {
+                AvatarProtocol.movePark(conn, px, py, left);
+                lastSentX = px;
+                lastSentY = py;
+                lastSentLeft = left;
+                lastMoveSentAt = netTime;
+            } catch (IOException e) {
+                // bỏ qua, frame sau thử lại
+            }
+        }
+    }
+
+    /** Nội suy vị trí + hoạt ảnh người chơi khác (chạy cả khi bơm gói giả để
+     *  kiểm chứng hình, không phụ thuộc kết nối thật). */
+    private void updateRemotes(float dt) {
+        float speedPx = SPEED * AvatarDkGame.HD * 1.2f;
+        for (RemoteFigure f : remotes.values()) {
+            float txPx = f.tx * AvatarDkGame.HD;
+            float tyPx = mapBottomPx - f.ty * AvatarDkGame.HD;
+            float dx = txPx - f.feetX, dy = tyPx - f.feetY;
+            float dist = (float) Math.hypot(dx, dy);
+            if (dist > 3f) {
+                float step = Math.min(dist, speedPx * dt);
+                f.feetX += dx / dist * step;
+                f.feetY += dy / dist * step;
+                if (Math.abs(dx) > 1f) f.anim.facingLeft = dx < 0;
+                f.anim.action = AvatarAnimator.RUN;
+            } else {
+                f.anim.action = AvatarAnimator.STAND;
+                f.anim.facingLeft = f.info.direct == 2;
+            }
+            f.anim.update(dt);
+            if (f.bubbleTimer > 0) { f.bubbleTimer -= dt; if (f.bubbleTimer <= 0) f.bubble = null; }
         }
     }
 
@@ -458,7 +651,7 @@ public class WorldScreen extends ScreenAdapter {
         if (!chatSeeded) {
             chatSeeded = true;
             addChatLog(TAB_SYSTEM, null, "Chào mừng bạn đến với AvatarDK!", true);
-            addChatLog(TAB_SYSTEM, null, "Đăng nhập + online đang được nối ở đợt 2.", true);
+            addChatLog(TAB_SYSTEM, null, "Đợt 2: đăng nhập/online đã nối — vào map sẽ thấy người chơi khác.", true);
         }
         Gdx.input.setInputProcessor(new InputAdapter() {
             @Override
@@ -657,6 +850,8 @@ public class WorldScreen extends ScreenAdapter {
             playerAnim.action = AvatarAnimator.STAND;
         }
         playerAnim.update(dt);
+        updateNet(dt);
+        updateRemotes(dt);
         for (NpcFigure f : npcFigures) {
             f.anim.update(dt);
             if (f.bubbleTimer > 0) { f.bubbleTimer -= dt; if (f.bubbleTimer <= 0) f.bubble = null; }
@@ -726,6 +921,13 @@ public class WorldScreen extends ScreenAdapter {
             drawFigure(f.doll, f.anim, f.feetX, f.feetY, f.data.name, false);
             if (f.bubble != null) drawBubble(f.doll, f.anim, f.feetX, f.feetY, f.bubble);
         }
+        // người chơi khác trong zone (đợt 2d): tên màu xanh nhạt để phân biệt
+        // với NPC (vàng) và chính mình (đỏ)
+        for (RemoteFigure f : remotes.values()) {
+            drawFigure(f.doll, f.anim, f.feetX, f.feetY, f.info.name,
+                new Color(0.55f, 0.9f, 1f, 1f));
+            if (f.bubble != null) drawBubble(f.doll, f.anim, f.feetX, f.feetY, f.bubble);
+        }
         drawFigure(playerDoll, playerAnim, playerFeetX, playerFeetY, displayName, true);
         if (chatBubble != null) drawBubble(playerDoll, playerAnim, playerFeetX, playerFeetY, chatBubble);
         batch.end();
@@ -787,11 +989,16 @@ public class WorldScreen extends ScreenAdapter {
     }
 
     private void drawFigure(PaperDoll doll, AvatarAnimator anim, float feetX, float feetY, String name, boolean isPlayer) {
+        // tên trên đầu: người chơi màu đỏ, NPC màu vàng — đúng Avatar.paintName của gốc
+        drawFigure(doll, anim, feetX, feetY, name,
+            isPlayer ? new Color(1f, 0.35f, 0.3f, 1f) : new Color(1f, 0.9f, 0.35f, 1f));
+    }
+
+    private void drawFigure(PaperDoll doll, AvatarAnimator anim, float feetX, float feetY, String name, Color nameColor) {
         int frame = anim.frameIndex();
         game.dollRenderer.draw(batch, doll, frame, feetX, feetY, AvatarDkGame.HD, anim.facingLeft);
         float topY = feetY + game.dollRenderer.heightPx(doll, frame, AvatarDkGame.HD);
-        // tên trên đầu: người chơi màu đỏ, NPC màu vàng — đúng Avatar.paintName của gốc
-        Color c = isPlayer ? new Color(1f, 0.35f, 0.3f, 1f) : new Color(1f, 0.9f, 0.35f, 1f);
+        Color c = nameColor;
         Ui.fontSmall.setColor(0f, 0f, 0f, 0.85f);
         layout.setText(Ui.fontSmall, name);
         Ui.fontSmall.draw(batch, name, feetX - layout.width / 2f + 1.5f, topY + 24f - 1.5f);

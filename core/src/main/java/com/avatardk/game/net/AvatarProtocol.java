@@ -90,14 +90,35 @@ public final class AvatarProtocol {
         conn.send(m);
     }
 
-    /** Xin vào map: byte mapId, byte area (-1 = tự chọn khu), short x, short y. */
-    public static void joinPark(GameConnection conn, int mapId, int x, int y) throws IOException {
+    /** Xin vào map (docs/park-spec.md): tham số là CLIENT map id — trên dây
+     *  gửi server map id = client id − 1; byte area (-1 = tự chọn khu),
+     *  short x, short y (đơn vị medium). */
+    public static void joinPark(GameConnection conn, int clientMapId, int x, int y) throws IOException {
         Msg m = new Msg(AVATAR_JOIN_PARK);
         DataOutputStream w = m.writer();
-        w.writeByte(mapId);
+        w.writeByte(clientMapId - 1);
         w.writeByte(-1);
         w.writeShort(x);
         w.writeShort(y);
+        conn.send(m);
+    }
+
+    /** Báo di chuyển trong map (gói 54): short x, short y, byte direct
+     *  (0 = phải, 2 = trái theo Base của gốc). */
+    public static void movePark(GameConnection conn, int x, int y, boolean facingLeft) throws IOException {
+        Msg m = new Msg(PLAYER_MOVE);
+        DataOutputStream w = m.writer();
+        w.writeShort(x);
+        w.writeShort(y);
+        w.writeByte(facingLeft ? 2 : 0);
+        conn.send(m);
+    }
+
+    /** Chat trong map (gói 55): UTF text. Server phát lại cho cả zone bằng
+     *  gói 55 (hoặc 77 ở server map 22), kèm id người nói. */
+    public static void chatPark(GameConnection conn, String text) throws IOException {
+        Msg m = new Msg(CHAT_PARK);
+        m.writer().writeUTF(text);
         conn.send(m);
     }
 }
