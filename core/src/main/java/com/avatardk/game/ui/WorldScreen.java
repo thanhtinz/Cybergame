@@ -107,18 +107,26 @@ public class WorldScreen extends ScreenAdapter {
     private boolean typing = false;
 
     // ---- Khung chat GIỮA DƯỚI (theo yêu cầu của chủ dự án: khung chat luôn hiện
-    // ở giữa dưới màn hình thay vì phải bấm icon chat như bản gốc) ----
+    // ở giữa dưới màn hình thay vì phải bấm icon chat như bản gốc; có 3 tab
+    // Hệ thống / Thế giới / Gần đây và NÚT GỬI ở cuối ô nhập) ----
     private static final float CHAT_W = 620f, CHAT_X = Ui.W / 2f - CHAT_W / 2f, CHAT_Y = 12f;
     private static final float CHAT_INPUT_H = 36f, CHAT_LOG_LINES = 4, CHAT_LINE_H = 22f;
-    private static final float CHAT_H = CHAT_INPUT_H + CHAT_LOG_LINES * CHAT_LINE_H + 16f;
-    private static class ChatLine { String name, text; boolean npc; }
-    private final List<ChatLine> chatLog = new ArrayList<>();
+    private static final float CHAT_TAB_H = 30f, CHAT_SEND_W = 64f;
+    private static final float CHAT_H = CHAT_TAB_H + CHAT_INPUT_H + CHAT_LOG_LINES * CHAT_LINE_H + 18f;
+    private static final int TAB_SYSTEM = 0, TAB_WORLD = 1, TAB_NEARBY = 2;
+    private static final String[] CHAT_TABS = {"Hệ thống", "Thế giới", "Gần đây"};
+    private int activeChatTab = TAB_NEARBY;
+    private boolean chatSeeded = false;
+    private static class ChatLine { String name, text; boolean system; }
+    @SuppressWarnings("unchecked")
+    private final List<ChatLine>[] chatLogs = new List[]{
+        new ArrayList<ChatLine>(), new ArrayList<ChatLine>(), new ArrayList<ChatLine>()};
 
-    private void addChatLog(String name, String text, boolean npc) {
+    private void addChatLog(int tab, String name, String text, boolean system) {
         ChatLine l = new ChatLine();
-        l.name = name; l.text = text; l.npc = npc;
-        chatLog.add(l);
-        while (chatLog.size() > 40) chatLog.remove(0);
+        l.name = name; l.text = text; l.system = system;
+        chatLogs[tab].add(l);
+        while (chatLogs[tab].size() > 40) chatLogs[tab].remove(0);
     }
     private final StringBuilder typeBuffer = new StringBuilder();
     private boolean menuOpen = false;
@@ -220,9 +228,11 @@ public class WorldScreen extends ScreenAdapter {
         for (MapDef d : MAPS) if (d.id == mapId) { loadMap(d); return; }
     }
     public void debugOpenMenu() { menuOpen = true; }
+    public void debugCloseMenu() { menuOpen = false; }
     public void debugInteract() { interact(); }
     public void debugSetPlayer(float mediumX, float mediumY) { playerX = mediumX; playerY = mediumY; }
     public void debugChat(String text) { showBubble(text); }
+    public void debugChatTab(int tab) { activeChatTab = tab; }
     public int mapId() { return mapDef.id; }
     public int npcCount() { return npcFigures.size(); }
     public String debugInfo() {
@@ -239,11 +249,28 @@ public class WorldScreen extends ScreenAdapter {
     private void showBubble(String text) {
         chatBubble = text;
         chatTimer = 4f; // ChatPopup của gốc hiện vài giây rồi tự tắt (Base.update -> setOut)
-        addChatLog(AvatarDkGame.SON_NAME, text, false);
+        addChatLog(TAB_NEARBY, AvatarDkGame.SON_NAME, text, false);
+    }
+
+    /** Gửi nội dung đang gõ: vào tab Gần đây + bong bóng trên đầu (dùng chung
+     *  cho phím Enter và nút Gửi). */
+    private void sendChat() {
+        typing = false;
+        String msg = typeBuffer.toString().trim();
+        typeBuffer.setLength(0);
+        if (!msg.isEmpty()) {
+            activeChatTab = TAB_NEARBY;
+            showBubble(msg);
+        }
     }
 
     @Override
     public void show() {
+        if (!chatSeeded) {
+            chatSeeded = true;
+            addChatLog(TAB_SYSTEM, null, "Chào mừng bạn đến với AvatarDK!", true);
+            addChatLog(TAB_SYSTEM, null, "Đăng nhập + online đang được nối ở đợt 2.", true);
+        }
         Gdx.input.setInputProcessor(new InputAdapter() {
             @Override
             public boolean keyTyped(char c) {
@@ -293,8 +320,24 @@ public class WorldScreen extends ScreenAdapter {
             menuOpen = false;
             return;
         }
-        // ô nhập của khung chat giữa dưới: chạm vào là gõ
-        if (x >= CHAT_X && x <= CHAT_X + CHAT_W && y >= CHAT_Y && y <= CHAT_Y + CHAT_INPUT_H + 6) {
+        // khung chat: tab (hàng trên cùng) / nút Gửi / ô nhập
+        float tabTop = CHAT_Y + CHAT_H;
+        if (x >= CHAT_X && x <= CHAT_X + CHAT_W && y >= tabTop - CHAT_TAB_H && y <= tabTop) {
+            float tx = CHAT_X + 10;
+            for (int i = 0; i < CHAT_TABS.length; i++) {
+                layout.setText(Ui.fontSmall, CHAT_TABS[i]);
+                float tw = layout.width + 24;
+                if (x >= tx && x <= tx + tw) { activeChatTab = i; return; }
+                tx += tw + 8;
+            }
+            return;
+        }
+        float sendX = CHAT_X + CHAT_W - 8 - CHAT_SEND_W;
+        if (x >= sendX && x <= sendX + CHAT_SEND_W && y >= CHAT_Y + 7 && y <= CHAT_Y + 7 + CHAT_INPUT_H) {
+            if (typing) sendChat();
+            return;
+        }
+        if (x >= CHAT_X && x <= sendX - 6 && y >= CHAT_Y && y <= CHAT_Y + CHAT_INPUT_H + 6) {
             typing = true;
             return;
         }
@@ -325,7 +368,11 @@ public class WorldScreen extends ScreenAdapter {
     public void interact() {
         NpcFigure n = findNearestNpc();
         if (n == null) {
-            showBubble("Không có ai ở gần để tương tác.");
+            // bong bóng trên đầu như cũ, nhưng trong khung chat thì đây là
+            // thông báo HỆ THỐNG (vào tab Hệ thống, không vào tab Gần đây)
+            chatBubble = "Không có ai ở gần để tương tác.";
+            chatTimer = 4f;
+            addChatLog(TAB_SYSTEM, null, "Không có ai ở gần để tương tác.", true);
             return;
         }
         n.bubble = (n.data.chat != null && !n.data.chat.isEmpty())
@@ -376,11 +423,7 @@ public class WorldScreen extends ScreenAdapter {
 
         if (Gdx.input.isKeyJustPressed(Input.Keys.ENTER)) {
             if (!typing) { typing = true; typeBuffer.setLength(0); }
-            else {
-                typing = false;
-                String msg = typeBuffer.toString().trim();
-                if (!msg.isEmpty()) showBubble(msg);
-            }
+            else sendChat();
         }
         if (typing && Gdx.input.isKeyJustPressed(Input.Keys.ESCAPE)) typing = false;
     }
@@ -507,27 +550,56 @@ public class WorldScreen extends ScreenAdapter {
         batch.end();
     }
 
-    /** Khung chat GIỮA DƯỚI, luôn hiện: trên là nhật ký chat gần nhất (tên người
-     *  chơi màu trắng, NPC màu vàng), dưới là ô nhập — Enter/chạm vào ô để gõ,
-     *  Enter lần nữa để gửi (lời chat đồng thời nổi bong bóng trên đầu như gốc).
-     *  Khi nối server ở đợt 2, khung này dùng luôn cho gói chat 55/77 của gốc. */
+    /** Khung chat GIỮA DƯỚI, luôn hiện, gồm: hàng TAB (Hệ thống / Thế giới /
+     *  Gần đây) ở trên cùng, nhật ký của tab đang chọn ở giữa, ô nhập + NÚT GỬI
+     *  ở dưới. Enter/chạm vào ô để gõ, Enter hoặc nút Gửi để gửi (lời chat
+     *  đồng thời nổi bong bóng trên đầu như gốc). Lời NPC không vào khung này.
+     *  Khi nối server: tab Gần đây = gói chat 55/77, Thế giới = kênh toàn server,
+     *  Hệ thống = gói SERVER_MESSAGE (-9) của gốc. */
     private void drawChatFrame() {
         batch.draw(Ui.roundedRect((int) CHAT_W, (int) CHAT_H, 14,
             new Color(0.04f, 0.09f, 0.15f, 0.62f), GLASS_RIM), CHAT_X, CHAT_Y);
-        // nhật ký: dòng mới nhất nằm ngay trên ô nhập
-        int n = Math.min((int) CHAT_LOG_LINES, chatLog.size());
-        for (int i = 0; i < n; i++) {
-            ChatLine l = chatLog.get(chatLog.size() - n + i);
-            float ly = CHAT_Y + CHAT_INPUT_H + 12 + (n - 1 - i) * CHAT_LINE_H + 15;
-            Ui.fontSmall.setColor(l.npc ? new Color(1f, 0.85f, 0.45f, 1f) : new Color(0.65f, 0.9f, 1f, 1f));
-            Ui.fontSmall.draw(batch, l.name + ":", CHAT_X + 14, ly);
-            layout.setText(Ui.fontSmall, l.name + ":");
-            Ui.fontSmall.setColor(1f, 1f, 1f, 0.95f);
-            Ui.fontSmall.draw(batch, l.text, CHAT_X + 14 + layout.width + 6, ly);
+        // hàng tab
+        float tx = CHAT_X + 10;
+        float ty = CHAT_Y + CHAT_H - CHAT_TAB_H + 3;
+        for (int i = 0; i < CHAT_TABS.length; i++) {
+            boolean active = i == activeChatTab;
+            layout.setText(Ui.fontSmall, CHAT_TABS[i]);
+            float tw = layout.width + 24;
+            batch.draw(Ui.roundedRect((int) tw, (int) (CHAT_TAB_H - 6), 9,
+                active ? new Color(0.55f, 0.38f, 0.10f, 0.9f) : new Color(1f, 1f, 1f, 0.14f),
+                active ? new Color(1f, 0.8f, 0.35f, 0.95f) : GLASS_RIM), tx, ty);
+            Ui.fontSmall.setColor(active ? Color.WHITE : new Color(1f, 1f, 1f, 0.65f));
+            Ui.fontSmall.draw(batch, CHAT_TABS[i], tx + 12, ty + CHAT_TAB_H - 13);
+            tx += tw + 8;
         }
-        // ô nhập
+        // nhật ký của tab đang chọn: dòng mới nhất nằm ngay trên ô nhập
+        List<ChatLine> log = chatLogs[activeChatTab];
+        int n = Math.min((int) CHAT_LOG_LINES, log.size());
+        for (int i = 0; i < n; i++) {
+            ChatLine l = log.get(log.size() - n + i);
+            float ly = CHAT_Y + CHAT_INPUT_H + 12 + (n - 1 - i) * CHAT_LINE_H + 15;
+            if (l.system) {
+                Ui.fontSmall.setColor(1f, 0.62f, 0.35f, 1f);
+                Ui.fontSmall.draw(batch, l.text, CHAT_X + 14, ly);
+            } else {
+                Ui.fontSmall.setColor(0.65f, 0.9f, 1f, 1f);
+                Ui.fontSmall.draw(batch, l.name + ":", CHAT_X + 14, ly);
+                layout.setText(Ui.fontSmall, l.name + ":");
+                Ui.fontSmall.setColor(1f, 1f, 1f, 0.95f);
+                Ui.fontSmall.draw(batch, l.text, CHAT_X + 14 + layout.width + 6, ly);
+            }
+        }
+        if (n == 0) {
+            Ui.fontSmall.setColor(1f, 1f, 1f, 0.45f);
+            Ui.fontSmall.draw(batch, activeChatTab == TAB_WORLD
+                ? "Chưa có tin nhắn thế giới nào." : "Chưa có tin nhắn nào.",
+                CHAT_X + 14, CHAT_Y + CHAT_INPUT_H + 27);
+        }
+        // ô nhập (chừa chỗ cho nút Gửi ở cuối)
+        float inputW = CHAT_W - 16 - CHAT_SEND_W - 8;
         Color inRim = typing ? new Color(1f, 0.8f, 0.35f, 0.95f) : GLASS_RIM;
-        batch.draw(Ui.roundedRect((int) (CHAT_W - 16), (int) CHAT_INPUT_H, 10,
+        batch.draw(Ui.roundedRect((int) inputW, (int) CHAT_INPUT_H, 10,
             new Color(1f, 1f, 1f, typing ? 0.96f : 0.88f), inRim), CHAT_X + 8, CHAT_Y + 7);
         if (typing) {
             Ui.fontSmall.setColor(0.1f, 0.1f, 0.12f, 1f);
@@ -536,6 +608,14 @@ public class WorldScreen extends ScreenAdapter {
             Ui.fontSmall.setColor(0.35f, 0.38f, 0.42f, 1f);
             Ui.fontSmall.draw(batch, "Nhấn Enter hoặc chạm vào đây để chat…", CHAT_X + 20, CHAT_Y + 30);
         }
+        // nút Gửi
+        float sendX = CHAT_X + CHAT_W - 8 - CHAT_SEND_W;
+        batch.draw(Ui.roundedRect((int) CHAT_SEND_W, (int) CHAT_INPUT_H, 10,
+            new Color(0.85f, 0.45f, 0.08f, 0.95f), new Color(1f, 0.7f, 0.3f, 0.9f)),
+            sendX, CHAT_Y + 7);
+        layout.setText(Ui.fontSmall, "Gửi");
+        Ui.fontSmall.setColor(Color.WHITE);
+        Ui.fontSmall.draw(batch, "Gửi", sendX + (CHAT_SEND_W - layout.width) / 2f, CHAT_Y + 30);
     }
 
     /** Trái trên — card glass gọn: avatar trong KHUNG VUÔNG (huy hiệu Lv nằm ở góc

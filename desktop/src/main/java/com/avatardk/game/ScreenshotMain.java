@@ -70,6 +70,14 @@ public class ScreenshotMain {
                     case 3:
                         if (frame == 25) {
                             shot("shot-hub-menu.png");
+                            world.debugCloseMenu();
+                            world.debugChatTab(0); // tab Hệ thống
+                            stage++; frame = 0;
+                        }
+                        break;
+                    case 4:
+                        if (frame == 25) {
+                            shot("shot-chat-system.png");
                             Gdx.app.exit();
                         }
                         break;
