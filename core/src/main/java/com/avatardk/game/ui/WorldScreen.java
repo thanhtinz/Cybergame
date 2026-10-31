@@ -102,6 +102,37 @@ public class WorldScreen extends ScreenAdapter {
     private final AvatarAnimator playerAnim = new AvatarAnimator();
     private float playerX = 200f, playerY = 150f; // medium, gốc trên–trái
 
+    // Thông tin hiển thị trên card: mặc định là nhân vật mẫu "Sơn" (chế độ offline);
+    // khi đăng nhập thành công, applyPlayerInfo() thay bằng dữ liệu thật từ server.
+    private String displayName = AvatarDkGame.SON_NAME;
+    private String displayXu = "12.500";
+    private String displayLuong = "260";
+    private String displayLevel = "Lv.50";
+
+    private static String fmtMoney(int v) {
+        String s = String.valueOf(v);
+        StringBuilder b = new StringBuilder();
+        for (int i = 0; i < s.length(); i++) {
+            if (i > 0 && (s.length() - i) % 3 == 0) b.append('.');
+            b.append(s.charAt(i));
+        }
+        return b.toString();
+    }
+
+    /** Nạp thông tin nhân vật thật (gói LOGIN_SUCESS) vào thế giới: tên, tiền, cấp
+     *  trên card và lắp lại paper-doll theo đúng part đang mặc của tài khoản. */
+    public void applyPlayerInfo(com.avatardk.game.net.PlayerInfo p) {
+        displayName = p.username;
+        displayXu = fmtMoney(p.xu);
+        displayLuong = fmtMoney(p.luong);
+        displayLevel = "Lv." + p.levelMain;
+        java.util.List<Integer> parts = new ArrayList<>();
+        for (int id : p.wearing) parts.add(id);
+        playerDoll = game.newDoll(parts);
+        addChatLog(TAB_SYSTEM, null, "Đăng nhập thành công: " + p.username
+            + " (cấp " + p.levelMain + ")", true);
+    }
+
     private String chatBubble = null;
     private float chatTimer = 0f;
     private boolean typing = false;
@@ -249,7 +280,7 @@ public class WorldScreen extends ScreenAdapter {
     private void showBubble(String text) {
         chatBubble = text;
         chatTimer = 4f; // ChatPopup của gốc hiện vài giây rồi tự tắt (Base.update -> setOut)
-        addChatLog(TAB_NEARBY, AvatarDkGame.SON_NAME, text, false);
+        addChatLog(TAB_NEARBY, displayName, text, false);
     }
 
     /** Gửi nội dung đang gõ: vào tab Gần đây + bong bóng trên đầu (dùng chung
@@ -471,7 +502,7 @@ public class WorldScreen extends ScreenAdapter {
             drawFigure(f.doll, f.anim, f.feetX, f.feetY, f.data.name, false);
             if (f.bubble != null) drawBubble(f.doll, f.anim, f.feetX, f.feetY, f.bubble);
         }
-        drawFigure(playerDoll, playerAnim, playerFeetX, playerFeetY, AvatarDkGame.SON_NAME, true);
+        drawFigure(playerDoll, playerAnim, playerFeetX, playerFeetY, displayName, true);
         if (chatBubble != null) drawBubble(playerDoll, playerAnim, playerFeetX, playerFeetY, chatBubble);
         batch.end();
 
@@ -647,28 +678,28 @@ public class WorldScreen extends ScreenAdapter {
         // huy hiệu Lv NHỎ ở góc dưới của khung vuông (chồng nhẹ lên cạnh khung,
         // không che avatar — chữ thu 0.7 lần, đo/vẽ xong trả scale về 1)
         Ui.fontSmall.getData().setScale(0.7f);
-        layout.setText(Ui.fontSmall, "Lv.50");
+        layout.setText(Ui.fontSmall, displayLevel);
         float badgeW = layout.width + 10, badgeH = 17;
         float badgeX = avX + avS - badgeW + 5, badgeY = avY - 5;
         batch.draw(Ui.roundedRect((int) badgeW, (int) badgeH, 6,
             new Color(0.10f, 0.08f, 0.02f, 0.92f), new Color(1f, 0.8f, 0.35f, 0.9f)), badgeX, badgeY);
         Ui.fontSmall.setColor(1f, 0.85f, 0.45f, 1f);
-        Ui.fontSmall.draw(batch, "Lv.50", badgeX + 5, badgeY + 13.5f);
+        Ui.fontSmall.draw(batch, displayLevel, badgeX + 5, badgeY + 13.5f);
         Ui.fontSmall.getData().setScale(1f);
         // tên nhân vật
         Ui.font.setColor(Color.WHITE);
-        Ui.font.draw(batch, AvatarDkGame.SON_NAME, CARD_X + 106, cardY + CARD_H - 24);
+        Ui.font.draw(batch, displayName, CARD_X + 106, cardY + CARD_H - 24);
         // tiền tệ GỌN một hàng: [icon xu] số · [icon lượng] số — icon là asset gốc
         Texture iconXu = game.texture("myinfo/icon0.png");
         Texture iconLuong = game.texture("myinfo/icon1.png");
         float cy = cardY + 20;
         batch.draw(iconXu, CARD_X + 106, cy, 21, 22);
         Ui.fontSmall.setColor(Color.WHITE);
-        Ui.fontSmall.draw(batch, "12.500", CARD_X + 133, cy + 17);
-        layout.setText(Ui.fontSmall, "12.500");
+        Ui.fontSmall.draw(batch, displayXu, CARD_X + 133, cy + 17);
+        layout.setText(Ui.fontSmall, displayXu);
         float x2 = CARD_X + 133 + layout.width + 14;
         batch.draw(iconLuong, x2, cy + 2, 24, 17);
-        Ui.fontSmall.draw(batch, "260", x2 + 30, cy + 17);
+        Ui.fontSmall.draw(batch, displayLuong, x2 + 30, cy + 17);
     }
 
     /** Phải trên — nút burger glass (3 vạch vẽ bằng hình, không emoji). */

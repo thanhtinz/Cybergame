@@ -53,7 +53,20 @@ public class GameConnection {
         socket.setTcpNoDelay(true);
         rawIn = socket.getInputStream();
         rawOut = socket.getOutputStream();
-        // gói -27 rỗng, dạng rõ
+        startHandshake();
+    }
+
+    public GameConnection() {
+    }
+
+    /** Dùng cho kiểm thử: gắn sẵn hai luồng byte thay cho socket. */
+    GameConnection(java.io.InputStream in, java.io.OutputStream out) {
+        this.rawIn = in;
+        this.rawOut = out;
+    }
+
+    /** Gửi gói -27 rỗng dạng rõ và bắt đầu luồng đọc nền. */
+    public void startHandshake() throws IOException {
         writeRawFrame((byte) -27, new byte[0]);
         Thread t = new Thread(this::readLoop, "game-net-reader");
         t.setDaemon(true);

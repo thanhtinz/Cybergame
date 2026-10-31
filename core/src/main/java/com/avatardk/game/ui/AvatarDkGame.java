@@ -16,6 +16,12 @@ public class AvatarDkGame extends Game {
 
     public AvatarDataSet data;
     public PaperDollRenderer dollRenderer;
+    /** Màn thế giới dùng chung: vào thẳng khi chơi offline, hoặc sau đăng nhập. */
+    public WorldScreen world;
+    /** Kết nối tới server khi chơi online (null khi offline). */
+    public com.avatardk.game.net.GameConnection connection;
+    /** Thông tin nhân vật từ gói LOGIN_SUCESS (null khi offline). */
+    public com.avatardk.game.net.PlayerInfo player;
     private final Map<Integer, Texture> atlases = new HashMap<>();
     private final Map<String, Texture> textures = new HashMap<>();
 
@@ -33,7 +39,8 @@ public class AvatarDkGame extends Game {
             Gdx.files.internal("data/imgdata.json").readString("UTF-8"),
             Gdx.files.internal("data/npcs.json").readString("UTF-8"));
         dollRenderer = new PaperDollRenderer(this);
-        setScreen(new WorldScreen(this));
+        world = new WorldScreen(this);
+        setScreen(new LoginScreen(this));
     }
 
     public Texture atlas(int bigId) {

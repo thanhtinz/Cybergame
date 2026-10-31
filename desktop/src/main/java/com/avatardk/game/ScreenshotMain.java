@@ -21,12 +21,12 @@ public class ScreenshotMain {
         cfg.setForegroundFPS(60);
         new Lwjgl3Application(new ApplicationAdapter() {
             AvatarDkGame game;
-            int stage, frame;
+            int stage = -1, frame;
             WorldScreen world;
             @Override public void create() {
                 game = new AvatarDkGame();
                 game.create();
-                world = (WorldScreen) game.getScreen();
+                world = game.world;
                 world.debugSetPlayer(455f, 95f); // đứng gần NPC đấu giá (410,48) để nút Tương tác sáng
                 world.debugChat("Xin chào, AvatarDK đã chạy bằng Java!");
             }
@@ -38,6 +38,13 @@ public class ScreenshotMain {
                 float dt = Math.min(Gdx.graphics.getDeltaTime(), 0.05f);
                 game.getScreen().render(dt);
                 switch (stage) {
+                    case -1:
+                        if (frame == 25) {
+                            shot("shot-login.png");
+                            game.setScreen(world);
+                            stage = 0; frame = 0;
+                        }
+                        break;
                     case 0:
                         if (frame == 20) world.debugInteract(); // NPC gần nhất cất lời, bong bóng hiện ở frame chụp
                         if (frame == 29) System.out.println("DEBUG WORLD: " + world.debugInfo());
