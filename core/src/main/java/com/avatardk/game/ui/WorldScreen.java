@@ -235,7 +235,7 @@ public class WorldScreen extends ScreenAdapter {
         playerParts.clear();
         playerParts.addAll(parts);
         playerDoll = game.newDoll(parts);
-        if (playerFeel != 4) applyFeel(playerFeel);
+        if (playerFeel != 4) applyFeelLocal(playerFeel);
         addChatLog(TAB_SYSTEM, null, "Đăng nhập thành công: " + p.username
             + " (cấp " + p.levelMain + ")", true);
     }
@@ -590,8 +590,10 @@ public class WorldScreen extends ScreenAdapter {
     }
 
     /** Đổi biểu cảm: thay part zOrder 40 (mắt/mặt) của người chơi bằng part mặt
-     *  được chọn — đúng cơ chế feel của Avatar.paint gốc (mặc định 4). */
-    public void applyFeel(int feelId) {
+     *  được chọn — đúng cơ chế feel của Avatar.paint gốc (mặc định 4).
+     *  Bản LOCAL: chỉ đổi hình của mình (nạp lại sau đăng nhập, chưa vào map
+     *  thì không được gửi gói — server chưa có MapService cho mình). */
+    public void applyFeelLocal(int feelId) {
         playerFeel = feelId;
         List<Integer> parts = new ArrayList<>(playerParts);
         boolean replaced = false;
@@ -603,6 +605,34 @@ public class WorldScreen extends ScreenAdapter {
         playerParts.clear();
         playerParts.addAll(parts);
         playerDoll = game.newDoll(parts);
+    }
+
+    /** Chọn biểu cảm từ sheet: đổi hình của mình + gửi gói 57 để cả khu
+     *  thấy mặt mới (chỉ khi online và đã vào map). Mặt có partId > 155
+     *  không mã hoá được vào 1 byte kiểu gốc — giữ cục bộ, không gửi. */
+    public void applyFeel(int feelId) {
+        applyFeelLocal(feelId);
+        if (online() && joinedClientMap >= 0) {
+            try {
+                AvatarProtocol.feelPark(game.connection, feelId);
+            } catch (IOException e) {
+                // mất một gói biểu cảm thì bỏ qua, không chặn việc chọn mặt
+            }
+        }
+    }
+
+    /** Áp biểu cảm (từ gói 57) cho một người chơi khác: lắp lại doll của họ
+     *  với part mặt mới thay cho part zOrder 40 trong bộ đồ server gửi. */
+    private void applyRemoteFeel(RemoteFigure f, int partId) {
+        List<Integer> parts = new ArrayList<>();
+        for (int id : f.info.wearing) parts.add(id);
+        boolean replaced = false;
+        for (int i = 0; i < parts.size(); i++) {
+            com.avatardk.game.data.PartData pd = game.data.part(parts.get(i));
+            if (pd != null && pd.zorder == 40) { parts.set(i, partId); replaced = true; break; }
+        }
+        if (!replaced) parts.add(partId);
+        f.doll = game.newDoll(parts);
     }
 
     /** Đặt người chơi ở điểm vào map khi chuyển map qua menu: x = 200 medium,
@@ -768,6 +798,17 @@ public class WorldScreen extends ScreenAdapter {
                         f.tx = mv[1];
                         f.ty = mv[2];
                         f.info.direct = mv[3];
+                    }
+                    break;
+                }
+                case AvatarProtocol.AVATAR_FEEL: {
+                    int[] fl = ZonePlayers.parseFeel(m);
+                    // server phát cho cả khu kể cả người gửi — mặt của mình
+                    // đã áp ngay lúc chọn nên bỏ qua gói mang id của mình.
+                    // Byte < 100 là hành động (doAction của gốc) — chưa port.
+                    if (fl[0] != ownId() && fl[1] >= 100) {
+                        RemoteFigure f = remotes.get(fl[0]);
+                        if (f != null) applyRemoteFeel(f, fl[1] - 100);
                     }
                     break;
                 }

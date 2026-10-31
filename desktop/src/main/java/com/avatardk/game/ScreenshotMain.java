@@ -318,6 +318,28 @@ public class ScreenshotMain {
                     case 21:
                         if (frame == 40) {
                             shot("shot-chat-big.png");
+                            // Kiểm đồng bộ biểu cảm (gói 57): Linh (id 7) đang
+                            // ở map 10 nhận mặt 107 — so với shot-online (mặt
+                            // thường) phải thấy khác rõ ở ảnh feel-sync.
+                            world.debugToggleChatBig();
+                            world.debugSetMap(10);
+                            world.debugBusSkip();
+                            world.debugSetPlayer(455f, 95f);
+                            try {
+                                java.util.List<Integer> items = game.data.npcs.get(3).items;
+                                int[] linhParts = items.stream().mapToInt(Integer::intValue).toArray();
+                                world.debugClearRemotes();
+                                world.debugInjectNet((byte) 51, joinPayload(7, "Linh", linhParts, 395, 100));
+                                world.debugInjectNet((byte) 57, feelPayload(7, 107 + 100));
+                            } catch (java.io.IOException ioe) {
+                                throw new RuntimeException(ioe);
+                            }
+                            stage = 22; frame = 0;
+                        }
+                        break;
+                    case 22:
+                        if (frame == 25) {
+                            shot("shot-feel-sync.png");
                             System.out.println("SCREENSHOT DONE");
                             Gdx.app.exit();
                         }
@@ -339,6 +361,16 @@ public class ScreenshotMain {
                 w.writeByte(-1);
                 w.writeShort(-1);
                 w.writeShort(-1);
+                w.flush();
+                return bos.toByteArray();
+            }
+
+            /** Thân gói 57 AVATAR_FEEL server phát: int id + byte feel. */
+            private byte[] feelPayload(int id, int feelByte) throws java.io.IOException {
+                java.io.ByteArrayOutputStream bos = new java.io.ByteArrayOutputStream();
+                java.io.DataOutputStream w = new java.io.DataOutputStream(bos);
+                w.writeInt(id);
+                w.writeByte(feelByte);
                 w.flush();
                 return bos.toByteArray();
             }

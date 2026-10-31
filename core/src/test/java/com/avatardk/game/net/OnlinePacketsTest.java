@@ -151,4 +151,32 @@ class OnlinePacketsTest {
         assertEquals(7, c.id);
         assertEquals("Chào Sơn!", c.text);
     }
+
+    @Test
+    void feelPacketParsesAndEncodes() throws IOException {
+        // gói 57 server phát (MapService.doAvatarFeel): int id + byte feel
+        byte[] feel = bytes(w -> {
+            w.writeInt(7);
+            w.writeByte(107); // mặt 7 + 100 — byte y hệt client gốc
+        });
+        int[] f = ZonePlayers.parseFeel(new Msg(AvatarProtocol.AVATAR_FEEL, feel));
+        assertEquals(7, f[0]);
+        assertEquals(107, f[1]);
+
+        // mặt 40: 40 + 100 = 140 — trên dây là byte -116, đọc không dấu = 140
+        byte[] feel2 = bytes(w -> {
+            w.writeInt(8);
+            w.writeByte(140);
+        });
+        int[] f2 = ZonePlayers.parseFeel(new Msg(AvatarProtocol.AVATAR_FEEL, feel2));
+        assertEquals(8, f2[0]);
+        assertEquals(140, f2[1]);
+
+        // mã hoá phía gửi: +100, trần 155; lớn hơn thì không gửi được
+        assertEquals(104, AvatarProtocol.encodeFeelPart(4));
+        assertEquals(127, AvatarProtocol.encodeFeelPart(27));
+        assertEquals(255, AvatarProtocol.encodeFeelPart(155));
+        assertEquals(-1, AvatarProtocol.encodeFeelPart(156));
+        assertEquals(-1, AvatarProtocol.encodeFeelPart(606));
+    }
 }

@@ -52,3 +52,25 @@ Ghi chú:
   A join −1 → khu 0; B join khu 3 → đúng khu 3; gói 60 → 10 khu, khu 0
   trạng thái 1 (NPC server nằm ở khu 0), khu 3 trạng thái 2; B chuyển
   khu 5 → header gói 50 xác nhận khu 5. PASS.
+
+## Biểu cảm mặt — gói 57 (AVATAR_FEEL)
+
+- C→S gói **57**: đúng **1 byte** — chọn mặt thì gửi `partId mặt + 100`
+  (`MapScr.doSellectFeel` của gốc: setFeel(focus) ở máy mình +
+  `AvatarService.doFeel(focus + 100)`); byte < 100 là **hành động**
+  (doAction — ngồi/nhảy…, bản port chưa làm).
+- Server: `User.doAvatarFeel` đọc byte rồi `MapService.doAvatarFeel`
+  phát cho **cả zone (kể cả người gửi)** gói 57: **int userId, byte feel**.
+- Phía nhận của gốc (`MapScr.onFeel`): byte ≥ 100 → `setFeel(byte − 100)`
+  (feel là **partId của part mặt zOrder 40**, Avatar.paint lấy
+  `AvatarData.getPart(feel)` thay mặt mặc định 4); byte < 100 → doAction.
+- Giới hạn dây: 1 byte có dấu chỉ chứa nổi partId ≤ 27 theo cách đọc của
+  gốc. Bản port đọc byte **không dấu** (0–255) nên mã hoá được partId
+  ≤ 155 — byte gửi cho partId ≤ 27 y hệt gốc. Mặt có partId > 155
+  (19/45 mặt trong sheet: 305–606) **không gửi được**, chỉ hiện ở máy mình.
+- Vào sau/không ở trong zone lúc đổi mặt thì không thấy mặt mới (server
+  không lưu feel; wearing trong gói 50/51 vẫn là mặt mặc định) — đúng gốc.
+- Kiểm chứng sống (core/src/test/python/live_feel_test.py, 2026-10-31):
+  A (id 1000) gửi byte 107 → B nhận {1000, 107}; A gửi byte 140 (mặt 40)
+  → B nhận {1000, 140}. PASS. Ảnh render: shot-feel-sync.png (Linh nhận
+  mặt 107 — mắt nhắm tịt khác hẳn mặt thường trong shot-online.png).

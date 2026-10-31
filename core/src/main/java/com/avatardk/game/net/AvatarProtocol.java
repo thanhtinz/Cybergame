@@ -23,6 +23,8 @@ public final class AvatarProtocol {
     public static final byte PLAYER_LEAVE = 53;
     public static final byte PLAYER_MOVE = 54;
     public static final byte CHAT_PARK = 55;
+    /** Biểu cảm mặt trong map (Cmd.AVATAR_FEEL của server). */
+    public static final byte AVATAR_FEEL = 57;
     public static final byte CHAT_FARM = 77;
 
     /** Handler Avatar trong GET_HANDLER (CLIENT_TYPE = 8 của gốc). */
@@ -138,5 +140,26 @@ public final class AvatarProtocol {
         Msg m = new Msg(CHAT_PARK);
         m.writer().writeUTF(text);
         conn.send(m);
+    }
+
+    /** Mã hoá part mặt thành byte gói 57 theo đúng client gốc
+     *  (MapScr.doSellectFeel: gửi partId + 100; bên nhận MapScr.onFeel:
+     *  byte ≥ 100 → đổi mặt partId = byte − 100, byte < 100 → hành động).
+     *  Byte đọc KHÔNG DẤU ở phía nhận của bản port nên partId mã hoá được
+     *  tới 155 (100 + 155 = 255); partId ≤ 27 cho byte y hệt client gốc.
+     *  Mặt có partId lớn hơn không có chỗ trên dây — trả -1 (không gửi). */
+    public static int encodeFeelPart(int partId) {
+        return partId >= 0 && partId <= 155 ? partId + 100 : -1;
+    }
+
+    /** Gửi đổi biểu cảm (gói 57): 1 byte = partId mặt + 100. Trả false nếu
+     *  partId không mã hoá được — mặt đó chỉ hiện ở máy mình. */
+    public static boolean feelPark(GameConnection conn, int partId) throws IOException {
+        int enc = encodeFeelPart(partId);
+        if (enc < 0) return false;
+        Msg m = new Msg(AVATAR_FEEL);
+        m.writer().writeByte(enc);
+        conn.send(m);
+        return true;
     }
 }

@@ -107,6 +107,13 @@ public final class ZonePlayers {
         return new int[]{r.readInt(), r.readShort(), r.readShort(), r.readByte()};
     }
 
+    /** Gói 57: {id, byte feel} — byte đọc KHÔNG DẤU: ≥ 100 = đổi mặt
+     *  (partId = byte − 100), < 100 = hành động (doAction, chưa port). */
+    public static int[] parseFeel(Msg m) throws IOException {
+        DataInputStream r = m.reader();
+        return new int[]{r.readInt(), r.readUnsignedByte()};
+    }
+
     /** Gói 55/77: {id, text}. */
     public static ChatMsg parseChat(Msg m) throws IOException {
         DataInputStream r = m.reader();
