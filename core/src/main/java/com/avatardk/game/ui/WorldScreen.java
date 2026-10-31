@@ -112,7 +112,7 @@ public class WorldScreen extends ScreenAdapter {
     // xe chạy vào trạm thả người chơi mỗi khi vào map có trạm) ----
     // Thân xe đã vẽ lại cho game mình: hành khách chibi + biển "Thị Trấn Mặt
     // Trời"; biển trạm cũng là asset riêng của game (sprites/busstop.png).
-    private Texture busTex, signTex;
+    private Texture busTex;
     /** 0 = không có xe, 1 = xe đang vào trạm, 2 = đang dừng thả khách, 3 = đang rời trạm. */
     private int busPhase = 0;
     private float busX, busV, busTimer;
@@ -314,7 +314,6 @@ public class WorldScreen extends ScreenAdapter {
             }
         }
         busTex = game.texture("sprites/bus.png");
-        signTex = game.texture("sprites/busstop.png");
         // lưới bản đồ thành phố: byte 69 = điểm vùng, thứ tự quét trên->dưới, trái->phải
         byte[] grid = Gdx.files.internal("data/citymap.bin").readBytes();
         for (int i = 0; i < 26 && i * 50 < grid.length; i++)
@@ -1133,14 +1132,9 @@ public class WorldScreen extends ScreenAdapter {
             float bottom = mapBottomPx - 60f;
             for (Texture t : daydien) { batch.draw(t, dx, bottom); dx += t.getWidth(); }
         }
-        // trạm xe buýt (mái che + ghế) đặt giữa dải trạm, chân ngay trên hàng đường
-        if (mapDef.stopX >= 0) {
-            float zoneCenter = (mapDef.stopFirstTileX + mapDef.stopLastTileX + 1)
-                * 24f * AvatarDkGame.HD / 2f;
-            float signX = zoneCenter - signTex.getWidth() / 2f;
-            float signY = mapBottomPx - mapDef.stopRow * 24f * AvatarDkGame.HD + 4f;
-            batch.draw(signTex, signX, signY);
-        }
+        // Gốc KHÔNG có hình trạm xe: ô 139 chỉ là điểm dừng + popup chữ,
+        // đã rà toàn bộ Pack5 không có asset nhà chờ/biển trạm nào — giữ
+        // nguyên bản, không vẽ thêm vật thể ở điểm trạm.
         // NPC trước/người chơi sau không theo độ sâu ở đợt 1: vẽ NPC rồi người chơi
         for (NpcFigure f : npcFigures) {
             drawFigure(f.doll, f.anim, f.feetX, f.feetY, f.data.name, false);

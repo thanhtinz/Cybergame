@@ -23,11 +23,12 @@ Bản trích nằm ở `assets/data/mapgrids.json`:
   `posBusStop.x + 300` sang trái, giảm tốc, dừng; người chơi xuống xe tại
   điểm trạm rồi xe chạy tiếp rời khung hình. Đường bình thường không có xe
   (luật đã chốt: xe buýt chỉ là sự kiện đến nơi).
-- Bản port: thân xe vẽ lại (`assets/sprites/bus.png` — hành khách chibi
-  theo phong cách game + LOGO “Thị Trấn Mặt Trời” vẽ trực tiếp lên thân
-  xe — không dán biển), trạm là asset riêng vẽ dạng NHÀ CHỜ đàng hoàng
-  (mái vòm cam + vách kính + ghế gỗ, `assets/sprites/busstop.png`, đặt
-  giữa dải trạm), sự kiện dựng trong `WorldScreen`
+- Bản port: `assets/sprites/bus.png` là BẢN SAO NGUYÊN TRẠNG của
+  839 gốc. ĐÃ RÀ LẠI TOÀN BỘ PACK5 THEO YÊU CẦU USER: gốc KHÔNG có
+  asset trạm/nhà chờ nào hết — ô 139 chỉ là điểm dừng + popup chữ;
+  các bản vẽ riêng (biển trạm, nhà chờ, thân xe sơn logo) đều bị user
+  bác — giữ NGUYÊN BẢN 100%: xe 839 nguyên trạng, điểm trạm không vẽ
+  vật thể nào. Sự kiện dựng trong `WorldScreen`
   (`beginBusArrival`/`updateBus`, pha 1 vào → 2 dừng → 3 rời).
 
 ## Mã vật thể tiêu biểu trong lưới (cho đợt lớp vật thể sau)
