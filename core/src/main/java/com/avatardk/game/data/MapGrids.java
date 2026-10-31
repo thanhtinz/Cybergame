@@ -25,11 +25,22 @@ public class MapGrids {
          *  [imgId, anchorX, anchorY] đơn vị medium, neo đáy–giữa (anchor 33
          *  của gốc); id âm = SubObject trang trại. Xem docs/mapgrid-spec.md. */
         public int[][] o;
+        /** Type ô (sbyte) của LoadMap sau setMap, base64 — trích cùng đợt
+         *  vật thể (docs/mapobjects-research.md mục 7). Di chuyển tự do
+         *  của gốc (Base.detectCollision → LoadMap.isTrans) chỉ cho
+         *  đứng lên type 80 và 51; mọi type khác đều chặn. */
+        public String t;
         private byte[] cells;
+        private byte[] types;
 
         public byte[] cells() {
             if (cells == null) cells = Base64Coder.decode(g);
             return cells;
+        }
+
+        public byte[] types() {
+            if (types == null && t != null) types = Base64Coder.decode(t);
+            return types;
         }
 
         public boolean hasStop() { return s != null && s.length >= 2; }

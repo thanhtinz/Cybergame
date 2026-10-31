@@ -17,8 +17,21 @@ Pháp lý mô phỏng (đối chiếu LoadMap.cs):
 - Giả định ngoài lưới (ghi rõ trong báo cáo): Cattle.numPig > 0,
   Dog.numBer > 0, FarmScr.idFarm == avatar.IDDB (nông trại của mình),
   idTileImg == -1 (mọi addObjTree đều bị chặn nếu idTileImg != -1).
+
+Mảng TYPE (va chạm) — khóa "t", base64 sbyte row-major:
+- type[] cấp phát toàn 0 (dòng 2146) NHƯNG với mọi map trừ client 20/108,
+  đầu vòng quét có PRE-PASS gán type theo dải giá trị của map[j] (mặc định
+  88; <7/44..55/114..123 -> 80; 20..23 -> 79; 67/85 -> 92; 62 -> 56 có
+  điều kiện index), rồi setTypeMap/gán trực tiếp trong switch ghi đè theo
+  từng case. Lưu trữ map[] là KHÔNG DẤU (dòng đọc đổi 255 -> -1 trước vòng
+  lặp — bằng chứng trong mã nguồn; cast (byte) ở bản dịch ngược là giả).
+- switch(index) client 20: vòng riêng (map<32 -> 80, còn lại 88, mã 65 ->
+  10); client 108: type giữ toàn 0.
+- Giả định riêng cho type (theo yêu cầu đợt này): FarmScr.idFarm = farm
+  của NGƯỜI KHÁC, trừ map farm chính client 26 (của mình); TYPEMAP lúc
+  nạp = -1 (ảnh hưởng case 145 -> type 9). numPig/numBer > 0 như phần "o".
 """
-import json, base64, sys
+import json, base64, struct, sys
 from collections import Counter
 
 W = 24
@@ -172,12 +185,220 @@ def simulate(client_id, wmap, cells_unsigned):
             b["b37"] = 0  # case default: b37 = 0; b29 = 0
     return objs
 
+# ---------- Mảng type (va chạm) ----------
+
+# Tập type ĐI ĐƯỢC trích từ LoadMap.doJoin (dòng 1288): mọi case của
+# switch đều kết thúc ở "return true" (case 54 trả kết quả doSat — vẫn
+# tính là bước vào được, xem báo cáo), cộng type 112 và dải portal
+# -125..-1 của nhánh default. Ngoài tập này (và -2 = ngoài map) -> false.
+_DOJOIN_CASES = {
+    0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19,
+    20, 21, 23, 24, 25, 27, 28, 29, 52, 53, 54, 55, 56, 57, 58, 59, 62, 63,
+    64, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 83, 84, 85, 86, 87, 89,
+    93, 94, 95, 96, 97, 98, 100, 101, 103, 104, 107, 108, 109, 110, 111,
+}
+WALKABLE = set(range(-125, 0)) | _DOJOIN_CASES | {112}
+
+TYPEMAP_AT_LOAD = -1  # giả định: nạp từ trạng thái chưa ở map nào
+
+
+def _prepass(v, srv):
+    """Pre-pass đầu vòng quét (nhánh default của switch(index)): gán type
+    theo dải giá trị map[j]. v là mã KHÔNG DẤU (255 đã đổi thành -1)."""
+    if v == -1 or 120 <= v <= 123 or 114 <= v <= 119 or v < 7:
+        t = 80
+    elif v == 67 or v == 85:
+        t = 92
+    elif 20 <= v <= 23:
+        t = 79
+    else:
+        t = 88
+    if 44 <= v <= 55:
+        t = 80
+    if v == 62 and srv not in (100, 101, 103, 104) and srv != 62:
+        t = 56
+    if v == 111 or v == 112:
+        t = 80
+    return t
+
+
+def simulate_types(client_id, wmap, cells_unsigned):
+    """Trả list type (sbyte) row-major, đúng thứ tự gán của setMap."""
+    srv = client_id - 1
+    m = [-1 if c == 255 else c for c in cells_unsigned]
+    if client_id == 108:
+        return [0] * len(m)
+    if client_id == 20:
+        out = []
+        for v in m:
+            t = 80 if v < 32 else 88
+            if v == 65:
+                t = 10
+            out.append(t)
+        return out
+    own_farm = client_id == 26  # map farm chính = farm của mình
+    b30 = 0  # chỉ tăng ở case 69 (map casino server 108/109)
+    b38 = 0  # chỉ tăng ở case 68 (map casino server 108/109)
+    out = []
+    for v in m:
+        t = _prepass(v, srv)
+        if v == -1:
+            t = 88
+        elif v == 127:
+            t = 108
+        elif v == 128:
+            if srv != 25:
+                t = 55
+        elif v in (129, 160):
+            t = 57 if v == 129 else 62
+        elif 130 <= v <= 138:
+            t = v - 130  # setTypePark
+        elif v == 153:
+            t = 11  # setTypePark
+        elif v == 139:
+            t = -1  # gán trực tiếp: ô điểm dừng xe buýt
+        elif v == 140:
+            t = 25
+        elif v == 141:
+            t = 24
+        elif v == 142:
+            t = 80
+        elif v == 143:
+            t = 52
+        elif v == 144:
+            t = 53
+        elif v == 145:
+            if srv == 109 or (srv == 57 and TYPEMAP_AT_LOAD == 17):
+                t = 17
+            elif TYPEMAP_AT_LOAD == 23:
+                t = 23
+            else:
+                t = 9
+        elif v in (147, 161):
+            t = 58 if v == 147 else 63
+        elif v in (148, 162):
+            t = 64  # map[j] bị gán 0 TRƯỚC setTypeMap -> luôn nhánh 64
+        elif v == 149:
+            t = 28
+        elif v == 150:
+            t = 93
+        elif v == 151:
+            t = 78
+        elif v == 152:
+            t = 81
+        elif v == 155:
+            t = 84  # setTypeMap(80) rồi bị ghi đè 84 khi numPig > 0
+        elif v == 156:
+            t = 85  # setTypeMap(80) rồi bị ghi đè 85 khi numBer > 0
+        elif v == 157:
+            t = 80
+        elif v == 158:
+            t = 80
+        elif v == 159:
+            t = 89
+        elif v == 163:
+            t = 12
+        elif v == 164:
+            t = 13
+        elif v == 165:
+            t = 14
+        elif v == 166:
+            t = 15
+        elif v == 167:
+            t = 16
+        elif v in (172, 173, 174):
+            t = 88
+        elif v == 175:
+            t = 68
+        elif v == 176:
+            t = 69
+        elif v == 177:
+            t = 70
+        elif v == 178:
+            t = 109
+        elif v == 179:
+            t = 18
+        elif v == 180:
+            t = 17
+        elif v == 181:
+            if srv not in (100, 101, 103, 104):
+                t = 56
+        elif v == 182:
+            t = 80
+        elif v == 183:
+            t = 88
+        elif v == 184:
+            t = 72 + b30  # case này KHÔNG tăng b30 (chỉ case 69 mới tăng)
+        elif v == 185:
+            t = 71
+        elif v == 186:
+            t = 94
+        elif v == 187:
+            t = 95 if own_farm else 80
+        elif v == 188:
+            t = 96 if own_farm else 80
+        elif v == 189:
+            t = 97
+        elif v == 190:
+            t = 98 if own_farm else 88  # farm người khác: bị ghi đè 88
+        elif v == 191:
+            t = 23
+        elif v == 192:
+            t = 99
+        elif v == 193:
+            t = 100
+        elif v == 194:
+            t = 106
+        elif v == 195:
+            t = 102
+        elif v == 196:
+            t = 103
+        elif v == 197:
+            t = 104
+        elif v == 198:
+            t = 105
+        elif v == 199:
+            t = 101
+        elif v == 200:
+            t = 107
+        elif v == 201:
+            t = 19
+        elif v == 202:
+            t = 88
+        elif v == 203:
+            t = 110
+        elif v == 204:
+            t = 10
+        elif v in (63, 65):
+            if srv not in (100, 101, 103, 104):
+                t = 27
+        elif v == 97:
+            t = 54
+        elif v == 98:
+            t = 29
+        elif v == 102:
+            t = 92
+        elif v == 68:
+            if srv in (108, 109):  # isCasino = false khi quét (load() reset)
+                t = 72 + b38
+                b38 += 1
+        elif v == 69:
+            if srv in (108, 109):
+                t = 72 + b30
+                b30 += 1
+        # 24/25/26, 27, 28, 110 và default: switch không gán type -> pre-pass
+        out.append(t)
+    return out
+
+
 def main():
     with open(PATH, encoding="utf-8") as f:
         data = json.load(f)
     total = 0
     per_map = {}
     id_counter = Counter()
+    per_types = {}
+    blocked = {}
     for key in sorted(data, key=int):
         g = data[key]
         cells = list(base64.b64decode(g["g"]))
@@ -187,9 +408,37 @@ def main():
         total += len(objs)
         for o in objs:
             id_counter[o[0]] += 1
+        types = simulate_types(int(key), g["w"], cells)
+        per_types[int(key)] = (types, g["w"])
+        g["t"] = base64.b64encode(struct.pack("<%db" % len(types), *types)).decode()
+        blocked[int(key)] = sum(1 for t in types if t not in WALKABLE)
     with open(PATH, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, separators=(",", ":"))
-    print(f"Đã ghi 'o' cho {len(data)} map. Tổng vật thể: {total}")
+    print(f"Đã ghi 'o' + 't' cho {len(data)} map. Tổng vật thể: {total}")
+    print("Ô BỊ CHẶN (type không đi được) từng map:",
+          {k: blocked[k] for k in sorted(blocked)})
+    print(f"Tổng ô bị chặn: {sum(blocked.values())}")
+
+    def cell(k, x, y):
+        types, w = per_types[k]
+        return types[y * w + x]
+
+    def grid_str(k):
+        types, w = per_types[k]
+        return "\n".join(
+            " ".join(f"{types[y * w + x]:>4}" for x in range(w))
+            for y in range(len(types) // w))
+
+    print("\n== TYPE MAP 24 ==\n" + grid_str(24))
+    print("\n== TYPE MAP 12 ==\n" + grid_str(12))
+    assert cell(24, 2, 1) == 58, "map24 (2,1) mã 147 -> type 58"
+    assert cell(24, 24, 5) == 81, "map24 (24,5) mã 152 -> type 81"
+    assert cell(24, 24, 7) == -1, "map24 (24,7) mã 139 -> type -1 (gán trực tiếp)"
+    assert cell(24, 13, 1) == 55, "map24 (13,1) mã 128 -> type 55"
+    assert cell(12, 1, 2) == 88, "map12 (1,2) mã 24 -> type 88 (pre-pass)"
+    assert cell(12, 19, 5) == 81, "map12 (19,5) mã 152 -> type 81"
+    print("\nKIỂM CHỨNG TYPE: map24 (2,1)=58, (24,5)=81, (24,7)=-1, (13,1)=55; "
+          "map12 (1,2)=88, (19,5)=81 — ĐÚNG")
     print("Theo id:", dict(sorted(id_counter.items())))
     print("Số vật thể từng map:", {k: len(v) for k, v in sorted(per_map.items())})
     print("\n== MAP 24 ==")

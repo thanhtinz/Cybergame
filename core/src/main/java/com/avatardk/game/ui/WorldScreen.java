@@ -72,6 +72,8 @@ public class WorldScreen extends ScreenAdapter {
         /** Lưới va chạm: blocked[ty*gridW+tx] = ô chân vật thể, không đứng được. */
         public boolean[] blocked;
         public int gridW, gridH;
+        /** Type ô gốc (sbyte) sau LoadMap.setMap — lớp va chạm nền. */
+        public byte[] types;
         /** Số nền dùng khi vẽ (map không nền thì tạm dùng 0 cho lớp trời). */
         public int bgNum() { return bg == null ? 0 : bg; }
         public String label() { return name == null || name.isEmpty() ? "Map " + id : name; }
@@ -348,6 +350,7 @@ public class WorldScreen extends ScreenAdapter {
             if (g.o != null) {
                 for (int[] o : g.o) d.objects.add(o);
             }
+            d.types = g.types();
             // Va chạm vật thể: ô chứa chân (hàng đáy) của mỗi vật thể theo
             // bề ngang sprite — nhân vật không đi xuyên/lên vật thể được.
             d.gridW = g.w;
@@ -422,11 +425,17 @@ public class WorldScreen extends ScreenAdapter {
         // giữ người chơi trong biên map mới
         playerX = MathUtils.clamp(playerX, 24, worldW / AvatarDkGame.HD - 24);
         playerY = MathUtils.clamp(playerY, 36, Math.max(60, def.hmap * 24 - 30));
-        // nếu điểm hiện tại rơi vào chân vật thể (đổi map), đẩy xuống
-        // hàng đứng được gần nhất phía dưới
+        // nếu điểm hiện tại rơi vào ô cấm (đổi map), tìm ô đứng được
+        // gần nhất theo vòng tròn ô mở rộng dần
         if (!canStand(playerX, playerY)) {
-            for (int dy = 0; dy < 8 * 24 && !canStand(playerX, playerY); dy += 24) {
-                playerY = Math.min(playerY + 24, def.hmap * 24 - 12);
+            boolean found = false;
+            for (int r = 1; r <= 6 && !found; r++) {
+                for (int dx = -r; dx <= r && !found; dx++) {
+                    for (int dy = -r; dy <= r && !found; dy++) {
+                        float tx = playerX + dx * 24, ty = playerY + dy * 24;
+                        if (canStand(tx, ty)) { playerX = tx; playerY = ty; found = true; }
+                    }
+                }
             }
         }
     }
@@ -1073,14 +1082,21 @@ public class WorldScreen extends ScreenAdapter {
         // Lời NPC chỉ nổi bong bóng trên đầu, KHÔNG đưa vào khung chat (chủ dự án chốt).
     }
 
-    /** Điểm chân (medium, hệ trên–trái) có đứng được không: ngoài lưới
-     *  thì không; ô chứa chân vật thể thì không. (Type ô của gốc sẽ gộp
-     *  vào đây khi dữ liệu trích tới.) */
+    /** Điểm chân (medium, hệ trên–trái) có đứng được không. Hai lớp như
+     *  gốc: (1) type ô — di chuyển tự do chỉ đi được type 80/51
+     *  (LoadMap.isTrans trong Base.detectCollision), còn lại là nền
+     *  cấm, mặt tiền shop, hàng rào, mặt đường…; (2) ô chân vật thể
+     *  gắn map. Ngoài lưới = không đứng được. */
     public boolean canStand(float mx, float my) {
-        if (mapDef == null || mapDef.blocked == null) return true;
+        if (mapDef == null || mapDef.gridW <= 0) return true;
         int cx = (int) (mx / 24), cy = (int) (my / 24);
         if (cx < 0 || cy < 0 || cx >= mapDef.gridW || cy >= mapDef.gridH) return false;
-        return !mapDef.blocked[cy * mapDef.gridW + cx];
+        int idx = cy * mapDef.gridW + cx;
+        if (mapDef.types != null) {
+            int t = mapDef.types[idx];
+            if (t != 80 && t != 51) return false;
+        }
+        return mapDef.blocked == null || !mapDef.blocked[idx];
     }
 
     private void update(float dt) {

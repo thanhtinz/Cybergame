@@ -164,3 +164,136 @@ port đã giữ server res trong repo (`server/res`) nên không cần mạng.
   chị em dùng chung bố cục ✓.
 - Map 22: 8 ô 202 → đúng 2 vật thể id 4 (ô #0 và #4) ✓.
 - Toàn vẹn file: 40 map giữ nguyên `w`/`g`/`s`, chỉ thêm `o`.
+
+## 7. Va chạm / mảng type (khóa `"t"`)
+
+Mỗi map thêm khóa `"t"` = base64 của mảng `type[]` (sbyte, row-major, cùng
+thứ tự với lưới `"g"`), mô phỏng đúng `setMap` trong cùng script
+`tools/extract_map_objects.py` (chạy lại sinh đồng thời `"o"` và `"t"`).
+
+### 7.1 Cách mô phỏng — và hai điểm khác với giả định ban đầu
+
+1. **`type[]` không giữ 0 ở các ô "không có case".** `type` đúng là được
+   cấp phát toàn 0 (dòng 2146), nhưng với mọi map trừ client 20/108, đầu
+   vòng quét (nhánh `default` của `switch(index)`) có một **pre-pass** gán
+   type cho MỌI ô theo dải giá trị của `map[j]`, chạy TRƯỚC switch theo
+   case; `setTypeMap`/gán trực tiếp trong switch chỉ ghi đè từng case:
+   - mặc định **88**; `120..123`, `114..119`, `< 7` → **80**; `67/85` →
+     **92**; `20..23` → **79**; sau đó `44..55` → **80** (ghi đè tiếp);
+     `62` → **56** nếu server ∉ {100, 101, 103, 104} và server ≠ 62;
+     `111/112` → **80**.
+   - Bằng chứng lưu trữ không dấu: vòng đọc đổi `255 → -1` trước khi quét
+     (chỉ -1 là giá trị âm duy nhất tồn tại trong `map[]`); các nhánh so
+     `-4/-5/-3/-6` của pre-pass là mã chết dưới cách lưu trữ này.
+2. **Ô 139 có type −1, không phải 0**: case 139 gán trực tiếp
+   `type[j] = -1` (dòng ~2369) — khớp ngữ nghĩa doJoin case −1 (bước lên
+   điểm dừng = kích hoạt xe buýt/thoát map). Xem kiểm chứng ở 7.4.
+3. Các bẫy đã mô phỏng đúng từng chữ: case **148/162 luôn cho type 64**
+   (`map[j] = 0` chạy trước `setTypeMap(... (map[j] != 148) ? 64 : 59)`);
+   case **128 không gán type ở server 25** (client 26); case **184** lấy
+   `72 + b30` nhưng không tăng b30 (chỉ case 69 ở map casino server
+   108/109 mới tăng — không có trong 40 map, nên 68/69 tại các map hiện
+   có giữ nguyên type pre-pass 88); case **63** dùng chung thân với 65.
+4. Client **20** có vòng riêng thay toàn bộ vòng quét: `map < 32 → 80`,
+   còn lại **88**, riêng mã 65 → **10**. Client **108**: type toàn 0.
+5. Gán type NGOÀI vòng quét — đã kiểm tra, **không áp dụng** cho 40 map:
+   `setMapPaint` chỉ sửa `map[]` (không đụng type); `setMapItem(index)`
+   chạy cuối mỗi lần setMap nhưng chỉ gán type qua `setTypeSeat` cho đồ
+   nội thất từ dữ liệu server — `map_item.dat` phía server rỗng (2 byte)
+   nên không phát sinh; cùng hàm còn gán `type = 83` cho điểm quảng cáo
+   `ObjAd` — dữ liệu do server đẩy qua `onMapAd`, không trích được từ
+   lưới, không áp dụng; `setMapAny` (type portal −125+num) chỉ chạy cho
+   map nội thất dựng từ `imgMap`, không phải đường nạp của 40 map này;
+   `setTypePark` thực ra nằm TRONG vòng quét (case 130–138/153) và đã
+   được tính (type = mã − 130, resp. 11).
+
+Giả định (ghi rõ): `FarmScr.idFarm` = farm của **người khác**, trừ map
+farm chính **client 26** (của mình) — ảnh hưởng: ô 187/188 → type 80
+(thay vì 95/96), ô 190 → type 88 (thay vì 98; ô 190 chỉ có ở map 25 nên
+kết quả thực tế là 88); `TYPEMAP` lúc nạp = **−1** → ô 145 luôn cho
+type **9** ở cả 3 map chứa nó (101, 59, 60); `Cattle.numPig > 0`,
+`Dog.numBer > 0` như phần "o" → ô 155/156 cho type **84/85** (ghi đè 80).
+
+### 7.2 Tập type ĐI ĐƯỢC (theo `LoadMap.doJoin`, dòng 1288)
+
+`doJoin` trả `false` chỉ khi: type = −2 (ngoài map, do `getTypeMap`), rơi
+vào nhánh `default` mà không phải 112 và không thuộc dải portal, hoặc case
+54 trả về kết quả của `FishingScr.doSat`. Mọi case còn lại đều kết thúc ở
+`return true` (kể cả các case chỉ mở hành động tương tác). Tập đi được:
+
+- Dải portal **−125..−1** (nhánh default; sinh ra bởi `setMapAny` ở map
+  nội thất — 40 map thị trấn chỉ có −1 của ô 139).
+- **112** (nhánh default).
+- Các case tường minh: 0–21, 23, 24, 25, 27, 28, 29, 52, 53, 54*, 55,
+  56, 57, 58, 59, 62, 63, 64, 68, 69, 70, 71, 72–77, 78, 83, 84, 85, 86,
+  87, 89, 93, 94, 95, 96, 97, 98, 100, 101, 103, 104, 107, 108, 109, 110,
+  111. (*54: `return doSat(...)` — tính là bước vào được với dấu sao này.)
+
+Type tiêu biểu **bị chặn** (không có case trong doJoin, không phải 112,
+không âm-portal): **80** (pre-pass cho mã <7, 44..55, 114..123 — nền
+"cấm" diện rộng), **88** (mặc định pre-pass — phần lớn ô nền đặc/vật thể
+đều mang type này), **81** (chân biển trạm 835, case 152), **51** (không
+case nào của setMap gán 51 làm type — nó chỉ là tham số M của case 143;
+nếu runtime xuất hiện type 51 từ nguồn khác vẫn bị doJoin chặn), 79
+(mã 20..23), 82, 90, 91, 92 (mã 67/85/102), 99, 102, 105, 106 (cụm ô
+192/195/197/198), 22, 26, 30..50, 60, 61, 65..67, ≥113.
+
+Lưu ý phạm vi: "đi được" ở đây nghĩa là **doJoin trả true khi bước vào
+ô** (kích hoạt/đi qua theo luật chạm-đích). Va chạm khi di chuyển tự do
+(`detectCollisionMap`, `initFindPath`) dùng luật khác — ngoài phạm vi
+đợt này; đừng dùng thẳng bảng này làm mask di chuyển.
+
+### 7.3 Lưới type map 24 và map 12 (44×8, hàng 0 ở trên)
+
+Map 24 (hàng 1: 58 = Mỹ Viện 147, 64 = Gift 148, 55 = ô 128, 57 = Shop
+129, 78 = ô 151; hàng 5: 81 = dải biển 152 cột 24–28, 29 = biển KHU 98;
+hàng 7: −1 = dải điểm dừng 139 cột 24–28):
+
+```
+  88   88   88   88   88   88   88   88   88   88   88   88   88   88   88   88   88   88   88   88   88   88   88   88   88   88   88   88   88   88   88   88   88   88   88   88   88   88   88   88   88   88   88   88
+  88   88   58   58   58   58   80   80   64   64   64   64   88   55   55   55   80  104  104  104   80   80  103  103  103  103   80   80  102  102  102  102   80   88   57   57   57   57   80   80   78   78   88   88
+  80   80   80   80   80   80   80   80   80   80   80   80   80   80   80   80   80   80   80   80   80   80   80   80   80   80   80   80   80   80   80   80   80   80   80   80   80   80   80   80   80   80   80   80
+  80   80   80   80   80   80   80   80   80   80   80   80   80   80   80   80   80   80   80   80   80   80   80   80   80   80   80   80   80   80   80   80   80   80   80   80   80   80   80   80   80   80   80   80   80
+  80   80   80   80   80   80   80   80   80   80   80   80   80   80   80   80   80   80   80   80   80   80   80   80   80   80   80   80   80   80   80   80   80   80   80   80   80   80   80   80   80   80   80   80   80
+  80   88   88   80   79   79   80   80   29   80   80   80   80   88   80   80   80   80   88   80   80   80   80   80   81   81   81   81   81   80   80   80   80   80   80   29   80   79   79   80   79   79   80   80
+  80   80   80   80   80   80   80   80   80   80   80   80   80   80   80   80   80   80   80   80   80   80   80   80   80   80   80   80   80   80   80   80   80   80   80   80   80   80   80   80   80   80   80   80   80
+  88   88   88   88   88   88   88   88   88   88   88   88   88   88   88   88   88   88   88   88   88   88   88   88   -1   -1   -1   -1   -1   88   88   88   88   88   88   88   88   88   88   88   88   88   88   88   88
+```
+
+Map 12 (hàng 0: 0 = ô 130 park, 10 = ô 204; hàng 5: 81 cột 19–23;
+hàng 7: −1 cột 19–23):
+
+```
+  88   88   88   88   88   88   88   88   88   88   88   88    0    0    0    0   88   88   88   88   88   88   88   88   88   88   88   88   10   10   88   88   88   88   88   88   88   88   88   88   88   88   88   88
+  88   80   80   80   79   79   80   80   29   80   88   80   80   80   80   80   80   88   80   80   79   79   80   80   80   80   88   80   80   80   80   88   80   80   80   80   79   79   80   79   79   80   80   88
+  88   88   80   80   80   80   80   80   80   88   80   80   80   80   80   80   80   80   88   80   80   80   80   80   80   88   80   80   80   80   80   80   88   80   80   80   80   80   80   80   80   80   88   88
+  80   80   80   80   80   80   80   80   80   80   80   80   80   80   80   80   80   80   80   80   80   80   80   80   80   80   80   80   80   80   80   80   80   80   80   80   80   80   80   80   80   80   80   80
+  80   80   80   80   80   80   80   80   80   80   80   80   80   80   80   80   80   80   80   80   80   80   80   80   80   80   80   80   80   80   80   80   80   80   80   80   80   80   80   80   80   80   80   80   80
+  80   80   80   80   80   80   80   80   80   80   80   80   80   80   80   80   80   80   80   81   81   81   81   81   80   80   80   80   80   80   80   80   80   80   80   80   80   80   80   80   80   80   80   80
+  80   88   80   80   80   80   80   80   88   80   80   80   80   80   80   80   80   80   80   80   80   80   80   80   80   80   88   88   80   80   80   80   80   88   88   80   80   80   80   80   80   29   88   80
+  88   88   88   88   88   88   88   88   88   88   88   88   88   88   88   88   88   88   88   -1   -1   -1   -1   -1   88   88   88   88   88   88   88   88   88   88   88   88   88   88   88   88   88   88   88   88
+```
+
+### 7.4 Kiểm chứng tay (script assert trực tiếp các ô này)
+
+| Map | Ô (x, y) | Mã | Type | Theo code |
+|---|---|---|---|---|
+| 24 | (2, 1) | 147 | **58** | case 147: `(map[j] != 147) ? 63 : 58` ✓ |
+| 24 | (24, 5) | 152 | **81** | case 152 `setTypeMap(j, 81, ...)` ✓ |
+| 24 | (24, 7) | 139 | **−1** | case 139 gán trực tiếp `type[j] = -1` — khác kỳ vọng "0" ban đầu, giải thích ở 7.1.2 ✓ |
+| 24 | (13, 1) | 128 | **55** | case 128: server 23 ≠ 25 → `setTypeMap(j, 55, 20)` ✓ |
+| 12 | (1, 2) | 24 | **88** | case 24/25/26 không gán type → giữ pre-pass: 24 không thuộc dải nào → 88 ✓ |
+| 12 | (19, 5) | 152 | **81** | case 152 ✓ |
+
+### 7.5 Thống kê ô bị chặn (type ∉ tập đi được ở 7.2)
+
+Tổng **7.454 ô bị chặn** trên 40 map. Từng map:
+1: 195, 2: 107, 3: 121, 4: 146, 5: 217, 6: 154, 7: 161, 8: 168, 9: 166,
+10: 312, 11: 252, 12: 339, 13: 323, 14: 148, 15: 157, 16: 264, 17: 206,
+18: 147, 19: 179, 20: 361, 21: 246, 22: 337, 23: 355, 24: 321, 25: 327,
+26: 172, 58: 126, 59: 125, 60: 127, 61: 35, 62: 35, 63: 127, 64: 125,
+65: 126, 66: 35, 101: 216, 102: 151, 104: 194, 105: 151, 108: 0.
+Map 108 = 0 vì type toàn 0 và 0 thuộc tập đi được (doJoin case 0); map 20
+cao (361/396 ô) vì vòng riêng của nó chỉ sinh 80/88/10 mà 80 và 88 đều bị
+chặn. Toàn vẹn file: 40 map giữ nguyên `w`/`g`/`s`/`o`, chỉ thêm `t`
+(độ dài mảng type = độ dài lưới ở mọi map — script đã kiểm).
