@@ -24,8 +24,10 @@ Bản trích nằm ở `assets/data/mapgrids.json`:
   điểm trạm rồi xe chạy tiếp rời khung hình. Đường bình thường không có xe
   (luật đã chốt: xe buýt chỉ là sự kiện đến nơi).
 - Bản port: thân xe vẽ lại (`assets/sprites/bus.png` — hành khách chibi
-  theo phong cách game + biển “Thị Trấn Mặt Trời”), biển trạm là asset
-  riêng (`assets/sprites/busstop.png`), sự kiện dựng trong `WorldScreen`
+  theo phong cách game + LOGO “Thị Trấn Mặt Trời” vẽ trực tiếp lên thân
+  xe — không dán biển), trạm là asset riêng vẽ dạng NHÀ CHỜ đàng hoàng
+  (mái vòm cam + vách kính + ghế gỗ, `assets/sprites/busstop.png`, đặt
+  giữa dải trạm), sự kiện dựng trong `WorldScreen`
   (`beginBusArrival`/`updateBus`, pha 1 vào → 2 dừng → 3 rời).
 
 ## Mã vật thể tiêu biểu trong lưới (cho đợt lớp vật thể sau)

@@ -35,8 +35,10 @@ public class MapGrids {
         public int stopX() { return s[s.length - 2] * 24 + 12; }
         public int stopY() { return s[s.length - 1] * 24 - 12; }
         public int stopRow() { return s[s.length - 1]; }
-        /** Ô 139 đầu tiên của dải trạm (đặt biển trạm ở mép trái dải). */
+        /** Ô 139 đầu tiên của dải trạm. */
         public int stopFirstTileX() { return s[0]; }
+        /** Ô 139 cuối cùng của dải trạm (trạm che đặt giữa dải). */
+        public int stopLastTileX() { return s[s.length - 2]; }
     }
 
     private final Map<String, Grid> byId;

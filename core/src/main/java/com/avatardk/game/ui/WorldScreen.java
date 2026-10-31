@@ -66,7 +66,7 @@ public class WorldScreen extends ScreenAdapter {
         public List<MapNpc> npcs = new ArrayList<>();
         /** Trạm xe buýt từ lưới ô gốc (ô 139, MapGrids): stopX/stopY = điểm
          *  trạm (medium, gốc trên–trái); stopX < 0 = map không có trạm. */
-        public int stopX = -1, stopY, stopRow, stopFirstTileX;
+        public int stopX = -1, stopY, stopRow, stopFirstTileX, stopLastTileX;
         /** Số nền dùng khi vẽ (map không nền thì tạm dùng 0 cho lớp trời). */
         public int bgNum() { return bg == null ? 0 : bg; }
         public String label() { return name == null || name.isEmpty() ? "Map " + id : name; }
@@ -310,6 +310,7 @@ public class WorldScreen extends ScreenAdapter {
                 d.stopY = g.stopY();
                 d.stopRow = g.stopRow();
                 d.stopFirstTileX = g.stopFirstTileX();
+                d.stopLastTileX = g.stopLastTileX();
             }
         }
         busTex = game.texture("sprites/bus.png");
@@ -1132,9 +1133,11 @@ public class WorldScreen extends ScreenAdapter {
             float bottom = mapBottomPx - 60f;
             for (Texture t : daydien) { batch.draw(t, dx, bottom); dx += t.getWidth(); }
         }
-        // biển trạm xe buýt ở mép trái dải trạm, chân biển ngay trên hàng đường
+        // trạm xe buýt (mái che + ghế) đặt giữa dải trạm, chân ngay trên hàng đường
         if (mapDef.stopX >= 0) {
-            float signX = mapDef.stopFirstTileX * 24f * AvatarDkGame.HD - 16f;
+            float zoneCenter = (mapDef.stopFirstTileX + mapDef.stopLastTileX + 1)
+                * 24f * AvatarDkGame.HD / 2f;
+            float signX = zoneCenter - signTex.getWidth() / 2f;
             float signY = mapBottomPx - mapDef.stopRow * 24f * AvatarDkGame.HD + 4f;
             batch.draw(signTex, signX, signY);
         }
