@@ -331,7 +331,7 @@ public class WorldScreen extends ScreenAdapter {
         n.bubble = (n.data.chat != null && !n.data.chat.isEmpty())
             ? n.data.chat.get(0) : "Xin chào, ta là " + n.data.name + ".";
         n.bubbleTimer = 4f;
-        addChatLog(n.data.name, n.bubble, true);
+        // Lời NPC chỉ nổi bong bóng trên đầu, KHÔNG đưa vào khung chat (chủ dự án chốt).
     }
 
     private void update(float dt) {

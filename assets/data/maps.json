@@ -1,0 +1,575 @@
+[
+ {
+  "id": 1,
+  "name": "Khu Mặt trời",
+  "bg": 1,
+  "strips": 3,
+  "daydien": false,
+  "npcs": [
+   {
+    "id": 858,
+    "name": "Bạch.vô.thường",
+    "x": 60,
+    "y": 65
+   },
+   {
+    "id": 859,
+    "name": "Hắc.vô.thường",
+    "x": 188,
+    "y": 157
+   }
+  ]
+ },
+ {
+  "id": 2,
+  "name": "Khu quay số cũ",
+  "bg": 1,
+  "strips": 1,
+  "daydien": false,
+  "npcs": []
+ },
+ {
+  "id": 3,
+  "name": "Khu đấu giá cũ",
+  "bg": 1,
+  "strips": 1,
+  "daydien": false,
+  "npcs": [
+   {
+    "id": 165,
+    "name": "saitama",
+    "x": 40,
+    "y": 77
+   }
+  ]
+ },
+ {
+  "id": 4,
+  "name": "Khu ăn xin trái",
+  "bg": 1,
+  "strips": 1,
+  "daydien": false,
+  "npcs": [
+   {
+    "id": 741,
+    "name": "an.xin",
+    "x": 168,
+    "y": 157
+   }
+  ]
+ },
+ {
+  "id": 5,
+  "name": "Khu cưới , clan",
+  "bg": 1,
+  "strips": 3,
+  "daydien": false,
+  "npcs": []
+ },
+ {
+  "id": 6,
+  "name": "Khu ăn xin phải",
+  "bg": 1,
+  "strips": 1,
+  "daydien": false,
+  "npcs": []
+ },
+ {
+  "id": 7,
+  "name": "Khu cô giáo",
+  "bg": 1,
+  "strips": 1,
+  "daydien": false,
+  "npcs": [
+   {
+    "id": 645,
+    "name": "co.giao.tieng.anh",
+    "x": 150,
+    "y": 100
+   },
+   {
+    "id": 646,
+    "name": "co.giao.tieng.viet",
+    "x": 250,
+    "y": 50
+   }
+  ]
+ },
+ {
+  "id": 8,
+  "name": "Khu dưới cô giáo",
+  "bg": 1,
+  "strips": 3,
+  "daydien": false,
+  "npcs": []
+ },
+ {
+  "id": 9,
+  "name": "",
+  "bg": 1,
+  "strips": 3,
+  "daydien": false,
+  "npcs": []
+ },
+ {
+  "id": 10,
+  "name": "Khu giải trí",
+  "bg": 0,
+  "strips": 3,
+  "daydien": true,
+  "npcs": [
+   {
+    "id": 185,
+    "name": "quay số",
+    "x": 514,
+    "y": 48
+   },
+   {
+    "id": 186,
+    "name": "đấu giá",
+    "x": 410,
+    "y": 48
+   }
+  ]
+ },
+ {
+  "id": 11,
+  "name": "Khu lễ đường",
+  "bg": 1,
+  "strips": 1,
+  "daydien": false,
+  "npcs": [
+   {
+    "id": 525,
+    "name": "Chủ Hôn",
+    "x": 278,
+    "y": 68
+   }
+  ]
+ },
+ {
+  "id": 12,
+  "name": "Bến xe công viên",
+  "bg": 1,
+  "strips": 3,
+  "daydien": false,
+  "npcs": [
+   {
+    "id": 465,
+    "name": "ve.so",
+    "x": 638,
+    "y": 68
+   },
+   {
+    "id": 860,
+    "name": "Tien.chi.mu.Lovanga",
+    "x": 250,
+    "y": 64
+   },
+   {
+    "id": 864,
+    "name": "Than.Tai.Xiu",
+    "x": 80,
+    "y": 50
+   }
+  ]
+ },
+ {
+  "id": 13,
+  "name": "",
+  "bg": 3,
+  "strips": 0,
+  "daydien": false,
+  "npcs": []
+ },
+ {
+  "id": 14,
+  "name": "Khu sinh thái",
+  "bg": 3,
+  "strips": 1,
+  "daydien": false,
+  "npcs": [
+   {
+    "id": 430,
+    "name": "tho.cau",
+    "x": 326,
+    "y": 64
+   }
+  ]
+ },
+ {
+  "id": 15,
+  "name": "Khu câu cá rô",
+  "bg": 3,
+  "strips": 1,
+  "daydien": false,
+  "npcs": [
+   {
+    "id": 335,
+    "name": "phi.hanh.gia",
+    "x": 40,
+    "y": 49
+   }
+  ]
+ },
+ {
+  "id": 16,
+  "name": "Khu câu cá lóc",
+  "bg": 3,
+  "strips": 3,
+  "daydien": false,
+  "npcs": []
+ },
+ {
+  "id": 17,
+  "name": "Khu câu cá mập",
+  "bg": 3,
+  "strips": 3,
+  "daydien": false,
+  "npcs": []
+ },
+ {
+  "id": 18,
+  "name": "Khu ngoại ô",
+  "bg": 2,
+  "strips": 3,
+  "daydien": true,
+  "npcs": [
+   {
+    "id": 862,
+    "name": "Pay.To.Win",
+    "x": 173,
+    "y": 48
+   },
+   {
+    "id": 863,
+    "name": "Chay.To.Win",
+    "x": 54,
+    "y": 48
+   }
+  ]
+ },
+ {
+  "id": 19,
+  "name": "Trong nhà tù",
+  "bg": null,
+  "strips": 1,
+  "daydien": false,
+  "npcs": [
+   {
+    "id": 315,
+    "name": "giam.thi",
+    "x": 274,
+    "y": 101
+   }
+  ]
+ },
+ {
+  "id": 20,
+  "name": "Trong lễ đường",
+  "bg": null,
+  "strips": 0,
+  "daydien": false,
+  "npcs": []
+ },
+ {
+  "id": 21,
+  "name": "",
+  "bg": null,
+  "strips": 0,
+  "daydien": false,
+  "npcs": []
+ },
+ {
+  "id": 22,
+  "name": "",
+  "bg": 0,
+  "strips": 3,
+  "daydien": false,
+  "npcs": [
+   {
+    "id": 857,
+    "name": "chu.dau.tu",
+    "x": 598,
+    "y": 24
+   }
+  ]
+ },
+ {
+  "id": 23,
+  "name": "",
+  "bg": 0,
+  "strips": 0,
+  "daydien": false,
+  "npcs": []
+ },
+ {
+  "id": 24,
+  "name": "Khu mua sắm",
+  "bg": 0,
+  "strips": 3,
+  "daydien": false,
+  "npcs": [
+   {
+    "id": 95,
+    "name": "tho.kim.hoan",
+    "x": 686,
+    "y": 52
+   }
+  ]
+ },
+ {
+  "id": 25,
+  "name": "Nông trại",
+  "bg": 2,
+  "strips": 6,
+  "daydien": false,
+  "npcs": []
+ },
+ {
+  "id": 26,
+  "name": "",
+  "bg": 2,
+  "strips": 3,
+  "daydien": false,
+  "npcs": [
+   {
+    "id": 850,
+    "name": "lai.buon",
+    "x": 70,
+    "y": 45
+   }
+  ]
+ },
+ {
+  "id": 28,
+  "name": "",
+  "bg": null,
+  "strips": 0,
+  "daydien": false,
+  "npcs": [
+   {
+    "id": 761,
+    "name": "cua.hang",
+    "x": 334,
+    "y": 72
+   },
+   {
+    "id": 861,
+    "name": "phu.thuy.bong.toi",
+    "x": 438,
+    "y": 72
+   }
+  ]
+ },
+ {
+  "id": 31,
+  "name": "",
+  "bg": null,
+  "strips": 0,
+  "daydien": false,
+  "npcs": [
+   {
+    "id": 50,
+    "name": "tien.ca",
+    "x": 180,
+    "y": 81
+   }
+  ]
+ },
+ {
+  "id": 34,
+  "name": "",
+  "bg": null,
+  "strips": 0,
+  "daydien": false,
+  "npcs": [
+   {
+    "id": 760,
+    "name": "pharaoh",
+    "x": 240,
+    "y": 49
+   }
+  ]
+ },
+ {
+  "id": 56,
+  "name": "",
+  "bg": null,
+  "strips": 0,
+  "daydien": false,
+  "npcs": [
+   {
+    "id": 535,
+    "name": "zombie",
+    "x": 402,
+    "y": 40
+   }
+  ]
+ },
+ {
+  "id": 57,
+  "name": "",
+  "bg": null,
+  "strips": 0,
+  "daydien": false,
+  "npcs": [
+   {
+    "id": 425,
+    "name": "phu.thuy.bong.toi",
+    "x": 244,
+    "y": 197
+   }
+  ]
+ },
+ {
+  "id": 58,
+  "name": "",
+  "bg": null,
+  "strips": 1,
+  "daydien": false,
+  "npcs": [
+   {
+    "id": 590,
+    "name": "pretty.witch",
+    "x": 200,
+    "y": 201
+   }
+  ]
+ },
+ {
+  "id": 59,
+  "name": "",
+  "bg": null,
+  "strips": 1,
+  "daydien": false,
+  "npcs": [
+   {
+    "id": 540,
+    "name": "bac.thay.phu.thuy",
+    "x": 252,
+    "y": 221
+   }
+  ]
+ },
+ {
+  "id": 60,
+  "name": "",
+  "bg": null,
+  "strips": 1,
+  "daydien": false,
+  "npcs": []
+ },
+ {
+  "id": 61,
+  "name": "",
+  "bg": null,
+  "strips": 0,
+  "daydien": false,
+  "npcs": []
+ },
+ {
+  "id": 62,
+  "name": "",
+  "bg": null,
+  "strips": 0,
+  "daydien": false,
+  "npcs": []
+ },
+ {
+  "id": 63,
+  "name": "",
+  "bg": null,
+  "strips": 0,
+  "daydien": false,
+  "npcs": []
+ },
+ {
+  "id": 64,
+  "name": "",
+  "bg": null,
+  "strips": 0,
+  "daydien": false,
+  "npcs": []
+ },
+ {
+  "id": 65,
+  "name": "",
+  "bg": null,
+  "strips": 1,
+  "daydien": false,
+  "npcs": []
+ },
+ {
+  "id": 66,
+  "name": "",
+  "bg": null,
+  "strips": 0,
+  "daydien": false,
+  "npcs": []
+ },
+ {
+  "id": 67,
+  "name": "",
+  "bg": null,
+  "strips": 0,
+  "daydien": false,
+  "npcs": []
+ },
+ {
+  "id": 68,
+  "name": "",
+  "bg": null,
+  "strips": 0,
+  "daydien": false,
+  "npcs": []
+ },
+ {
+  "id": 101,
+  "name": "",
+  "bg": null,
+  "strips": 1,
+  "daydien": false,
+  "npcs": []
+ },
+ {
+  "id": 102,
+  "name": "",
+  "bg": null,
+  "strips": 1,
+  "daydien": false,
+  "npcs": []
+ },
+ {
+  "id": 104,
+  "name": "",
+  "bg": null,
+  "strips": 1,
+  "daydien": false,
+  "npcs": []
+ },
+ {
+  "id": 105,
+  "name": "",
+  "bg": null,
+  "strips": 1,
+  "daydien": false,
+  "npcs": []
+ },
+ {
+  "id": 106,
+  "name": "",
+  "bg": null,
+  "strips": 0,
+  "daydien": false,
+  "npcs": []
+ },
+ {
+  "id": 108,
+  "name": "Trường đua thú",
+  "bg": 0,
+  "strips": 6,
+  "daydien": false,
+  "npcs": []
+ }
+]
