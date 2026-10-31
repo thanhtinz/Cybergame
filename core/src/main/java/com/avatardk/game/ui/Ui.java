@@ -46,6 +46,10 @@ public final class Ui {
         Texture cached = rectCache.get(key);
         if (cached != null) return cached;
         Pixmap pm = new Pixmap(w, h, Pixmap.Format.RGBA8888);
+        // Blending.None: hai lượt vẽ rim/fill phải THAY pixel, không cộng alpha —
+        // SourceOver làm 4 hình tròn ở góc bị cộng sáng thành "chấm tròn" trên kính
+        // (chủ dự án yêu cầu bỏ hẳn các chấm này).
+        pm.setBlending(Pixmap.Blending.None);
         if (rim != null) {
             pm.setColor(rim);
             fillRounded(pm, 0, 0, w, h, r);

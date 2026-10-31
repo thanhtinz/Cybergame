@@ -971,8 +971,7 @@ public class WorldScreen extends ScreenAdapter {
             int col = i % 3, row = i / 3;
             float cx = px + 10 + col * MENU_CELL;
             float cy = py + ph - MENU_HEADER - (row + 1) * MENU_CELL_H + 6;
-            batch.draw(Ui.roundedRect((int) (MENU_CELL - 8), (int) (MENU_CELL_H - 8), 12,
-                new Color(1f, 1f, 1f, 0.10f), GLASS_RIM), cx + 4, cy);
+            // Chỉ asset + nhãn, KHÔNG đè ô kính lên icon nữa (yêu cầu của chủ dự án)
             Texture icon = game.texture("iconmenu/" + MENU_ITEMS[i][0] + ".png");
             float is = 46f;
             batch.draw(icon, cx + MENU_CELL / 2f - is / 2f, cy + MENU_CELL_H - 8 - is - 8, is, is);
