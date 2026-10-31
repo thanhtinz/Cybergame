@@ -1,9 +1,0 @@
-.gradle/
-build/
-*/build/
-local.properties
-*.log
-screenshots/
-neolang-save.txt
-synth/
-.gradle-user/
