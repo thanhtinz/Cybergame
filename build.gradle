@@ -1,34 +1,30 @@
+buildscript {
+    repositories {
+        if (rootProject.file('local-maven').isDirectory()) {
+            maven { url rootProject.file('local-maven') }
+        }
+        google()
+        mavenCentral()
+        gradlePluginPortal()
+    }
+    dependencies {
+        classpath 'com.android.tools.build:gradle:8.5.2'
+    }
+}
 allprojects {
-    version = '1.0.0'
+    version = '0.1.0'
+    tasks.withType(JavaCompile).configureEach { options.encoding = 'UTF-8' }
     ext {
-        appName = 'NeoLang'
-        gdxVersion = '1.12.1'
+        gdxVersion = '1.14.0'
+        appName = 'AvatarDK'
     }
     repositories {
+        // Kho Maven cuc bo offline (copy tu du an TFT cua chu du an) — uu tien so 1
+        if (rootProject.file('local-maven').isDirectory()) {
+            maven { url rootProject.file('local-maven') }
+        }
         mavenCentral()
         google()
         maven { url 'https://oss.sonatype.org/content/repositories/snapshots/' }
     }
 }
-
-project(':core') {
-    apply plugin: 'java-library'
-    dependencies {
-        api "com.badlogicgames.gdx:gdx:$gdxVersion"
-        api "com.badlogicgames.gdx:gdx-freetype:$gdxVersion"
-    }
-}
-
-project(':desktop') {
-    apply plugin: 'java'
-    apply plugin: 'application'
-    dependencies {
-        implementation project(':core')
-        implementation "com.badlogicgames.gdx:gdx-backend-lwjgl3:$gdxVersion"
-        implementation "com.badlogicgames.gdx:gdx-platform:$gdxVersion:natives-desktop"
-        implementation "com.badlogicgames.gdx:gdx-freetype-platform:$gdxVersion:natives-desktop"
-    }
-}
-
-// The android module is fully configured in android/build.gradle
-// (its buildscript block declares the AGP classpath).

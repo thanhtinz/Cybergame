@@ -1,0 +1,14 @@
+// Module iOS (MobiVM/RoboVM) — STUB: mã nguồn launcher đã sẵn và platform-clean,
+// việc đóng gói IPA cần máy Mac + Xcode + tài khoản Apple Developer nên chưa bật
+// dependency RoboVM trong bản dựng sandbox này. Khi có infra: bỏ comment 2 dòng
+// dependencies bên dưới và chạy :ios:launchIOSDevice / createIPA.
+plugins { id 'java' }
+java { sourceCompatibility = JavaVersion.VERSION_17; targetCompatibility = JavaVersion.VERSION_17 }
+dependencies {
+    implementation project(':core')
+    // implementation "com.mobidevelop.robovm:robovm-rt:2.3.20"
+    // implementation "com.mobidevelop.robovm:robovm-cocoatouch:2.3.20"
+    // implementation "com.badlogicgames.gdx:gdx-backend-robovm:$gdxVersion"
+    // implementation "com.badlogicgames.gdx:gdx-platform:$gdxVersion:natives-ios"
+    // implementation "com.badlogicgames.gdx:gdx-freetype-platform:$gdxVersion:natives-ios"
+}

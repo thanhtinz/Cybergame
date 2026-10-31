@@ -3,8 +3,11 @@
 
 Chay 1 lan sau khi clone:  python3 tools/restore_assets.py
 Moi file assets-src/<duong-dan-tuong-doi>.b64 se duoc giai ma ve dung vi tri
-trong cay thu muc du an (vi du assets-src/core/src/main/resources/art/keyart.jpg.b64
--> core/src/main/resources/art/keyart.jpg).
+trong cay thu muc du an (vi du assets-src/assets/big/3.png.b64 -> assets/big/3.png,
+assets-src/gradle/wrapper/gradle-wrapper.jar.b64 -> gradle/wrapper/gradle-wrapper.jar).
+
+Ban local goc (may cua chu du an) da co san cac file nhi phan that trong assets/
+nen KHONG can chay script nay — chi ban clone tu GitHub moi can.
 """
 import base64
 import pathlib
