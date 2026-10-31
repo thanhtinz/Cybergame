@@ -86,6 +86,7 @@ public class ScreenshotMain {
                         if (frame == 25) {
                             shot("shot-server-panel.png");
                             game.setScreen(world);
+                            world.debugBusSkip(); // sân khấu tĩnh: không chạy sự kiện xe buýt
                             stage = 0; frame = 0;
                         }
                         break;
@@ -235,6 +236,26 @@ public class ScreenshotMain {
                             if (world.remoteCount() != 2)
                                 throw new IllegalStateException("Kỳ vọng 2 người chơi khác, thấy " + world.remoteCount());
                             shot("shot-online.png");
+                            // Sân khấu xe buýt: map 24 có trạm (ô 139), xe đang vào
+                            world.debugSetMap(24);
+                            world.debugCloseFeel();
+                            world.debugClearRemotes();
+                            world.debugBusArrive();
+                            stage = 14; frame = 0;
+                        }
+                        break;
+                    case 14:
+                        if (frame == 25) {
+                            shot("shot-bus-arrive.png");
+                            world.debugBusDwell();
+                            // lùi người chơi lên vỉa hè trên để không bị khung chat che trong ảnh kiểm
+                            world.debugSetPlayer(684f, 110f);
+                            stage = 15; frame = 0;
+                        }
+                        break;
+                    case 15:
+                        if (frame == 25) {
+                            shot("shot-bus-stop.png");
                             Gdx.app.exit();
                         }
                         break;

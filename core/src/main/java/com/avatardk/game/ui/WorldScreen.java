@@ -64,6 +64,9 @@ public class WorldScreen extends ScreenAdapter {
         public Integer bg;
         public boolean daydien;
         public List<MapNpc> npcs = new ArrayList<>();
+        /** Trạm xe buýt từ lưới ô gốc (ô 139, MapGrids): stopX/stopY = điểm
+         *  trạm (medium, gốc trên–trái); stopX < 0 = map không có trạm. */
+        public int stopX = -1, stopY, stopRow, stopFirstTileX;
         /** Số nền dùng khi vẽ (map không nền thì tạm dùng 0 cho lớp trời). */
         public int bgNum() { return bg == null ? 0 : bg; }
         public String label() { return name == null || name.isEmpty() ? "Map " + id : name; }
@@ -104,6 +107,18 @@ public class WorldScreen extends ScreenAdapter {
     private final GlyphLayout layout = new GlyphLayout();
 
     private MapDef mapDef;
+
+    // ---- Xe buýt + trạm xe (lớp lưới ô của gốc: ô 139 = trạm; Bus.cs gốc cho
+    // xe chạy vào trạm thả người chơi mỗi khi vào map có trạm) ----
+    // Thân xe đã vẽ lại cho game mình: hành khách chibi + biển "Thị Trấn Mặt
+    // Trời"; biển trạm cũng là asset riêng của game (sprites/busstop.png).
+    private Texture busTex, signTex;
+    /** 0 = không có xe, 1 = xe đang vào trạm, 2 = đang dừng thả khách, 3 = đang rời trạm. */
+    private int busPhase = 0;
+    private float busX, busV, busTimer;
+    /** Tâm xe khi dừng: cửa trước (đầu xe bên trái) khớp điểm trạm. */
+    private float busTargetX() { return mapDef.stopX + 55f; }
+
     private final List<Texture> strips = new ArrayList<>();
     private final List<Float> stripLefts = new ArrayList<>();
     private final List<Texture> daydien = new ArrayList<>();
@@ -285,6 +300,20 @@ public class WorldScreen extends ScreenAdapter {
             Gdx.files.internal("data/maps.json").readString("UTF-8"));
         for (MapDef d : all) if (d.strips > 0) maps.add(d);
         maps.sort((a, b) -> Integer.compare(a.id, b.id));
+        // trạm xe buýt từ lưới ô gốc (ô 139) — docs/mapgrid-spec.md
+        com.avatardk.game.data.MapGrids grids = new com.avatardk.game.data.MapGrids(
+            Gdx.files.internal("data/mapgrids.json").readString("UTF-8"));
+        for (MapDef d : maps) {
+            com.avatardk.game.data.MapGrids.Grid g = grids.grid(d.id);
+            if (g != null && g.hasStop()) {
+                d.stopX = g.stopX();
+                d.stopY = g.stopY();
+                d.stopRow = g.stopRow();
+                d.stopFirstTileX = g.stopFirstTileX();
+            }
+        }
+        busTex = game.texture("sprites/bus.png");
+        signTex = game.texture("sprites/busstop.png");
         // lưới bản đồ thành phố: byte 69 = điểm vùng, thứ tự quét trên->dưới, trái->phải
         byte[] grid = Gdx.files.internal("data/citymap.bin").readBytes();
         for (int i = 0; i < 26 && i * 50 < grid.length; i++)
@@ -305,6 +334,7 @@ public class WorldScreen extends ScreenAdapter {
             }
         }
         loadMap(findMap(10));
+        beginBusArrival();
     }
 
     public MapDef findMap(int id) {
@@ -418,6 +448,27 @@ public class WorldScreen extends ScreenAdapter {
     public void debugSetMap(int mapId) {
         loadMap(findMap(mapId));
         spawnPlayer();
+        debugBusSkip();
+    }
+
+    /** Hủy sự kiện xe buýt (giữ nguyên vị trí spawn) — cho ảnh chụp/tour tĩnh. */
+    public void debugBusSkip() { busPhase = 0; }
+
+    /** Đặt xe đang vào trạm ở cự ly vừa khung hình (kiểm chứng hình). */
+    public void debugBusArrive() {
+        if (mapDef.stopX < 0) return;
+        busPhase = 1;
+        busX = mapDef.stopX + 118f;
+    }
+
+    /** Đặt xe đang dừng ở trạm, người chơi đã xuống tại điểm trạm. */
+    public void debugBusDwell() {
+        if (mapDef.stopX < 0) return;
+        busPhase = 2;
+        busTimer = 5f;
+        busX = busTargetX();
+        playerX = mapDef.stopX;
+        playerY = mapDef.stopY;
     }
 
     /** Hình học panel bản đồ thành phố dùng chung cho vẽ + chạm:
@@ -478,12 +529,49 @@ public class WorldScreen extends ScreenAdapter {
     public void spawnPlayer() {
         playerX = Math.min(200f, worldW / AvatarDkGame.HD - 40);
         playerY = mapDef.hmap * 24 * 0.72f;
+        beginBusArrival();
+    }
+
+    /** Bắt đầu sự kiện xe buýt vào trạm (map có trạm): xe chạy từ phải vào,
+     *  người chơi đang "ngồi trên xe" nên ẩn + khóa di chuyển tới khi xe dừng. */
+    public void beginBusArrival() {
+        if (mapDef == null || mapDef.stopX < 0) { busPhase = 0; return; }
+        busPhase = 1;
+        busX = mapDef.stopX + 340f;
+        busV = 0f;
+    }
+
+    /** Cập nhật xe buýt theo pha: vào (giảm tốc về điểm dừng) → dừng thả
+     *  người chơi xuống tại điểm trạm → rời trạm (tăng tốc sang trái). */
+    private void updateBus(float dt) {
+        if (busPhase == 1) {
+            float target = busTargetX();
+            float dist = busX - target;
+            float v = MathUtils.clamp(dist * 1.7f, 34f, 300f);
+            busX -= v * dt;
+            if (dist <= 1.5f) {
+                busX = target;
+                busPhase = 2;
+                busTimer = 0.9f;
+                playerX = mapDef.stopX;
+                playerY = mapDef.stopY;
+            }
+        } else if (busPhase == 2) {
+            busTimer -= dt;
+            if (busTimer <= 0) { busPhase = 3; busV = 50f; }
+        } else if (busPhase == 3) {
+            busV = Math.min(340f, busV + 300f * dt);
+            busX -= busV * dt;
+            if (busX < -160f) busPhase = 0;
+        }
     }
     public void debugOpenMenu() { menuOpen = true; }
     public void debugCloseMenu() { menuOpen = false; }
     public void debugOpenCityMap() { cityMapOpen = true; }
     public void debugCloseCityMap() { cityMapOpen = false; }
     public void debugOpenFeel() { feelOpen = true; }
+    public void debugCloseFeel() { feelOpen = false; }
+    public void debugClearRemotes() { remotes.clear(); }
     /** Mở sheet biểu cảm ở nấc mở rộng + cuộn xuống (kiểm chứng hình). */
     public void debugExpandFeel(float scroll) {
         feelOpen = true;
@@ -941,6 +1029,9 @@ public class WorldScreen extends ScreenAdapter {
             if (Gdx.input.isKeyJustPressed(Input.Keys.NUM_3)) loadMap(findMap(25));
         }
         if (joyPointer >= 0) { mx += joyVecX; my -= joyVecY; }
+        updateBus(dt);
+        // đang ngồi trên xe buýt vào trạm: khóa di chuyển cho tới khi xe dừng
+        if (busPhase == 1) { mx = 0f; my = 0f; }
         float len = (float) Math.hypot(mx, my);
         boolean moving = len > 0.01f;
         if (moving) {
@@ -992,8 +1083,11 @@ public class WorldScreen extends ScreenAdapter {
 
         float playerFeetX = playerX * AvatarDkGame.HD;
         float playerFeetY = mapBottomPx - playerY * AvatarDkGame.HD;
-        // camera bám người chơi, kẹp biên thế giới
-        float camX = MathUtils.clamp(playerFeetX, Ui.W / 2f, Math.max(Ui.W / 2f, worldW - Ui.W / 2f));
+        // camera bám người chơi, kẹp biên thế giới; lúc xe buýt đang vào trạm
+        // thì camera nhảy tới điểm trạm như AvCamera của gốc (Bus.setBus)
+        float focusX = (busPhase == 1 && mapDef.stopX >= 0)
+            ? mapDef.stopX * AvatarDkGame.HD : playerFeetX;
+        float camX = MathUtils.clamp(focusX, Ui.W / 2f, Math.max(Ui.W / 2f, worldW - Ui.W / 2f));
         // Camera dọc theo AvCamera của gốc: mặc định NEO ĐÁY map vào đáy màn hình
         // (yTo = Hmap*w - hCan). Ngoại lệ căn giữa dọc: TYPEMAP 57/58/59 (client
         // 58/59/60) trong AvCamera.init và các map không nền (bg = -1) trong setLimit.
@@ -1004,6 +1098,16 @@ public class WorldScreen extends ScreenAdapter {
         } else {
             camY = MathUtils.clamp(playerFeetY + 120, Ui.H / 2f, worldH - Ui.H / 2f);
         }
+        // Xe buýt đang chạy (sự kiện đến nơi): NÂNG khung hình lên khỏi khung
+        // chat để thấy trọn xe + biển trạm + người chơi lúc xuống xe — khung
+        // chat luôn hiện của mình sẽ che mất làn đường ở đáy map nếu giữ
+        // nguyên camera neo đáy. Mọi map có trạm đều thấp (Hmap <= 8) nên
+        // chỉ áp dụng ở nhánh neo đáy; xe rời trạm xong camera tự trả về.
+        float busLift = 0f;
+        if (busPhase > 0 && worldH <= Ui.H && !centerVertically()) {
+            busLift = CHAT_H + 20f;
+            camY -= busLift; // hạ tâm camera = thế giới nhô lên trên màn hình
+        }
         if (worldW <= Ui.W) camX = worldW / 2f;
         worldCam.position.set(camX, camY, 0);
         worldCam.update();
@@ -1012,6 +1116,13 @@ public class WorldScreen extends ScreenAdapter {
 
         batch.setProjectionMatrix(worldCam.combined);
         batch.begin();
+        // dải tối dưới đáy map khi camera nâng vì xe buýt (che khoảng trống
+        // dưới đường vừa lộ ra, cùng tông hai cột đen hai bên của gốc)
+        if (busLift > 0 && whiteTex != null) {
+            batch.setColor(0.03f, 0.04f, 0.05f, 1f);
+            batch.draw(whiteTex, -60f, -busLift, worldW + 120f, busLift);
+            batch.setColor(Color.WHITE);
+        }
         for (int i = 0; i < strips.size(); i++) {
             Texture t = strips.get(i);
             batch.draw(t, stripLefts.get(i), 0);
@@ -1020,6 +1131,12 @@ public class WorldScreen extends ScreenAdapter {
             float dx = 0f;
             float bottom = mapBottomPx - 60f;
             for (Texture t : daydien) { batch.draw(t, dx, bottom); dx += t.getWidth(); }
+        }
+        // biển trạm xe buýt ở mép trái dải trạm, chân biển ngay trên hàng đường
+        if (mapDef.stopX >= 0) {
+            float signX = mapDef.stopFirstTileX * 24f * AvatarDkGame.HD - 16f;
+            float signY = mapBottomPx - mapDef.stopRow * 24f * AvatarDkGame.HD + 4f;
+            batch.draw(signTex, signX, signY);
         }
         // NPC trước/người chơi sau không theo độ sâu ở đợt 1: vẽ NPC rồi người chơi
         for (NpcFigure f : npcFigures) {
@@ -1033,8 +1150,15 @@ public class WorldScreen extends ScreenAdapter {
                 new Color(0.55f, 0.9f, 1f, 1f));
             if (f.bubble != null) drawBubble(f.doll, f.anim, f.feetX, f.feetY, f.bubble);
         }
-        drawFigure(playerDoll, playerAnim, playerFeetX, playerFeetY, displayName, true);
-        if (chatBubble != null) drawBubble(playerDoll, playerAnim, playerFeetX, playerFeetY, chatBubble);
+        // người chơi đang ngồi trên xe (pha 1) thì chưa hiện hình
+        if (busPhase != 1) {
+            drawFigure(playerDoll, playerAnim, playerFeetX, playerFeetY, displayName, true);
+            if (chatBubble != null) drawBubble(playerDoll, playerAnim, playerFeetX, playerFeetY, chatBubble);
+        }
+        // xe buýt vẽ sau cùng trong thế giới (ở làn đường, trước mọi nhân vật)
+        if (busPhase > 0) {
+            batch.draw(busTex, busX * AvatarDkGame.HD - busTex.getWidth() / 2f, 2f);
+        }
         batch.end();
 
         drawSideBars(camX);
