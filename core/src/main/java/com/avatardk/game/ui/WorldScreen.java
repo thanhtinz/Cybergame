@@ -366,6 +366,23 @@ public class WorldScreen extends ScreenAdapter {
         return new float[]{px, py, iw, ih, px + 24, py + ph - 64 - ih};
     }
 
+    /** Hình học panel chọn biểu cảm {px, py, pw, ph, cell, pad}: panel VUÔNG
+     *  lưới 3x3 (8 mặt + 1 ô đóng) nổi phía trên khung chat, không che khung
+     *  chat — theo yêu cầu của chủ dự án (bản thanh ngang dài che mất khung). */
+    private float[] feelPickerGeom() {
+        float pw = 202f, ph = 202f, pad = 8f, cell = (pw - 2 * pad) / 3f;
+        float px = FEEL_BTN_X + FEEL_BTN_S - pw;
+        float py = CHAT_Y + CHAT_H + 12;
+        return new float[]{px, py, pw, ph, cell, pad};
+    }
+
+    /** Ô thứ idx (0..8) trong lưới 3x3 của panel biểu cảm: {trái, dưới} của ô. */
+    private float[] feelCellXY(float[] fg, int idx) {
+        float px = fg[0], py = fg[1], ph = fg[3], cell = fg[4], pad = fg[5];
+        int col = idx % 3, rowFromTop = idx / 3;
+        return new float[]{px + pad + col * cell, py + ph - pad - (rowFromTop + 1) * cell};
+    }
+
     /** Đổi biểu cảm: thay part zOrder 40 (mắt/mặt) của người chơi bằng part mặt
      *  được chọn — đúng cơ chế feel của Avatar.paint gốc (mặc định 4). */
     public void applyFeel(int feelId) {
@@ -510,11 +527,16 @@ public class WorldScreen extends ScreenAdapter {
         }
         // hàng chọn biểu cảm đang mở: chạm một mặt để đổi
         if (feelOpen) {
-            float cell = 58f, pw = cell * FEEL_IDS.length + 16, ph = 76f;
-            float px = FEEL_BTN_X + FEEL_BTN_S - pw, py = FEEL_BTN_Y + FEEL_BTN_S + 10;
+            float[] fg = feelPickerGeom();
+            float px = fg[0], py = fg[1], pw = fg[2], ph = fg[3], cell = fg[4];
             if (x >= px && x <= px + pw && y >= py && y <= py + ph) {
-                int idx = (int) ((x - px - 8) / cell);
-                if (idx >= 0 && idx < FEEL_IDS.length) applyFeel(FEEL_IDS[idx]);
+                for (int i = 0; i <= FEEL_IDS.length; i++) {
+                    float[] cxy = feelCellXY(fg, i);
+                    if (x >= cxy[0] && x <= cxy[0] + cell && y >= cxy[1] && y <= cxy[1] + cell) {
+                        if (i < FEEL_IDS.length) applyFeel(FEEL_IDS[i]);
+                        break;
+                    }
+                }
                 feelOpen = false;
                 return;
             }
@@ -1002,22 +1024,30 @@ public class WorldScreen extends ScreenAdapter {
             FEEL_BTN_X, FEEL_BTN_Y);
         batch.draw(icon, FEEL_BTN_X + 8, FEEL_BTN_Y + 8, FEEL_BTN_S - 16, FEEL_BTN_S - 16);
         if (!feelOpen) return;
-        float cell = 58f, pw = cell * FEEL_IDS.length + 16, ph = 76f;
-        float px = FEEL_BTN_X + FEEL_BTN_S - pw, py = FEEL_BTN_Y + FEEL_BTN_S + 10;
+        float[] fg = feelPickerGeom();
+        float px = fg[0], py = fg[1], pw = fg[2], ph = fg[3], cell = fg[4];
         batch.draw(Ui.roundedRect((int) pw, (int) ph, 12, GLASS_FILL_DARK, GLASS_RIM), px, py);
-        for (int i = 0; i < FEEL_IDS.length; i++) {
-            float cx = px + 8 + i * cell;
+        for (int i = 0; i <= FEEL_IDS.length; i++) {
+            float[] cxy = feelCellXY(fg, i);
+            float cx = cxy[0], cy = cxy[1];
+            if (i == FEEL_IDS.length) {
+                // ô cuối: nút đóng panel
+                Ui.font.setColor(1f, 1f, 1f, 0.8f);
+                layout.setText(Ui.font, "X");
+                Ui.font.draw(batch, "X", cx + cell / 2f - layout.width / 2f, cy + cell / 2f + 10);
+                continue;
+            }
             if (FEEL_IDS[i] == playerFeel) {
-                batch.draw(Ui.roundedRect((int) (cell - 4), (int) (ph - 12), 9,
+                batch.draw(Ui.roundedRect((int) (cell - 4), (int) (cell - 4), 9,
                     new Color(0.55f, 0.38f, 0.10f, 0.85f), new Color(1f, 0.8f, 0.35f, 0.9f)),
-                    cx + 2, py + 6);
+                    cx + 2, cy + 2);
             }
             // mặt xem trước: doll chỉ gồm mặt nền + part mặt, căn giữa ô theo bounds
             PaperDoll fd = feelDolls.get(i);
             int[] b = fd.bounds(0);
-            float u = Math.min(2.4f, 52f / Math.max(1, b[3] - b[1]));
+            float u = Math.min(2.2f, 44f / Math.max(1, b[3] - b[1]));
             float fx = cx + cell / 2f - (b[0] + b[2]) / 2f * u;
-            float fy = py + ph / 2f + (b[1] + b[3]) / 2f * u;
+            float fy = cy + cell / 2f + (b[1] + b[3]) / 2f * u;
             game.dollRenderer.draw(batch, fd, 0, fx, fy, u, false);
         }
     }
