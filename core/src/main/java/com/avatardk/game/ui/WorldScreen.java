@@ -193,9 +193,11 @@ public class WorldScreen extends ScreenAdapter {
     private static final float CHAT_W = 620f, CHAT_X = Ui.W / 2f - CHAT_W / 2f, CHAT_Y = 12f;
     private static final float CHAT_INPUT_H = 36f, CHAT_LOG_LINES = 4, CHAT_LINE_H = 22f;
     private static final float CHAT_SEND_W = 46f;
-    private static final float CHAT_H = CHAT_INPUT_H + CHAT_LOG_LINES * CHAT_LINE_H + 26f;
-    // Tab kiểu "thẻ thư mục" gắn ngay trên viền trên của khung: tab đang dùng
-    // CAO hơn (34), tab chưa dùng lún thấp (21) — chủ dự án chốt 2026-10-31.
+    private static final float CHAT_H = CHAT_INPUT_H + CHAT_LOG_LINES * CHAT_LINE_H + 36f;
+    // Tab kiểu "thẻ thư mục": TRUNG TÂM của tab nằm đúng trên đường viền trên
+    // của khung (nửa tab nhô lên ngoài, nửa tab lọt vào trong khung — như một
+    // khối liền với khung); tab đang dùng CAO hơn (34), tab chưa dùng lún
+    // thấp (21) — chủ dự án chốt 2026-10-31.
     private static final float TAB_H_ACTIVE = 34f, TAB_H_IDLE = 21f;
     private static final int TAB_SYSTEM = 0, TAB_WORLD = 1, TAB_NEARBY = 2;
     private static final String[] CHAT_TABS = {"Hệ thống", "Thế giới", "Gần đây"};
@@ -852,15 +854,15 @@ public class WorldScreen extends ScreenAdapter {
             menuOpen = false;
             return;
         }
-        // khung chat: tab gắn trên viền (mỗi tab một ô chạm theo chiều cao
+        // khung chat: tab vắt ngang viền (mỗi tab một ô chạm theo chiều cao
         // thật của nó — tab đang dùng cao hơn) / nút Gửi / ô nhập
         {
-            float tabBottom = CHAT_Y + CHAT_H - 2;
             float tx = CHAT_X + 12;
             for (int i = 0; i < CHAT_TABS.length; i++) {
                 layout.setText(Ui.fontSmall, CHAT_TABS[i]);
                 float tw = layout.width + 26;
                 float th = i == activeChatTab ? TAB_H_ACTIVE : TAB_H_IDLE;
+                float tabBottom = CHAT_Y + CHAT_H - th / 2f;
                 if (x >= tx && x <= tx + tw && y >= tabBottom && y <= tabBottom + th) {
                     activeChatTab = i;
                     return;
@@ -1144,18 +1146,19 @@ public class WorldScreen extends ScreenAdapter {
     private void drawChatFrame() {
         batch.draw(Ui.roundedRect((int) CHAT_W, (int) CHAT_H, 14,
             new Color(0.04f, 0.09f, 0.15f, 0.82f), GLASS_RIM), CHAT_X, CHAT_Y);
-        // Hàng tab kiểu "thẻ thư mục" GẮN NGAY TRÊN VIỀN TRÊN của khung (chủ
-        // dự án chốt): đáy tab trùng viền khung; tab đang dùng CAO hơn hẳn và
-        // sáng tông kính như dính liền vào khung; tab chưa dùng lún thấp, tối
+        // Hàng tab kiểu "thẻ thư mục" VẮT NGANG ĐƯỜNG VIỀN TRÊN của khung
+        // (chủ dự án chốt): trung tâm mỗi tab nằm đúng trên đường viền — nửa
+        // tab nhô lên ngoài khung, nửa tab lọt vào trong, thân tab che luôn
+        // đoạn viền đi qua nó nên tab + khung trông như MỘT KHỐI. Tab đang
+        // dùng CAO hơn hẳn và sáng tông kính; tab chưa dùng lún thấp, tối
         // hơn, chữ mờ. Bỏ hẳn màu cam cũ cho hợp tông panel.
-        float tabBottom = CHAT_Y + CHAT_H - 2;
         float tx = CHAT_X + 12;
-        float activeTx = -1, activeTw = 0;
         for (int i = 0; i < CHAT_TABS.length; i++) {
             boolean active = i == activeChatTab;
             layout.setText(Ui.fontSmall, CHAT_TABS[i]);
             float tw = layout.width + 26;
             float th = active ? TAB_H_ACTIVE : TAB_H_IDLE;
+            float tabBottom = CHAT_Y + CHAT_H - th / 2f;
             Color fill = active ? new Color(0.10f, 0.17f, 0.26f, 0.97f)
                                 : new Color(0.03f, 0.06f, 0.10f, 0.92f);
             Color rim = active ? new Color(0.62f, 0.82f, 1f, 0.60f)
@@ -1163,21 +1166,14 @@ public class WorldScreen extends ScreenAdapter {
             batch.draw(Ui.roundedRect((int) tw, (int) th, 8, fill, rim), tx, tabBottom);
             Ui.fontSmall.setColor(active ? Color.WHITE : new Color(1f, 1f, 1f, 0.55f));
             Ui.fontSmall.draw(batch, CHAT_TABS[i], tx + 13, tabBottom + th - 9);
-            if (active) { activeTx = tx; activeTw = tw; }
             tx += tw + 6;
-        }
-        // che mép dưới của tab đang dùng để nó liền hẳn vào thân khung
-        if (activeTx >= 0) {
-            batch.draw(Ui.roundedRect((int) activeTw - 10, 5, 2,
-                new Color(0.10f, 0.17f, 0.26f, 0.97f), new Color(0.10f, 0.17f, 0.26f, 0.97f)),
-                activeTx + 5, tabBottom - 1);
         }
         // nhật ký của tab đang chọn: dòng mới nhất nằm ngay trên ô nhập
         List<ChatLine> log = chatLogs[activeChatTab];
         int n = Math.min((int) CHAT_LOG_LINES, log.size());
         for (int i = 0; i < n; i++) {
             ChatLine l = log.get(log.size() - n + i);
-            float ly = CHAT_Y + CHAT_INPUT_H + 12 + (n - 1 - i) * CHAT_LINE_H + 15;
+            float ly = CHAT_Y + CHAT_INPUT_H + 6 + (n - 1 - i) * CHAT_LINE_H + 15;
             if (l.system) {
                 Ui.fontSmall.setColor(1f, 0.62f, 0.35f, 1f);
                 Ui.fontSmall.draw(batch, l.text, CHAT_X + 14, ly);
