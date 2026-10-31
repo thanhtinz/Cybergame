@@ -44,15 +44,36 @@ import java.util.List;
 public class WorldScreen extends ScreenAdapter {
     private static class MapDef {
         final int id; final String name; final int strips; final boolean daydien;
-        MapDef(int id, String name, int strips, boolean daydien) {
+        /** Số nền theo bảng bg[] của LoadMap gốc (chỉ số = id map - 1). */
+        final int bgNum;
+        MapDef(int id, String name, int strips, boolean daydien, int bgNum) {
             this.id = id; this.name = name; this.strips = strips; this.daydien = daydien;
+            this.bgNum = bgNum;
         }
     }
     private static final MapDef[] MAPS = {
-        new MapDef(10, "Thành phố", 3, true),
-        new MapDef(24, "Khu mua sắm", 3, false),
-        new MapDef(25, "Nông trại", 6, false),
+        new MapDef(10, "Thành phố", 3, true, 0),
+        new MapDef(24, "Khu mua sắm", 3, false, 0),
+        new MapDef(25, "Nông trại", 6, false, 2),
     };
+
+    // ---- Nền (port từ LoadMap.loadBG + paintBackGround của gốc) ----
+    // status: 0 = ngày (06–18h), 1 = đêm — gốc lấy theo giờ máy lúc vào map.
+    // colorBg[status] của gốc: ngày 6143735 = #5DBCE7, đêm 21 = #000015.
+    private static final Color[] SKY_COLOR = {
+        new Color(0x5D / 255f, 0xBC / 255f, 0xE7 / 255f, 1f),
+        new Color(0f, 0f, 0x15 / 255f, 1f),
+    };
+    /** x0_imgTreeBg theo số nền (đơn vị hd): bg0=20, bg1=25, bg2=10, bg3=33 (×hd). */
+    private static final int[] X0_TREE_HD = {20, 25, 10, 33};
+    /** x0_imgBG theo số nền (đơn vị hd): bg0=2, bg1=20, bg2=15, bg3=0 (×hd). */
+    private static final int[] X0_BG_HD = {2, 20, 15, 0};
+    private int bgStatus = 0;
+    private Texture bgSkyTex, bgLineTex;
+    private final Texture[] cloudTex = new Texture[2];
+    private static class Cloud { float x100, yW, speed; int anchor; }
+    private final List<Cloud> clouds = new ArrayList<>();
+    private Texture whiteTex;
     /** Đáy map theo gốc: Hmap(8) * w(24) * hd(2) = 384px ở thang file hd. */
     private static final float MAP_BOTTOM_PX = 8 * 24 * AvatarDkGame.HD;
     private static final float SPEED = 78f; // medium/giây (gốc: v = 4 medium/tick)
@@ -126,10 +147,42 @@ public class WorldScreen extends ScreenAdapter {
         if (def.daydien) {
             for (int i = 0; i < 3; i++) daydien.add(game.texture("imagemap/" + def.id + "/daydien" + i + ".png"));
         }
+        loadBackground(def);
         buildNpcs();
         // giữ người chơi trong biên map mới
         playerX = MathUtils.clamp(playerX, 24, worldW / AvatarDkGame.HD - 24);
         playerY = MathUtils.clamp(playerY, 36, 186);
+    }
+
+    /** Nạp lớp nền đúng LoadMap.loadBG: status theo giờ máy (18h–6h = đêm),
+     *  ảnh trời bghd/may<num><status> và ảnh silhouette bghd/<num><status>,
+     *  mây trôi effect/cl<anchor><status>. */
+    private void loadBackground(MapDef def) {
+        int hour = java.time.LocalTime.now().getHour();
+        bgStatus = (hour >= 18 || hour < 6) ? 1 : 0;
+        bgSkyTex = game.texture("bghd/may" + def.bgNum + bgStatus + ".png");
+        bgLineTex = game.texture("bghd/" + def.bgNum + bgStatus + ".png");
+        cloudTex[0] = game.texture("effect/cl0" + bgStatus + ".png");
+        cloudTex[1] = game.texture("effect/cl1" + bgStatus + ".png");
+        clouds.clear();
+        java.util.Random rnd = new java.util.Random(1234 + def.id);
+        for (int i = 0; i < 8; i++) {
+            Cloud c = new Cloud();
+            c.anchor = i % 2;
+            c.x100 = rnd.nextFloat() * (2200 + 800) * 100f;
+            // dải mây của gốc nằm trên nóc ảnh silhouette một đoạn
+            c.yW = MAP_BOTTOM_PX + bgLineTex.getHeight() / 2f + 30 + rnd.nextFloat() * 170f;
+            c.speed = 900 + rnd.nextFloat() * 900; // đơn vị x100/giây (~9–18 px/giây)
+            clouds.add(c);
+        }
+        if (whiteTex == null) {
+            com.badlogic.gdx.graphics.Pixmap pm =
+                new com.badlogic.gdx.graphics.Pixmap(1, 1, com.badlogic.gdx.graphics.Pixmap.Format.RGBA8888);
+            pm.setColor(Color.WHITE);
+            pm.fill();
+            whiteTex = new Texture(pm);
+            pm.dispose();
+        }
     }
 
     private void buildNpcs() {
@@ -260,6 +313,10 @@ public class WorldScreen extends ScreenAdapter {
     }
 
     private void update(float dt) {
+        for (Cloud c : clouds) {
+            c.x100 += c.speed * dt;
+            if (c.x100 / 100f > 3200f) c.x100 = -40000f;
+        }
         float mx = 0f, my = 0f; // medium, hệ trên–trái: my > 0 = đi xuống màn hình
         if (!typing) {
             if (Gdx.input.isKeyPressed(Input.Keys.A) || Gdx.input.isKeyPressed(Input.Keys.LEFT)) mx -= 1;
@@ -317,17 +374,21 @@ public class WorldScreen extends ScreenAdapter {
         // Đặt lại glViewport về đúng backbuffer mỗi frame: FitViewport của HUD ở frame
         // trước có thể đã thu viewport (đặc biệt khi resize chưa được chuyển tiếp).
         Gdx.gl.glViewport(0, 0, Gdx.graphics.getBackBufferWidth(), Gdx.graphics.getBackBufferHeight());
-        Gdx.gl.glClearColor(0.06f, 0.08f, 0.14f, 1f);
+        Color sky = SKY_COLOR[bgStatus];
+        Gdx.gl.glClearColor(sky.r, sky.g, sky.b, 1f);
         Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT);
 
         float playerFeetX = playerX * AvatarDkGame.HD;
         float playerFeetY = MAP_BOTTOM_PX - playerY * AvatarDkGame.HD;
         // camera bám người chơi, kẹp biên thế giới
         float camX = MathUtils.clamp(playerFeetX, Ui.W / 2f, Math.max(Ui.W / 2f, worldW - Ui.W / 2f));
-        float camY = worldH <= Ui.H ? worldH / 2f : MathUtils.clamp(playerFeetY + 120, Ui.H / 2f, worldH - Ui.H / 2f);
+        // map thấp hơn màn hình: neo đáy map vào đáy màn hình (phần trên nhường cho nền trời)
+        float camY = worldH <= Ui.H ? Ui.H / 2f : MathUtils.clamp(playerFeetY + 120, Ui.H / 2f, worldH - Ui.H / 2f);
         if (worldW <= Ui.W) camX = worldW / 2f;
         worldCam.position.set(camX, camY, 0);
         worldCam.update();
+
+        drawBackground(camX, camY);
 
         batch.setProjectionMatrix(worldCam.combined);
         batch.begin();
@@ -350,6 +411,41 @@ public class WorldScreen extends ScreenAdapter {
         batch.end();
 
         drawHud(playerFeetX, playerFeetY);
+    }
+
+    /** Vẽ nền theo paintBackGround của gốc, tính theo không gian màn hình:
+     *  1) tô màu trời colorBg[status] toàn màn (đã làm ở glClearColor),
+     *  2) ảnh trời "may" lát liền theo chiều ngang, neo vào mép trái camera
+     *     (hệ số thị sai 30/30), đáy nằm trên đường đáy map một khoảng x0_imgTreeBg,
+     *  3) mây trôi (thị sai 30/40 cho anchor 0, 30/35 cho anchor 1),
+     *  4) ảnh silhouette lát liền, thị sai 30/50, đáy thấp hơn đường đáy map x0_imgBG.
+     *  Đổi sang hệ dưới–lên của mình: đáy map ở y=0 ↔ y gốc (trên–xuống) = 384. */
+    private void drawBackground(float camX, float camY) {
+        if (bgSkyTex == null || bgLineTex == null) return;
+        hudViewport.update(Gdx.graphics.getWidth(), Gdx.graphics.getHeight(), true);
+        hudViewport.apply();
+        batch.setProjectionMatrix(hudViewport.getCamera().combined);
+        batch.begin();
+        float visBottom = camY - Ui.H / 2f; // y thế giới ở đáy màn hình
+        int bg = mapDef.bgNum;
+        // lớp trời (may)
+        float skyBottomY = MAP_BOTTOM_PX + X0_TREE_HD[bg] * AvatarDkGame.HD - visBottom;
+        int step = bgSkyTex.getWidth() - 2;
+        for (float x = -1; x < Ui.W; x += step) batch.draw(bgSkyTex, x, skyBottomY);
+        // mây trôi
+        for (Cloud c : clouds) {
+            Texture t = cloudTex[c.anchor];
+            float pf = (c.anchor == 0) ? 0.25f : (1f - 30f / 35f);
+            float sx = c.x100 / 100f - camX * pf;
+            if (sx < -t.getWidth() || sx > Ui.W) continue;
+            batch.draw(t, sx, c.yW - visBottom);
+        }
+        // lớp silhouette (bg)
+        float lineBottomY = MAP_BOTTOM_PX - X0_BG_HD[bg] * AvatarDkGame.HD - visBottom;
+        int step2 = bgLineTex.getWidth() - 2;
+        float startX = -1f - (camX * 0.4f) % step2;
+        for (float x = startX; x < Ui.W; x += step2) batch.draw(bgLineTex, x, lineBottomY);
+        batch.end();
     }
 
     private void drawFigure(PaperDoll doll, AvatarAnimator anim, float feetX, float feetY, String name, boolean isPlayer) {
