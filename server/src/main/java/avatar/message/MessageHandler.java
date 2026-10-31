@@ -260,6 +260,15 @@ public class MessageHandler implements IMessageHandler {
                         }
                         break;
                     }
+                    // [BỔ SUNG CỦA BẢN PORT] bản gốc không có nhánh -30;
+                    // client gốc vẫn gửi gói này khi đăng ký — xem Session.doRegister.
+                    case Cmd.REQUEST_REGISTER: {
+                        if (this.client.user == null) {
+                            this.client.doRegister(mss);
+                            break;
+                        }
+                        break;
+                    }
                     case Cmd.GET_HANDLER: {
                         if (this.client.user != null) {
                             this.client.getHandler(mss);

@@ -468,6 +468,54 @@ public class Session implements ISession {
         }
     }
 
+    /**
+     * [BỔ SUNG CỦA BẢN PORT — bản gốc không xử lý đăng ký qua socket:
+     *  client gốc có gửi gói REQUEST_REGISTER (-30) nhưng server gốc bỏ qua
+     *  (Session.regMessage là hàm chết). Hàm này cài đặt phía server đúng
+     *  định dạng gói client gốc gửi: UTF username, UTF password, (UTF mã
+     *  giới thiệu — tuỳ chọn). Tài khoản tạo xong để active = 1 để đăng nhập
+     *  được ngay (User.login yêu cầu active). Mật khẩu lưu MD5 như gốc.]
+     */
+    public void doRegister(Message ms) throws IOException {
+        String username = ms.reader().readUTF().trim();
+        String password = ms.reader().readUTF().trim();
+        // trường thứ 3 (mã giới thiệu) là tuỳ chọn — đọc nếu còn dữ liệu
+        try {
+            if (ms.reader().available() > 0) ms.reader().readUTF();
+        } catch (Exception ignored) {
+        }
+        String reply;
+        if (username.length() < 4 || username.length() > 20 || password.length() < 4) {
+            reply = "Tên tài khoản 4–20 ký tự, mật khẩu tối thiểu 4 ký tự.";
+        } else {
+            try (Connection con = DbManager.getInstance().getConnection()) {
+                try (java.sql.PreparedStatement check = con.prepareStatement(
+                        "SELECT `id` FROM `users` WHERE `username` = ? LIMIT 1")) {
+                    check.setString(1, username);
+                    try (ResultSet rs = check.executeQuery()) {
+                        if (rs.next()) {
+                            reply = "Tên tài khoản đã tồn tại, hãy chọn tên khác.";
+                        } else {
+                            try (java.sql.PreparedStatement ins = con.prepareStatement(
+                                    "INSERT INTO `users` (`username`, `password`, `role`, `active`, `gmail`, `vnd`, `tongnap`) VALUES (?, ?, -1, 1, '', 0, 0)")) {
+                                ins.setString(1, username);
+                                ins.setString(2, Utils.md5(password));
+                                ins.executeUpdate();
+                            }
+                            reply = "Đăng ký thành công! Hãy đăng nhập để bắt đầu chơi.";
+                        }
+                    }
+                }
+            } catch (Exception e) {
+                reply = "Có lỗi phía máy chủ khi đăng ký, thử lại sau.";
+            }
+        }
+        Message out = new Message(Cmd.SERVER_MESSAGE);
+        out.writer().writeUTF(reply);
+        out.writer().flush();
+        this.sendMessage(out);
+    }
+
     private boolean isCharCreatedPopup;
 
     private void enter() throws IOException {

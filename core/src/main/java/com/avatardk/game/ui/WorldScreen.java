@@ -638,12 +638,7 @@ public class WorldScreen extends ScreenAdapter {
             ACT_CX - 10, ACT_CY - 14);
         Ui.fontSmall.setColor(0.1f, 0.12f, 0.16f, 1f);
         Ui.fontSmall.draw(batch, "...", ACT_CX - 11, ACT_CY + 14);
-        // nhãn dưới nút
-        Ui.fontSmall.setColor(0f, 0f, 0f, 0.7f);
-        layout.setText(Ui.fontSmall, "Tương tác");
-        Ui.fontSmall.draw(batch, "Tương tác", ACT_CX - layout.width / 2f + 1, ACT_CY - ACT_R - 9);
-        Ui.fontSmall.setColor(Color.WHITE);
-        Ui.fontSmall.draw(batch, "Tương tác", ACT_CX - layout.width / 2f, ACT_CY - ACT_R - 8);
+        // (chữ "Tương tác" dưới nút đã bỏ theo yêu cầu của chủ dự án)
         if (active) {
             layout.setText(Ui.fontSmall, nearestNpc.data.name);
             float pw = layout.width + 22;
