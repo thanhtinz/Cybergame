@@ -195,6 +195,14 @@ public class ScreenshotMain {
                     case 12:
                         if (frame == 25) {
                             shot("shot-feel.png");
+                            System.out.println("FEEL STAGE: tong bieu cam = " + world.feelCount());
+                            world.debugExpandFeel(150f); // nấc mở rộng + đã cuộn xuống
+                            stage = 125; frame = 0;
+                        }
+                        break;
+                    case 125:
+                        if (frame == 25) {
+                            shot("shot-feel-big.png");
                             // Sân khấu online giả (đợt 2d): bơm gói 51/55 qua đúng
                             // đường xử lý thật của WorldScreen để kiểm chứng hình
                             // người chơi khác + bong bóng chat của họ.
@@ -218,7 +226,7 @@ public class ScreenshotMain {
                             } catch (java.io.IOException ioe) {
                                 throw new RuntimeException(ioe);
                             }
-                            stage++; frame = 0;
+                            stage = 13; frame = 0;
                         }
                         break;
                     case 13:

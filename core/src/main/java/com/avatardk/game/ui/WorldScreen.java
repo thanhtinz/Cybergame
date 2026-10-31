@@ -233,15 +233,26 @@ public class WorldScreen extends ScreenAdapter {
     private final List<int[]> regionCells = new ArrayList<>(); // {col, row}
     private boolean cityMapOpen = false;
     private Texture minimapTex;
-    // Biểu cảm (feel của gốc): nút mặt cười feel0 đặt KẾ BÊN khung chat, mở hàng
-    // chọn 8 mặt {4..11} (MapScr.doFeel); chọn mặt = thay part zOrder 40 của
-    // người chơi bằng part mặt đó (Avatar.paint của gốc).
-    private static final int[] FEEL_IDS = {4, 5, 6, 7, 8, 9, 10, 11};
+    // Biểu cảm (feel của gốc): nút mặt cười feel0 đặt KẾ BÊN khung chat, mở
+    // SHEET biểu cảm kéo lên được (yêu cầu của chủ dự án: bản cũ chỉ có 8 mặt
+    // {4..11} theo MapScr.doFeel là quá ít). Sheet chứa MỌI part mặt (zOrder
+    // 40) dựng được offline trong dữ liệu gốc; chọn mặt = thay part zOrder 40
+    // của người chơi bằng part mặt đó (Avatar.paint của gốc).
+    private final List<Integer> feelIds = new ArrayList<>();
     private boolean feelOpen = false;
     private int playerFeel = 4;
     private final List<Integer> playerParts = new ArrayList<>(AvatarDkGame.SON_PARTS);
     private final List<PaperDoll> feelDolls = new ArrayList<>();
     private static final float FEEL_BTN_X = 962f, FEEL_BTN_Y = 62f, FEEL_BTN_S = 56f;
+    // sheet biểu cảm: neo đáy ngay trên khung chat, cạnh phải thẳng hàng nút feel
+    private static final float FEEL_SHEET_W = 472f;
+    private static final float FEEL_SHEET_MIN = 168f, FEEL_SHEET_MAX = 400f;
+    private float feelH = FEEL_SHEET_MIN, feelHTarget = FEEL_SHEET_MIN;
+    private float feelScroll = 0f;
+    private int feelPointer = -1;
+    private boolean feelDragHandle = false;
+    private float feelDragStartY = 0f, feelDragStartH = 0f;
+    private float feelDragStartScroll = 0f, feelDragMoved = 0f;
     private NpcFigure nearestNpc = null;
 
     // --- Hub theo spec của chủ dự án (2026-10-31) ---
@@ -273,9 +284,20 @@ public class WorldScreen extends ScreenAdapter {
         for (int i = 0; i < 26 && i * 50 < grid.length; i++)
             for (int j = 0; j < 50 && i * 50 + j < grid.length; j++)
                 if (grid[i * 50 + j] == 69) regionCells.add(new int[]{j, i});
-        // doll xem trước cho hàng chọn biểu cảm: mặt nền (part 0) + part mặt (gốc
-        // CommandFeel.paint cũng vẽ đúng hai lớp này)
-        for (int fid : FEEL_IDS) feelDolls.add(game.newDoll(java.util.List.of(0, fid)));
+        // Danh sách biểu cảm: mọi part mặt (zOrder 40) dựng được offline —
+        // không phải part động do server stream và đủ 15 frame như PaperDoll
+        // yêu cầu. Doll xem trước = mặt nền (part 0) + part mặt, đúng cách
+        // CommandFeel.paint của gốc vẽ.
+        List<Integer> allIds = new ArrayList<>(game.data.parts.keySet());
+        allIds.sort(Integer::compareTo);
+        for (int id : allIds) {
+            com.avatardk.game.data.PartData pd = game.data.part(id);
+            if (pd != null && pd.zorder == 40 && !pd.isDynamic()
+                && pd.frames.size() == com.avatardk.game.data.PaperDoll.FRAMES) {
+                feelIds.add(id);
+                feelDolls.add(game.newDoll(java.util.List.of(0, id)));
+            }
+        }
         loadMap(findMap(10));
     }
 
@@ -401,21 +423,31 @@ public class WorldScreen extends ScreenAdapter {
         return new float[]{px, py, iw, ih, px + 24, py + ph - 64 - ih};
     }
 
-    /** Hình học panel chọn biểu cảm {px, py, pw, ph, cell, pad}: panel VUÔNG
-     *  lưới 3x3 (8 mặt + 1 ô đóng) nổi phía trên khung chat, không che khung
-     *  chat — theo yêu cầu của chủ dự án (bản thanh ngang dài che mất khung). */
-    private float[] feelPickerGeom() {
-        float pw = 202f, ph = 202f, pad = 8f, cell = (pw - 2 * pad) / 3f;
-        float px = FEEL_BTN_X + FEEL_BTN_S - pw;
+    /** Hình học sheet biểu cảm {px, py, pw, ph, cell, pad}: sheet neo đáy
+     *  ngay phía trên khung chat, cạnh phải thẳng hàng nút mặt cười, chiều
+     *  cao ph = feelH hiện tại (thay đổi khi kéo tay cầm). Lưới 7 cột. */
+    private float[] feelSheetGeom() {
+        float pad = 10f;
+        float cell = (FEEL_SHEET_W - 2 * pad) / 7f;
+        float px = FEEL_BTN_X + FEEL_BTN_S - FEEL_SHEET_W;
         float py = CHAT_Y + CHAT_H + 12;
-        return new float[]{px, py, pw, ph, cell, pad};
+        return new float[]{px, py, FEEL_SHEET_W, feelH, cell, pad};
     }
 
-    /** Ô thứ idx (0..8) trong lưới 3x3 của panel biểu cảm: {trái, dưới} của ô. */
+    /** Độ cuộn tối đa của lưới mặt trong sheet ở chiều cao hiện tại. */
+    private float feelMaxScroll() {
+        float[] fg = feelSheetGeom();
+        int rows = (feelIds.size() + 6) / 7;
+        return Math.max(0f, rows * fg[4] - (fg[3] - 44f));
+    }
+
+    /** Ô thứ idx trong lưới sheet: {trái, dưới}; hàng 0 ở trên cùng, vị trí
+     *  đã cộng độ cuộn feelScroll (cuộn lên = thấy các hàng dưới). */
     private float[] feelCellXY(float[] fg, int idx) {
         float px = fg[0], py = fg[1], ph = fg[3], cell = fg[4], pad = fg[5];
-        int col = idx % 3, rowFromTop = idx / 3;
-        return new float[]{px + pad + col * cell, py + ph - pad - (rowFromTop + 1) * cell};
+        int col = idx % 7, row = idx / 7;
+        float gridTop = py + ph - 34f;
+        return new float[]{px + pad + col * cell, gridTop - (row + 1) * cell + feelScroll};
     }
 
     /** Đổi biểu cảm: thay part zOrder 40 (mắt/mặt) của người chơi bằng part mặt
@@ -446,6 +478,13 @@ public class WorldScreen extends ScreenAdapter {
     public void debugOpenCityMap() { cityMapOpen = true; }
     public void debugCloseCityMap() { cityMapOpen = false; }
     public void debugOpenFeel() { feelOpen = true; }
+    /** Mở sheet biểu cảm ở nấc mở rộng + cuộn xuống (kiểm chứng hình). */
+    public void debugExpandFeel(float scroll) {
+        feelOpen = true;
+        feelH = feelHTarget = FEEL_SHEET_MAX;
+        feelScroll = scroll;
+    }
+    public int feelCount() { return feelIds.size(); }
     public void debugInteract() { interact(); }
     public void debugSetPlayer(float mediumX, float mediumY) { playerX = mediumX; playerY = mediumY; }
     public void debugChat(String text) { showBubble(text); }
@@ -672,6 +711,20 @@ public class WorldScreen extends ScreenAdapter {
             }
             @Override
             public boolean touchDragged(int sx, int sy, int pointer) {
+                if (pointer == feelPointer) {
+                    Vector3 v = hudViewport.unproject(new Vector3(sx, sy, 0));
+                    float dy = v.y - feelDragStartY;
+                    feelDragMoved = Math.max(feelDragMoved, Math.abs(dy));
+                    if (feelDragHandle) {
+                        // kéo tay cầm: sheet cao theo tay (kẹp 110..MAX)
+                        feelH = MathUtils.clamp(feelDragStartH + dy, 110f, FEEL_SHEET_MAX);
+                        feelHTarget = feelH;
+                    } else {
+                        // kéo trong lưới: cuộn theo tay (kéo lên = xem hàng dưới)
+                        feelScroll = MathUtils.clamp(feelDragStartScroll + dy, 0f, feelMaxScroll());
+                    }
+                    return true;
+                }
                 if (pointer == joyPointer) {
                     Vector3 v = hudViewport.unproject(new Vector3(sx, sy, 0));
                     float dx = v.x - JOY_CX, dy = v.y - JOY_CY;
@@ -682,7 +735,44 @@ public class WorldScreen extends ScreenAdapter {
             }
             @Override
             public boolean touchUp(int sx, int sy, int pointer, int button) {
+                if (pointer == feelPointer) {
+                    Vector3 v = hudViewport.unproject(new Vector3(sx, sy, 0));
+                    if (feelDragHandle) {
+                        // thả tay cầm: kéo xuống quá thấp thì đóng hẳn; còn lại
+                        // hít về nấc gọn hoặc nấc mở rộng
+                        if (feelH < 130f) {
+                            feelOpen = false;
+                            feelHTarget = FEEL_SHEET_MIN;
+                        } else {
+                            feelHTarget = feelH < (FEEL_SHEET_MIN + FEEL_SHEET_MAX) / 2f
+                                ? FEEL_SHEET_MIN : FEEL_SHEET_MAX;
+                        }
+                    } else if (feelDragMoved < 10f) {
+                        // chạm nhẹ (không kéo) = chọn mặt tại vị trí thả; sheet
+                        // GIỮ MỞ để thử tiếp mặt khác
+                        float[] fg = feelSheetGeom();
+                        float cell = fg[4];
+                        for (int i = 0; i < feelIds.size(); i++) {
+                            float[] cxy = feelCellXY(fg, i);
+                            if (v.x >= cxy[0] && v.x <= cxy[0] + cell
+                                && v.y >= cxy[1] && v.y <= cxy[1] + cell) {
+                                applyFeel(feelIds.get(i));
+                                break;
+                            }
+                        }
+                    }
+                    feelPointer = -1;
+                    return true;
+                }
                 if (pointer == joyPointer) { joyPointer = -1; joyVecX = 0; joyVecY = 0; }
+                return false;
+            }
+            @Override
+            public boolean scrolled(float amountX, float amountY) {
+                if (feelOpen) {
+                    feelScroll = MathUtils.clamp(feelScroll + amountY * 36f, 0f, feelMaxScroll());
+                    return true;
+                }
                 return false;
             }
         });
@@ -718,19 +808,19 @@ public class WorldScreen extends ScreenAdapter {
             feelOpen = !feelOpen;
             return;
         }
-        // hàng chọn biểu cảm đang mở: chạm một mặt để đổi
+        // sheet biểu cảm đang mở: chạm vào sheet = bắt đầu kéo (30px trên cùng
+        // là tay cầm kéo đổi chiều cao; trong lưới là kéo cuộn; chạm nhẹ không
+        // kéo = chọn mặt, xử lý ở touchUp). Chạm ra ngoài sheet thì đóng.
         if (feelOpen) {
-            float[] fg = feelPickerGeom();
-            float px = fg[0], py = fg[1], pw = fg[2], ph = fg[3], cell = fg[4];
+            float[] fg = feelSheetGeom();
+            float px = fg[0], py = fg[1], pw = fg[2], ph = fg[3];
             if (x >= px && x <= px + pw && y >= py && y <= py + ph) {
-                for (int i = 0; i <= FEEL_IDS.length; i++) {
-                    float[] cxy = feelCellXY(fg, i);
-                    if (x >= cxy[0] && x <= cxy[0] + cell && y >= cxy[1] && y <= cxy[1] + cell) {
-                        if (i < FEEL_IDS.length) applyFeel(FEEL_IDS[i]);
-                        break;
-                    }
-                }
-                feelOpen = false;
+                feelPointer = pointer;
+                feelDragHandle = y >= py + ph - 30f;
+                feelDragStartY = y;
+                feelDragStartH = feelH;
+                feelDragStartScroll = feelScroll;
+                feelDragMoved = 0f;
                 return;
             }
             feelOpen = false;
@@ -821,6 +911,12 @@ public class WorldScreen extends ScreenAdapter {
     }
 
     private void update(float dt) {
+        // sheet biểu cảm: chiều cao chạy mượt về nấc đích (trừ lúc đang kéo tay cầm)
+        if (feelPointer < 0 || !feelDragHandle) {
+            feelH += (feelHTarget - feelH) * Math.min(1f, dt * 14f);
+            if (Math.abs(feelHTarget - feelH) < 0.6f) feelH = feelHTarget;
+        }
+        feelScroll = MathUtils.clamp(feelScroll, 0f, feelMaxScroll());
         for (Cloud c : clouds) {
             c.x100 += c.speed * dt;
             if (c.x100 / 100f > 3200f) c.x100 = -40000f;
@@ -1221,8 +1317,9 @@ public class WorldScreen extends ScreenAdapter {
         }
     }
 
-    /** Nút mặt cười (asset iconmenu/feel0 gốc) kế bên khung chat + hàng chọn
-     *  biểu cảm 8 mặt khi mở. */
+    /** Nút mặt cười (asset iconmenu/feel0 gốc) kế bên khung chat + SHEET biểu
+     *  cảm kéo lên được: viên pill ở mép trên là tay cầm kéo (kéo lên mở rộng,
+     *  kéo xuống thu gọn/đóng), lưới 7 cột cuộn dọc chứa mọi part mặt. */
     private void drawFeelUi() {
         Texture icon = game.texture("iconmenu/feel0.png");
         batch.draw(Ui.roundedRect((int) FEEL_BTN_S, (int) FEEL_BTN_S, (int) (FEEL_BTN_S / 2),
@@ -1230,31 +1327,37 @@ public class WorldScreen extends ScreenAdapter {
             FEEL_BTN_X, FEEL_BTN_Y);
         batch.draw(icon, FEEL_BTN_X + 8, FEEL_BTN_Y + 8, FEEL_BTN_S - 16, FEEL_BTN_S - 16);
         if (!feelOpen) return;
-        float[] fg = feelPickerGeom();
+        float[] fg = feelSheetGeom();
         float px = fg[0], py = fg[1], pw = fg[2], ph = fg[3], cell = fg[4];
-        batch.draw(Ui.roundedRect((int) pw, (int) ph, 12, GLASS_FILL_DARK, GLASS_RIM), px, py);
-        for (int i = 0; i <= FEEL_IDS.length; i++) {
-            float[] cxy = feelCellXY(fg, i);
-            float cx = cxy[0], cy = cxy[1];
-            if (i == FEEL_IDS.length) {
-                // ô cuối: nút đóng panel
-                Ui.font.setColor(1f, 1f, 1f, 0.8f);
-                layout.setText(Ui.font, "X");
-                Ui.font.draw(batch, "X", cx + cell / 2f - layout.width / 2f, cy + cell / 2f + 10);
-                continue;
+        batch.draw(Ui.roundedRect((int) pw, (int) ph, 14, GLASS_FILL_DARK, GLASS_RIM), px, py);
+        // tay cầm kéo: viên pill xám ở giữa mép trên của sheet
+        batch.draw(Ui.roundedRect(64, 9, 4, new Color(1f, 1f, 1f, 0.45f),
+            new Color(1f, 1f, 1f, 0.22f)), px + pw / 2f - 32f, py + ph - 20f);
+        // lưới mặt, cắt trong vùng lưới của sheet (dưới tay cầm, trên đáy 8px)
+        Rectangle clip = new Rectangle(px + 2, py + 8, pw - 4, ph - 44);
+        Rectangle scissors = new Rectangle();
+        batch.flush();
+        ScissorStack.calculateScissors(hudViewport.getCamera(), batch.getTransformMatrix(), clip, scissors);
+        if (ScissorStack.pushScissors(scissors)) {
+            for (int i = 0; i < feelIds.size(); i++) {
+                float[] cxy = feelCellXY(fg, i);
+                float cx = cxy[0], cy = cxy[1];
+                if (cy + cell < clip.y || cy > clip.y + clip.height) continue;
+                if (feelIds.get(i) == playerFeel) {
+                    batch.draw(Ui.roundedRect((int) (cell - 4), (int) (cell - 4), 9,
+                        new Color(0.55f, 0.38f, 0.10f, 0.85f), new Color(1f, 0.8f, 0.35f, 0.9f)),
+                        cx + 2, cy + 2);
+                }
+                // mặt xem trước: doll chỉ gồm mặt nền + part mặt, căn giữa ô theo bounds
+                PaperDoll fd = feelDolls.get(i);
+                int[] b = fd.bounds(0);
+                float u = Math.min(2.2f, 44f / Math.max(1, b[3] - b[1]));
+                float fx = cx + cell / 2f - (b[0] + b[2]) / 2f * u;
+                float fy = cy + cell / 2f + (b[1] + b[3]) / 2f * u;
+                game.dollRenderer.draw(batch, fd, 0, fx, fy, u, false);
             }
-            if (FEEL_IDS[i] == playerFeel) {
-                batch.draw(Ui.roundedRect((int) (cell - 4), (int) (cell - 4), 9,
-                    new Color(0.55f, 0.38f, 0.10f, 0.85f), new Color(1f, 0.8f, 0.35f, 0.9f)),
-                    cx + 2, cy + 2);
-            }
-            // mặt xem trước: doll chỉ gồm mặt nền + part mặt, căn giữa ô theo bounds
-            PaperDoll fd = feelDolls.get(i);
-            int[] b = fd.bounds(0);
-            float u = Math.min(2.2f, 44f / Math.max(1, b[3] - b[1]));
-            float fx = cx + cell / 2f - (b[0] + b[2]) / 2f * u;
-            float fy = cy + cell / 2f + (b[1] + b[3]) / 2f * u;
-            game.dollRenderer.draw(batch, fd, 0, fx, fy, u, false);
+            batch.flush();
+            ScissorStack.popScissors();
         }
     }
 
