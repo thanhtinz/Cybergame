@@ -37,8 +37,29 @@ public class MapGrids {
         public int stopRow() { return s[s.length - 1]; }
         /** Ô 139 đầu tiên của dải trạm. */
         public int stopFirstTileX() { return s[0]; }
-        /** Ô 139 cuối cùng của dải trạm (trạm che đặt giữa dải). */
+        /** Ô 139 cuối cùng của dải trạm. */
         public int stopLastTileX() { return s[s.length - 2]; }
+
+        /**
+         * Neo của vật thể 835 (tấm biển TeaM mà người chơi quen gọi là
+         * trạm xe): gốc đặt tại ô 152 đầu tiên qua addObjTree — tâm x =
+         * x(ô đầu) + bề rộng dải ô 152 / 2, đáy y = đáy hàng ô − 4
+         * (đơn vị medium). Trả null nếu map không có ô 152.
+         */
+        public int[] boardAnchor() {
+            byte[] cells = cells();
+            for (int i = 0; i < cells.length; i++) {
+                if (cells[i] == (byte) 152) {
+                    int tx = i % w, ty = i / w, run = 0;
+                    while (i + run < cells.length && cells[i + run] == (byte) 152
+                        && (i + run) / w == ty) {
+                        run++;
+                    }
+                    return new int[] { tx * 24 + run * 12, (ty + 1) * 24 - 4 };
+                }
+            }
+            return null;
+        }
     }
 
     private final Map<String, Grid> byId;

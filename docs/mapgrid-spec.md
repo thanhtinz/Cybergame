@@ -24,11 +24,13 @@ Bản trích nằm ở `assets/data/mapgrids.json`:
   điểm trạm rồi xe chạy tiếp rời khung hình. Đường bình thường không có xe
   (luật đã chốt: xe buýt chỉ là sự kiện đến nơi).
 - Bản port: `assets/sprites/bus.png` là BẢN SAO NGUYÊN TRẠNG của
-  839 gốc. ĐÃ RÀ LẠI TOÀN BỘ PACK5 THEO YÊU CẦU USER: gốc KHÔNG có
-  asset trạm/nhà chờ nào hết — ô 139 chỉ là điểm dừng + popup chữ;
-  các bản vẽ riêng (biển trạm, nhà chờ, thân xe sơn logo) đều bị user
-  bác — giữ NGUYÊN BẢN 100%: xe 839 nguyên trạng, điểm trạm không vẽ
-  vật thể nào. Sự kiện dựng trong `WorldScreen`
+  839 gốc. “TRẠM XE” MÀ NGƯỜI CHƠI NHỚ = tấm biển TeaM **835**, vật
+  thể lưới ô **152**: ở 7/9 map có trạm (10, 12, 13, 14, 22, 23, 24),
+  dải 5 ô 152 nằm đúng 2 hàng trên dải 139 cùng cột; gốc đặt MỘT vật
+  thể tại ô 152 đầu tiên (`addObjTree(835, j, 81)`, neo đáy–giữa tại
+  tâm dải, đáy = đáy hàng − 4). Hai map 18/26 không có ô 152 (gốc
+  không có biển ở đó). ĐÃ DỰNG vật thể 835 trong WorldScreen; lớp vật
+  thể đầy đủ cho các mã còn lại vẫn là việc đợt sau.
   (`beginBusArrival`/`updateBus`, pha 1 vào → 2 dừng → 3 rời).
 
 ## Mã vật thể tiêu biểu trong lưới (cho đợt lớp vật thể sau)

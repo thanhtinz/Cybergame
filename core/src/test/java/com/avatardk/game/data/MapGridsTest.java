@@ -39,4 +39,19 @@ class MapGridsTest {
         assertFalse(grids.grid(10).hasStop());
         assertNull(grids.grid(77));
     }
+
+    @Test
+    void boardAnchorCentersOnFirstRunOf152() {
+        // dải 152 dài 3 ô bắt đầu cột 1 hàng 1: tâm x = 24 + 36, đáy = 48 − 4
+        byte[] cells = new byte[12];
+        cells[5] = (byte) 152;
+        cells[6] = (byte) 152;
+        cells[7] = (byte) 152;
+        String g = Base64.getEncoder().encodeToString(cells);
+        MapGrids grids = new MapGrids("{\"9\":{\"w\":4,\"g\":\"" + g + "\"}}");
+        int[] a = grids.grid(9).boardAnchor();
+        assertEquals(24 + 36, a[0]);
+        assertEquals(48 - 4, a[1]);
+        assertNull(new MapGrids(json()).grid(10).boardAnchor());
+    }
 }

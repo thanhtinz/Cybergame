@@ -67,6 +67,8 @@ public class WorldScreen extends ScreenAdapter {
         /** Trạm xe buýt từ lưới ô gốc (ô 139, MapGrids): stopX/stopY = điểm
          *  trạm (medium, gốc trên–trái); stopX < 0 = map không có trạm. */
         public int stopX = -1, stopY, stopRow, stopFirstTileX, stopLastTileX;
+        /** Neo biển TeaM 835 (medium): tâm x + đáy y; -1 = map không có. */
+        public int boardX = -1, boardY;
         /** Số nền dùng khi vẽ (map không nền thì tạm dùng 0 cho lớp trời). */
         public int bgNum() { return bg == null ? 0 : bg; }
         public String label() { return name == null || name.isEmpty() ? "Map " + id : name; }
@@ -112,7 +114,7 @@ public class WorldScreen extends ScreenAdapter {
     // xe chạy vào trạm thả người chơi mỗi khi vào map có trạm) ----
     // Thân xe đã vẽ lại cho game mình: hành khách chibi + biển "Thị Trấn Mặt
     // Trời"; biển trạm cũng là asset riêng của game (sprites/busstop.png).
-    private Texture busTex;
+    private Texture busTex, boardTex;
     /** 0 = không có xe, 1 = xe đang vào trạm, 2 = đang dừng thả khách, 3 = đang rời trạm. */
     private int busPhase = 0;
     private float busX, busV, busTimer;
@@ -311,9 +313,15 @@ public class WorldScreen extends ScreenAdapter {
                 d.stopRow = g.stopRow();
                 d.stopFirstTileX = g.stopFirstTileX();
                 d.stopLastTileX = g.stopLastTileX();
+                int[] board = g.boardAnchor();
+                if (board != null) {
+                    d.boardX = board[0];
+                    d.boardY = board[1];
+                }
             }
         }
         busTex = game.texture("sprites/bus.png");
+        boardTex = game.texture("sprites/obj835.png");
         // lưới bản đồ thành phố: byte 69 = điểm vùng, thứ tự quét trên->dưới, trái->phải
         byte[] grid = Gdx.files.internal("data/citymap.bin").readBytes();
         for (int i = 0; i < 26 && i * 50 < grid.length; i++)
@@ -1132,9 +1140,14 @@ public class WorldScreen extends ScreenAdapter {
             float bottom = mapBottomPx - 60f;
             for (Texture t : daydien) { batch.draw(t, dx, bottom); dx += t.getWidth(); }
         }
-        // Gốc KHÔNG có hình trạm xe: ô 139 chỉ là điểm dừng + popup chữ,
-        // đã rà toàn bộ Pack5 không có asset nhà chờ/biển trạm nào — giữ
-        // nguyên bản, không vẽ thêm vật thể ở điểm trạm.
+        // "Trạm xe" theo gốc là tấm biển TeaM 835 đặt theo ô 152 (hai hàng
+        // trên dải điểm dừng 139) — neo đáy–giữa tại tâm dải ô như
+        // addObjTree của LoadMap; vẽ trước nhân vật như thứ tự gốc.
+        if (mapDef.boardX >= 0) {
+            batch.draw(boardTex,
+                mapDef.boardX * AvatarDkGame.HD - boardTex.getWidth() / 2f,
+                mapBottomPx - mapDef.boardY * AvatarDkGame.HD);
+        }
         // NPC trước/người chơi sau không theo độ sâu ở đợt 1: vẽ NPC rồi người chơi
         for (NpcFigure f : npcFigures) {
             drawFigure(f.doll, f.anim, f.feetX, f.feetY, f.data.name, false);
