@@ -192,8 +192,11 @@ public class WorldScreen extends ScreenAdapter {
     // Hệ thống / Thế giới / Gần đây và NÚT GỬI ở cuối ô nhập) ----
     private static final float CHAT_W = 620f, CHAT_X = Ui.W / 2f - CHAT_W / 2f, CHAT_Y = 12f;
     private static final float CHAT_INPUT_H = 36f, CHAT_LOG_LINES = 4, CHAT_LINE_H = 22f;
-    private static final float CHAT_TAB_H = 30f, CHAT_SEND_W = 64f;
-    private static final float CHAT_H = CHAT_TAB_H + CHAT_INPUT_H + CHAT_LOG_LINES * CHAT_LINE_H + 18f;
+    private static final float CHAT_SEND_W = 46f;
+    private static final float CHAT_H = CHAT_INPUT_H + CHAT_LOG_LINES * CHAT_LINE_H + 26f;
+    // Tab kiểu "thẻ thư mục" gắn ngay trên viền trên của khung: tab đang dùng
+    // CAO hơn (34), tab chưa dùng lún thấp (21) — chủ dự án chốt 2026-10-31.
+    private static final float TAB_H_ACTIVE = 34f, TAB_H_IDLE = 21f;
     private static final int TAB_SYSTEM = 0, TAB_WORLD = 1, TAB_NEARBY = 2;
     private static final String[] CHAT_TABS = {"Hệ thống", "Thế giới", "Gần đây"};
     private int activeChatTab = TAB_NEARBY;
@@ -849,17 +852,21 @@ public class WorldScreen extends ScreenAdapter {
             menuOpen = false;
             return;
         }
-        // khung chat: tab (hàng trên cùng) / nút Gửi / ô nhập
-        float tabTop = CHAT_Y + CHAT_H;
-        if (x >= CHAT_X && x <= CHAT_X + CHAT_W && y >= tabTop - CHAT_TAB_H && y <= tabTop) {
-            float tx = CHAT_X + 10;
+        // khung chat: tab gắn trên viền (mỗi tab một ô chạm theo chiều cao
+        // thật của nó — tab đang dùng cao hơn) / nút Gửi / ô nhập
+        {
+            float tabBottom = CHAT_Y + CHAT_H - 2;
+            float tx = CHAT_X + 12;
             for (int i = 0; i < CHAT_TABS.length; i++) {
                 layout.setText(Ui.fontSmall, CHAT_TABS[i]);
-                float tw = layout.width + 24;
-                if (x >= tx && x <= tx + tw) { activeChatTab = i; return; }
-                tx += tw + 8;
+                float tw = layout.width + 26;
+                float th = i == activeChatTab ? TAB_H_ACTIVE : TAB_H_IDLE;
+                if (x >= tx && x <= tx + tw && y >= tabBottom && y <= tabBottom + th) {
+                    activeChatTab = i;
+                    return;
+                }
+                tx += tw + 6;
             }
-            return;
         }
         float sendX = CHAT_X + CHAT_W - 8 - CHAT_SEND_W;
         if (x >= sendX && x <= sendX + CHAT_SEND_W && y >= CHAT_Y + 7 && y <= CHAT_Y + 7 + CHAT_INPUT_H) {
@@ -1137,21 +1144,33 @@ public class WorldScreen extends ScreenAdapter {
     private void drawChatFrame() {
         batch.draw(Ui.roundedRect((int) CHAT_W, (int) CHAT_H, 14,
             new Color(0.04f, 0.09f, 0.15f, 0.82f), GLASS_RIM), CHAT_X, CHAT_Y);
-        // hàng tab
-        float tx = CHAT_X + 10;
-        float ty = CHAT_Y + CHAT_H - CHAT_TAB_H + 3;
+        // Hàng tab kiểu "thẻ thư mục" GẮN NGAY TRÊN VIỀN TRÊN của khung (chủ
+        // dự án chốt): đáy tab trùng viền khung; tab đang dùng CAO hơn hẳn và
+        // sáng tông kính như dính liền vào khung; tab chưa dùng lún thấp, tối
+        // hơn, chữ mờ. Bỏ hẳn màu cam cũ cho hợp tông panel.
+        float tabBottom = CHAT_Y + CHAT_H - 2;
+        float tx = CHAT_X + 12;
+        float activeTx = -1, activeTw = 0;
         for (int i = 0; i < CHAT_TABS.length; i++) {
             boolean active = i == activeChatTab;
             layout.setText(Ui.fontSmall, CHAT_TABS[i]);
-            float tw = layout.width + 24;
-            // Tab phải RÕ (phản hồi của chủ dự án: bản trước mờ quá): tab chưa chọn
-            // nền slate đặc + chữ trắng 90%; tab chọn nền cam đặc + chữ trắng.
-            batch.draw(Ui.roundedRect((int) tw, (int) (CHAT_TAB_H - 6), 9,
-                active ? new Color(0.85f, 0.45f, 0.08f, 0.98f) : new Color(0.13f, 0.20f, 0.30f, 0.95f),
-                active ? new Color(1f, 0.85f, 0.4f, 1f) : new Color(0.55f, 0.68f, 0.85f, 0.9f)), tx, ty);
-            Ui.fontSmall.setColor(active ? Color.WHITE : new Color(1f, 1f, 1f, 0.92f));
-            Ui.fontSmall.draw(batch, CHAT_TABS[i], tx + 12, ty + CHAT_TAB_H - 13);
-            tx += tw + 8;
+            float tw = layout.width + 26;
+            float th = active ? TAB_H_ACTIVE : TAB_H_IDLE;
+            Color fill = active ? new Color(0.10f, 0.17f, 0.26f, 0.97f)
+                                : new Color(0.03f, 0.06f, 0.10f, 0.92f);
+            Color rim = active ? new Color(0.62f, 0.82f, 1f, 0.60f)
+                               : new Color(0.45f, 0.60f, 0.80f, 0.32f);
+            batch.draw(Ui.roundedRect((int) tw, (int) th, 8, fill, rim), tx, tabBottom);
+            Ui.fontSmall.setColor(active ? Color.WHITE : new Color(1f, 1f, 1f, 0.55f));
+            Ui.fontSmall.draw(batch, CHAT_TABS[i], tx + 13, tabBottom + th - 9);
+            if (active) { activeTx = tx; activeTw = tw; }
+            tx += tw + 6;
+        }
+        // che mép dưới của tab đang dùng để nó liền hẳn vào thân khung
+        if (activeTx >= 0) {
+            batch.draw(Ui.roundedRect((int) activeTw - 10, 5, 2,
+                new Color(0.10f, 0.17f, 0.26f, 0.97f), new Color(0.10f, 0.17f, 0.26f, 0.97f)),
+                activeTx + 5, tabBottom - 1);
         }
         // nhật ký của tab đang chọn: dòng mới nhất nằm ngay trên ô nhập
         List<ChatLine> log = chatLogs[activeChatTab];
@@ -1188,14 +1207,13 @@ public class WorldScreen extends ScreenAdapter {
             Ui.fontSmall.setColor(0.35f, 0.38f, 0.42f, 1f);
             Ui.fontSmall.draw(batch, "Nhấn Enter hoặc chạm vào đây để chat…", CHAT_X + 20, CHAT_Y + 30);
         }
-        // nút Gửi
+        // nút Gửi: ICON máy bay giấy Font Awesome trên nền kính cùng tông
+        // panel (chủ dự án chốt: bỏ chữ "Gửi" + bỏ màu cam)
         float sendX = CHAT_X + CHAT_W - 8 - CHAT_SEND_W;
         batch.draw(Ui.roundedRect((int) CHAT_SEND_W, (int) CHAT_INPUT_H, 10,
-            new Color(0.85f, 0.45f, 0.08f, 0.95f), new Color(1f, 0.7f, 0.3f, 0.9f)),
-            sendX, CHAT_Y + 7);
-        layout.setText(Ui.fontSmall, "Gửi");
-        Ui.fontSmall.setColor(Color.WHITE);
-        Ui.fontSmall.draw(batch, "Gửi", sendX + (CHAT_SEND_W - layout.width) / 2f, CHAT_Y + 30);
+            new Color(0.10f, 0.17f, 0.26f, 0.97f), GLASS_RIM), sendX, CHAT_Y + 7);
+        Ui.faIcon(batch, Ui.fa20, Ui.FA_SEND,
+            sendX + CHAT_SEND_W / 2f, CHAT_Y + 7 + CHAT_INPUT_H / 2f, Color.WHITE);
     }
 
     /** Trái trên — card glass gọn: avatar trong KHUNG VUÔNG (huy hiệu Lv nằm ở góc

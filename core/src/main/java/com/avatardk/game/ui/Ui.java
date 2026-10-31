@@ -34,8 +34,9 @@ public final class Ui {
     public static final String FA_EYE_SLASH = "\uf070";
     public static final String FA_CHECK = "\uf00c";
     public static final String FA_XMARK = "\uf00d";
+    public static final String FA_SEND = "\uf1d8";
     private static final String FA_SOLID_CHARS = FA_BELL + FA_TRASH + FA_HEADSET + FA_SUN
-        + FA_USER + FA_LOCK + FA_EYE + FA_EYE_SLASH + FA_CHECK + FA_XMARK;
+        + FA_USER + FA_LOCK + FA_EYE + FA_EYE_SLASH + FA_CHECK + FA_XMARK + FA_SEND;
     // Glyph Font Awesome (brands)
     public static final String FA_GOOGLE = "\uf1a0";
     public static final String FA_APPLE = "\uf179";
