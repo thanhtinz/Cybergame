@@ -37,25 +37,33 @@ import java.util.List;
  *  Chuyển sang LibGDX (dưới–lên, thang file hd): feetX = x * 2,
  *  feetY = 384 - y * 2.
  *
- *  NPC: lọc npcs.json theo map. Riêng map 10, NPC duy nhất trong dữ liệu (Chủ Hôn, 278/68)
- *  chỉ mặc part động 2480 (server stream, không có ảnh offline) nên chỉ hiện tên;
- *  đợt 1 đồng thời đặt 2 NPC của map 9 — khu thành phố còn lại trong dữ liệu gốc
- *  (quay số 514/48, đấu giá 410/48) — để có NPC lắp được đứng trong thành phố. */
+ *  Map + NPC: nạp từ assets/data/maps.json (kiểm kê docs/maps-spec.md) — 31 map
+ *  dựng được bằng dải imagemap; NPC gán theo hệ client (client map = npc.map + 1):
+ *  quay số/đấu giá ở map 10, Chủ Hôn ở map 11 (chỉ hiện tên — part 2480 do server
+ *  stream), lai.buon ở map 26 (đường ra nông trại) chứ không phải trong farm 25. */
 public class WorldScreen extends ScreenAdapter {
-    private static class MapDef {
-        final int id; final String name; final int strips; final boolean daydien;
-        /** Số nền theo bảng bg[] của LoadMap gốc (chỉ số = id map - 1). */
-        final int bgNum;
-        MapDef(int id, String name, int strips, boolean daydien, int bgNum) {
-            this.id = id; this.name = name; this.strips = strips; this.daydien = daydien;
-            this.bgNum = bgNum;
-        }
+    /** Một NPC đặt trong map theo maps.json (toạ độ medium của gốc). */
+    public static class MapNpc {
+        public int id, x, y;
+        public String name;
     }
-    private static final MapDef[] MAPS = {
-        new MapDef(10, "Thành phố", 3, true, 0),
-        new MapDef(24, "Khu mua sắm", 3, false, 0),
-        new MapDef(25, "Nông trại", 6, false, 2),
-    };
+
+    /** Hàng dữ liệu map trong assets/data/maps.json (kiểm kê ở docs/maps-spec.md:
+     *  id = chỉ số load phía client = server zone id + 1; bg = số nền theo bảng
+     *  bg[] của LoadMap gốc tra theo id-1, null = không có ảnh nền). */
+    public static class MapDef {
+        public int id, strips, hmap;
+        public String name;
+        public Integer bg;
+        public boolean daydien;
+        public List<MapNpc> npcs = new ArrayList<>();
+        /** Số nền dùng khi vẽ (map không nền thì tạm dùng 0 cho lớp trời). */
+        public int bgNum() { return bg == null ? 0 : bg; }
+        public String label() { return name == null || name.isEmpty() ? "Map " + id : name; }
+    }
+
+    /** Toàn bộ map dựng được bằng dải imagemap (strips > 0), nạp từ maps.json. */
+    private final List<MapDef> maps = new ArrayList<>();
 
     // ---- Nền (port từ LoadMap.loadBG + paintBackGround của gốc) ----
     // status: 0 = ngày (06–18h), 1 = đêm — gốc lấy theo giờ máy lúc vào map.
@@ -74,8 +82,10 @@ public class WorldScreen extends ScreenAdapter {
     private static class Cloud { float x100, yW, speed; int anchor; }
     private final List<Cloud> clouds = new ArrayList<>();
     private Texture whiteTex;
-    /** Đáy map theo gốc: Hmap(8) * w(24) * hd(2) = 384px ở thang file hd. */
-    private static final float MAP_BOTTOM_PX = 8 * 24 * AvatarDkGame.HD;
+    /** Đáy map theo gốc: Hmap * w(24) * hd(2) px ở thang file hd — Hmap lấy theo
+     *  đúng bảng switch trong LoadMap.load của gốc (mặc định 8; map 108 = 16,
+     *  map 19 = 10, map 18 = 6...), đã ghi vào maps.json. */
+    private float mapBottomPx = 8 * 24 * AvatarDkGame.HD;
     private static final float SPEED = 78f; // medium/giây (gốc: v = 4 medium/tick)
 
     private final AvatarDkGame game;
@@ -161,6 +171,13 @@ public class WorldScreen extends ScreenAdapter {
     }
     private final StringBuilder typeBuffer = new StringBuilder();
     private boolean menuOpen = false;
+    private int menuPage = 0;
+    // Panel chọn map trong menu burger: danh sách map dựng được, 8 map/trang
+    private static final float MENU_PX = Ui.W - 330f, MENU_PW = 312f;
+    private static final float MENU_HEADER = 42f, MENU_ROW_H = 30f, MENU_FOOTER = 38f;
+    private static final int MENU_PER_PAGE = 8;
+    private static final float MENU_PH = MENU_HEADER + MENU_PER_PAGE * MENU_ROW_H + MENU_FOOTER;
+    private static final float MENU_PY = Ui.H - 84 - MENU_PH;
     private NpcFigure nearestNpc = null;
 
     // --- Hub theo spec của chủ dự án (2026-10-31) ---
@@ -182,11 +199,22 @@ public class WorldScreen extends ScreenAdapter {
     public WorldScreen(AvatarDkGame game) {
         this.game = game;
         this.playerDoll = game.newDoll(AvatarDkGame.SON_PARTS);
-        loadMap(MAPS[0]);
+        // nạp danh sách map từ maps.json — chỉ giữ map dựng được bằng dải imagemap
+        MapDef[] all = new com.badlogic.gdx.utils.Json().fromJson(MapDef[].class,
+            Gdx.files.internal("data/maps.json").readString("UTF-8"));
+        for (MapDef d : all) if (d.strips > 0) maps.add(d);
+        maps.sort((a, b) -> Integer.compare(a.id, b.id));
+        loadMap(findMap(10));
+    }
+
+    public MapDef findMap(int id) {
+        for (MapDef d : maps) if (d.id == id) return d;
+        return maps.get(0);
     }
 
     public void loadMap(MapDef def) {
         mapDef = def;
+        mapBottomPx = def.hmap * 24 * AvatarDkGame.HD;
         strips.clear(); stripLefts.clear(); daydien.clear();
         float acc = -1f;
         worldH = 0f;
@@ -199,13 +227,17 @@ public class WorldScreen extends ScreenAdapter {
         }
         worldW = acc + 1f;
         if (def.daydien) {
-            for (int i = 0; i < 3; i++) daydien.add(game.texture("imagemap/" + def.id + "/daydien" + i + ".png"));
+            for (int i = 0; i < 4; i++) {
+                String path = "imagemap/" + def.id + "/daydien" + i + ".png";
+                if (!Gdx.files.internal(path).exists()) break;
+                daydien.add(game.texture(path));
+            }
         }
         loadBackground(def);
         buildNpcs();
         // giữ người chơi trong biên map mới
         playerX = MathUtils.clamp(playerX, 24, worldW / AvatarDkGame.HD - 24);
-        playerY = MathUtils.clamp(playerY, 36, 186);
+        playerY = MathUtils.clamp(playerY, 36, Math.max(60, def.hmap * 24 - 30));
     }
 
     /** Nạp lớp nền đúng LoadMap.loadBG: status theo giờ máy (18h–6h = đêm),
@@ -214,8 +246,8 @@ public class WorldScreen extends ScreenAdapter {
     private void loadBackground(MapDef def) {
         int hour = java.time.LocalTime.now().getHour();
         bgStatus = (hour >= 18 || hour < 6) ? 1 : 0;
-        bgSkyTex = game.texture("bghd/may" + def.bgNum + bgStatus + ".png");
-        bgLineTex = game.texture("bghd/" + def.bgNum + bgStatus + ".png");
+        bgSkyTex = game.texture("bghd/may" + def.bgNum() + bgStatus + ".png");
+        bgLineTex = game.texture("bghd/" + def.bgNum() + bgStatus + ".png");
         cloudTex[0] = game.texture("effect/cl0" + bgStatus + ".png");
         cloudTex[1] = game.texture("effect/cl1" + bgStatus + ".png");
         clouds.clear();
@@ -225,7 +257,7 @@ public class WorldScreen extends ScreenAdapter {
             c.anchor = i % 2;
             c.x100 = rnd.nextFloat() * (2200 + 800) * 100f;
             // dải mây của gốc nằm trên nóc ảnh silhouette một đoạn
-            c.yW = MAP_BOTTOM_PX + bgLineTex.getHeight() / 2f + 30 + rnd.nextFloat() * 170f;
+            c.yW = mapBottomPx + bgLineTex.getHeight() / 2f + 30 + rnd.nextFloat() * 170f;
             c.speed = 900 + rnd.nextFloat() * 900; // đơn vị x100/giây (~9–18 px/giây)
             clouds.add(c);
         }
@@ -241,14 +273,18 @@ public class WorldScreen extends ScreenAdapter {
 
     private void buildNpcs() {
         npcFigures.clear();
-        List<NpcData> list = new ArrayList<>(game.data.npcsForMap(mapDef.id));
-        if (mapDef.id == 10) list.addAll(game.data.npcsForMap(9)); // xem ghi chú đầu lớp
-        for (NpcData n : list) {
+        // Vị trí + map của NPC lấy theo maps.json (đã đổi hệ: client id = npc.map + 1,
+        // xem docs/maps-spec.md mục 0); hình + câu chat lấy từ dữ liệu NPC theo id.
+        java.util.Map<Integer, NpcData> byId = new java.util.HashMap<>();
+        for (NpcData n : game.data.npcs) byId.put(n.id, n);
+        for (MapNpc mn : mapDef.npcs) {
+            NpcData n = byId.get(mn.id);
+            if (n == null) continue;
             NpcFigure f = new NpcFigure();
             f.data = n;
             f.doll = game.newDoll(n.items);
-            f.feetX = n.x * AvatarDkGame.HD;
-            f.feetY = MAP_BOTTOM_PX - n.y * AvatarDkGame.HD;
+            f.feetX = mn.x * AvatarDkGame.HD;
+            f.feetY = mapBottomPx - mn.y * AvatarDkGame.HD;
             f.anim.action = AvatarAnimator.STAND;
             npcFigures.add(f);
         }
@@ -256,8 +292,18 @@ public class WorldScreen extends ScreenAdapter {
 
     // ---------- API cho ScreenshotMain / kiểm chứng ----------
     public void debugSetMap(int mapId) {
-        for (MapDef d : MAPS) if (d.id == mapId) { loadMap(d); return; }
+        loadMap(findMap(mapId));
+        spawnPlayer();
     }
+
+    /** Đặt người chơi ở điểm vào map khi chuyển map qua menu: x = 200 medium,
+     *  y ở 72% chiều cao map (điểm đứng trên đường đi của từng map; khi online,
+     *  toạ độ vào map do server cấp trong gói join). */
+    public void spawnPlayer() {
+        playerX = Math.min(200f, worldW / AvatarDkGame.HD - 40);
+        playerY = mapDef.hmap * 24 * 0.72f;
+    }
+    public void debugMenuPage(int page) { menuPage = page; }
     public void debugOpenMenu() { menuOpen = true; }
     public void debugCloseMenu() { menuOpen = false; }
     public void debugInteract() { interact(); }
@@ -343,11 +389,29 @@ public class WorldScreen extends ScreenAdapter {
             menuOpen = !menuOpen;
             return;
         }
-        // panel burger đang mở: chạm trong panel thì giữ, chạm ra ngoài thì đóng
-        // (các vị trí/map đã bỏ khỏi menu theo yêu cầu — chuyển map tạm bằng phím 1/2/3)
+        // panel burger đang mở: chọn map / chuyển trang / chạm ra ngoài thì đóng
         if (menuOpen) {
-            float px = Ui.W - 330f, pw = 312f, ph = 104f, py = Ui.H - 84 - ph;
-            if (x >= px && x <= px + pw && y >= py && y <= py + ph) return;
+            float px = MENU_PX, pw = MENU_PW, ph = MENU_PH, py = MENU_PY;
+            if (x >= px && x <= px + pw && y >= py && y <= py + ph) {
+                int pages = (maps.size() + MENU_PER_PAGE - 1) / MENU_PER_PAGE;
+                if (y <= py + MENU_FOOTER) {
+                    if (x <= px + 56) menuPage = Math.max(0, menuPage - 1);
+                    else if (x >= px + pw - 56) menuPage = Math.min(pages - 1, menuPage + 1);
+                    return;
+                }
+                for (int i = 0; i < MENU_PER_PAGE; i++) {
+                    int idx = menuPage * MENU_PER_PAGE + i;
+                    if (idx >= maps.size()) break;
+                    float rowTop = py + ph - MENU_HEADER - i * MENU_ROW_H;
+                    if (y <= rowTop && y >= rowTop - MENU_ROW_H) {
+                        loadMap(maps.get(idx));
+                        spawnPlayer();
+                        menuOpen = false;
+                        return;
+                    }
+                }
+                return;
+            }
             menuOpen = false;
             return;
         }
@@ -423,9 +487,9 @@ public class WorldScreen extends ScreenAdapter {
             if (Gdx.input.isKeyPressed(Input.Keys.D) || Gdx.input.isKeyPressed(Input.Keys.RIGHT)) mx += 1;
             if (Gdx.input.isKeyPressed(Input.Keys.W) || Gdx.input.isKeyPressed(Input.Keys.UP)) my -= 1;
             if (Gdx.input.isKeyPressed(Input.Keys.S) || Gdx.input.isKeyPressed(Input.Keys.DOWN)) my += 1;
-            if (Gdx.input.isKeyJustPressed(Input.Keys.NUM_1)) loadMap(MAPS[0]);
-            if (Gdx.input.isKeyJustPressed(Input.Keys.NUM_2)) loadMap(MAPS[1]);
-            if (Gdx.input.isKeyJustPressed(Input.Keys.NUM_3)) loadMap(MAPS[2]);
+            if (Gdx.input.isKeyJustPressed(Input.Keys.NUM_1)) loadMap(findMap(10));
+            if (Gdx.input.isKeyJustPressed(Input.Keys.NUM_2)) loadMap(findMap(24));
+            if (Gdx.input.isKeyJustPressed(Input.Keys.NUM_3)) loadMap(findMap(25));
         }
         if (joyPointer >= 0) { mx += joyVecX; my -= joyVecY; }
         float len = (float) Math.hypot(mx, my);
@@ -475,7 +539,7 @@ public class WorldScreen extends ScreenAdapter {
         Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT);
 
         float playerFeetX = playerX * AvatarDkGame.HD;
-        float playerFeetY = MAP_BOTTOM_PX - playerY * AvatarDkGame.HD;
+        float playerFeetY = mapBottomPx - playerY * AvatarDkGame.HD;
         // camera bám người chơi, kẹp biên thế giới
         float camX = MathUtils.clamp(playerFeetX, Ui.W / 2f, Math.max(Ui.W / 2f, worldW - Ui.W / 2f));
         // map thấp hơn màn hình: neo đáy map vào đáy màn hình (phần trên nhường cho nền trời)
@@ -494,7 +558,7 @@ public class WorldScreen extends ScreenAdapter {
         }
         if (!daydien.isEmpty()) {
             float dx = 0f;
-            float bottom = MAP_BOTTOM_PX - 60f;
+            float bottom = mapBottomPx - 60f;
             for (Texture t : daydien) { batch.draw(t, dx, bottom); dx += t.getWidth(); }
         }
         // NPC trước/người chơi sau không theo độ sâu ở đợt 1: vẽ NPC rồi người chơi
@@ -523,9 +587,9 @@ public class WorldScreen extends ScreenAdapter {
         batch.setProjectionMatrix(hudViewport.getCamera().combined);
         batch.begin();
         float visBottom = camY - Ui.H / 2f; // y thế giới ở đáy màn hình
-        int bg = mapDef.bgNum;
+        int bg = mapDef.bgNum();
         // lớp trời (may)
-        float skyBottomY = MAP_BOTTOM_PX + X0_TREE_HD[bg] * AvatarDkGame.HD - visBottom;
+        float skyBottomY = mapBottomPx + X0_TREE_HD[bg] * AvatarDkGame.HD - visBottom;
         int step = bgSkyTex.getWidth() - 2;
         for (float x = -1; x < Ui.W; x += step) batch.draw(bgSkyTex, x, skyBottomY);
         // mây trôi
@@ -537,7 +601,7 @@ public class WorldScreen extends ScreenAdapter {
             batch.draw(t, sx, c.yW - visBottom);
         }
         // lớp silhouette (bg)
-        float lineBottomY = MAP_BOTTOM_PX - X0_BG_HD[bg] * AvatarDkGame.HD - visBottom;
+        float lineBottomY = mapBottomPx - X0_BG_HD[bg] * AvatarDkGame.HD - visBottom;
         int step2 = bgLineTex.getWidth() - 2;
         float startX = -1f - (camX * 0.4f) % step2;
         for (float x = startX; x < Ui.W; x += step2) batch.draw(bgLineTex, x, lineBottomY);
@@ -712,18 +776,43 @@ public class WorldScreen extends ScreenAdapter {
         }
     }
 
-    /** Panel kính mở từ nút burger. Các vị trí/map ĐÃ BỎ khỏi menu theo yêu cầu
-     *  của chủ dự án — panel chỉ còn tiêu đề và ghi chú; mục tính năng sẽ thêm
-     *  khi từng đợt port mở ra (chuyển map tạm thời bằng phím 1/2/3). */
+    /** Panel kính mở từ nút burger: danh sách CHỌN MAP (toàn bộ map dựng được
+     *  bằng dải imagemap theo maps.json), phân trang 8 map/trang, map đang đứng
+     *  sáng viền vàng. Chạm tên map để chuyển. (Vị trí/tọa độ KHÔNG đưa vào menu
+     *  theo yêu cầu của chủ dự án — chỉ tên map.) */
     private void drawBurgerPanel() {
-        float px = Ui.W - 330f, pw = 312f, ph = 104f;
-        float py = Ui.H - 84 - ph;
+        float px = MENU_PX, pw = MENU_PW, ph = MENU_PH, py = MENU_PY;
         batch.draw(Ui.roundedRect((int) pw, (int) ph, 14, GLASS_FILL_DARK, GLASS_RIM), px, py);
         Ui.fontSmall.setColor(1f, 0.85f, 0.45f, 1f);
-        Ui.fontSmall.draw(batch, "MENU", px + 18, py + ph - 22);
+        Ui.fontSmall.draw(batch, "CHỌN MAP", px + 18, py + ph - 24);
+        int pages = (maps.size() + MENU_PER_PAGE - 1) / MENU_PER_PAGE;
+        menuPage = MathUtils.clamp(menuPage, 0, pages - 1);
+        for (int i = 0; i < MENU_PER_PAGE; i++) {
+            int idx = menuPage * MENU_PER_PAGE + i;
+            if (idx >= maps.size()) break;
+            MapDef m = maps.get(idx);
+            float rowTop = py + ph - MENU_HEADER - i * MENU_ROW_H;
+            boolean current = m.id == mapDef.id;
+            if (current) {
+                batch.draw(Ui.roundedRect((int) (pw - 24), (int) (MENU_ROW_H - 5), 8,
+                    new Color(0.55f, 0.38f, 0.10f, 0.85f), new Color(1f, 0.8f, 0.35f, 0.9f)),
+                    px + 12, rowTop - MENU_ROW_H + 4);
+            }
+            Ui.fontSmall.setColor(current ? Color.WHITE : new Color(1f, 1f, 1f, 0.82f));
+            Ui.fontSmall.draw(batch, m.label(), px + 22, rowTop - 10);
+            Ui.fontSmall.setColor(1f, 1f, 1f, 0.45f);
+            String idText = "#" + m.id;
+            layout.setText(Ui.fontSmall, idText);
+            Ui.fontSmall.draw(batch, idText, px + pw - 22 - layout.width, rowTop - 10);
+        }
+        // chân panel: chuyển trang
+        Ui.font.setColor(Color.WHITE);
+        Ui.font.draw(batch, "<", px + 20, py + 27);
+        Ui.font.draw(batch, ">", px + pw - 32, py + 27);
         Ui.fontSmall.setColor(1f, 1f, 1f, 0.7f);
-        Ui.fontSmall.draw(batch, "Tính năng mở theo từng đợt.", px + 18, py + 46);
-        Ui.fontSmall.draw(batch, "Đợt 2: tài khoản + online.", px + 18, py + 22);
+        String pg = "Trang " + (menuPage + 1) + "/" + pages;
+        layout.setText(Ui.fontSmall, pg);
+        Ui.fontSmall.draw(batch, pg, px + pw / 2f - layout.width / 2f, py + 24);
     }
 
     /** Trái dưới — joystick glass. */

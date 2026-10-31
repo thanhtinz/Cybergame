@@ -85,6 +85,46 @@ public class ScreenshotMain {
                     case 4:
                         if (frame == 25) {
                             shot("shot-chat-system.png");
+                            world.debugChatTab(2);
+                            world.debugSetMap(11);           // Khu lễ đường — Chủ Hôn
+                            world.debugSetPlayer(300f, 95f);
+                            stage++; frame = 0;
+                        }
+                        break;
+                    case 5:
+                        if (frame == 25) {
+                            shot("shot-map11.png");
+                            world.debugSetMap(12);           // Bến xe công viên — Tài Xỉu, vé số
+                            world.debugSetPlayer(115f, 80f);
+                            stage++; frame = 0;
+                        }
+                        break;
+                    case 6:
+                        if (frame == 25) {
+                            shot("shot-map12.png");
+                            world.debugSetMap(26);           // đường ra nông trại — lái buôn
+                            world.debugSetPlayer(105f, 75f);
+                            stage++; frame = 0;
+                        }
+                        break;
+                    case 7:
+                        if (frame == 25) {
+                            shot("shot-map26.png");
+                            world.debugSetMap(108);          // Trường đua thú (Hmap 16) — dùng điểm spawn của map
+                            stage++; frame = 0;
+                        }
+                        break;
+                    case 8:
+                        if (frame == 25) {
+                            shot("shot-map108.png");
+                            world.debugSetMap(1);            // Khu Mặt trời — Bạch/Hắc vô thường
+                            world.debugSetPlayer(90f, 95f);
+                            stage++; frame = 0;
+                        }
+                        break;
+                    case 9:
+                        if (frame == 25) {
+                            shot("shot-map1.png");
                             Gdx.app.exit();
                         }
                         break;
