@@ -105,6 +105,21 @@ public class WorldScreen extends ScreenAdapter {
     private String chatBubble = null;
     private float chatTimer = 0f;
     private boolean typing = false;
+
+    // ---- Khung chat GIỮA DƯỚI (theo yêu cầu của chủ dự án: khung chat luôn hiện
+    // ở giữa dưới màn hình thay vì phải bấm icon chat như bản gốc) ----
+    private static final float CHAT_W = 620f, CHAT_X = Ui.W / 2f - CHAT_W / 2f, CHAT_Y = 12f;
+    private static final float CHAT_INPUT_H = 36f, CHAT_LOG_LINES = 4, CHAT_LINE_H = 22f;
+    private static final float CHAT_H = CHAT_INPUT_H + CHAT_LOG_LINES * CHAT_LINE_H + 16f;
+    private static class ChatLine { String name, text; boolean npc; }
+    private final List<ChatLine> chatLog = new ArrayList<>();
+
+    private void addChatLog(String name, String text, boolean npc) {
+        ChatLine l = new ChatLine();
+        l.name = name; l.text = text; l.npc = npc;
+        chatLog.add(l);
+        while (chatLog.size() > 40) chatLog.remove(0);
+    }
     private final StringBuilder typeBuffer = new StringBuilder();
     private boolean menuOpen = false;
     private NpcFigure nearestNpc = null;
@@ -224,6 +239,7 @@ public class WorldScreen extends ScreenAdapter {
     private void showBubble(String text) {
         chatBubble = text;
         chatTimer = 4f; // ChatPopup của gốc hiện vài giây rồi tự tắt (Base.update -> setOut)
+        addChatLog(AvatarDkGame.SON_NAME, text, false);
     }
 
     @Override
@@ -277,6 +293,11 @@ public class WorldScreen extends ScreenAdapter {
             menuOpen = false;
             return;
         }
+        // ô nhập của khung chat giữa dưới: chạm vào là gõ
+        if (x >= CHAT_X && x <= CHAT_X + CHAT_W && y >= CHAT_Y && y <= CHAT_Y + CHAT_INPUT_H + 6) {
+            typing = true;
+            return;
+        }
         // nút tương tác (phải dưới)
         if (Math.hypot(x - ACT_CX, y - ACT_CY) <= ACT_R + 10) { interact(); return; }
         // joystick
@@ -310,6 +331,7 @@ public class WorldScreen extends ScreenAdapter {
         n.bubble = (n.data.chat != null && !n.data.chat.isEmpty())
             ? n.data.chat.get(0) : "Xin chào, ta là " + n.data.name + ".";
         n.bubbleTimer = 4f;
+        addChatLog(n.data.name, n.bubble, true);
     }
 
     private void update(float dt) {
@@ -481,13 +503,39 @@ public class WorldScreen extends ScreenAdapter {
         if (menuOpen) drawBurgerPanel();
         drawJoystick();
         drawInteractButton();
-        // ô nhập chat (chỉ khi đang gõ)
-        if (typing) {
-            batch.draw(Ui.roundedRect(560, 46, 10, new Color(1f, 1f, 1f, 0.96f), null), Ui.W / 2f - 280, 14);
-            Ui.font.setColor(0.1f, 0.1f, 0.12f, 1f);
-            Ui.font.draw(batch, typeBuffer.toString() + "|", Ui.W / 2f - 264, 44);
-        }
+        drawChatFrame();
         batch.end();
+    }
+
+    /** Khung chat GIỮA DƯỚI, luôn hiện: trên là nhật ký chat gần nhất (tên người
+     *  chơi màu trắng, NPC màu vàng), dưới là ô nhập — Enter/chạm vào ô để gõ,
+     *  Enter lần nữa để gửi (lời chat đồng thời nổi bong bóng trên đầu như gốc).
+     *  Khi nối server ở đợt 2, khung này dùng luôn cho gói chat 55/77 của gốc. */
+    private void drawChatFrame() {
+        batch.draw(Ui.roundedRect((int) CHAT_W, (int) CHAT_H, 14,
+            new Color(0.04f, 0.09f, 0.15f, 0.62f), GLASS_RIM), CHAT_X, CHAT_Y);
+        // nhật ký: dòng mới nhất nằm ngay trên ô nhập
+        int n = Math.min((int) CHAT_LOG_LINES, chatLog.size());
+        for (int i = 0; i < n; i++) {
+            ChatLine l = chatLog.get(chatLog.size() - n + i);
+            float ly = CHAT_Y + CHAT_INPUT_H + 12 + (n - 1 - i) * CHAT_LINE_H + 15;
+            Ui.fontSmall.setColor(l.npc ? new Color(1f, 0.85f, 0.45f, 1f) : new Color(0.65f, 0.9f, 1f, 1f));
+            Ui.fontSmall.draw(batch, l.name + ":", CHAT_X + 14, ly);
+            layout.setText(Ui.fontSmall, l.name + ":");
+            Ui.fontSmall.setColor(1f, 1f, 1f, 0.95f);
+            Ui.fontSmall.draw(batch, l.text, CHAT_X + 14 + layout.width + 6, ly);
+        }
+        // ô nhập
+        Color inRim = typing ? new Color(1f, 0.8f, 0.35f, 0.95f) : GLASS_RIM;
+        batch.draw(Ui.roundedRect((int) (CHAT_W - 16), (int) CHAT_INPUT_H, 10,
+            new Color(1f, 1f, 1f, typing ? 0.96f : 0.88f), inRim), CHAT_X + 8, CHAT_Y + 7);
+        if (typing) {
+            Ui.fontSmall.setColor(0.1f, 0.1f, 0.12f, 1f);
+            Ui.fontSmall.draw(batch, typeBuffer.toString() + "|", CHAT_X + 20, CHAT_Y + 30);
+        } else {
+            Ui.fontSmall.setColor(0.35f, 0.38f, 0.42f, 1f);
+            Ui.fontSmall.draw(batch, "Nhấn Enter hoặc chạm vào đây để chat…", CHAT_X + 20, CHAT_Y + 30);
+        }
     }
 
     /** Trái trên — card glass gọn: avatar trong KHUNG VUÔNG (huy hiệu Lv nằm ở góc
