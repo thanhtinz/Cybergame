@@ -32,6 +32,7 @@ public class DbManager {
     private String username;
     private String passeword;
     private String driver;
+    private String socket;
     private int maxConnections;
     private int minConnections;
 
@@ -53,6 +54,11 @@ public class DbManager {
             this.dbname = props.getProperty("dbname");
             this.username = props.getProperty("username");
             this.passeword = props.getProperty("passeword");
+            // Tuỳ chọn cho môi trường dev bị chặn TCP (sandbox Muse): nếu
+            // database.properties có dòng socket=<đường dẫn unix socket> thì
+            // nối MariaDB qua unix socket (cần JNA trong lib/), bỏ qua TCP.
+            // Không đặt dòng này thì hành vi giữ nguyên như bản gốc.
+            this.socket = props.getProperty("socket");
             this.maxConnections = Integer.parseInt(props.getProperty("max_connection"));
             this.minConnections = Integer.parseInt(props.getProperty("min_connection"));
         } catch (IOException ex) {
@@ -67,7 +73,12 @@ public class DbManager {
         } else {
             try {
                 HikariConfig config = new HikariConfig();
-                config.setJdbcUrl("jdbc:mysql://" + this.host + ":" + this.port + "/" + this.dbname);
+                if (this.socket != null && !this.socket.isBlank()) {
+                    config.setJdbcUrl("jdbc:mariadb://localhost/" + this.dbname
+                        + "?localSocket=" + this.socket);
+                } else {
+                    config.setJdbcUrl("jdbc:mysql://" + this.host + ":" + this.port + "/" + this.dbname);
+                }
                 config.setDriverClassName(this.driver);
                 config.setUsername(this.username);
                 config.setPassword(this.passeword);
