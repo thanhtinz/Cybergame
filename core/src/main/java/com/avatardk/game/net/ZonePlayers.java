@@ -20,14 +20,28 @@ public final class ZonePlayers {
         public int direct;    // 0 = phải, 2 = trái (Base của gốc)
     }
 
+    /** Kết quả đọc gói 50: map/khu server xác nhận + danh sách người. */
+    public static class JoinResult {
+        public int mapId;
+        public int zoneId;
+        public final List<RemotePlayer> players = new ArrayList<>();
+    }
+
     /** Gói 50 (trả lời join): danh sách người đang có trong zone (không gồm mình). */
     public static List<RemotePlayer> parseJoinList(Msg m) throws IOException {
+        return parseJoin(m).players;
+    }
+
+    /** Gói 50 đầy đủ — header chứa mapId + zoneId (KHU mình thực sự ở),
+     *  kể cả khi xin vào bằng khu −1 (server tự chọn). */
+    public static JoinResult parseJoin(Msg m) throws IOException {
         DataInputStream r = m.reader();
-        r.readByte(); // mapId (server)
-        r.readByte(); // zoneId
+        JoinResult res = new JoinResult();
+        res.mapId = r.readByte();
+        res.zoneId = r.readByte();
         r.readShort(); r.readShort(); // -1, -1
         int num = r.readByte();
-        List<RemotePlayer> out = new ArrayList<>();
+        List<RemotePlayer> out = res.players;
         for (int i = 0; i < num; i++) out.add(readPlayerBlock(r));
         for (RemotePlayer p : out) p.direct = r.readByte();
         // phần đuôi (hằng số + vật thể map): đọc bỏ theo đúng format server
@@ -48,6 +62,16 @@ public final class ZonePlayers {
         } catch (IOException tail) {
             // đuôi gói lệch cũng không được làm mất danh sách người chơi đã đọc
         }
+        return res;
+    }
+
+    /** Gói 60 (trả lời xin danh sách khu): byte số khu, rồi mỗi khu một
+     *  byte trạng thái — 0 = đầy (≥9 người), 1 = đông (≥4), 2 = vắng. */
+    public static int[] parseBoardList(Msg m) throws IOException {
+        DataInputStream r = m.reader();
+        int n = r.readByte();
+        int[] out = new int[n];
+        for (int i = 0; i < n; i++) out[i] = r.readByte();
         return out;
     }
 

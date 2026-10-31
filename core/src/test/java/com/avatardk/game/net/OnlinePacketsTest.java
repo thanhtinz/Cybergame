@@ -75,6 +75,45 @@ class OnlinePacketsTest {
     }
 
     @Test
+    void joinHeaderCarriesZoneAndBoardListParses() throws IOException {
+        // gói 50: header phải lộ zoneId (khu) server xếp vào — kể cả khi
+        // client xin bằng khu −1 (tự chọn)
+        byte[] payload = bytes(w -> {
+            w.writeByte(23);  // server map id
+            w.writeByte(7);   // zoneId = KHU 7
+            w.writeShort(-1);
+            w.writeShort(-1);
+            w.writeByte(1);
+            writePlayer(w, 7, "Linh", new int[]{0, 80}, 395, 100, 1);
+            w.writeByte(0);
+            w.writeByte(101);
+            w.writeShort(-1);
+            w.writeByte(0);
+            w.writeByte(0);
+            w.writeShort(0);
+            w.writeByte(0);
+            w.writeByte(0);
+            w.writeShort(-1);
+        });
+        ZonePlayers.JoinResult jr =
+            ZonePlayers.parseJoin(new Msg(AvatarProtocol.AVATAR_JOIN_PARK, payload));
+        assertEquals(23, jr.mapId);
+        assertEquals(7, jr.zoneId);
+        assertEquals(1, jr.players.size());
+
+        // gói 60: byte số khu + mỗi khu một byte trạng thái (0 đầy, 1 đông, 2 vắng)
+        byte[] board = bytes(w -> {
+            w.writeByte(10);
+            for (int s : new int[]{2, 1, 2, 0, 2, 2, 2, 2, 1, 2}) w.writeByte(s);
+        });
+        int[] st = ZonePlayers.parseBoardList(new Msg(AvatarProtocol.PARK_BOARD_LIST, board));
+        assertEquals(10, st.length);
+        assertEquals(1, st[1]);
+        assertEquals(0, st[3]);
+        assertEquals(2, st[9]);
+    }
+
+    @Test
     void playerJoinMoveLeaveChatParse() throws IOException {
         byte[] join = bytes(w -> {
             writePlayer(w, 8, "Tuấn", new int[]{0, 80, 46}, 525, 88, 1);

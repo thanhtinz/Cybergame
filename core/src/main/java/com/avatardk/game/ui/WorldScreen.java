@@ -161,6 +161,7 @@ public class WorldScreen extends ScreenAdapter {
         float y;
         float x;
         Texture tex;
+        int objId;
         NpcFigure npc;
         RemoteFigure remote;
     }
@@ -182,6 +183,13 @@ public class WorldScreen extends ScreenAdapter {
     /** Client map id đã gửi gói join (50); -1 = chưa join / đã rớt mạng. */
     private int joinedClientMap = -1;
     private boolean netLossAnnounced = false;
+    // KHU (zone) của map: mỗi map có 10 khu 0–9 chạy song song; bảng 846
+    // hiện số khu hiện tại; đổi khu = join lại cùng map với khu khác.
+    private int currentArea = 0;
+    private Integer pendingArea = null; // khu muốn chuyển tới ở lần join sau
+    private boolean boardOpen = false;
+    private int[] boardStatus = null;   // trạng thái từng khu từ gói 60
+    private float boardLatch = 0f;      // chống mở panel liên tục khi va bảng
     private float lastMoveSentAt = 0f, netTime = 0f;
     private int lastSentX = Integer.MIN_VALUE, lastSentY = Integer.MIN_VALUE;
     private boolean lastSentLeft = false;
@@ -728,8 +736,15 @@ public class WorldScreen extends ScreenAdapter {
         try {
             switch (m.command) {
                 case AvatarProtocol.AVATAR_JOIN_PARK: {
+                    ZonePlayers.JoinResult jr = ZonePlayers.parseJoin(m);
+                    currentArea = jr.zoneId; // khu thật server xếp mình vào
                     remotes.clear();
-                    for (ZonePlayers.RemotePlayer p : ZonePlayers.parseJoinList(m)) addRemote(p);
+                    for (ZonePlayers.RemotePlayer p : jr.players) addRemote(p);
+                    break;
+                }
+                case AvatarProtocol.PARK_BOARD_LIST: {
+                    boardStatus = ZonePlayers.parseBoardList(m);
+                    boardOpen = true;
                     break;
                 }
                 case AvatarProtocol.PLAYER_JOIN: {
@@ -780,6 +795,68 @@ public class WorldScreen extends ScreenAdapter {
         handleNetMsg(new Msg(cmd, payload));
     }
 
+    // ---------- KHU (zone) ----------
+
+    /** Mở panel chọn khu: online thì xin trạng thái thật từ server
+     *  (gói 60), offline thì mở với trạng thái trống để xem/chọn cục bộ. */
+    public void openBoardRequest() {
+        boardOpen = true;
+        boardLatch = 1.2f;
+        GameConnection conn = game.connection;
+        if (conn != null && game.player != null && !conn.isClosed()) {
+            boardStatus = null; // chờ gói 60 trả về
+            try {
+                AvatarProtocol.requestBoardList(conn, mapDef.id);
+            } catch (IOException e) {
+                boardStatus = new int[]{2, 2, 2, 2, 2, 2, 2, 2, 2, 2};
+            }
+        } else if (boardStatus == null) {
+            boardStatus = new int[]{2, 2, 2, 2, 2, 2, 2, 2, 2, 2};
+        }
+    }
+
+    /** Chuyển sang khu khác của CÙNG map, giữ nguyên vị trí — đúng cách
+     *  gốc làm khi chọn khu trong ParkListSrc (doJoinPark với board mới). */
+    public void switchArea(int area) {
+        boardOpen = false;
+        if (area == currentArea) return;
+        GameConnection conn = game.connection;
+        if (conn == null || game.player == null || conn.isClosed()) {
+            currentArea = area; // offline: chỉ đổi số hiển thị trên bảng
+            return;
+        }
+        pendingArea = area;
+        joinedClientMap = -1; // ép updateNet join lại với khu mới
+        remotes.clear();
+    }
+
+    /** Bảng KHU (vật thể 846) gần nhất trong tầm tương tác, hoặc null. */
+    private int[] nearestSign() {
+        int[] best = null;
+        float bd = INTERACT_RANGE;
+        for (int[] o : mapDef.objects) {
+            if (o[0] != 846) continue;
+            float d = (float) Math.hypot(playerX - o[1], playerY - o[2]);
+            if (d < bd) { bd = d; best = o; }
+        }
+        return best;
+    }
+
+    /** Type ô tại điểm (medium); −999 nếu map không có dữ liệu type. */
+    private int cellTypeAt(float mx, float my) {
+        if (mapDef == null || mapDef.types == null || mapDef.gridW <= 0) return -999;
+        int cx = (int) (mx / 24), cy = (int) (my / 24);
+        if (cx < 0 || cy < 0 || cx >= mapDef.gridW || cy >= mapDef.gridH) return -999;
+        return mapDef.types[cy * mapDef.gridW + cx];
+    }
+
+    public void debugOpenBoard(int[] statuses, int area) {
+        boardStatus = statuses;
+        currentArea = area;
+        boardOpen = true;
+    }
+    public int debugArea() { return currentArea; }
+
     /** Số người chơi khác đang hiển thị (kiểm chứng). */
     public int remoteCount() {
         return remotes.size();
@@ -803,7 +880,9 @@ public class WorldScreen extends ScreenAdapter {
         netLossAnnounced = false;
         if (joinedClientMap != mapDef.id) {
             try {
-                AvatarProtocol.joinPark(conn, mapDef.id, (int) playerX, (int) playerY);
+                int area = pendingArea != null ? pendingArea : -1;
+                AvatarProtocol.joinPark(conn, mapDef.id, area, (int) playerX, (int) playerY);
+                pendingArea = null;
                 joinedClientMap = mapDef.id;
                 remotes.clear();
                 lastSentX = Integer.MIN_VALUE;
@@ -967,6 +1046,27 @@ public class WorldScreen extends ScreenAdapter {
             if (x < px || x > px + 940 || y < py || y > py + 600) cityMapOpen = false;
             return;
         }
+        // panel chọn khu đang mở là lớp trên (sau bản đồ thành phố)
+        if (boardOpen) {
+            if (x >= BOARD_PX + BOARD_PW - 52 && x <= BOARD_PX + BOARD_PW
+                && y >= BOARD_PY + BOARD_PH - 52 && y <= BOARD_PY + BOARD_PH) {
+                boardOpen = false;
+                return;
+            }
+            if (boardStatus != null) {
+                for (int k = 0; k < boardStatus.length && k < 10; k++) {
+                    float cx = boardCellX(k % 5), cy = boardCellY(k / 5);
+                    if (x >= cx && x <= cx + BOARD_CELL_W && y >= cy && y <= cy + BOARD_CELL_H) {
+                        if (boardStatus[k] != 0) switchArea(k); else boardOpen = false;
+                        return;
+                    }
+                }
+            }
+            if (x < BOARD_PX || x > BOARD_PX + BOARD_PW || y < BOARD_PY || y > BOARD_PY + BOARD_PH) {
+                boardOpen = false;
+            }
+            return;
+        }
         // nút burger (phải trên): mở/đóng panel kính
         if (x >= BURGER_X && x <= BURGER_X + BURGER_S && y >= BURGER_Y && y <= BURGER_Y + BURGER_S) {
             menuOpen = !menuOpen;
@@ -1069,6 +1169,8 @@ public class WorldScreen extends ScreenAdapter {
     public void interact() {
         NpcFigure n = findNearestNpc();
         if (n == null) {
+            // đứng gần bảng KHU (846) thì tương tác = mở danh sách khu
+            if (nearestSign() != null) { openBoardRequest(); return; }
             // bong bóng trên đầu như cũ, nhưng trong khung chat thì đây là
             // thông báo HỆ THỐNG (vào tab Hệ thống, không vào tab Gần đây)
             chatBubble = "Không có ai ở gần để tương tác.";
@@ -1100,6 +1202,7 @@ public class WorldScreen extends ScreenAdapter {
     }
 
     private void update(float dt) {
+        if (boardLatch > 0f) boardLatch -= dt;
         // sheet biểu cảm: chiều cao chạy mượt về nấc đích (trừ lúc đang kéo tay cầm)
         if (feelPointer < 0 || !feelDragHandle) {
             feelH += (feelHTarget - feelH) * Math.min(1f, dt * 14f);
@@ -1134,8 +1237,10 @@ public class WorldScreen extends ScreenAdapter {
             float nx = MathUtils.clamp(playerX + mx * SPEED * dt, 16,
                 worldW / AvatarDkGame.HD - 16);
             if (canStand(nx, playerY)) playerX = nx;
+            else if (cellTypeAt(nx, playerY) == 29 && boardLatch <= 0f && !boardOpen) openBoardRequest();
             float ny = MathUtils.clamp(playerY + my * SPEED * dt, 30, 190);
             if (canStand(playerX, ny)) playerY = ny;
+            else if (cellTypeAt(playerX, ny) == 29 && boardLatch <= 0f && !boardOpen) openBoardRequest();
             if (Math.abs(mx) > 0.05f) playerAnim.facingLeft = mx < 0;
             playerAnim.action = AvatarAnimator.RUN;
         } else {
@@ -1240,6 +1345,7 @@ public class WorldScreen extends ScreenAdapter {
             it.kind = DrawItem.OBJ;
             it.y = mapBottomPx - o[2] * AvatarDkGame.HD;
             it.tex = t;
+            it.objId = o[0];
             it.x = o[1] * AvatarDkGame.HD - t.getWidth() / 2f;
             drawItems.add(it);
         }
@@ -1268,6 +1374,16 @@ public class WorldScreen extends ScreenAdapter {
             switch (it.kind) {
                 case DrawItem.OBJ:
                     batch.draw(it.tex, it.x, it.y);
+                    if (it.objId == 846) {
+                        // bảng KHU: gốc vẽ SỐ KHU hiện tại lên mặt bảng
+                        // (ImageObj.paint của gốc) — chữ đen giữa bảng
+                        String num = String.valueOf(currentArea);
+                        Ui.font.setColor(0.05f, 0.1f, 0.25f, 1f);
+                        layout.setText(Ui.font, num);
+                        Ui.font.draw(batch, num,
+                            it.x + it.tex.getWidth() / 2f - layout.width / 2f,
+                            it.y + 56f);
+                    }
                     break;
                 case DrawItem.NPC:
                     drawFigure(it.npc.doll, it.npc.anim, it.npc.feetX, it.npc.feetY,
@@ -1395,6 +1511,7 @@ public class WorldScreen extends ScreenAdapter {
         drawInteractButton();
         drawChatFrame();
         drawFeelUi();
+        if (boardOpen) drawBoardPanel();
         if (cityMapOpen) drawCityMap();
         batch.end();
     }
@@ -1570,6 +1687,60 @@ public class WorldScreen extends ScreenAdapter {
             layout.setText(Ui.fontSmall, MENU_ITEMS[i][1]);
             Ui.fontSmall.draw(batch, MENU_ITEMS[i][1], cx + MENU_CELL / 2f - layout.width / 2f, cy + 24);
         }
+    }
+
+    // ---------- Panel chọn KHU (ParkListSrc của gốc, vẽ theo tông kính) ----------
+    private static final float BOARD_PW = 560f, BOARD_PH = 308f;
+    private static final float BOARD_PX = (Ui.W - BOARD_PW) / 2f, BOARD_PY = (Ui.H - BOARD_PH) / 2f;
+    private static final float BOARD_CELL_W = 100f, BOARD_CELL_H = 88f;
+
+    private float boardCellX(int col) { return BOARD_PX + 14 + col * (BOARD_CELL_W + 8); }
+    private float boardCellY(int row) { return BOARD_PY + BOARD_PH - 56 - (row + 1) * BOARD_CELL_H - row * 8; }
+
+    private void drawBoardPanel() {
+        batch.setColor(0f, 0f, 0f, 0.45f);
+        batch.draw(whiteTex, 0, 0, Ui.W, Ui.H);
+        batch.setColor(Color.WHITE);
+        batch.draw(Ui.roundedRect((int) BOARD_PW, (int) BOARD_PH, 16, GLASS_FILL_DARK, GLASS_RIM),
+            BOARD_PX, BOARD_PY);
+        Ui.font.setColor(1f, 0.85f, 0.45f, 1f);
+        Ui.font.draw(batch, "CHỌN KHU — " + (mapDef.name != null ? mapDef.name : ("MAP " + mapDef.id)),
+            BOARD_PX + 22, BOARD_PY + BOARD_PH - 20);
+        Ui.font.setColor(Color.WHITE);
+        Ui.font.draw(batch, "X", BOARD_PX + BOARD_PW - 38, BOARD_PY + BOARD_PH - 18);
+        if (boardStatus == null) {
+            Ui.fontSmall.setColor(1f, 1f, 1f, 0.85f);
+            String s = "Đang tải danh sách khu…";
+            layout.setText(Ui.fontSmall, s);
+            Ui.fontSmall.draw(batch, s, BOARD_PX + BOARD_PW / 2f - layout.width / 2f,
+                BOARD_PY + BOARD_PH / 2f);
+            return;
+        }
+        for (int k = 0; k < boardStatus.length && k < 10; k++) {
+            int col = k % 5, row = k / 5;
+            float cx = boardCellX(col), cy = boardCellY(row);
+            int st = boardStatus[k];
+            Color fill = st == 0 ? new Color(0.32f, 0.09f, 0.09f, 0.88f)
+                : st == 1 ? new Color(0.34f, 0.23f, 0.05f, 0.88f)
+                : new Color(0.07f, 0.24f, 0.12f, 0.88f);
+            Color rim = k == currentArea ? new Color(0.45f, 0.95f, 1f, 0.95f) : GLASS_RIM;
+            batch.draw(Ui.roundedRect((int) BOARD_CELL_W, (int) BOARD_CELL_H, 10, fill, rim), cx, cy);
+            Ui.font.setColor(1f, 1f, 1f, 0.95f);
+            String t = "KHU " + k;
+            layout.setText(Ui.font, t);
+            Ui.font.draw(batch, t, cx + BOARD_CELL_W / 2f - layout.width / 2f, cy + BOARD_CELL_H - 16);
+            String s = k == currentArea ? "ĐANG Ở"
+                : st == 0 ? "ĐẦY" : st == 1 ? "ĐÔNG" : "VẮNG";
+            Ui.fontSmall.setColor(k == currentArea ? new Color(0.45f, 0.95f, 1f, 1f)
+                : st == 0 ? new Color(1f, 0.45f, 0.4f, 1f)
+                : st == 1 ? new Color(1f, 0.8f, 0.35f, 1f)
+                : new Color(0.45f, 1f, 0.6f, 1f));
+            layout.setText(Ui.fontSmall, s);
+            Ui.fontSmall.draw(batch, s, cx + BOARD_CELL_W / 2f - layout.width / 2f, cy + 26);
+        }
+        Ui.fontSmall.setColor(1f, 1f, 1f, 0.7f);
+        Ui.fontSmall.draw(batch, "Khu đông thì chọn khu khác — vẫn là map này, chỉ khác người.",
+            BOARD_PX + 22, BOARD_PY + 30);
     }
 
     /** Bản đồ thành phố toàn màn hình (MiniMap của gốc): ảnh minimap + các điểm

@@ -30,3 +30,25 @@ Ghi chú:
   chơi thật (role ≠ 0) từ gói mạng; NPC tĩnh vẫn vẽ theo maps.json như đợt 1.
 - Người chơi nhận echo 54/55 của chính mình: client bỏ qua gói mang id của mình
   (di chuyển lấy nội bộ làm chuẩn; chat hiển thị qua echo như client gốc).
+
+## KHU (zone) — mỗi map 10 khu chạy song song
+
+- Server tạo đúng **10 zone (khu 0–9) cho mỗi map** (`MapManager.add(new Map(i, 0, 10))`).
+  Khu là "channel" của map: cùng một map, người ở khác khu không thấy nhau.
+- Vào khu: gói 50 với byte khu = 0–9 để vào thẳng, hoặc −1 để server tự
+  chọn (`joinAreaAutoNumber`: khu đầu tiên có ≤ 10 người). Header gói 50
+  trả về chứa **zoneId thật** — client lấy đó làm khu hiện tại.
+- Chuyển khu = gửi lại gói 50 cùng map, khu khác, giữ x/y (`ParkListSrc.doSelect`
+  của gốc gọi `doJoinPark(roomID, selected)`).
+- Danh sách khu: C→S gói **60** (byte mapId server) → S→C gói 60: byte số
+  khu (10), rồi mỗi khu 1 byte trạng thái do `Session.doiKhuVuc` tính theo
+  số người trong zone (gồm cả NPC phía server): **0 = đầy (≥9), 1 = đông
+  (≥4), 2 = vắng (<4)**. Khu đầy thì client gốc không cho chọn.
+- Bảng KHU (vật thể **846**) hiện **số khu hiện tại** ngay trên mặt bảng:
+  `ImageObj.paint` của gốc vẽ `MapScr.boardID` tại tâm bảng. Ô của bảng
+  (mã 98) có type **29** — gốc "dẫm lên" ô này là gửi gói 60 mở danh sách;
+  bản port mở panel khi va vào ô type 29 hoặc bấm Tương tác khi đứng gần bảng.
+- Kiểm chứng sống (core/src/test/python/live_khu_test.py, 2026-10-31):
+  A join −1 → khu 0; B join khu 3 → đúng khu 3; gói 60 → 10 khu, khu 0
+  trạng thái 1 (NPC server nằm ở khu 0), khu 3 trạng thái 2; B chuyển
+  khu 5 → header gói 50 xác nhận khu 5. PASS.

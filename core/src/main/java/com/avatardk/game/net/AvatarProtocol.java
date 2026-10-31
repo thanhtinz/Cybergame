@@ -17,6 +17,8 @@ public final class AvatarProtocol {
     public static final byte CRE_CHARACTER = -35;
     public static final byte SET_AGENT = -79;
     public static final byte AVATAR_JOIN_PARK = 50;
+    /** Xin danh sách khu (board) của một map + server trả trạng thái từng khu. */
+    public static final byte PARK_BOARD_LIST = 60;
     public static final byte PLAYER_JOIN = 51;
     public static final byte PLAYER_LEAVE = 53;
     public static final byte PLAYER_MOVE = 54;
@@ -94,12 +96,28 @@ public final class AvatarProtocol {
      *  gửi server map id = client id − 1; byte area (-1 = tự chọn khu),
      *  short x, short y (đơn vị medium). */
     public static void joinPark(GameConnection conn, int clientMapId, int x, int y) throws IOException {
+        joinPark(conn, clientMapId, -1, x, y);
+    }
+
+    /** Vào map ở một KHU (zone) cụ thể: byte map (server), byte khu
+     *  (0–9; −1 = server tự chọn khu còn trống), short x, short y.
+     *  Chuyển khu = gửi lại gói này với khu khác, vẫn map đó, giữ vị trí. */
+    public static void joinPark(GameConnection conn, int clientMapId, int area, int x, int y)
+            throws IOException {
         Msg m = new Msg(AVATAR_JOIN_PARK);
         DataOutputStream w = m.writer();
         w.writeByte(clientMapId - 1);
-        w.writeByte(-1);
+        w.writeByte(area);
         w.writeShort(x);
         w.writeShort(y);
+        conn.send(m);
+    }
+
+    /** Xin trạng thái các khu của map (gói 60): server trả byte số khu
+     *  rồi mỗi khu một byte trạng thái (0 = đầy, 1 = đông, 2 = vắng). */
+    public static void requestBoardList(GameConnection conn, int clientMapId) throws IOException {
+        Msg m = new Msg(PARK_BOARD_LIST);
+        m.writer().writeByte(clientMapId - 1);
         conn.send(m);
     }
 

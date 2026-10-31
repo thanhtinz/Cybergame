@@ -291,6 +291,16 @@ public class ScreenshotMain {
                     case 18:
                         if (frame == 25) {
                             shot("shot-day-park.png");
+                            // Panel chọn KHU ở map 24 (khu 3 đầy, 1/8 đông)
+                            world.debugSetMap(24);
+                            world.debugForceDay();
+                            world.debugOpenBoard(new int[]{2, 1, 2, 0, 2, 2, 2, 2, 1, 2}, 0);
+                            stage = 19; frame = 0;
+                        }
+                        break;
+                    case 19:
+                        if (frame == 25) {
+                            shot("shot-board.png");
                             System.out.println("SCREENSHOT DONE");
                             Gdx.app.exit();
                         }
