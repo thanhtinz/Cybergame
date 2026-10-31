@@ -69,6 +69,9 @@ public class WorldScreen extends ScreenAdapter {
         public int stopX = -1, stopY, stopRow, stopFirstTileX, stopLastTileX;
         /** Vật thể gắn map [imgId, anchorX, anchorY] (medium, neo đáy–giữa). */
         public final java.util.List<int[]> objects = new java.util.ArrayList<>();
+        /** Lưới va chạm: blocked[ty*gridW+tx] = ô chân vật thể, không đứng được. */
+        public boolean[] blocked;
+        public int gridW, gridH;
         /** Số nền dùng khi vẽ (map không nền thì tạm dùng 0 cho lớp trời). */
         public int bgNum() { return bg == null ? 0 : bg; }
         public String label() { return name == null || name.isEmpty() ? "Map " + id : name; }
@@ -91,6 +94,8 @@ public class WorldScreen extends ScreenAdapter {
     /** x0_imgBG theo số nền (đơn vị hd): bg0=2, bg1=20, bg2=15, bg3=0 (×hd). */
     private static final int[] X0_BG_HD = {2, 20, 15, 0};
     private int bgStatus = 0;
+    /** Ghi đè ngày/đêm cho ảnh kiểm chứng (debug); -1 = theo giờ thật. */
+    private int bgStatusOverride = -1;
     private Texture bgSkyTex, bgLineTex;
     private final Texture[] cloudTex = new Texture[2];
     private static class Cloud { float x100, yW, speed; int anchor; }
@@ -332,15 +337,32 @@ public class WorldScreen extends ScreenAdapter {
             Gdx.files.internal("data/mapgrids.json").readString("UTF-8"));
         for (MapDef d : maps) {
             com.avatardk.game.data.MapGrids.Grid g = grids.grid(d.id);
-            if (g != null && g.hasStop()) {
+            if (g == null) continue;
+            if (g.hasStop()) {
                 d.stopX = g.stopX();
                 d.stopY = g.stopY();
                 d.stopRow = g.stopRow();
                 d.stopFirstTileX = g.stopFirstTileX();
                 d.stopLastTileX = g.stopLastTileX();
-                if (g.o != null) {
-                    for (int[] o : g.o) d.objects.add(o);
-                }
+            }
+            if (g.o != null) {
+                for (int[] o : g.o) d.objects.add(o);
+            }
+            // Va chạm vật thể: ô chứa chân (hàng đáy) của mỗi vật thể theo
+            // bề ngang sprite — nhân vật không đi xuyên/lên vật thể được.
+            d.gridW = g.w;
+            d.gridH = g.w > 0 ? g.cells().length / g.w : 0;
+            d.blocked = new boolean[g.cells().length];
+            for (int[] o : d.objects) {
+                if (o[0] < 0) continue;
+                Texture t = objTexture(o[0]);
+                if (t == null) continue;
+                int halfW = t.getWidth() / 4; // hd -> nửa bề ngang theo medium
+                int row = o[2] / 24;
+                if (row < 0 || row >= d.gridH) continue;
+                int c0 = Math.max(0, (int) Math.floor((o[1] - halfW) / 24.0));
+                int c1 = Math.min(d.gridW - 1, (int) Math.floor((o[1] + halfW - 1) / 24.0));
+                for (int c = c0; c <= c1; c++) d.blocked[row * d.gridW + c] = true;
             }
         }
         busTex = game.texture("sprites/bus.png");
@@ -400,6 +422,13 @@ public class WorldScreen extends ScreenAdapter {
         // giữ người chơi trong biên map mới
         playerX = MathUtils.clamp(playerX, 24, worldW / AvatarDkGame.HD - 24);
         playerY = MathUtils.clamp(playerY, 36, Math.max(60, def.hmap * 24 - 30));
+        // nếu điểm hiện tại rơi vào chân vật thể (đổi map), đẩy xuống
+        // hàng đứng được gần nhất phía dưới
+        if (!canStand(playerX, playerY)) {
+            for (int dy = 0; dy < 8 * 24 && !canStand(playerX, playerY); dy += 24) {
+                playerY = Math.min(playerY + 24, def.hmap * 24 - 12);
+            }
+        }
     }
 
     /** Map không có nền (bg = null trong maps.json: bg bảng = -1 hoặc TYPEMAP
@@ -416,7 +445,8 @@ public class WorldScreen extends ScreenAdapter {
      *  mây trôi effect/cl<anchor><status>. */
     private void loadBackground(MapDef def) {
         int hour = java.time.LocalTime.now().getHour();
-        bgStatus = (hour >= 18 || hour < 6) ? 1 : 0;
+        bgStatus = bgStatusOverride >= 0 ? bgStatusOverride
+            : (hour >= 18 || hour < 6) ? 1 : 0;
         if (def.bg == null) {
             bgSkyTex = null;
             bgLineTex = null;
@@ -611,6 +641,12 @@ public class WorldScreen extends ScreenAdapter {
     public int feelCount() { return feelIds.size(); }
     public void debugInteract() { interact(); }
     public void debugSetPlayer(float mediumX, float mediumY) { playerX = mediumX; playerY = mediumY; }
+    public boolean debugCanStand(float mediumX, float mediumY) { return canStand(mediumX, mediumY); }
+    /** Ép nền ban ngày cho ảnh kiểm chứng (chỉ harness chụp hình dùng). */
+    public void debugForceDay() {
+        bgStatusOverride = 0;
+        if (mapDef != null) loadBackground(mapDef);
+    }
     public void debugChat(String text) { showBubble(text); }
     public void debugChatTab(int tab) { activeChatTab = tab; }
     public int mapId() { return mapDef.id; }
@@ -1037,6 +1073,16 @@ public class WorldScreen extends ScreenAdapter {
         // Lời NPC chỉ nổi bong bóng trên đầu, KHÔNG đưa vào khung chat (chủ dự án chốt).
     }
 
+    /** Điểm chân (medium, hệ trên–trái) có đứng được không: ngoài lưới
+     *  thì không; ô chứa chân vật thể thì không. (Type ô của gốc sẽ gộp
+     *  vào đây khi dữ liệu trích tới.) */
+    public boolean canStand(float mx, float my) {
+        if (mapDef == null || mapDef.blocked == null) return true;
+        int cx = (int) (mx / 24), cy = (int) (my / 24);
+        if (cx < 0 || cy < 0 || cx >= mapDef.gridW || cy >= mapDef.gridH) return false;
+        return !mapDef.blocked[cy * mapDef.gridW + cx];
+    }
+
     private void update(float dt) {
         // sheet biểu cảm: chiều cao chạy mượt về nấc đích (trừ lúc đang kéo tay cầm)
         if (feelPointer < 0 || !feelDragHandle) {
@@ -1066,10 +1112,14 @@ public class WorldScreen extends ScreenAdapter {
         boolean moving = len > 0.01f;
         if (moving) {
             mx /= Math.max(1f, len); my /= Math.max(1f, len);
-            playerX += mx * SPEED * dt;
-            playerY += my * SPEED * dt;
-            playerX = MathUtils.clamp(playerX, 16, worldW / AvatarDkGame.HD - 16);
-            playerY = MathUtils.clamp(playerY, 30, 190);
+            // di chuyển tách trục + va chạm: trục nào đụng vật thể thì
+            // dừng trục đó, trục còn lại trượt dọc theo vật (đúng cảm
+            // giác game gốc); nhân vật không đi xuyên/lên vật thể.
+            float nx = MathUtils.clamp(playerX + mx * SPEED * dt, 16,
+                worldW / AvatarDkGame.HD - 16);
+            if (canStand(nx, playerY)) playerX = nx;
+            float ny = MathUtils.clamp(playerY + my * SPEED * dt, 30, 190);
+            if (canStand(playerX, ny)) playerY = ny;
             if (Math.abs(mx) > 0.05f) playerAnim.facingLeft = mx < 0;
             playerAnim.action = AvatarAnimator.RUN;
         } else {

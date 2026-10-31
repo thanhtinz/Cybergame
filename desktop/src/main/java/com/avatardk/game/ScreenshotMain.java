@@ -265,6 +265,30 @@ public class ScreenshotMain {
                     case 16:
                         if (frame == 25) {
                             shot("shot-objects.png");
+                            // Kiểm va chạm + cảnh ban ngày ở map 24
+                            world.debugSetMap(24);
+                            world.debugForceDay();
+                            System.out.println("COLLIDE bien-tram(636,132) blocked="
+                                + !world.debugCanStand(636f, 132f)
+                                + " truoc-bien(636,156) free=" + world.debugCanStand(636f, 156f)
+                                + " den(12,55) blocked=" + !world.debugCanStand(12f, 55f)
+                                + " duong(684,175) free=" + world.debugCanStand(684f, 175f));
+                            world.debugBusDwell();
+                            stage = 17; frame = 0;
+                        }
+                        break;
+                    case 17:
+                        if (frame == 25) {
+                            shot("shot-day-bus.png");
+                            world.debugSetMap(12);
+                            world.debugForceDay();
+                            world.debugSetPlayer(560f, 128f);
+                            stage = 18; frame = 0;
+                        }
+                        break;
+                    case 18:
+                        if (frame == 25) {
+                            shot("shot-day-park.png");
                             System.out.println("SCREENSHOT DONE");
                             Gdx.app.exit();
                         }
