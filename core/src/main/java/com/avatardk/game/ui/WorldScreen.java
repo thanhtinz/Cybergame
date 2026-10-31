@@ -1395,12 +1395,13 @@ public class WorldScreen extends ScreenAdapter {
         batch.draw(Ui.roundedRect(56, 56, 28, new Color(1f, 1f, 1f, 0.30f), GLASS_RIM), kx - 28, ky - 28);
     }
 
-    /** Phải dưới — nút tương tác glass: sáng viền vàng khi có NPC trong tầm,
-     *  kèm nhãn tên NPC đó; chưa có ai thì để mờ. */
+    /** Phải dưới — nút tương tác glass: tông kính slate khớp panel chat khi
+     *  có NPC trong tầm (bỏ hẳn tông vàng/nâu cũ) và KHÔNG hiện nhãn tên NPC
+     *  ở phía trên nữa — chủ dự án chốt 2026-10-31. Chưa có ai thì để mờ. */
     private void drawInteractButton() {
         boolean active = nearestNpc != null;
-        Color fill = active ? new Color(0.45f, 0.32f, 0.08f, 0.72f) : GLASS_FILL;
-        Color rim = active ? new Color(1f, 0.8f, 0.35f, 0.95f) : GLASS_RIM;
+        Color fill = active ? new Color(0.10f, 0.17f, 0.26f, 0.97f) : GLASS_FILL;
+        Color rim = active ? new Color(0.62f, 0.82f, 1f, 0.90f) : GLASS_RIM;
         batch.draw(Ui.roundedRect((int) (ACT_R * 2), (int) (ACT_R * 2), (int) ACT_R, fill, rim),
             ACT_CX - ACT_R, ACT_CY - ACT_R);
         // glyph bong bóng thoại vẽ bằng hình (không emoji)
@@ -1410,15 +1411,8 @@ public class WorldScreen extends ScreenAdapter {
             ACT_CX - 10, ACT_CY - 14);
         Ui.fontSmall.setColor(0.1f, 0.12f, 0.16f, 1f);
         Ui.fontSmall.draw(batch, "...", ACT_CX - 11, ACT_CY + 14);
-        // (chữ "Tương tác" dưới nút đã bỏ theo yêu cầu của chủ dự án)
-        if (active) {
-            layout.setText(Ui.fontSmall, nearestNpc.data.name);
-            float pw = layout.width + 22;
-            batch.draw(Ui.roundedRect((int) pw, 32, 10, GLASS_FILL_DARK, rim),
-                ACT_CX - pw / 2f, ACT_CY + ACT_R + 10);
-            Ui.fontSmall.setColor(1f, 0.9f, 0.5f, 1f);
-            Ui.fontSmall.draw(batch, nearestNpc.data.name, ACT_CX - layout.width / 2f, ACT_CY + ACT_R + 31);
-        }
+        // (chữ "Tương tác" dưới nút và nhãn tên NPC phía trên đã bỏ theo yêu
+        // cầu của chủ dự án)
     }
 
     @Override
