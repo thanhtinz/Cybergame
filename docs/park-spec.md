@@ -135,7 +135,14 @@ gốc (MainMenu.doExchange + ParkService/GlobalService của C#):
   (−1 = không có); nếu có: UTF tên, byte số part + short partIds (doll
   người yêu), UTF slogan, short idImage, byte cấp, byte %cấp, UTF tên
   quan hệ, short idAction (−1 = không có; có thì thêm UTF tên hành động);
-  cuối gói có thể còn short cấp của chính mình}. Đích khác mình → thẻ
+  cuối gói có thể còn short cấp của chính mình}. **Mở rộng của bản port**
+  (server `AvatarService.requestYourInfo`): sau short cuối, server ghi
+  thêm UTF ngày tạo tài khoản dd/MM/yyyy (cột `users.timeCreate`) để
+  panel nhân vật hiện "Vào game: …"; client gốc đọc tới short là dừng
+  nên không bị ảnh hưởng. Panel nhân vật (kiểu D đã chốt) còn hiện: icon
+  giới tính FA cạnh tên (gender 1 = Nam, 2 = Nữ), icon đôi giữa hai
+  nhân vật trên sân khấu = ảnh idImage (không có thì icon tim FA) +
+  slogan/tên nhẫn của đôi ở dưới icon. Đích khác mình → thẻ
   kính trên panel người chơi (cấp + 5 thanh). Đích là mình → **panel
   nhân vật** (bấm card góc trái trên): cột tiền icon myinfo gốc (Xu,
   Lượng, Lượng khoá, Xèng, Cấp+%), doll đứng lớn + người yêu đứng cạnh

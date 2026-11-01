@@ -19,6 +19,9 @@ import java.util.regex.Pattern;
 public class AvatarDataSet {
     public final Map<Integer, PartData> parts = new HashMap<>();
     public final Map<Integer, ImgInfo> imgByItemId = new HashMap<>();
+    /** Tra theo ID ảnh của gốc (ImageInfo.ID) — dữ liệu trích có id dòng
+     *  = item_id + 1 trên toàn bộ bảng nên ánh xạ được (xem ImgInfo). */
+    public final Map<Integer, ImgInfo> imgById = new HashMap<>();
     public final List<NpcData> npcs = new ArrayList<>();
 
     private static final Pattern INT = Pattern.compile("-?\\d+");
@@ -34,6 +37,7 @@ public class AvatarDataSet {
                 r.getInt("item_id"), r.getInt("image_id"),
                 r.getInt("x"), r.getInt("y"), r.getInt("w"), r.getInt("h"));
             ds.imgByItemId.put(info.itemId, info);
+            ds.imgById.put(info.itemId + 1, info);
         }
 
         JsonValue items = reader.parse(itemsJson);

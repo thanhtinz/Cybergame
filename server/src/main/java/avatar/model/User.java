@@ -71,6 +71,7 @@ public class User {
     private int PerLevelMarry;
     private int imginfo;
     private String tenNhan;
+    private java.sql.Date timeCreate;
 /// //////////
     private int storedXuUpdate; // Biến lưu trữ xu đã cập nhật
     private static final Logger logger = Logger.getLogger(User.class);
@@ -887,6 +888,7 @@ public class User {
             try (ResultSet red = ps.executeQuery()) {
                 if (red.next()) {
                     this.id = red.getInt("id");
+                    try { this.timeCreate = red.getDate("timeCreate"); } catch (Exception ignored) {}
                     this.role = (byte) red.getInt("role");
                     boolean active = red.getBoolean("active");
                     if (!active) {

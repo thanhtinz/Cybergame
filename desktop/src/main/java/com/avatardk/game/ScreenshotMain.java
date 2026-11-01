@@ -421,6 +421,7 @@ public class ScreenshotMain {
                             game.player.luong = 260;
                             game.player.luongKhoa = 1500;
                             game.player.xeng = 42;
+                            game.player.gender = 1; // Sơn = Nam
                             try {
                                 java.io.ByteArrayOutputStream bos = new java.io.ByteArrayOutputStream();
                                 java.io.DataOutputStream w = new java.io.DataOutputStream(bos);
@@ -433,10 +434,15 @@ public class ScreenshotMain {
                                 w.writeByte(lp.size());
                                 for (int pid : lp) w.writeShort(pid);
                                 w.writeUTF("Mãi mãi bên nhau");
-                                w.writeShort(0);
+                                // idImage -1: bản demo vẽ icon tim; dữ liệu
+                                // thật có idImage thì client vẽ đúng ảnh gốc
+                                w.writeShort(-1);
                                 w.writeByte(12); w.writeByte(40);
                                 w.writeUTF("Người yêu");
                                 w.writeShort(-1);
+                                // đuôi mở rộng: short cấp của mình + UTF ngày vào game
+                                w.writeShort(50);
+                                w.writeUTF("12/09/2024");
                                 w.flush();
                                 world.debugInjectNet((byte) -22, bos.toByteArray());
                             } catch (java.io.IOException ioe) {

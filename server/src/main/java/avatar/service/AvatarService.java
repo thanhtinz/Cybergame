@@ -883,6 +883,20 @@ public class AvatarService extends Service {
         }
     }
 
+    /** Ban port mo rong goi -22: cuoi goi ghi them UTF ngay tao tai khoan
+     *  (dd/MM/yyyy) de panel nhan vat hien "ngay vao game". Client goc doc
+     *  toi short cuoi la dung nen khong bi anh huong. */
+    private static void writeJoinDate(DataOutputStream ds, User us) {
+        try {
+            String s = "";
+            if (us.getTimeCreate() != null) {
+                s = new java.text.SimpleDateFormat("dd/MM/yyyy").format(us.getTimeCreate());
+            }
+            ds.writeUTF(s);
+        } catch (Exception ignored) {
+        }
+    }
+
     public void requestYourInfo(User us) {
         try {
             Message ms = new Message(-22);
@@ -902,6 +916,7 @@ public class AvatarService extends Service {
             }else {
                 ds.writeInt(-1);
                 ds.writeShort(us.getLeverMain());
+                writeJoinDate(ds, us);
                 ds.flush();
                 sendMessage(ms);
                 return;
@@ -923,6 +938,7 @@ public class AvatarService extends Service {
             ds.writeUTF("text 3"); // Action name if num23 != -1
 
             ds.writeShort(us.getLeverMain());
+            writeJoinDate(ds, us);
             ds.flush();
 
             sendMessage(ms);

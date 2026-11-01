@@ -9,6 +9,7 @@ import com.badlogic.gdx.graphics.GL20;
 import com.badlogic.gdx.graphics.OrthographicCamera;
 import com.badlogic.gdx.graphics.Pixmap;
 import com.badlogic.gdx.graphics.Texture;
+import com.badlogic.gdx.graphics.g2d.TextureRegion;
 import com.badlogic.gdx.graphics.g2d.GlyphLayout;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.math.MathUtils;
@@ -1189,6 +1190,7 @@ public class WorldScreen extends ScreenAdapter {
                         selfStats = st;
                         partnerName = null;
                         partnerDoll = null;
+                        partnerImgId = -1;
                         try {
                             if (r.available() >= 4) {
                                 int pid = r.readInt();
@@ -1198,7 +1200,7 @@ public class WorldScreen extends ScreenAdapter {
                                     java.util.List<Integer> parts = new java.util.ArrayList<>();
                                     for (int i = 0; i < n; i++) parts.add((int) r.readShort());
                                     partnerSlogan = r.readUTF();
-                                    r.readShort(); // idImage quan hệ
+                                    partnerImgId = r.readShort(); // idImage quan hệ (icon đôi)
                                     partnerLv = r.readByte() & 0xFF;
                                     partnerPct = MathUtils.clamp(r.readByte(), 0, 100);
                                     partnerRel = r.readUTF();
@@ -1211,6 +1213,18 @@ public class WorldScreen extends ScreenAdapter {
                             }
                         } catch (Exception ignored) {
                             // đuôi người yêu thiếu/hỏng: bỏ qua, chỉ số chính vẫn dùng được
+                        }
+                        // Đuôi mở rộng của server bản port: short cấp của
+                        // gốc + UTF ngày vào game (dd/MM/yyyy) — có thì lấy.
+                        try {
+                            if (r.available() >= 2) {
+                                r.readShort();
+                                if (r.available() > 0) {
+                                    String jd = r.readUTF();
+                                    selfJoinDate = jd.isEmpty() ? null : jd;
+                                }
+                            }
+                        } catch (Exception ignored) {
                         }
                     } else {
                         infoStats = st;
@@ -2226,6 +2240,9 @@ public class WorldScreen extends ScreenAdapter {
     private static final float CP_W = 640f, CP_H = 470f;
     private boolean charPanel = false;
     private int[] selfStats;
+    /** Icon đôi (idImage của gói −22) + ngày vào game (đuôi mở rộng −22). */
+    private int partnerImgId = -1;
+    private String selfJoinDate;
     private String partnerName, partnerRel, partnerSlogan;
     private int partnerLv, partnerPct;
     private PaperDoll partnerDoll;
@@ -2492,8 +2509,26 @@ public class WorldScreen extends ScreenAdapter {
         batch.draw(ringTexture(), avCx - 37, avCy - 37, 74, 74);
         Ui.font.setColor(1f, 0.83f, 0.38f, 1f);
         Ui.font.draw(batch, p.username, px + 116, avCy + 14);
+        if (p.gender == 1 || p.gender == 2) {
+            Ui.faIcon(batch, Ui.fa20, p.gender == 1 ? Ui.FA_MARS : Ui.FA_VENUS,
+                px + 116 + Ui.textWidth(Ui.font, p.username) + 16, avCy + 4,
+                new Color(p.gender == 1 ? 0.45f : 1f, p.gender == 1 ? 0.75f : 0.55f,
+                    p.gender == 1 ? 1f : 0.75f, 1f));
+        }
         Ui.fontSmall.setColor(1f, 1f, 1f, 0.92f);
         Ui.fontSmall.draw(batch, st != null ? "Cấp " + st[0] : "—", px + 116, avCy - 18);
+        // dòng phụ: giới tính · ngày vào game (ngày từ đuôi mở rộng gói −22)
+        StringBuilder meta = new StringBuilder();
+        if (p.gender == 1) meta.append("Nam");
+        else if (p.gender == 2) meta.append("Nữ");
+        if (selfJoinDate != null) {
+            if (meta.length() > 0) meta.append("  ·  ");
+            meta.append("Vào game: ").append(selfJoinDate);
+        }
+        if (meta.length() > 0) {
+            Ui.fontTiny.setColor(1f, 1f, 1f, 0.72f);
+            Ui.fontTiny.draw(batch, meta.toString(), px + 116, avCy - 40);
+        }
         // bên phải hàng cấp: "Người yêu: <tên>" — chưa có thì để trống
         if (partnerName != null) {
             String rel = (partnerRel != null && !partnerRel.isEmpty() ? partnerRel : "Người yêu")
@@ -2530,8 +2565,27 @@ public class WorldScreen extends ScreenAdapter {
         game.dollRenderer.draw(batch, playerDoll, playerAnim.frameIndex(), selfCx, floorY, 2.5f, false);
         if (hasPartner) {
             game.dollRenderer.draw(batch, partnerDoll, 0, partCx, floorY, 2.5f, true);
-            Ui.centered(batch, Ui.fontTiny, partnerName + " · " + (partnerRel != null ? partnerRel : "")
-                + " · Cấp " + partnerLv, partCx, stY + 14, new Color(1f, 0.85f, 0.92f, 1f));
+            // Giữa hai nhân vật: icon đôi (idImage của gói −22 — panel gốc
+            // cũng vẽ icon này ở giữa cặp) + tên nhẫn của đôi ở dưới icon.
+            float midX = (selfCx + partCx) / 2f;
+            float iconCy = floorY + 82;
+            com.avatardk.game.data.ImgInfo ii = partnerImgId > 0
+                ? game.data.imgById.get(partnerImgId) : null;
+            if (ii != null) {
+                Texture tex = game.texture("big/" + ii.bigId + ".png");
+                TextureRegion reg = new TextureRegion(tex,
+                    ii.x * 2, ii.y * 2, ii.w * 2, ii.h * 2);
+                float sc = 38f / Math.max(1, ii.h * 2);
+                float dw = ii.w * 2 * sc;
+                batch.draw(reg, midX - dw / 2f, iconCy - 19, dw, 38);
+            } else {
+                Ui.faIcon(batch, Ui.fa30, Ui.FA_HEART, midX, iconCy,
+                    new Color(1f, 0.45f, 0.6f, 1f));
+            }
+            if (partnerSlogan != null && !partnerSlogan.isEmpty()) {
+                Ui.centered(batch, Ui.fontTiny, partnerSlogan, midX, iconCy - 36,
+                    new Color(1f, 0.8f, 0.85f, 1f));
+            }
         }
         // lưới 6 thẻ chỉ số 3×2
         String[] labels = {"Cấp", "Thân thiện", "Gây rối", "Sành điệu", "Vui vẻ", "Sức khỏe"};
