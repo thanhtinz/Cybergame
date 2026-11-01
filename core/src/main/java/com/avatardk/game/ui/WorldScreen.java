@@ -1493,8 +1493,23 @@ public class WorldScreen extends ScreenAdapter {
                     break;
                 }
                 case AvatarProtocol.SERVER_DIALOG: {
-                    // gói −10: hộp thoại của server -> đưa vào tab Hệ thống
-                    addChatLog(TAB_SYSTEM, null, m.reader().readUTF(), true);
+                    // gói −10: hộp thoại của server -> đưa vào tab Hệ thống;
+                    // form đổi mật khẩu đang mở thì hiện luôn vào dòng trạng
+                    // thái của form (server báo kết quả đổi mật khẩu ở đây)
+                    String dlg = m.reader().readUTF();
+                    addChatLog(TAB_SYSTEM, null, dlg, true);
+                    if (passFormOpen) {
+                        setPassStatus(dlg, dlg.contains("thành công") ? 1 : 2);
+                    }
+                    break;
+                }
+                case AvatarProtocol.CHANGE_PASS: {
+                    // gói −62: server xác nhận đã đổi mật khẩu {UTF mới}
+                    m.reader().readUTF();
+                    if (passFormOpen) {
+                        setPassStatus("Đổi mật khẩu thành công.", 1);
+                        for (StringBuilder b : passFields) b.setLength(0);
+                    }
                     break;
                 }
                 default:
@@ -1677,6 +1692,17 @@ public class WorldScreen extends ScreenAdapter {
         Gdx.input.setInputProcessor(new InputAdapter() {
             @Override
             public boolean keyTyped(char c) {
+                if (passFormOpen) {
+                    StringBuilder b = passFields[passFocus];
+                    if (c == '\b') {
+                        if (b.length() > 0) b.deleteCharAt(b.length() - 1);
+                    } else if (c == '\r' || c == '\n') {
+                        submitPassForm();
+                    } else if (c >= 32 && b.length() < 24) {
+                        b.append(c);
+                    }
+                    return true;
+                }
                 if (!typing) return false;
                 if (c == '\b') {
                     if (typeBuffer.length() > 0) typeBuffer.deleteCharAt(typeBuffer.length() - 1);
@@ -1828,6 +1854,11 @@ public class WorldScreen extends ScreenAdapter {
     }
 
     private void onTouch(float x, float y, int pointer) {
+        // form Đổi mật khẩu đang mở là lớp trên cùng (modal, nuốt mọi chạm)
+        if (passFormOpen) {
+            passFormTouch(x, y);
+            return;
+        }
         // panel Cài đặt đang mở là lớp trên cùng (modal, nuốt mọi chạm)
         if (settingsOpen) {
             settingsTouch(x, y);
@@ -3943,14 +3974,14 @@ public class WorldScreen extends ScreenAdapter {
         if (boardOpen) drawBoardPanel();
         if (cityMapOpen) drawCityMap();
         if (settingsOpen) drawSettingsPanel();
+        if (passFormOpen) drawPassFormPanel();
         batch.end();
     }
 
-    /** Panel Cài đặt theo OptionScr của gốc, vẽ theo tông kính của game:
-     *  mỗi hàng gồm nhãn trái, giá trị ở giữa và hai nút bước ‹ › hai bên
-     *  (bản gốc dùng ảnh mũi tên imgMuiIOS; bản port dùng glyph chevron
-     *  Font Awesome thật). Hàng 0 "Tên": hiện/ẩn; hàng 1 "Chỉ đường":
-     *  hiện/ẩn; hàng 2 "Âm thanh": 0..100 nấc 10. Đóng = lưu như gốc. */
+    /** Panel Cài đặt (OptionScr của gốc) theo tông kính của game — bản 2
+     *  theo yêu cầu của chủ dự án: bỏ mũi tên bước, ba hàng Tên / Chỉ
+     *  đường / Âm thanh dùng CÔNG TẮC GẠT (bật là áp dụng và lưu ngay,
+     *  không còn nút Xong); thêm hàng Đổi mật khẩu mở form riêng. */
     private void drawSettingsPanel() {
         batch.setColor(0f, 0f, 0f, 0.45f);
         batch.draw(whiteTex, 0, 0, Ui.W, Ui.H);
@@ -3959,13 +3990,12 @@ public class WorldScreen extends ScreenAdapter {
             SET_PX, SET_PY);
         Ui.font.setColor(1f, 0.85f, 0.38f, 1f);
         Ui.font.draw(batch, "Cài đặt", SET_PX + 26, SET_PY + SET_PH - 30);
-        // nút X nằm gọn trong góc panel
         float xCx = SET_PX + SET_PW - 27, xCy = SET_PY + SET_PH - 27;
         batch.draw(Ui.roundedRect(36, 36, 18,
             new Color(0.13f, 0.18f, 0.28f, 0.95f), GLASS_RIM), xCx - 18, xCy - 18);
         Ui.faIcon(batch, Ui.fa20, Ui.FA_XMARK, xCx, xCy, new Color(1f, 1f, 1f, 0.9f));
-        String[] labels = {"Tên", "Chỉ đường", "Âm thanh"};
-        for (int i = 0; i < 3; i++) {
+        String[] labels = {"Tên", "Chỉ đường", "Âm thanh", "Đổi mật khẩu"};
+        for (int i = 0; i < 4; i++) {
             float cy = setRowCenter(i);
             if (i > 0) {
                 batch.draw(Ui.roundedRect((int) SET_PW - 48, 2, 1,
@@ -3974,39 +4004,41 @@ public class WorldScreen extends ScreenAdapter {
             }
             Ui.font.setColor(1f, 1f, 1f, 0.95f);
             Ui.font.draw(batch, labels[i], SET_PX + 30, cy + 10);
-            // hai nút bước
-            drawSetStepper(setStepLx(), cy, Ui.FA_CHEVRON_LEFT);
-            drawSetStepper(setStepRx(), cy, Ui.FA_CHEVRON_RIGHT);
-            // giá trị ở giữa hai nút bước
-            String val;
-            Color vc;
-            if (i == 0) {
-                val = com.avatardk.game.data.GameSettings.showName ? "hiện" : "ẩn";
-                vc = com.avatardk.game.data.GameSettings.showName
-                    ? new Color(0.55f, 0.95f, 0.60f, 1f) : new Color(0.65f, 0.68f, 0.72f, 1f);
-            } else if (i == 1) {
-                val = com.avatardk.game.data.GameSettings.showDir ? "hiện" : "ẩn";
-                vc = com.avatardk.game.data.GameSettings.showDir
-                    ? new Color(0.55f, 0.95f, 0.60f, 1f) : new Color(0.65f, 0.68f, 0.72f, 1f);
+            if (i < 3) {
+                drawSetToggle(i, cy);
             } else {
-                val = String.valueOf(com.avatardk.game.data.GameSettings.volume);
-                vc = new Color(1f, 0.85f, 0.45f, 1f);
+                // hàng Đổi mật khẩu: nút "Đổi" mở form riêng
+                float bw = 116, bh = 46, bx = SET_PX + SET_PW - 26 - bw, by = cy - bh / 2f;
+                batch.draw(Ui.roundedRect((int) bw, (int) bh, 12,
+                    new Color(0.98f, 0.58f, 0.16f, 1f), new Color(0.98f, 0.58f, 0.16f, 1f)), bx, by);
+                Ui.centered(batch, Ui.font, "Đổi", bx + bw / 2f, by + 31, new Color(1f, 1f, 1f, 1f));
             }
-            float midX = (setStepLx() + setStepRx()) / 2f;
-            Ui.centered(batch, Ui.font, val, midX, cy + 10, vc);
         }
-        // nút Xong cam ở đáy — đóng và lưu như lệnh "Xong" của gốc
-        float bw = 200, bh = 54, bx = SET_PX + (SET_PW - bw) / 2f, by = SET_PY + 24;
-        batch.draw(Ui.roundedRect((int) bw, (int) bh, 14,
-            new Color(0.98f, 0.58f, 0.16f, 1f), new Color(0.98f, 0.58f, 0.16f, 1f)), bx, by);
-        Ui.centered(batch, Ui.font, "Xong", SET_PX + SET_PW / 2f, by + 36,
-            new Color(1f, 1f, 1f, 1f));
+        Ui.centered(batch, Ui.fontTiny, "Thay đổi được lưu ngay",
+            SET_PX + SET_PW / 2f, SET_PY + 22, new Color(1f, 1f, 1f, 0.45f));
     }
 
-    private void drawSetStepper(float cx, float cy, String glyph) {
-        batch.draw(Ui.roundedRect(54, 54, 12,
-            new Color(0.16f, 0.22f, 0.34f, 0.95f), GLASS_RIM), cx - 27, cy - 27);
-        Ui.faIcon(batch, Ui.fa26, glyph, cx, cy, new Color(1f, 1f, 1f, 0.92f));
+    private boolean setRowOn(int i) {
+        if (i == 0) return com.avatardk.game.data.GameSettings.showName;
+        if (i == 1) return com.avatardk.game.data.GameSettings.showDir;
+        return com.avatardk.game.data.GameSettings.volume > 0;
+    }
+
+    /** Công tắc gạt một hàng cài đặt: thân pill (xanh lá khi bật, xám khi
+     *  tắt) + núm tròn trượt hai đầu + chữ trạng thái hiện/ẩn, bật/tắt. */
+    private void drawSetToggle(int i, float cy) {
+        boolean on = setRowOn(i);
+        float cx = SET_PX + SET_PW - 70;
+        String st = i == 2 ? (on ? "bật" : "tắt") : (on ? "hiện" : "ẩn");
+        layout.setText(Ui.fontSmall, st);
+        Ui.fontSmall.setColor(on ? new Color(0.55f, 0.95f, 0.60f, 1f)
+            : new Color(0.62f, 0.65f, 0.70f, 1f));
+        Ui.fontSmall.draw(batch, st, cx - 46 - layout.width, cy + 7);
+        batch.draw(Ui.roundedRect(68, 38, 19,
+            on ? new Color(0.25f, 0.72f, 0.42f, 0.95f) : new Color(0.30f, 0.33f, 0.40f, 0.95f),
+            GLASS_RIM), cx - 34, cy - 19);
+        batch.setColor(Color.WHITE);
+        batch.draw(circleTexture(), (on ? cx + 16 : cx - 16) - 15, cy - 15, 30, 30);
     }
 
     private void closeSettings() {
@@ -4014,19 +4046,28 @@ public class WorldScreen extends ScreenAdapter {
         settingsOpen = false;
     }
 
-    /** Một nấc chỉnh ở panel Cài đặt: hai hàng đầu lật hiện/ẩn (gốc bỏ
-     *  qua hướng mũi tên với hai hàng này), hàng Âm thanh ±10 kẹp 0..100. */
-    private void applySettingsStep(int row, int dir) {
+    /** Gạt một hàng cài đặt: Tên/Chỉ đường lật hiện-ẩn; Âm thanh tắt thì
+     *  nhớ mức cũ vào lastVolume, bật lại khôi phục đúng mức đó. Mọi thay
+     *  đổi lưu ngay (panel không còn nút Xong). */
+    private void applySettingsToggle(int row) {
         if (row == 0) {
             com.avatardk.game.data.GameSettings.showName =
                 !com.avatardk.game.data.GameSettings.showName;
         } else if (row == 1) {
             com.avatardk.game.data.GameSettings.showDir =
                 !com.avatardk.game.data.GameSettings.showDir;
-        } else {
-            int v = com.avatardk.game.data.GameSettings.volume + dir * 10;
-            com.avatardk.game.data.GameSettings.volume = Math.max(0, Math.min(100, v));
+        } else if (row == 2) {
+            if (com.avatardk.game.data.GameSettings.volume > 0) {
+                com.avatardk.game.data.GameSettings.lastVolume =
+                    com.avatardk.game.data.GameSettings.volume;
+                com.avatardk.game.data.GameSettings.volume = 0;
+            } else {
+                com.avatardk.game.data.GameSettings.volume =
+                    com.avatardk.game.data.GameSettings.lastVolume > 0
+                        ? com.avatardk.game.data.GameSettings.lastVolume : 100;
+            }
         }
+        com.avatardk.game.data.GameSettings.save();
     }
 
     private void settingsTouch(float x, float y) {
@@ -4035,27 +4076,154 @@ public class WorldScreen extends ScreenAdapter {
             closeSettings();
             return;
         }
-        float bw = 200, bh = 54, bx = SET_PX + (SET_PW - bw) / 2f, by = SET_PY + 24;
-        if (x >= bx && x <= bx + bw && y >= by && y <= by + bh) {
-            closeSettings();
-            return;
-        }
-        for (int i = 0; i < 3; i++) {
-            float cy = setRowCenter(i);
-            if (Math.abs(y - cy) <= 27) {
-                if (Math.abs(x - setStepLx()) <= 27) {
-                    applySettingsStep(i, -1);
-                    return;
+        for (int i = 0; i < 4; i++) {
+            if (Math.abs(y - setRowCenter(i)) <= 36) {
+                if (i < 3) {
+                    applySettingsToggle(i);
+                } else {
+                    openPassForm();
                 }
-                if (Math.abs(x - setStepRx()) <= 27) {
-                    applySettingsStep(i, 1);
-                    return;
-                }
+                return;
             }
         }
         if (x < SET_PX || x > SET_PX + SET_PW || y < SET_PY || y > SET_PY + SET_PH) {
             closeSettings();
         }
+    }
+
+    // ---------- Form ĐỔI MẬT KHẨU (InputFace của gốc, gói −62) ----------
+    // Gốc mở từ menu của MainMenu (mục Đổi mật khẩu cạnh Cài đặt), form 3
+    // ô Mật khẩu Cũ / Mật khẩu Mới / Nhập lại Mật khẩu, câu báo lỗi lấy
+    // nguyên T.enterPass. Gửi gói −62 {UTF cũ, UTF mới}; server trả −62
+    // kèm dialog thành công hoặc dialog "Mật khẩu cũ không đúng.".
+    private boolean passFormOpen = false;
+    private int passFocus = 0;
+    private final StringBuilder[] passFields =
+        {new StringBuilder(), new StringBuilder(), new StringBuilder()};
+    private String passStatus = null;
+    private int passStatusKind = 0; // 0 xám (thông tin), 1 xanh (thành công), 2 đỏ (lỗi)
+    private static final float PF_PW = 560f, PF_PH = 478f;
+    private static final float PF_PX = (Ui.W - PF_PW) / 2f, PF_PY = (Ui.H - PF_PH) / 2f;
+    private static final String[] PASS_LABELS =
+        {"Mật khẩu cũ", "Mật khẩu mới", "Nhập lại mật khẩu"};
+
+    private float passBoxY(int i) { return PF_PY + PF_PH - 168 - i * 92; }
+
+    private void setPassStatus(String s, int kind) {
+        passStatus = s;
+        passStatusKind = kind;
+    }
+
+    private void openPassForm() {
+        settingsOpen = false;
+        passFormOpen = true;
+        passFocus = 0;
+        passStatus = null;
+        for (StringBuilder b : passFields) b.setLength(0);
+    }
+
+    private void closePassForm() {
+        passFormOpen = false;
+        settingsOpen = true;
+        Gdx.input.setOnscreenKeyboardVisible(false);
+    }
+
+    private void drawPassFormPanel() {
+        batch.setColor(0f, 0f, 0f, 0.45f);
+        batch.draw(whiteTex, 0, 0, Ui.W, Ui.H);
+        batch.setColor(Color.WHITE);
+        batch.draw(Ui.roundedRect((int) PF_PW, (int) PF_PH, 16, GLASS_FILL_DARK, GLASS_RIM),
+            PF_PX, PF_PY);
+        Ui.font.setColor(1f, 0.85f, 0.38f, 1f);
+        Ui.font.draw(batch, "Đổi mật khẩu", PF_PX + 26, PF_PY + PF_PH - 30);
+        float xCx = PF_PX + PF_PW - 27, xCy = PF_PY + PF_PH - 27;
+        batch.draw(Ui.roundedRect(36, 36, 18,
+            new Color(0.13f, 0.18f, 0.28f, 0.95f), GLASS_RIM), xCx - 18, xCy - 18);
+        Ui.faIcon(batch, Ui.fa20, Ui.FA_XMARK, xCx, xCy, new Color(1f, 1f, 1f, 0.9f));
+        for (int i = 0; i < 3; i++) {
+            float by = passBoxY(i);
+            Ui.fontSmall.setColor(1f, 1f, 1f, 0.85f);
+            Ui.fontSmall.draw(batch, PASS_LABELS[i], PF_PX + 26, by + 80);
+            boolean focused = passFocus == i;
+            batch.draw(Ui.roundedRect((int) PF_PW - 52, 54, 12,
+                new Color(0.10f, 0.13f, 0.22f, 0.97f),
+                focused ? new Color(1f, 0.62f, 0.25f, 1f) : GLASS_RIM),
+                PF_PX + 26, by);
+            StringBuilder dots = new StringBuilder();
+            for (int d = 0; d < passFields[i].length(); d++) dots.append('•');
+            Ui.font.setColor(1f, 1f, 1f, 0.95f);
+            Ui.font.draw(batch, dots.toString(), PF_PX + 42, by + 37);
+            if (focused && (System.currentTimeMillis() / 500) % 2 == 0) {
+                layout.setText(Ui.font, dots.toString());
+                batch.setColor(1f, 1f, 1f, 0.85f);
+                batch.draw(whiteTex, PF_PX + 44 + layout.width, by + 14, 3, 26);
+                batch.setColor(Color.WHITE);
+            }
+        }
+        if (passStatus != null) {
+            Color sc = passStatusKind == 1 ? new Color(0.55f, 0.95f, 0.60f, 1f)
+                : passStatusKind == 2 ? new Color(1f, 0.45f, 0.40f, 1f)
+                : new Color(1f, 1f, 1f, 0.65f);
+            Ui.centered(batch, Ui.fontSmall, passStatus, PF_PX + PF_PW / 2f, PF_PY + 104, sc);
+        }
+        float bw = 240, bh = 56, bx = PF_PX + (PF_PW - bw) / 2f, by = PF_PY + 26;
+        batch.draw(Ui.roundedRect((int) bw, (int) bh, 14,
+            new Color(0.98f, 0.58f, 0.16f, 1f), new Color(0.98f, 0.58f, 0.16f, 1f)), bx, by);
+        Ui.centered(batch, Ui.font, "Đổi mật khẩu", PF_PX + PF_PW / 2f, by + 37,
+            new Color(1f, 1f, 1f, 1f));
+    }
+
+    private void passFormTouch(float x, float y) {
+        float xCx = PF_PX + PF_PW - 27, xCy = PF_PY + PF_PH - 27;
+        if ((x - xCx) * (x - xCx) + (y - xCy) * (y - xCy) <= 24 * 24) {
+            closePassForm();
+            return;
+        }
+        float bw = 240, bh = 56, bx = PF_PX + (PF_PW - bw) / 2f, by = PF_PY + 26;
+        if (x >= bx && x <= bx + bw && y >= by && y <= by + bh) {
+            submitPassForm();
+            return;
+        }
+        for (int i = 0; i < 3; i++) {
+            float fby = passBoxY(i);
+            if (x >= PF_PX + 26 && x <= PF_PX + PF_PW - 26 && y >= fby && y <= fby + 54) {
+                passFocus = i;
+                Gdx.input.setOnscreenKeyboardVisible(true);
+                return;
+            }
+        }
+        if (x < PF_PX || x > PF_PX + PF_PW || y < PF_PY || y > PF_PY + PF_PH) {
+            closePassForm();
+        }
+    }
+
+    /** Kiểm tra đúng 5 câu T.enterPass của gốc rồi gửi gói −62. */
+    private void submitPassForm() {
+        String oldP = passFields[0].toString();
+        String newP = passFields[1].toString();
+        String cf = passFields[2].toString();
+        if (oldP.isEmpty()) { setPassStatus("Xin nhập mật khẩu hiện tại.", 2); return; }
+        if (newP.isEmpty()) { setPassStatus("Xin nhập mật khẩu mới.", 2); return; }
+        if (cf.isEmpty()) { setPassStatus("Xin nhập lại mật khẩu mới.", 2); return; }
+        if (!newP.equals(cf)) { setPassStatus("Hai mật khẩu mới phải giống nhau.", 2); return; }
+        if (newP.equals(oldP)) { setPassStatus("Mật khẩu mới phải khác mật khẩu cũ.", 2); return; }
+        if (!online()) { setPassStatus("Chưa kết nối máy chủ.", 2); return; }
+        try {
+            AvatarProtocol.changePassword(game.connection, oldP, newP);
+            setPassStatus("Đang đổi mật khẩu…", 0);
+        } catch (IOException e) {
+            setPassStatus("Không gửi được (mất kết nối?).", 2);
+        }
+    }
+
+    /** Mở form Đổi mật khẩu cho harness chụp kiểm chứng (điền sẵn để thấy
+     *  ô nhập che dấu chấm). */
+    public void debugOpenPassForm() {
+        openPassForm();
+        passFields[0].append("abcd1234");
+        passFields[1].append("matkhaumoi");
+        passFields[2].append("matkhaumoi");
+        passFocus = 1;
     }
 
     /** Mở panel Cài đặt cho harness chụp kiểm chứng. */

@@ -19,6 +19,8 @@ public class GameSettings {
     public static boolean showName = true;
     public static boolean showDir = true;
     public static int volume = 100;
+    /** Mức âm lượng trước khi tắt tiếng, để bật lại khôi phục đúng mức cũ. */
+    public static int lastVolume = 100;
 
     private static Preferences prefs() {
         return Gdx.app.getPreferences("avatarShowName");
@@ -30,6 +32,7 @@ public class GameSettings {
             showName = p.getBoolean("showName", true);
             showDir = p.getBoolean("showDir", true);
             volume = p.getInteger("volume", 100);
+            lastVolume = p.getInteger("lastVolume", 100);
             if (volume < 0) volume = 0;
             if (volume > 100) volume = 100;
         } catch (Exception e) {
@@ -43,6 +46,7 @@ public class GameSettings {
             p.putBoolean("showName", showName);
             p.putBoolean("showDir", showDir);
             p.putInteger("volume", volume);
+            p.putInteger("lastVolume", lastVolume);
             p.flush();
         } catch (Exception e) {
             // không lưu được cũng không chặn việc đóng panel

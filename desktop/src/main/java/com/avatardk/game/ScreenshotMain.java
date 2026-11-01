@@ -568,6 +568,13 @@ public class ScreenshotMain {
                     case 43:
                         if (frame == 15) {
                             shot("shot-settings.png");
+                            world.debugOpenPassForm();
+                            stage = 44; frame = 0;
+                        }
+                        break;
+                    case 44:
+                        if (frame == 15) {
+                            shot("shot-pass-form.png");
                             System.out.println("SCREENSHOT DONE");
                             Gdx.app.exit();
                         }

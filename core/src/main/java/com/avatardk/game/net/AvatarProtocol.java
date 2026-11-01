@@ -71,6 +71,7 @@ public final class AvatarProtocol {
     public static final byte TRANS_CHEST = -89;
     /** Hộp thoại từ server (Cmd.SET_MONEY_ERROR của gốc): S→C {UTF}. */
     public static final byte SERVER_DIALOG = -10;
+    public static final byte CHANGE_PASS = -62;
     /** Mua đồ ở shop: C→S {short idPart, byte type} (1 = trả Xu, 2 = trả
      *  Lượng); S→C khi thành công {short idPart, int giá đã trừ, byte 1,
      *  UTF thông báo, int xu, int lượng, int lượng khoá} — server tự mặc
@@ -253,6 +254,19 @@ public final class AvatarProtocol {
         DataOutputStream w = m.writer();
         w.writeInt(idFrom);
         w.writeBoolean(accept);
+        conn.send(m);
+    }
+
+    /** Đổi mật khẩu (gói −62 của gốc): UTF mật khẩu cũ + UTF mật khẩu
+     *  mới. Server đúng mật khẩu cũ thì cập nhật MD5 mới, trả lại gói −62
+     *  {UTF mật khẩu mới} kèm dialog "Đổi mật khẩu thành công."; sai thì
+     *  dialog "Mật khẩu cũ không đúng." */
+    public static void changePassword(GameConnection conn, String oldPass, String newPass)
+            throws IOException {
+        Msg m = new Msg(CHANGE_PASS);
+        DataOutputStream w = m.writer();
+        w.writeUTF(oldPass);
+        w.writeUTF(newPass);
         conn.send(m);
     }
 
