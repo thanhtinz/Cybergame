@@ -480,10 +480,12 @@ public class WorldScreen extends ScreenAdapter {
     private int playerFeel = 4;
     private final List<Integer> playerParts = new ArrayList<>(AvatarDkGame.SON_PARTS);
     private final List<PaperDoll> feelDolls = new ArrayList<>();
-    // Nút mở sheet biểu cảm: đặt NGAY BÊN TRÁI nút Tương tác, cùng hàng
-    // ngang tâm với nó (chủ dự án chốt "cái biểu cảm đưa qua gần nút
-    // tương tác") — trước đây nút nằm sát mép phải khung chat.
-    private static final float FEEL_BTN_X = 1080f, FEEL_BTN_Y = 64f, FEEL_BTN_S = 56f;
+    // Nút mở sheet biểu cảm + nút hành động: xếp VÒNG CUNG quanh nút
+    // Tương tác (chủ dự án chốt 2026-11-01) — cả hai nằm trên đường tròn
+    // bán kính 106 quanh tâm nút Tương tác (1196, 92): biểu cảm ở góc
+    // 180 độ (ngang trái, tâm 1090, 92), hành động ở góc 135 độ (chéo
+    // lên trái, tâm 1121, 167).
+    private static final float FEEL_BTN_X = 1062f, FEEL_BTN_Y = 64f, FEEL_BTN_S = 56f;
     // sheet biểu cảm: neo đáy ngay trên khung chat, cạnh phải thẳng hàng nút feel
     private static final float FEEL_SHEET_W = 472f;
     private static final float FEEL_SHEET_MIN = 168f, FEEL_SHEET_MAX = 400f;
@@ -494,12 +496,13 @@ public class WorldScreen extends ScreenAdapter {
     private float feelDragStartY = 0f, feelDragStartH = 0f;
     private float feelDragStartScroll = 0f, feelDragMoved = 0f;
     // Hành động nhân vật (MapScr.doSellectAction của gốc): nút riêng ở HUD
-    // đặt BÊN TRÁI nút biểu cảm (chủ dự án chốt 2026-11-01 đưa ra khỏi
-    // menu burger), mở sheet 4 hành động gốc — tên T.actionStr {Nhảy, Nằm,
-    // Ngồi bệt, Quỳ}, mã gói 57 ac[] {10, 4, 3, 5}, icon là khung 7..10
-    // của sheet effect/cmd (CommandAction.paint của gốc). Tư thế giữ
-    // nguyên cho tới khi di chuyển (đúng Avatar.doAction của gốc).
-    private static final float ACT_BTN_X = FEEL_BTN_X - 68f, ACT_BTN_Y = FEEL_BTN_Y, ACT_BTN_S = FEEL_BTN_S;
+    // (chủ dự án chốt 2026-11-01 đưa ra khỏi menu burger) nằm trên vòng
+    // cung quanh nút Tương tác ở góc 135 độ — tâm (1121, 167); mở sheet 4
+    // hành động gốc — tên T.actionStr {Nhảy, Nằm, Ngồi bệt, Quỳ}, mã gói
+    // 57 ac[] {10, 4, 3, 5}, icon là khung 7..10 của sheet effect/cmd
+    // (CommandAction.paint của gốc). Tư thế giữ nguyên cho tới khi di
+    // chuyển (đúng Avatar.doAction của gốc).
+    private static final float ACT_BTN_X = 1093f, ACT_BTN_Y = 139f, ACT_BTN_S = FEEL_BTN_S;
     private static final String[] ACTION_NAMES = {"Nhảy", "Nằm", "Ngồi bệt", "Quỳ"};
     private static final int[] ACTION_BYTES = {10, 4, 3, 5};
     private static final int[] ACTION_FRAMES = {7, 8, 9, 10};
@@ -2092,7 +2095,7 @@ public class WorldScreen extends ScreenAdapter {
             menuOpen = !menuOpen;
             return;
         }
-        // nút hành động (asset action0) bên trái nút biểu cảm: mở/đóng sheet hành động
+        // nút hành động (asset action0) trên vòng cung quanh nút Tương tác: mở/đóng sheet hành động
         if (x >= ACT_BTN_X && x <= ACT_BTN_X + ACT_BTN_S && y >= ACT_BTN_Y && y <= ACT_BTN_Y + ACT_BTN_S) {
             actionOpen = !actionOpen;
             if (actionOpen) feelOpen = false;
@@ -5672,8 +5675,8 @@ public class WorldScreen extends ScreenAdapter {
         }
     }
 
-    /** Nút hành động (asset iconmenu/action0 gốc) bên trái nút biểu cảm +
-     *  SHEET hành động: 4 ô — icon là khung 7..10 của sheet effect/cmd vẽ
+    /** Nút hành động (asset iconmenu/action0 gốc) trên vòng cung quanh nút
+     *  Tương tác + SHEET hành động: 4 ô — icon là khung 7..10 của sheet effect/cmd vẽ
      *  nguyên trạng (nền teal của sheet gốc), tên đúng T.actionStr; ô của
      *  tư thế đang diễn sáng viền vàng như sheet biểu cảm. */
     private void drawActionUi() {
