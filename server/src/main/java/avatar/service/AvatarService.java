@@ -148,6 +148,9 @@ public class AvatarService extends Service {
                 ds.writeByte(100 - item.reliability());
                 ds.writeUTF(item.expiredString());
             }
+            // Đuôi mở rộng của bản port: sức chứa giỏ (client gốc đọc hết
+            // danh sách là dừng nên không ảnh hưởng).
+            ds.writeByte(this.session.user.getChestSlot());
             ds.flush();
             sendMessage(ms);
         } catch (IOException e) {

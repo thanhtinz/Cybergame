@@ -49,6 +49,28 @@ public final class AvatarProtocol {
      *  đích, short mã, short thời gian} — client gốc MapScr.onGivingDefferent.
      *  Server Pack5 thiếu handler nên bản port bổ sung phát cả zone như gói 61. */
     public static final byte GIVING_DEFERR = 59;
+    /** Giỏ đồ: C→S {int id} xin danh sách; S→C {short n, n×(short idPart,
+     *  byte time, UTF hạn dùng)} + đuôi mở rộng của bản port: byte sức chứa
+     *  giỏ (Cmd.CONTAINER của gốc; MapScr.onContainer mở PopupShop giỏ). */
+    public static final byte CONTAINER = -47;
+    /** Mặc/cất đồ: C→S {short idPart, byte type} (1 = dùng từ giỏ, 0 = cất
+     *  từ đang mặc); S→C {int id người, short idPart} phát cả zone, bên
+     *  nhận tự đảo trạng thái mặc của part đó (Cmd.USING_PART của gốc). */
+    public static final byte USING_PART = -48;
+    /** Xoá đồ: C→S {short idPart, byte type} (1 = trong giỏ, 0 = đang mặc);
+     *  S→C {int id người, short idPart} (Cmd.REMOVE_ITEM của gốc). */
+    public static final byte REMOVE_ITEM = -36;
+    /** Rương nhà: C→S rỗng để xin; S→C {short n1, n1×(short, byte, UTF)
+     *  giỏ, int xu-trong-rương (bản port bỏ qua), byte cấp rương, short n2,
+     *  n2×(...) rương} + đuôi mở rộng: byte sức chứa giỏ, byte sức chứa
+     *  rương (Cmd.CUSTOM_CHEST của gốc). */
+    public static final byte CUSTOM_CHEST = -87;
+    /** Chuyển đồ giỏ ↔ rương: C→S {byte hướng (0 = giỏ→rương, 1 = rương→
+     *  giỏ), short vị trí, short idPart}; S→C {boolean xong, UTF báo}
+     *  (Cmd.TRANS_PART_CHEST của gốc). */
+    public static final byte TRANS_CHEST = -89;
+    /** Hộp thoại từ server (Cmd.SET_MONEY_ERROR của gốc): S→C {UTF}. */
+    public static final byte SERVER_DIALOG = -10;
 
     /** Handler Avatar trong GET_HANDLER (CLIENT_TYPE = 8 của gốc). */
     public static final byte HANDLER_AVATAR = 8;
@@ -216,6 +238,48 @@ public final class AvatarProtocol {
     public static void requestYourInfo(GameConnection conn, int id) throws IOException {
         Msg m = new Msg(REQUEST_YOUR_INFO);
         m.writer().writeInt(id);
+        conn.send(m);
+    }
+
+    /** Xin danh sách giỏ đồ của chính mình (gói −47): int id của mình. */
+    public static void requestContainer(GameConnection conn, int id) throws IOException {
+        Msg m = new Msg(CONTAINER);
+        m.writer().writeInt(id);
+        conn.send(m);
+    }
+
+    /** Mặc đồ từ giỏ (type 1) / cất đồ đang mặc vào giỏ (type 0) — gói −48. */
+    public static void usingPart(GameConnection conn, int partId, int type) throws IOException {
+        Msg m = new Msg(USING_PART);
+        DataOutputStream w = m.writer();
+        w.writeShort(partId);
+        w.writeByte(type);
+        conn.send(m);
+    }
+
+    /** Xoá hẳn một món (gói −36): type 1 = trong giỏ, 0 = đang mặc. */
+    public static void removeItem(GameConnection conn, int partId, int type) throws IOException {
+        Msg m = new Msg(REMOVE_ITEM);
+        DataOutputStream w = m.writer();
+        w.writeShort(partId);
+        w.writeByte(type);
+        conn.send(m);
+    }
+
+    /** Xin dữ liệu rương nhà (gói −87): gói rỗng. */
+    public static void requestChest(GameConnection conn) throws IOException {
+        conn.send(new Msg(CUSTOM_CHEST));
+    }
+
+    /** Chuyển một món giữa giỏ và rương (gói −89): dir 0 = giỏ→rương,
+     *  1 = rương→giỏ; index là vị trí món trong danh sách nguồn. */
+    public static void transChest(GameConnection conn, int dir, int index, int partId)
+            throws IOException {
+        Msg m = new Msg(TRANS_CHEST);
+        DataOutputStream w = m.writer();
+        w.writeByte(dir);
+        w.writeShort(index);
+        w.writeShort(partId);
         conn.send(m);
     }
 

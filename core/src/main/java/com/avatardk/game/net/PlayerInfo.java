@@ -11,6 +11,9 @@ import java.io.IOException;
 public class PlayerInfo {
     public int id;
     public int[] wearing = new int[0];
+    /** Hạn dùng của từng part đang mặc, song song với {@link #wearing}
+     *  (gói đăng nhập có byte + UTF hạn dùng cho mỗi part). */
+    public String[] wearingExpire = new String[0];
     public int gender;
     public int levelMain;
     public int levelPercent;
@@ -41,9 +44,10 @@ public class PlayerInfo {
         p.health = r.readByte(); // 100 - hunger
         p.luong = r.readInt();
         r.readByte(); // star
+        p.wearingExpire = new String[nParts];
         for (int i = 0; i < nParts; i++) {
             r.readByte();
-            r.readUTF(); // hạn dùng của part
+            p.wearingExpire[i] = r.readUTF(); // hạn dùng của part
         }
         r.readShort(); // icon clan (-1 nếu chưa có)
         int nCmd = r.readByte();

@@ -7,6 +7,7 @@ import avatar.network.Message;
 import avatar.network.Session;
 import avatar.constants.Cmd;
 import avatar.network.IMessageHandler;
+import avatar.service.HomeService;
 
 public class MessageHandler implements IMessageHandler {
 
@@ -165,6 +166,31 @@ public class MessageHandler implements IMessageHandler {
                     case Cmd.CONTAINER: {
                         if (this.client.user != null) {
                             this.client.user.viewChest(mss);
+                            break;
+                        }
+                        break;
+                    }
+                    // Rương nhà: gốc chỉ route trong HomeMsgHandler (khi ở
+                    // nhà); bản port route thêm ở handler nền để mở rương
+                    // được từ park/menu — HomeService chỉ thao tác trên
+                    // danh sách đồ của chính người chơi.
+                    case Cmd.CUSTOM_CHEST: {
+                        if (this.client.user != null) {
+                            new HomeService(this.client).onCustomChest(mss);
+                            break;
+                        }
+                        break;
+                    }
+                    case Cmd.TRANS_PART_CHEST: {
+                        if (this.client.user != null) {
+                            new HomeService(this.client).transPartChest(mss);
+                            break;
+                        }
+                        break;
+                    }
+                    case Cmd.UPGRADE_CHEST: {
+                        if (this.client.user != null) {
+                            new HomeService(this.client).upgradeChestHome(mss);
                             break;
                         }
                         break;

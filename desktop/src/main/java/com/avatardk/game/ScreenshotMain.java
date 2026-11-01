@@ -476,6 +476,34 @@ public class ScreenshotMain {
                     case 30:
                         if (frame == 15) {
                             shot("shot-char-v3.png");
+                            world.debugOpenBag();
+                            stage = 31; frame = 0;
+                        }
+                        break;
+                    case 31:
+                        if (frame == 15) {
+                            shot("shot-bag.png");
+                            world.debugOpenChest();
+                            stage = 32; frame = 0;
+                        }
+                        break;
+                    case 32:
+                        if (frame == 15) {
+                            shot("shot-chest.png");
+                            world.debugOpenBagWearing();
+                            stage = 33; frame = 0;
+                        }
+                        break;
+                    case 33:
+                        if (frame == 15) {
+                            shot("shot-bag-wearing.png");
+                            world.debugChestConfirm();
+                            stage = 34; frame = 0;
+                        }
+                        break;
+                    case 34:
+                        if (frame == 15) {
+                            shot("shot-chest-confirm.png");
                             System.out.println("SCREENSHOT DONE");
                             Gdx.app.exit();
                         }

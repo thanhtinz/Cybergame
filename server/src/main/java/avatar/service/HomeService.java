@@ -247,7 +247,18 @@ public class HomeService extends Service {
 
     public void onCustomChest(Message ms) throws IOException {
 
-        List<Item> lstChest = this.session.user.chests;
+        // Bản port sửa 3 chỗ so với bản fan-made: (1) đếm list1 theo số món
+        // THẬT SỰ ghi ra (bản cũ ghi size đầy đủ nhưng bỏ qua món id 40 khi
+        // ghi -> client đọc lệch luồng); (2) cấp rương ghi cấp thật từ
+        // chestHomeSlot thay vì ghi cứng 1; (3) mỗi món ghi hạn dùng thật
+        // như viewChest. Đuôi mở rộng (client gốc đọc đúng list2 là dừng):
+        // byte sức chứa giỏ + byte sức chứa rương cho panel hiển thị.
+        List<Item> lstChest = new java.util.ArrayList<>();
+        for (Item item : this.session.user.chests) {
+            if (item.getId() != 40) {
+                lstChest.add(item);
+            }
+        }
 
         List<Item> lstChestHome = this.session.user.chestsHome;
 
@@ -255,21 +266,21 @@ public class HomeService extends Service {
         DataOutputStream ds = ms.writer();
         ds.writeShort(lstChest.size());
         for (Item item : lstChest) {
-            if(item.getId() != 40){
-                ds.writeShort(item.getId());
-                ds.writeByte(0);
-                ds.writeUTF("");
-            }
+            ds.writeShort(item.getId());
+            ds.writeByte(100 - item.reliability());
+            ds.writeUTF(item.expiredString());
         }
-        ds.writeInt(0);
-        ds.writeByte(1);
+        ds.writeInt(0); // moneyOnChest: bản port không dùng tiền trong rương
+        ds.writeByte(this.session.user.getChestLevel());
 
         ds.writeShort(lstChestHome.size());
         for (Item item : lstChestHome) {
             ds.writeShort(item.getId());
-            ds.writeByte(0);
-            ds.writeUTF("");
+            ds.writeByte(100 - item.reliability());
+            ds.writeUTF(item.expiredString());
         }
+        ds.writeByte(this.session.user.getChestSlot());
+        ds.writeByte(this.session.user.getChestHomeSlot());
 
         ds.flush();
         this.session.sendMessage(ms); // Gửi thông điệp tới client
