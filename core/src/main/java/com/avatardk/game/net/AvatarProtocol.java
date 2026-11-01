@@ -25,6 +25,10 @@ public final class AvatarProtocol {
     public static final byte CHAT_PARK = 55;
     /** Biểu cảm mặt trong map (Cmd.AVATAR_FEEL của server). */
     public static final byte AVATAR_FEEL = 57;
+    /** Tin nhắn thoại trong map — GÓI MỞ RỘNG của bản port (game gốc
+     *  không có voice): cmd 61 còn trống trong cả hai handler park của
+     *  server; server chỉ chuyển tiếp mù theo zone, không giải mã audio. */
+    public static final byte VOICE_PARK = 61;
     public static final byte CHAT_FARM = 77;
 
     /** Handler Avatar trong GET_HANDLER (CLIENT_TYPE = 8 của gốc). */
@@ -161,5 +165,19 @@ public final class AvatarProtocol {
         m.writer().writeByte(enc);
         conn.send(m);
         return true;
+    }
+
+    /** Gửi một mẩu tin nhắn thoại (gói 61): int clipId, short seq,
+     *  short total, rồi các byte audio μ-law (tối đa vài KB mỗi gói).
+     *  Bên nhận ráp đủ total mẩu theo (người gửi, clipId) mới phát lại. */
+    public static void voicePark(GameConnection conn, int clipId, int seq, int total,
+                                 byte[] chunk) throws IOException {
+        Msg m = new Msg(VOICE_PARK);
+        DataOutputStream w = m.writer();
+        w.writeInt(clipId);
+        w.writeShort(seq);
+        w.writeShort(total);
+        w.write(chunk);
+        conn.send(m);
     }
 }

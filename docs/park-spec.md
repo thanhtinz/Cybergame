@@ -74,3 +74,38 @@ Ghi chú:
   A (id 1000) gửi byte 107 → B nhận {1000, 107}; A gửi byte 140 (mặt 40)
   → B nhận {1000, 140}. PASS. Ảnh render: shot-feel-sync.png (Linh nhận
   mặt 107 — mắt nhắm tịt khác hẳn mặt thường trong shot-online.png).
+
+## Tin nhắn thoại — gói 61 (MỞ RỘNG của bản port, game gốc không có)
+
+Theo yêu cầu của chủ dự án (2026-10-31): hình thức **tin nhắn thoại**
+(bấm giữ micro để ghi đoạn ngắn, gửi đi, người nhận bấm vào để nghe) —
+không phải voice trực tiếp. Cmd **61** còn trống trong cả hai handler
+park của server (MessageHandler + ParkMsgHandler) nên dùng cho gói này.
+
+- Âm thanh: PCM **16 kHz mono**, nén **μ-law G.711** (1 byte/mẫu =
+  16 KB/s), tối đa **30 giây**/tin. Codec phía client:
+  `net/VoiceCodec.java` (bản độc lập của port).
+- C→S gói **61**: **int clipId, short seq, short total, byte[] audio**
+  (mỗi mẩu ≤ 4000 byte audio). Server (`User.doVoicePark`) chỉ kiểm tra
+  độ dài (9..8200 byte) rồi chuyển NGUYÊN VĂN cho
+  `MapService.doVoicePark` phát cả zone (kể cả người gửi — echo như chat).
+  S→C gói **61**: **int senderId** + nguyên văn thân gói của người gửi.
+  Server KHÔNG giải mã âm thanh.
+- Phía nhận: ráp các mẩu theo (senderId, clipId), đủ `total` mẩu thì
+  giải mã μ-law → PCM, hiện **chip nghe lại** trong tab Gần đây
+  ("Tin nhắn thoại 0:05", icon play/stop Font Awesome), chạm chip để
+  nghe/dừng; bong bóng trên đầu người gửi hiện "Tin nhắn thoại 0:05".
+- LƯU Ý khi đọc gói đến phía server: `Message.getData()` chỉ dùng cho
+  gói ĐI (gói đến dựng bằng constructor reader, `os == null`, getData trả
+  rỗng) — handler phải đọc thân gói từ `reader()`.
+- Chat mang **id ≥ 100.000.000** là tin HỆ THỐNG của server phát qua
+  định dạng chat park (vd id 2000000864: thông báo phiên/đếm ngược mỗi
+  giây) — client đưa vào tab Hệ thống, không hiện tên "Người chơi".
+- Kiểm chứng sống (core/src/test/python/live_voice_test.py, 2026-10-31):
+  A gửi clip 777 gồm 3 mẩu (4000+4000+2000 byte) → B nhận đủ 3 gói 61
+  {idA, 777, seq, total, data} và ráp đúng nguyên văn 10000 byte; A cũng
+  nhận echo đủ. PASS. Unit test: VoiceTest (μ-law roundtrip + parse gói).
+  Ảnh render: shot-chat-voice.png. Chưa kiểm chứng được trong sandbox:
+  ghi âm bằng micro thật và phát ra loa (VM không có thiết bị âm thanh;
+  client Java cũng không nối TCP ra ngoài được trong sandbox) — code có
+  bắt lỗi và báo vào tab Hệ thống khi thiết bị không ghi/phát được.

@@ -142,6 +142,21 @@ public class MapService extends Service {
         }
     }
 
+    /** Phat mot mau tin nhan thoai (goi 61) cho ca zone: int id nguoi gui
+     *  + nguyen van than goi cua nguoi gui (clipId/seq/total/audio). */
+    public void doVoicePark(int userID, byte[] payload) {
+        try {
+            Message ms = new Message(Cmd.AVATAR_VOICE_PARK);
+            DataOutputStream ds = ms.writer();
+            ds.writeInt(userID);
+            ds.write(payload);
+            ds.flush();
+            sendMessage(ms);
+        } catch (IOException ex) {
+            logger.error("doVoicePark()", ex);
+        }
+    }
+
     public void addPlayer(User us) {
         try {
             Message ms = new Message(51);

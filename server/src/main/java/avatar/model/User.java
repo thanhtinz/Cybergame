@@ -1335,6 +1335,28 @@ public class User {
         }
     }
 
+    /** Tin nhan thoai (goi 61, mo rong cua ban port): than goi la
+     *  int clipId + short seq + short total + byte[] audio — server
+     *  chuyen nguyen van cho MapService phat lai ca zone kem id nguoi gui.
+     *  LUU Y: goi den duoc dung bang constructor reader (os == null) nen
+     *  PHAI doc tu reader() — Message.getData() chi dung cho goi di. */
+    public void doVoicePark(Message ms) {
+        try {
+            java.io.DataInputStream r = ms.reader();
+            int avail = r.available();
+            if (avail < 9 || avail > 8200) {
+                return; // thieu header clip hoac mau audio qua lon — bo qua
+            }
+            byte[] data = new byte[avail];
+            r.readFully(data);
+            if (this.getMapService() != null) {
+                this.getMapService().doVoicePark(id, data);
+            }
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+
     public void close() throws IOException {
         if (zone != null) {
             zone.leave(this);

@@ -306,6 +306,13 @@ public class MessageHandler implements IMessageHandler {
                         }
                         break;
                     }
+                    case Cmd.AVATAR_VOICE_PARK: {
+                        if (this.client.user != null) {
+                            this.client.user.doVoicePark(mss);
+                            break;
+                        }
+                        break;
+                    }
                     case Cmd.ACTION: {
                         if (this.client.user != null) {
                             this.client.user.doAction(mss);

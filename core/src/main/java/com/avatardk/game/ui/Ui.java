@@ -39,6 +39,8 @@ public final class Ui {
     public static final String FA_COMPRESS = "\uf066";
     public static final String FA_FACE_SMILE = "\uf118";
     public static final String FA_MICROPHONE = "\uf130";
+    public static final String FA_PLAY = "\uf04b";
+    public static final String FA_STOP = "\uf04d";
     // Bộ icon dùng làm emoji trong chat (không có icon mặt — mặt đã có
     // sheet đổi biểu cảm riêng cho nhân vật, chủ dự án chốt 2026-10-31)
     public static final String FA_HEART = "\uf004";
@@ -60,7 +62,7 @@ public final class Ui {
     public static final String FA_ROCKET = "\uf135";
     private static final String FA_SOLID_CHARS = FA_BELL + FA_TRASH + FA_HEADSET + FA_SUN
         + FA_USER + FA_LOCK + FA_EYE + FA_EYE_SLASH + FA_CHECK + FA_XMARK + FA_SEND
-        + FA_EXPAND + FA_COMPRESS + FA_FACE_SMILE + FA_MICROPHONE
+        + FA_EXPAND + FA_COMPRESS + FA_FACE_SMILE + FA_MICROPHONE + FA_PLAY + FA_STOP
         + FA_HEART + FA_STAR + FA_THUMBS_UP + FA_THUMBS_DOWN + FA_FIRE + FA_GIFT
         + FA_MUSIC + FA_BOLT + FA_CROWN + FA_GEM + FA_TROPHY + FA_CAKE + FA_PIZZA
         + FA_ICE_CREAM + FA_CAT + FA_DOG + FA_ROCKET;

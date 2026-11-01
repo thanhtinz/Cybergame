@@ -57,6 +57,10 @@ public class ParkMsgHandler extends MessageHandler {
                     this.client.user.doAvatarFeel(mss);
                     break;
 
+                case Cmd.AVATAR_VOICE_PARK:
+                    this.client.user.doVoicePark(mss);
+                    break;
+
                 case Cmd.REQUEST_DYNAMIC_PART:
                     this.client.getAvatarService().requestPartDynaMic(mss);
                     break;

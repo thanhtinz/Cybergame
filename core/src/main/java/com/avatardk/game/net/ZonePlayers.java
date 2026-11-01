@@ -114,6 +114,25 @@ public final class ZonePlayers {
         return new int[]{r.readInt(), r.readUnsignedByte()};
     }
 
+    /** Một mẩu tin nhắn thoại (gói 61 phía server phát). */
+    public static class VoiceChunk {
+        public int senderId, clipId, seq, total;
+        public byte[] data = new byte[0];
+    }
+
+    /** Gói 61: {int senderId, int clipId, short seq, short total, byte[] audio}. */
+    public static VoiceChunk parseVoice(Msg m) throws IOException {
+        DataInputStream r = m.reader();
+        VoiceChunk v = new VoiceChunk();
+        v.senderId = r.readInt();
+        v.clipId = r.readInt();
+        v.seq = r.readShort();
+        v.total = r.readShort();
+        v.data = new byte[r.available()];
+        r.readFully(v.data);
+        return v;
+    }
+
     /** Gói 55/77: {id, text}. */
     public static ChatMsg parseChat(Msg m) throws IOException {
         DataInputStream r = m.reader();

@@ -348,6 +348,15 @@ public class ScreenshotMain {
                     case 23:
                         if (frame == 25) {
                             shot("shot-chat-emoji.png");
+                            // Kiểm tin nhắn thoại: chip nghe lại trong nhật ký
+                            world.debugCloseEmoji();
+                            world.debugVoiceDemo();
+                            stage = 24; frame = 0;
+                        }
+                        break;
+                    case 24:
+                        if (frame == 25) {
+                            shot("shot-chat-voice.png");
                             System.out.println("SCREENSHOT DONE");
                             Gdx.app.exit();
                         }

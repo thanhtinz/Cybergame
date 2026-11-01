@@ -157,6 +157,11 @@ public class Cmd {
     public static final byte CHAT_PARK = 55;
     public static final byte AVATAR_CHAT_PRIVATE = 56;
     public static final byte AVATAR_FEEL = 57;
+    // Tin nhan thoai trong park — goi MO RONG cua ban port Java (game goc
+    // khong co voice); cmd 61 con trong trong ca hai handler park. Server
+    // chi chuyen tiep mu theo zone (int clipId, short seq, short total,
+    // byte[] audio mu-law), khong giai ma am thanh.
+    public static final byte AVATAR_VOICE_PARK = 61;
     public static final byte AVATAR_GIFT_GIVING = 58;
     public static final byte ACTION = 59;
     public static final byte PARK_BOARD_LIST = 60;

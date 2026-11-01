@@ -20,6 +20,7 @@ import com.avatardk.game.data.PaperDoll;
 import com.avatardk.game.net.AvatarProtocol;
 import com.avatardk.game.net.GameConnection;
 import com.avatardk.game.net.Msg;
+import com.avatardk.game.net.VoiceCodec;
 import com.avatardk.game.net.ZonePlayers;
 import com.avatardk.game.sim.AvatarAnimator;
 import java.io.IOException;
@@ -266,7 +267,13 @@ public class WorldScreen extends ScreenAdapter {
     private static final String[] CHAT_TABS = {"Hệ thống", "Thế giới", "Gần đây"};
     private int activeChatTab = TAB_NEARBY;
     private boolean chatSeeded = false;
-    private static class ChatLine { String name, text, time; boolean system; }
+    private static class ChatLine {
+        String name, text, time; boolean system;
+        /** Tin nhắn thoại: mẫu PCM 16 kHz đã giải mã từ μ-law (null = tin chữ). */
+        short[] voice;
+        int voiceSecs;
+        boolean voicePlaying;
+    }
     @SuppressWarnings("unchecked")
     private final List<ChatLine>[] chatLogs = new List[]{
         new ArrayList<ChatLine>(), new ArrayList<ChatLine>(), new ArrayList<ChatLine>()};
@@ -279,6 +286,23 @@ public class WorldScreen extends ScreenAdapter {
         l.time = new java.text.SimpleDateFormat("HH:mm").format(new java.util.Date());
         chatLogs[tab].add(l);
         while (chatLogs[tab].size() > 40) chatLogs[tab].remove(0);
+    }
+
+    /** Thêm một tin nhắn THOẠI vào nhật ký (chip nghe lại vẽ ở drawChatFrame). */
+    private void addVoiceLog(int tab, String name, short[] samples) {
+        ChatLine l = new ChatLine();
+        l.name = name;
+        l.voice = samples;
+        l.voiceSecs = Math.max(1, (samples.length + VOICE_RATE - 1) / VOICE_RATE);
+        l.time = new java.text.SimpleDateFormat("HH:mm").format(new java.util.Date());
+        chatLogs[tab].add(l);
+        while (chatLogs[tab].size() > 40) chatLogs[tab].remove(0);
+    }
+
+    /** "0:05" từ số mẫu PCM (16 kHz). */
+    private static String voiceDurText(short[] samples) {
+        int secs = Math.max(1, (samples.length + VOICE_RATE - 1) / VOICE_RATE);
+        return "0:" + (secs < 10 ? "0" : "") + secs;
     }
 
     // Ô emoji của khung chat: EMOJI THẬT (ảnh Twemoji, CC-BY 4.0 —
@@ -853,6 +877,206 @@ public class WorldScreen extends ScreenAdapter {
         }
     }
 
+    // ---------- Tin nhắn thoại (gói 61 — mở rộng của bản port, game gốc
+    // không có): bấm GIỮ nút micro để ghi (tối đa 30 giây, PCM 16 kHz nén
+    // μ-law còn 16 KB/s, cắt gói 4000 byte), thả ra là gửi; server chỉ
+    // chuyển tiếp mù theo zone, bên nhận ráp đủ các mẩu rồi mới hiện chip
+    // nghe trong nhật ký, chạm vào chip để nghe/dừng. ----------
+    private static final int VOICE_RATE = 16000;
+    private static final int VOICE_MAX_SECS = 30;
+    private static final int VOICE_CHUNK = 4000;
+    private static final float MIC_BTN_W = 40f;
+    private boolean recording = false;
+    private com.badlogic.gdx.audio.AudioRecorder recorder;
+    private Thread recThread;
+    private volatile boolean recActive;
+    private final short[] recBuf = new short[VOICE_RATE * VOICE_MAX_SECS];
+    private volatile int recCount;
+    private volatile boolean recError;
+
+    private static class VoiceAsm { byte[][] chunks; int got; }
+    private final Map<String, VoiceAsm> voiceAsm = new java.util.HashMap<>();
+
+    private ChatLine playingLine;
+    private Thread playThread;
+    private volatile int playGen;
+    /** Vùng chạm các chip thoại đã vẽ ở khung hình trước: {x, y, w, h, ChatLine}. */
+    private final List<Object[]> voiceHits = new ArrayList<>();
+
+    /** Bắt đầu ghi âm (gọi khi chạm GIỮ nút micro). */
+    private void startRecording() {
+        if (recording) return;
+        if (!online()) {
+            activeChatTab = TAB_SYSTEM;
+            addChatLog(TAB_SYSTEM, null, "Vào thế giới online mới gửi được tin nhắn thoại.", true);
+            return;
+        }
+        try {
+            if (recorder == null) recorder = Gdx.audio.newAudioRecorder(VOICE_RATE, true);
+        } catch (Throwable t) {
+            activeChatTab = TAB_SYSTEM;
+            addChatLog(TAB_SYSTEM, null, "Không mở được micro trên thiết bị này.", true);
+            return;
+        }
+        recCount = 0;
+        recError = false;
+        recActive = true;
+        recording = true;
+        recThread = new Thread(() -> {
+            short[] chunk = new short[1600];
+            while (recActive && recCount < recBuf.length) {
+                int n = Math.min(chunk.length, recBuf.length - recCount);
+                try {
+                    recorder.read(chunk, 0, n);
+                } catch (Throwable t) {
+                    recError = true;
+                    break;
+                }
+                System.arraycopy(chunk, 0, recBuf, recCount, n);
+                recCount += n;
+            }
+        });
+        recThread.setDaemon(true);
+        recThread.start();
+    }
+
+    /** Dừng ghi và gửi (gọi khi thả tay khỏi micro / ghi đủ 30 giây). */
+    private void finishRecording() {
+        if (!recording) return;
+        recording = false;
+        recActive = false;
+        if (recThread != null) {
+            try { recThread.join(400); } catch (InterruptedException ignored) {}
+            recThread = null;
+        }
+        int n = recCount;
+        if (recError && n == 0) {
+            activeChatTab = TAB_SYSTEM;
+            addChatLog(TAB_SYSTEM, null, "Micro không ghi được âm thanh.", true);
+            return;
+        }
+        if (n < VOICE_RATE / 2) {
+            addChatLog(TAB_SYSTEM, null, "Tin nhắn thoại quá ngắn — bấm giữ micro lâu hơn một chút.", true);
+            return;
+        }
+        if (!online()) {
+            addChatLog(TAB_SYSTEM, null, "Mất kết nối — không gửi được tin nhắn thoại.", true);
+            return;
+        }
+        short[] pcm = java.util.Arrays.copyOf(recBuf, n);
+        byte[] data = VoiceCodec.encode(pcm, n);
+        int clipId = (int) (System.currentTimeMillis() & 0x7ffffff) ^ (ownId() << 7);
+        int total = (data.length + VOICE_CHUNK - 1) / VOICE_CHUNK;
+        try {
+            for (int s = 0; s < total; s++) {
+                int off = s * VOICE_CHUNK;
+                int len = Math.min(VOICE_CHUNK, data.length - off);
+                AvatarProtocol.voicePark(game.connection, clipId, s, total,
+                    java.util.Arrays.copyOfRange(data, off, off + len));
+            }
+        } catch (IOException e) {
+            addChatLog(TAB_SYSTEM, null, "Không gửi được tin nhắn thoại (mất kết nối?).", true);
+        }
+        // dòng thoại của mình hiện khi server phát lại (echo) như tin chữ
+    }
+
+    /** Nhận một mẩu thoại (gói 61): ráp theo (người gửi, clipId), đủ mẩu
+     *  thì giải mã và thêm vào nhật ký Gần đây + bong bóng trên đầu. */
+    private void onVoiceChunk(ZonePlayers.VoiceChunk v) {
+        if (v.total <= 0 || v.total > 200 || v.seq < 0 || v.seq >= v.total) return;
+        String key = v.senderId + ":" + v.clipId;
+        VoiceAsm a = voiceAsm.get(key);
+        if (a == null) {
+            a = new VoiceAsm();
+            a.chunks = new byte[v.total][];
+            voiceAsm.put(key, a);
+        }
+        if (a.chunks[v.seq] == null) {
+            a.chunks[v.seq] = v.data;
+            a.got++;
+        }
+        if (a.got < v.total) return;
+        voiceAsm.remove(key);
+        int len = 0;
+        for (byte[] c : a.chunks) len += c.length;
+        byte[] all = new byte[len];
+        int off = 0;
+        for (byte[] c : a.chunks) {
+            System.arraycopy(c, 0, all, off, c.length);
+            off += c.length;
+        }
+        short[] pcm = VoiceCodec.decode(all);
+        if (v.senderId == ownId()) {
+            chatBubble = "Tin nhắn thoại " + voiceDurText(pcm);
+            chatTimer = 4f;
+            addVoiceLog(TAB_NEARBY, displayName, pcm);
+        } else {
+            RemoteFigure f = remotes.get(v.senderId);
+            if (f != null) {
+                f.bubble = "Tin nhắn thoại " + voiceDurText(pcm);
+                f.bubbleTimer = 4f;
+                addVoiceLog(TAB_NEARBY, f.info.name, pcm);
+            } else {
+                addVoiceLog(TAB_NEARBY, "Người chơi", pcm);
+            }
+        }
+    }
+
+    /** Chạm chip thoại: đang nghe thì dừng, chưa nghe thì phát. */
+    private void toggleVoicePlay(ChatLine l) {
+        if (l == null || l.voice == null) return;
+        if (playingLine == l) {
+            stopVoicePlay();
+            return;
+        }
+        stopVoicePlay();
+        playingLine = l;
+        l.voicePlaying = true;
+        final int gen = ++playGen;
+        final short[] pcm = l.voice;
+        playThread = new Thread(() -> {
+            com.badlogic.gdx.audio.AudioDevice dev = null;
+            try {
+                dev = Gdx.audio.newAudioDevice(VOICE_RATE, true);
+                int o = 0;
+                while (o < pcm.length && gen == playGen) {
+                    int n = Math.min(4096, pcm.length - o);
+                    dev.writeSamples(pcm, o, n);
+                    o += n;
+                }
+            } catch (Throwable ignored) {
+                // thiết bị không có loa/tai nghe: bỏ qua, trạng thái tự dọn ở update()
+            } finally {
+                if (dev != null) dev.dispose();
+            }
+        });
+        playThread.setDaemon(true);
+        playThread.start();
+    }
+
+    private void stopVoicePlay() {
+        playGen++;
+        if (playingLine != null) {
+            playingLine.voicePlaying = false;
+            playingLine = null;
+        }
+    }
+
+    /** Kiểm chứng bằng ảnh: thêm 2 tin thoại mẫu (sóng sine) vào tab Gần đây,
+     *  một tin đặt ở trạng thái đang nghe để thấy icon dừng. */
+    public void debugVoiceDemo() {
+        short[] a = new short[VOICE_RATE * 5];
+        short[] b = new short[VOICE_RATE * 3];
+        for (int i = 0; i < a.length; i++) a[i] = (short) (Math.sin(i * 0.05) * 9000);
+        for (int i = 0; i < b.length; i++) b[i] = (short) (Math.sin(i * 0.03) * 7000);
+        addVoiceLog(TAB_NEARBY, "Linh", a);
+        addVoiceLog(TAB_NEARBY, displayName, b);
+        List<ChatLine> log = chatLogs[TAB_NEARBY];
+        ChatLine last = log.get(log.size() - 1);
+        last.voicePlaying = true;
+        playingLine = last;
+    }
+
     // ---------- Mạng: người chơi khác trong zone (đợt 2d) ----------
 
     private void addRemote(ZonePlayers.RemotePlayer p) {
@@ -917,10 +1141,19 @@ public class WorldScreen extends ScreenAdapter {
                     }
                     break;
                 }
+                case AvatarProtocol.VOICE_PARK: {
+                    onVoiceChunk(ZonePlayers.parseVoice(m));
+                    break;
+                }
                 case AvatarProtocol.CHAT_PARK:
                 case AvatarProtocol.CHAT_FARM: {
                     ZonePlayers.ChatMsg c = ZonePlayers.parseChat(m);
-                    if (c.id == ownId()) {
+                    if (c.id >= 100_000_000) {
+                        // id hệ thống của server (vd 2000000864 — thông báo
+                        // phiên đấu giá/đếm ngược phát mỗi giây): vào tab
+                        // Hệ thống, không đội tên "Người chơi" ở tab Gần đây
+                        addChatLog(TAB_SYSTEM, null, c.text, true);
+                    } else if (c.id == ownId()) {
                         showBubble(c.text);
                     } else {
                         RemoteFigure f = remotes.get(c.id);
@@ -1010,6 +1243,7 @@ public class WorldScreen extends ScreenAdapter {
     public void debugCloseBoard() { boardOpen = false; }
     public void debugToggleChatBig() { chatExpanded = !chatExpanded; }
     public void debugOpenEmoji() { emojiOpen = true; typing = true; }
+    public void debugCloseEmoji() { emojiOpen = false; }
     /** Nạp vài dòng chat mẫu vào tab Gần đây để kiểm chứng panel chat. */
     public void debugChatDemo() {
         String[][] demo = {
@@ -1153,6 +1387,8 @@ public class WorldScreen extends ScreenAdapter {
             }
             @Override
             public boolean touchUp(int sx, int sy, int pointer, int button) {
+                // đang giữ micro ghi âm: thả tay ra là gửi tin nhắn thoại
+                if (recording) { finishRecording(); return true; }
                 if (pointer == feelPointer) {
                     Vector3 v = hudViewport.unproject(new Vector3(sx, sy, 0));
                     if (feelDragHandle) {
@@ -1296,6 +1532,14 @@ public class WorldScreen extends ScreenAdapter {
                 return;
             }
         }
+        // chip tin nhắn thoại trong nhật ký: chạm để nghe / dừng nghe
+        for (Object[] h : voiceHits) {
+            float hx = (Float) h[0], hy = (Float) h[1], hw = (Float) h[2], hh = (Float) h[3];
+            if (x >= hx && x <= hx + hw && y >= hy && y <= hy + hh) {
+                toggleVoicePlay((ChatLine) h[4]);
+                return;
+            }
+        }
         // ô emoji đang mở: chạm một icon để chèn mã :ten: vào ô nhập
         if (emojiOpen) {
             float[] g = emojiPanelGeom();
@@ -1313,11 +1557,19 @@ public class WorldScreen extends ScreenAdapter {
         }
         // nút mở ô emoji (nằm giữa ô nhập và nút Gửi)
         {
-            float emojiX = CHAT_X + CHAT_W - 8 - CHAT_SEND_W - 6 - EMOJI_BTN_W;
+            float micX = CHAT_X + CHAT_W - 8 - CHAT_SEND_W - 6 - MIC_BTN_W;
+            float emojiX = micX - 6 - EMOJI_BTN_W;
             if (x >= emojiX && x <= emojiX + EMOJI_BTN_W
                     && y >= CHAT_Y + 7 && y <= CHAT_Y + 7 + CHAT_INPUT_H) {
                 emojiOpen = !emojiOpen;
                 if (emojiOpen) typing = true;
+                return;
+            }
+            // nút micro: bấm GIỮ để ghi tin nhắn thoại, thả ra là gửi
+            // (việc dừng/gửi xử lý ở touchUp)
+            if (x >= micX && x <= micX + MIC_BTN_W
+                    && y >= CHAT_Y + 7 && y <= CHAT_Y + 7 + CHAT_INPUT_H) {
+                startRecording();
                 return;
             }
         }
@@ -1406,6 +1658,14 @@ public class WorldScreen extends ScreenAdapter {
 
     private void update(float dt) {
         if (boardLatch > 0f) boardLatch -= dt;
+        // nghe thoại: luồng phát chạy nền, phát xong thì tự dọn trạng thái
+        if (playingLine != null && playThread != null && !playThread.isAlive()) {
+            playingLine.voicePlaying = false;
+            playingLine = null;
+            playThread = null;
+        }
+        // ghi âm đủ 30 giây thì tự dừng và gửi
+        if (recording && recCount >= recBuf.length - 1600) finishRecording();
         // chiều cao panel chat chạy mượt tới nấc đích khi bấm phóng to/thu nhỏ
         float chatTarget = chatExpanded ? CHAT_H_BIG : CHAT_H;
         chatH += (chatTarget - chatH) * Math.min(1f, dt * 12f);
@@ -1770,6 +2030,7 @@ public class WorldScreen extends ScreenAdapter {
         List<ChatLine> log = chatLogs[activeChatTab];
         int maxLines = (int) CHAT_LOG_LINES + (int) ((chatH - CHAT_H) / CHAT_LINE_H);
         int n = Math.min(maxLines, log.size());
+        voiceHits.clear();
         for (int i = 0; i < n; i++) {
             ChatLine l = log.get(log.size() - n + i);
             float ly = CHAT_Y + CHAT_INPUT_H + 14 + (n - 1 - i) * CHAT_LINE_H + 15;
@@ -1779,7 +2040,25 @@ public class WorldScreen extends ScreenAdapter {
                 Ui.fontSmall.setColor(0.65f, 0.9f, 1f, 1f);
                 Ui.fontSmall.draw(batch, l.name + ":", CHAT_X + 14, ly);
                 layout.setText(Ui.fontSmall, l.name + ":");
-                drawRichText(l.text, CHAT_X + 14 + layout.width + 6, ly, null);
+                float tx2 = CHAT_X + 14 + layout.width + 6;
+                if (l.voice != null) {
+                    // chip nghe lại của tin nhắn thoại: icon play (hoặc stop
+                    // đỏ khi đang nghe) + nhãn + độ dài; chạm chip để nghe
+                    String label = "Tin nhắn thoại " + voiceDurText(l.voice);
+                    layout.setText(Ui.fontSmall, label);
+                    float chipW = layout.width + 46;
+                    float chipX = tx2, chipY = ly - 15;
+                    batch.draw(Ui.roundedRect((int) chipW, 20, 10,
+                        new Color(0.10f, 0.17f, 0.26f, 0.97f), GLASS_RIM), chipX, chipY);
+                    Ui.faIcon(batch, Ui.fa20, l.voicePlaying ? Ui.FA_STOP : Ui.FA_PLAY,
+                        chipX + 15, chipY + 10, l.voicePlaying
+                            ? new Color(1f, 0.45f, 0.4f, 1f) : Color.WHITE);
+                    Ui.fontSmall.setColor(Color.WHITE);
+                    Ui.fontSmall.draw(batch, label, chipX + 29, ly);
+                    voiceHits.add(new Object[]{chipX, chipY, chipW, 20f, l});
+                } else {
+                    drawRichText(l.text, tx2, ly, null);
+                }
             }
             // giờ gửi nằm ở góc phải của chính dòng tin nhắn đó (chữ mờ);
             // dòng trên cùng né sang trái nút phóng to ở góc panel
@@ -1795,12 +2074,23 @@ public class WorldScreen extends ScreenAdapter {
                 ? "Chưa có tin nhắn thế giới nào." : "Chưa có tin nhắn nào.",
                 CHAT_X + 14, CHAT_Y + CHAT_INPUT_H + 35);
         }
-        // ô nhập (chừa chỗ cho nút emoji + nút Gửi ở cuối)
-        float inputW = CHAT_W - 16 - CHAT_SEND_W - 8 - EMOJI_BTN_W - 6;
+        // ô nhập (chừa chỗ cho nút emoji + nút micro + nút Gửi ở cuối)
+        float inputW = CHAT_W - 16 - CHAT_SEND_W - 8 - MIC_BTN_W - 6 - EMOJI_BTN_W - 6;
         Color inRim = typing ? new Color(1f, 0.8f, 0.35f, 0.95f) : GLASS_RIM;
         batch.draw(Ui.roundedRect((int) inputW, (int) CHAT_INPUT_H, 10,
             new Color(1f, 1f, 1f, typing ? 0.96f : 0.88f), inRim), CHAT_X + 8, CHAT_Y + 7);
-        if (typing) {
+        if (recording) {
+            // đang ghi âm: chấm đỏ nhấp nháy + đồng hồ giây ngay trong ô nhập
+            int secs = recCount / VOICE_RATE;
+            if ((System.currentTimeMillis() / 500) % 2 == 0) {
+                batch.draw(Ui.roundedRect(12, 12, 6,
+                    new Color(0.9f, 0.2f, 0.2f, 1f), new Color(0.9f, 0.2f, 0.2f, 1f)),
+                    CHAT_X + 20, CHAT_Y + 19);
+            }
+            Ui.fontSmall.setColor(0.75f, 0.15f, 0.15f, 1f);
+            Ui.fontSmall.draw(batch, "Đang ghi âm 0:" + (secs < 10 ? "0" : "") + secs
+                + " — thả micro để gửi", CHAT_X + 42, CHAT_Y + 30);
+        } else if (typing) {
             float endX = drawRichText(typeBuffer.toString(), CHAT_X + 20, CHAT_Y + 30,
                 new Color(0.1f, 0.1f, 0.12f, 1f));
             Ui.fontSmall.setColor(0.1f, 0.1f, 0.12f, 1f);
@@ -1810,7 +2100,8 @@ public class WorldScreen extends ScreenAdapter {
             Ui.fontSmall.draw(batch, "Nhập nội dung", CHAT_X + 20, CHAT_Y + 30);
         }
         // nút mở ô emoji: ảnh emoji cười lăn (rofl) trên nền kính cùng tông
-        float emojiX = CHAT_X + CHAT_W - 8 - CHAT_SEND_W - 6 - EMOJI_BTN_W;
+        float micX = CHAT_X + CHAT_W - 8 - CHAT_SEND_W - 6 - MIC_BTN_W;
+        float emojiX = micX - 6 - EMOJI_BTN_W;
         batch.draw(Ui.roundedRect((int) EMOJI_BTN_W, (int) CHAT_INPUT_H, 10,
             new Color(0.10f, 0.17f, 0.26f, 0.97f), GLASS_RIM), emojiX, CHAT_Y + 7);
         Texture roflTex = emojiTex("rofl");
@@ -1821,6 +2112,12 @@ public class WorldScreen extends ScreenAdapter {
             Ui.faIcon(batch, Ui.fa20, Ui.FA_FACE_SMILE,
                 emojiX + EMOJI_BTN_W / 2f, CHAT_Y + 7 + CHAT_INPUT_H / 2f, Color.WHITE);
         }
+        // nút micro của tin nhắn thoại: bấm giữ để ghi, đỏ lên khi đang ghi
+        batch.draw(Ui.roundedRect((int) MIC_BTN_W, (int) CHAT_INPUT_H, 10,
+            recording ? new Color(0.55f, 0.12f, 0.12f, 0.97f)
+                      : new Color(0.10f, 0.17f, 0.26f, 0.97f), GLASS_RIM), micX, CHAT_Y + 7);
+        Ui.faIcon(batch, Ui.fa20, Ui.FA_MICROPHONE,
+            micX + MIC_BTN_W / 2f, CHAT_Y + 7 + CHAT_INPUT_H / 2f, Color.WHITE);
         // nút Gửi: ICON máy bay giấy Font Awesome trên nền kính cùng tông
         // panel (chủ dự án chốt: bỏ chữ "Gửi" + bỏ màu cam)
         float sendX = CHAT_X + CHAT_W - 8 - CHAT_SEND_W;
