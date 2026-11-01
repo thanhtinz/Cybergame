@@ -32,6 +32,13 @@ public class MapManager {
         }
     }
 
+    /** [ADMIN] Bản sao danh sách mọi map. */
+    public java.util.List<Map> allMaps() {
+        synchronized (maps) {
+            return new ArrayList<>(maps);
+        }
+    }
+
     public Map find(int id) {
         synchronized (maps) {
             for (Map map : maps) {

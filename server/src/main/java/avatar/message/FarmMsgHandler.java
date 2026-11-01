@@ -31,6 +31,11 @@ public class FarmMsgHandler extends MessageHandler {
         if (this.client.user == null) {
             return;
         }
+        // [ADMIN] Cờ tắt nông trại: chặn mọi thao tác farm
+        if (!avatar.admin.FeatureFlags.farmOpen()) {
+            this.client.user.getService().serverDialog("Nông trại đang tạm đóng để bảo trì, quay lại sau nhé.");
+            return;
+        }
         try {
             System.out.println("FarmMsgHandler: " + mss.getCommand());
             switch (mss.getCommand()) {

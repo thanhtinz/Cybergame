@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Quản trị — Thị Trấn Mặt Trời</title>
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<div id="loginBox" class="login-wrap">
+  <div class="login-card">
+    <h1>Thị Trấn Mặt Trời</h1>
+    <p class="sub">Trang quản trị game</p>
+    <label>Tài khoản admin (role &ge; 2)</label>
+    <input id="loginUser" type="text" autocomplete="username" placeholder="Tên tài khoản">
+    <label>Mật khẩu</label>
+    <input id="loginPass" type="password" autocomplete="current-password" placeholder="Mật khẩu">
+    <button id="loginBtn" class="btn primary big">Đăng nhập</button>
+    <p id="loginErr" class="err"></p>
+  </div>
+</div>
+
+<div id="app" class="layout hidden">
+  <aside class="side">
+    <div class="brand">Thị Trấn Mặt Trời</div>
+    <div class="brand-sub">Quản trị game</div>
+    <nav>
+      <button data-nav="overview" class="nav active">Tổng quan</button>
+      <button data-nav="players" class="nav">Người chơi</button>
+      <button data-nav="items" class="nav">Vật phẩm &amp; Shop</button>
+      <button data-nav="npcs" class="nav">NPC</button>
+      <button data-nav="wheel" class="nav">Vòng quay</button>
+      <button data-nav="giftcodes" class="nav">Giftcode</button>
+      <button data-nav="events" class="nav">Sự kiện &amp; Thông báo</button>
+      <button data-nav="flags" class="nav">Bật / Tắt tính năng</button>
+    </nav>
+    <div class="side-foot">
+      <span id="whoami"></span>
+      <button id="logoutBtn" class="btn small">Đăng xuất</button>
+    </div>
+  </aside>
+
+  <main class="main">
+    <section id="sec-overview" class="sec">
+      <h2>Tổng quan</h2>
+      <div class="cards" id="ovCards"></div>
+      <div class="panel">
+        <h3>Trạng thái server</h3>
+        <p id="ovStatus" class="muted"></p>
+      </div>
+    </section>
+
+    <section id="sec-players" class="sec hidden">
+      <h2>Người chơi</h2>
+      <div class="toolbar">
+        <input id="plQ" type="text" placeholder="Tìm theo tên tài khoản...">
+        <button id="plSearch" class="btn">Tìm</button>
+      </div>
+      <div class="panel">
+        <table id="plTable">
+          <thead><tr>
+            <th>ID</th><th>Tài khoản</th><th>Trạng thái</th><th>Xu</th><th>Lượng</th>
+            <th>Lượng khoá</th><th>Xèng</th><th>Role</th><th>Ngày tạo</th><th>Thao tác</th>
+          </tr></thead>
+          <tbody></tbody>
+        </table>
+        <div class="pager">
+          <button id="plPrev" class="btn small">Trang trước</button>
+          <span id="plPageInfo"></span>
+          <button id="plNext" class="btn small">Trang sau</button>
+        </div>
+      </div>
+    </section>
+
+    <section id="sec-items" class="sec hidden">
+      <h2>Vật phẩm &amp; Shop</h2>
+      <div class="toolbar">
+        <input id="itQ" type="text" placeholder="Tìm theo tên hoặc ID...">
+        <select id="itSell">
+          <option value="">Tất cả</option>
+          <option value="shop">Đang bán ở Cửa Hàng</option>
+          <option value="hidden">Không bán ở Cửa Hàng</option>
+        </select>
+        <button id="itSearch" class="btn">Tìm</button>
+      </div>
+      <div class="panel">
+        <h3>Thêm vật phẩm mới (nhân bản từ vật phẩm mẫu)</h3>
+        <div class="row-form">
+          <input id="newItemTemplate" type="number" placeholder="ID vật phẩm mẫu">
+          <input id="newItemName" type="text" placeholder="Tên vật phẩm mới">
+          <button id="newItemBtn" class="btn primary">Thêm vật phẩm</button>
+        </div>
+        <p class="muted">Vật phẩm mới giữ nguyên hình/animation của mẫu; sửa tên, giá và hạn dùng ở bảng dưới rồi bấm Lưu. Sell = 8 hoặc 14 thì món hiện trong Cửa Hàng NPC, các giá trị khác thì ẩn khỏi Cửa Hàng.</p>
+      </div>
+      <div class="panel">
+        <table id="itTable">
+          <thead><tr>
+            <th>ID</th><th>Tên</th><th>Giá Xu</th><th>Giá Lượng</th><th>Sell (shop)</th>
+            <th>Hạn dùng (ngày)</th><th>Loại hình</th><th>Thao tác</th>
+          </tr></thead>
+          <tbody></tbody>
+        </table>
+        <div class="pager">
+          <button id="itPrev" class="btn small">Trang trước</button>
+          <span id="itPageInfo"></span>
+          <button id="itNext" class="btn small">Trang sau</button>
+        </div>
+      </div>
+    </section>
+
+    <section id="sec-npcs" class="sec hidden">
+      <h2>NPC</h2>
+      <div class="panel">
+        <h3>Thêm NPC (nhân bản NPC mẫu để giữ hình + câu thoại)</h3>
+        <div class="row-form">
+          <input id="newNpcTemplate" type="number" placeholder="ID NPC mẫu (bỏ trống = NPC trắng)">
+          <input id="newNpcName" type="text" placeholder="Tên NPC mới">
+          <input id="newNpcMap" type="number" placeholder="Map (server id)">
+          <input id="newNpcX" type="number" placeholder="X">
+          <input id="newNpcY" type="number" placeholder="Y">
+          <button id="newNpcBtn" class="btn primary">Thêm NPC</button>
+        </div>
+        <p class="muted">Map ở đây là map phía SERVER (map trong game = map server + 1). Tắt "Đang bật" là NPC biến mất khỏi thế giới ngay sau khi lưu.</p>
+      </div>
+      <div class="panel">
+        <table id="npcTable">
+          <thead><tr>
+            <th>ID</th><th>Tên</th><th>Map server</th><th>X</th><th>Y</th><th>Đang bật</th><th>Thao tác</th>
+          </tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="sec-wheel" class="sec hidden">
+      <h2>Vòng quay may mắn</h2>
+      <div class="panel">
+        <h3>Thêm ô quà</h3>
+        <div class="row-form">
+          <input id="newWheelItem" type="number" placeholder="ID vật phẩm quà">
+          <select id="newWheelKind">
+            <option value="xu">Vòng Xu</option>
+            <option value="luong">Vòng Lượng</option>
+            <option value="free">Vòng miễn phí</option>
+          </select>
+          <input id="newWheelRatio" type="number" placeholder="Tỉ trọng (ratio)" value="10">
+          <button id="newWheelBtn" class="btn primary">Thêm ô quà</button>
+        </div>
+        <p class="muted">Tỉ trọng càng cao càng dễ trúng ô đó. Sửa tỉ trọng/ID quà trực tiếp trong bảng rồi bấm Lưu.</p>
+      </div>
+      <div class="panel">
+        <table id="wheelTable">
+          <thead><tr>
+            <th>ID</th><th>Vật phẩm quà</th><th>Thuộc vòng</th><th>Tỉ trọng</th><th>Thao tác</th>
+          </tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="sec-giftcodes" class="sec hidden">
+      <h2>Giftcode</h2>
+      <div class="panel">
+        <h3 id="gcFormTitle">Tạo giftcode mới</h3>
+        <div class="grid-form">
+          <label>Mã code <input id="gcCode" type="text" placeholder="VD: TANTHU2026"></label>
+          <label>Số lượt dùng tối đa <input id="gcNum" type="number" value="1"></label>
+          <label>Tin nhắn khi nhận <input id="gcMsg" type="text" placeholder="Chúc mừng bạn nhận quà"></label>
+          <label>Bắt đầu <input id="gcStart" type="datetime-local"></label>
+          <label>Kết thúc <input id="gcEnd" type="datetime-local"></label>
+        </div>
+        <label>Quà (JSON): Xu / Lượng / vật phẩm
+          <textarea id="gcData" rows="3">{"xu": 0, "luong": 0, "items": [{"id": 0, "day": 0, "quantity": 1}]}</textarea>
+        </label>
+        <p class="muted">Trong items: id = ID vật phẩm, day = hạn dùng theo ngày (0 = vĩnh viễn), quantity = số lượng. Xoá phần items nếu chỉ tặng tiền.</p>
+        <input id="gcId" type="hidden">
+        <button id="gcSave" class="btn primary">Lưu giftcode</button>
+        <button id="gcReset" class="btn">Làm mới form</button>
+      </div>
+      <div class="panel">
+        <table id="gcTable">
+          <thead><tr>
+            <th>ID</th><th>Mã</th><th>Quà (JSON)</th><th>Lượt dùng</th><th>Bắt đầu</th><th>Kết thúc</th><th>Thao tác</th>
+          </tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="sec-events" class="sec hidden">
+      <h2>Sự kiện &amp; Thông báo</h2>
+      <div class="panel">
+        <h3>Thông báo của server</h3>
+        <p class="muted">Dòng thông báo này hiện cho người chơi khi vào game. Sửa rồi bấm Lưu; tick "phát ngay" để gửi tức thì tới mọi người đang online.</p>
+        <textarea id="evNotify" rows="3"></textarea>
+        <label class="check"><input id="evBroadcast" type="checkbox"> Phát ngay cho người đang online</label>
+        <button id="evSave" class="btn primary">Lưu thông báo</button>
+      </div>
+      <div class="panel">
+        <h3>Sự kiện trong game</h3>
+        <p class="muted">Các sự kiện theo mùa của bản gốc (đổi quà ở NPC sự kiện, vòng quay, nông trại...) được bật/tắt ở mục "Bật / Tắt tính năng". Tạo sự kiện mới theo mẫu: tạo NPC sự kiện ở map sự kiện + gắn vật phẩm đổi quà vào shop + tạo giftcode cho người tham gia — cả ba đều làm được ngay trong trang này.</p>
+      </div>
+    </section>
+
+    <section id="sec-flags" class="sec hidden">
+      <h2>Bật / Tắt tính năng</h2>
+      <div class="panel">
+        <div id="flagList"></div>
+        <p class="muted">Thay đổi áp dụng ngay trong game, không cần khởi động lại server.</p>
+      </div>
+    </section>
+  </main>
+</div>
+
+<div id="toast" class="toast hidden"></div>
+<script src="app.js"></script>
+</body>
+</html>

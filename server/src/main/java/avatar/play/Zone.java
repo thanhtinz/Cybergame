@@ -84,6 +84,19 @@ public class Zone {
         user.setZone(null);
     }
 
+    /** [ADMIN] Gỡ mọi NPC khỏi khu (khi admin nạp lại NPC từ DB). */
+    public void clearNpcs() {
+        ArrayList<User> copy;
+        synchronized (players) {
+            copy = new ArrayList<>(players);
+        }
+        for (User u : copy) {
+            if (u instanceof Npc) {
+                leave(u);
+            }
+        }
+    }
+
     public void update() {
 
     }

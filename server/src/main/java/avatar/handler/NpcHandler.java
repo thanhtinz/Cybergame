@@ -632,6 +632,11 @@ public class NpcHandler {
                     break;
                 }
                 case NpcName.CUA_HANG: {
+                    // [ADMIN] Cờ tắt shop: không mở menu Cửa Hàng
+                    if (!avatar.admin.FeatureFlags.shopOpen()) {
+                        us.getAvatarService().serverDialog("Cửa hàng đang tạm đóng để bảo trì, quay lại sau nhé.");
+                        break;
+                    }
                     List<Menu> listet = new ArrayList<>();
                     List<Item> Items = new ArrayList<>();
 

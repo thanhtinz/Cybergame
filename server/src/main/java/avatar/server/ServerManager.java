@@ -39,6 +39,8 @@ public class ServerManager {
     public static String hashSettings;
     public static boolean active;
     protected static short port;
+    /** [ADMIN] Cổng trang quản trị web (config admin.port, mặc định 19129). */
+    public static int adminPort = 19129;
     public static String notify;
     public static int bigImgVersion;
     public static int partVersion;
@@ -61,6 +63,9 @@ public class ServerManager {
             Properties props = new Properties();
             props.load(new InputStreamReader(input, StandardCharsets.UTF_8));
             ServerManager.port = Short.parseShort(props.getProperty("server.port"));
+            if (props.containsKey("admin.port")) {
+                ServerManager.adminPort = Integer.parseInt(props.getProperty("admin.port"));
+            }
             ServerManager.cityName = props.getProperty("game.city.name");
             ServerManager.active = Boolean.parseBoolean(props.getProperty("server.active"));
             ServerManager.debug = Boolean.parseBoolean(props.getProperty("server.debug"));
@@ -120,18 +125,21 @@ public class ServerManager {
             MapManager.getInstance().add(new Map(i, 0, 10));
         }
         System.out.println("Load NPC data start ...");
+        avatar.admin.AdminServer.ensureSchema();
         loadNpcData();
         System.out.println("Reset player online ...");
         DbManager.getInstance().executeUpdate("UPDATE `players` SET `is_online` = 0, `client_id` = -1");
         System.out.println("Reset player online successfully");
         BoardManager.getInstance().initBoards();
-
+        // [ADMIN] Cờ tính năng + trang quản trị web chạy cùng tiến trình
+        avatar.admin.FeatureFlags.reload();
+        avatar.admin.AdminServer.start(ServerManager.adminPort);
     }
 
-    private static void loadNpcData() {
+    public static void loadNpcData() {
         int numNPC = 0;
         try (Connection connection = DbManager.getInstance().getConnection();
-             PreparedStatement ps = connection.prepareStatement("SELECT * FROM `npc`;");
+             PreparedStatement ps = connection.prepareStatement("SELECT * FROM `npc` WHERE `active` = 1;");
              ResultSet res = ps.executeQuery();) {
             while (res.next()) {
                 int botID = res.getInt("id");

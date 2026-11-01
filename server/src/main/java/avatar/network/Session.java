@@ -460,6 +460,19 @@ public class Session implements ISession {
         us.setSession(this);
         boolean result = us.login();
         if (result) {
+            // [ADMIN] Cờ bảo trì: chỉ tài khoản admin (role >= 2) vào được.
+            // User.login() đã set login_lock = 1 nên phải mở khoá lại ngay,
+            // nếu không tài khoản bị kẹt khoá tới lượt quét mở khoá kế tiếp.
+            if (avatar.admin.FeatureFlags.maintenance() && us.getRole() < 2) {
+                DbManager.getInstance().executeUpdate(
+                    "UPDATE `users` SET `login_lock` = 0 WHERE `id` = ?;", us.getId());
+                Message mt = new Message(Cmd.SERVER_MESSAGE);
+                mt.writer().writeUTF("Server đang bảo trì, vui lòng quay lại sau ít phút.");
+                mt.writer().flush();
+                this.sendMessage(mt);
+                this.login = false;
+                return;
+            }
             this.login = true;
             this.user = us;
             enter();
@@ -485,7 +498,10 @@ public class Session implements ISession {
         } catch (Exception ignored) {
         }
         String reply;
-        if (username.length() < 4 || username.length() > 20 || password.length() < 4) {
+        if (!avatar.admin.FeatureFlags.registerOpen()) {
+            // [ADMIN] Cờ tắt đăng ký mới
+            reply = "Đăng ký tài khoản đang tạm đóng, vui lòng quay lại sau.";
+        } else if (username.length() < 4 || username.length() > 20 || password.length() < 4) {
             reply = "Tên tài khoản 4–20 ký tự, mật khẩu tối thiểu 4 ký tự.";
         } else {
             try (Connection con = DbManager.getInstance().getConnection()) {
@@ -1104,6 +1120,11 @@ public void NhanThuongEventXuBoss() throws IOException {
 
     public void buyItemShop(Message ms) {
         try {
+            // [ADMIN] Cờ tắt shop
+            if (!avatar.admin.FeatureFlags.shopOpen()) {
+                this.user.getService().serverDialog("Cửa hàng đang tạm đóng để bảo trì, quay lại sau nhé.");
+                return;
+            }
             if(this.user.checkFullSlotChest()) {
                 return;
             }
@@ -1927,6 +1948,11 @@ public void NhanThuongEventXuBoss() throws IOException {
     }
 
     public void doDialLucky(Message ms) throws IOException {
+        // [ADMIN] Cờ tắt vòng quay
+        if (!avatar.admin.FeatureFlags.wheelOpen()) {
+            this.user.getService().serverDialog("Vòng quay may mắn đang tạm đóng để bảo trì.");
+            return;
+        }
         short partId = ms.reader().readShort();
         short degree = ms.reader().readShort();
         DialLucky dl = user.getDialLucky();

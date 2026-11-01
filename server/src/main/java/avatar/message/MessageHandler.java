@@ -258,6 +258,10 @@ public class MessageHandler implements IMessageHandler {
                     // nhắn riêng −6, mời kết bạn −21, trả lời kết bạn −19.
                     case Cmd.CHAT_TO: {
                         if (this.client.user != null) {
+                            // [ADMIN] Cờ tắt chat: bỏ qua lặng lẽ
+                            if (!avatar.admin.FeatureFlags.chatOpen()) {
+                                break;
+                            }
                             this.client.getAvatarService().chatToUser(mss);
                             break;
                         }
@@ -345,6 +349,10 @@ public class MessageHandler implements IMessageHandler {
                     }
                     case Cmd.CHAT_PARK: {
                         if (this.client.user != null) {
+                            // [ADMIN] Cờ tắt chat: bỏ qua lặng lẽ
+                            if (!avatar.admin.FeatureFlags.chatOpen()) {
+                                break;
+                            }
                             this.client.user.chat(mss);
                             System.out.println("551:  ");
                             break;

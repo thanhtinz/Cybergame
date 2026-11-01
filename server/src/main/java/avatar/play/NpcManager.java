@@ -38,6 +38,20 @@ public class NpcManager {
         }
     }
 
+    /** [ADMIN] Bản sao danh sách NPC hiện tại (để admin nạp lại). */
+    public List<Npc> snapshot() {
+        synchronized (npcs) {
+            return new ArrayList<>(npcs);
+        }
+    }
+
+    /** [ADMIN] Xoá toàn bộ NPC khỏi manager (khi nạp lại từ DB). */
+    public void clearAll() {
+        synchronized (npcs) {
+            npcs.clear();
+        }
+    }
+
     public Npc find(int map, int zone, int id) {
         synchronized (npcs) {
             for (Npc npc : npcs) {

@@ -239,6 +239,11 @@ public class GlobalHandler {
                 }
                 break;
             case 20:
+                // [ADMIN] Cờ tắt nhập giftcode
+                if (!avatar.admin.FeatureFlags.giftcodeOpen()) {
+                    this.us.getAvatarService().serverDialog("Nhập giftcode đang tạm đóng.");
+                    break;
+                }
                 GiftCodeService giftCodeService = new GiftCodeService();
                 giftCodeService.useGiftCode(this.us.getId(), text);
                 break;
