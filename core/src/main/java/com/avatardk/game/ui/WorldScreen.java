@@ -439,7 +439,10 @@ public class WorldScreen extends ScreenAdapter {
     private int playerFeel = 4;
     private final List<Integer> playerParts = new ArrayList<>(AvatarDkGame.SON_PARTS);
     private final List<PaperDoll> feelDolls = new ArrayList<>();
-    private static final float FEEL_BTN_X = 962f, FEEL_BTN_Y = 62f, FEEL_BTN_S = 56f;
+    // Nút mở sheet biểu cảm: đặt NGAY BÊN TRÁI nút Tương tác, cùng hàng
+    // ngang tâm với nó (chủ dự án chốt "cái biểu cảm đưa qua gần nút
+    // tương tác") — trước đây nút nằm sát mép phải khung chat.
+    private static final float FEEL_BTN_X = 1080f, FEEL_BTN_Y = 64f, FEEL_BTN_S = 56f;
     // sheet biểu cảm: neo đáy ngay trên khung chat, cạnh phải thẳng hàng nút feel
     private static final float FEEL_SHEET_W = 472f;
     private static final float FEEL_SHEET_MIN = 168f, FEEL_SHEET_MAX = 400f;
@@ -1524,9 +1527,10 @@ public class WorldScreen extends ScreenAdapter {
             menuOpen = false;
             return;
         }
-        // khung chat: nút phóng to/thu nhỏ ở góc trên phải panel
+        // khung chat: nút phóng to/thu nhỏ — tâm nút nằm đúng góc trên
+        // phải của panel (khớp vị trí vẽ trong drawChatFrame)
         {
-            float ebX = CHAT_X + CHAT_W - 48, ebY = CHAT_Y + chatH - 48;
+            float ebX = CHAT_X + CHAT_W - 19, ebY = CHAT_Y + chatH - 19;
             if (x >= ebX && x <= ebX + 38 && y >= ebY && y <= ebY + 38) {
                 chatExpanded = !chatExpanded;
                 return;
@@ -2060,10 +2064,10 @@ public class WorldScreen extends ScreenAdapter {
                     drawRichText(l.text, tx2, ly, null);
                 }
             }
-            // giờ gửi nằm ở góc phải của chính dòng tin nhắn đó (chữ mờ);
-            // dòng trên cùng né sang trái nút phóng to ở góc panel
-            float timeRight = ly > CHAT_Y + chatH - 56
-                ? CHAT_X + CHAT_W - 48 - 8 : CHAT_X + CHAT_W - 14;
+            // giờ gửi nằm ở góc phải của chính dòng tin nhắn đó (chữ mờ).
+            // Nút phóng to giờ vắt trên GÓC panel (chỉ lấn 19px từ mép
+            // trên) nên dòng trên cùng không còn phải né sang trái nữa.
+            float timeRight = CHAT_X + CHAT_W - 14;
             Ui.fontSmall.setColor(1f, 1f, 1f, 0.42f);
             layout.setText(Ui.fontSmall, l.time);
             Ui.fontSmall.draw(batch, l.time, timeRight - layout.width, ly);
@@ -2125,9 +2129,12 @@ public class WorldScreen extends ScreenAdapter {
             new Color(0.10f, 0.17f, 0.26f, 0.97f), GLASS_RIM), sendX, CHAT_Y + 7);
         Ui.faIcon(batch, Ui.fa20, Ui.FA_SEND,
             sendX + CHAT_SEND_W / 2f, CHAT_Y + 7 + CHAT_INPUT_H / 2f, Color.WHITE);
-        // nút phóng to / thu nhỏ panel chat (góc trên phải trong panel):
-        // FA expand khi đang nhỏ, FA compress khi đang to
-        float ebX = CHAT_X + CHAT_W - 48, ebY = CHAT_Y + chatH - 48, ebS = 38;
+        // nút phóng to / thu nhỏ panel chat: TÂM nút nằm đúng GÓC trên phải
+        // của panel (nửa trong nửa ngoài như tab vắt ngang viền — chủ dự án
+        // chốt "đưa cái phóng to lên góc của panel chat"); FA expand khi
+        // đang nhỏ, FA compress khi đang to
+        float ebS = 38;
+        float ebX = CHAT_X + CHAT_W - ebS / 2f, ebY = CHAT_Y + chatH - ebS / 2f;
         batch.draw(Ui.roundedRect((int) ebS, (int) ebS, 9,
             new Color(0.10f, 0.17f, 0.26f, 0.97f), GLASS_RIM), ebX, ebY);
         Ui.faIcon(batch, Ui.fa20, chatExpanded ? Ui.FA_COMPRESS : Ui.FA_EXPAND,
