@@ -4871,8 +4871,7 @@ public class WorldScreen extends ScreenAdapter {
             // bản trước chữ nhỏ và dính vào nút mua): hạn dùng và giới
             // tính/cấp dùng fontSmall, giãn dòng hẳn hoi, nút mua hạ
             // xuống để chừa khoảng thở phía dưới dòng meta
-            Ui.font.setColor(1f, 1f, 1f, 0.97f);
-            Ui.font.draw(batch, sel.name, stX + 4, py + 182);
+            drawFittedName(sel.name, stX + 4, py + 182, stW - 8);
             // Luồng mua mới (mockup): hạn dùng KHÔNG hiện ở đây nữa —
             // người chơi chọn thời hạn trong panel riêng sau khi bấm
             // nút mua. Luồng cũ vẫn giữ dòng hạn dùng như đã chốt.
@@ -4967,6 +4966,27 @@ public class WorldScreen extends ScreenAdapter {
         if (billOpen) drawShopBill();
     }
 
+    /** Vẽ tên món VỪA KHUNG (user phàn nàn chữ tràn/dính 2026-11-01):
+     *  vừa cỡ chính thì vẽ cỡ chính; dài quá thì hạ xuống fontSmall;
+     *  vẫn dài nữa thì cắt ngắn và thêm "…" — không bao giờ để chữ
+     *  tràn khỏi khung của nó đè lên phần khác. */
+    private void drawFittedName(String name, float x, float baseline, float maxW) {
+        if (Ui.textWidth(Ui.font, name) <= maxW) {
+            Ui.font.setColor(1f, 1f, 1f, 0.97f);
+            Ui.font.draw(batch, name, x, baseline);
+        } else if (Ui.textWidth(Ui.fontSmall, name) <= maxW) {
+            Ui.fontSmall.setColor(1f, 1f, 1f, 0.97f);
+            Ui.fontSmall.draw(batch, name, x, baseline);
+        } else {
+            String t = name;
+            while (t.length() > 4 && Ui.textWidth(Ui.fontSmall, t + "…") > maxW) {
+                t = t.substring(0, t.length() - 1);
+            }
+            Ui.fontSmall.setColor(1f, 1f, 1f, 0.97f);
+            Ui.fontSmall.draw(batch, t + "…", x, baseline);
+        }
+    }
+
     /** Các mốc ngày mua bằng Xu trong hoá đơn (mốc cuối = Vĩnh viễn). */
     private static final int[] BILL_DAY_TIERS = {1, 3, 7, 15, 30};
 
@@ -5002,7 +5022,9 @@ public class WorldScreen extends ScreenAdapter {
             new Color(0.08f, 0.12f, 0.19f, 0.98f), GLASS_RIM), cx, cy);
         Ui.font.setColor(1f, 0.85f, 0.38f, 1f);
         Ui.font.draw(batch, "Hoá đơn mua", cx + 28, cy + ch - 30);
-        float xCx = cx + cw - 2, xCy = cy + ch - 2;
+        // nút X nằm GỌN TRONG góc panel (không chồm ra viền như panel
+        // shop) để không đè lên chữ của panel phía sau
+        float xCx = cx + cw - 26, xCy = cy + ch - 26;
         batch.setColor(0.10f, 0.16f, 0.24f, 1f);
         batch.draw(circleTexture(), xCx - 17, xCy - 17, 34, 34);
         batch.setColor(Color.WHITE);
@@ -5010,8 +5032,7 @@ public class WorldScreen extends ScreenAdapter {
         Ui.centered(batch, Ui.font, "X", xCx, xCy + 7, Color.WHITE);
         // món đang mua: icon + tên + giới tính/cấp
         drawPartIcon(sel.id, cx + 62, cy + ch - 100, 76);
-        Ui.font.setColor(1f, 1f, 1f, 0.97f);
-        Ui.font.draw(batch, sel.name, cx + 116, cy + ch - 82);
+        drawFittedName(sel.name, cx + 116, cy + ch - 82, cw - 116 - 24);
         String meta = sel.gender == 1 ? "Chỉ cho Nam"
             : sel.gender == 2 ? "Chỉ cho Nữ" : "Nam/Nữ đều mặc được";
         if (sel.level > 0) meta += " • Cấp yêu cầu: " + sel.level;
@@ -5103,7 +5124,7 @@ public class WorldScreen extends ScreenAdapter {
     private void billTouch(float x, float y) {
         com.avatardk.game.data.PartData sel = shopSelPart();
         float cw = 640, ch = 520, cx = (Ui.W - cw) / 2f, cy = (Ui.H - ch) / 2f;
-        float xCx = cx + cw - 2, xCy = cy + ch - 2;
+        float xCx = cx + cw - 26, xCy = cy + ch - 26;
         if ((x - xCx) * (x - xCx) + (y - xCy) * (y - xCy) <= 28 * 28
             || x < cx || x > cx + cw || y < cy || y > cy + ch) {
             billOpen = false;
