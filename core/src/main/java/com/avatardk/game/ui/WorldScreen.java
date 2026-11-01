@@ -1383,8 +1383,8 @@ public class WorldScreen extends ScreenAdapter {
                         bagCapacity = r.readByte() & 0xFF;
                         chestCapacity = r.readByte() & 0xFF;
                     }
-                    chestTab = 0;
-                    chestSel = 0;
+                    conSel = 0;
+                    homeSel = 0;
                     bagPanel = false;
                     chestPanel = true;
                     break;
@@ -1753,8 +1753,12 @@ public class WorldScreen extends ScreenAdapter {
             return;
         }
         // panel giỏ đồ / rương đồ đang mở: modal, nuốt mọi chạm
-        if (bagPanel || chestPanel) {
+        if (bagPanel) {
             invTouch(x, y);
+            return;
+        }
+        if (chestPanel) {
+            chestTouch(x, y);
             return;
         }
         // panel tương tác người chơi khác đang mở
@@ -2758,13 +2762,17 @@ public class WorldScreen extends ScreenAdapter {
     /** Hạn dùng của đồ đang mặc theo partId (từ gói đăng nhập + khi mặc từ giỏ). */
     private final java.util.Map<Integer, String> wornExpire = new java.util.HashMap<>();
     private int bagCapacity = 20, chestCapacity = 20, chestLevel = 1;
-    private int bagTab = 0, chestTab = 0, bagSel = 0, chestSel = 0;
+    private int bagTab = 0, bagSel = 0;
+    /** Panel rương song song: vị trí đang chọn ở phía giỏ / phía rương. */
+    private int conSel = 0, homeSel = 0;
     private static final float INV_W = 720, INV_H = 500;
     // Hộp xác nhận dùng chung cho panel đồ (văn bản hỏi đúng của gốc:
     // T.trasContainter + T.doYouWantDel). confirmAction: 1 = dùng,
     // 2 = cất, 3 = xoá, 4 = chuyển giỏ<->rương.
     private String confirmText;
     private int confirmAction, confirmPart, confirmIndex;
+    /** Phía nguồn của lần chuyển rương đang chờ xác nhận (0 giỏ, 1 rương). */
+    private int confirmSide;
 
     /** Vẽ icon của một part (theo idIcon gốc) canh giữa tại (cx, cy). */
     private void drawPartIcon(int partId, float cx, float cy, float maxBox) {
@@ -2779,11 +2787,11 @@ public class WorldScreen extends ScreenAdapter {
         batch.draw(reg, cx - dw / 2f, cy - dh / 2f, dw, dh);
     }
 
-    /** Danh sách đang hiển thị của một panel: giỏ có 2 tab (Giỏ đồ /
-     *  Đang mặc), rương có 2 tab (Giỏ đồ / Rương đồ). Đang mặc suy từ
-     *  playerParts, lọc zOrder 30/40 như MapScr.getListYourPart của gốc. */
+    /** Danh sách tab đang xem của panel GIỎ: Giỏ đồ (gói −47) hoặc
+     *  Đang mặc — suy từ playerParts, lọc zOrder 30/40 như
+     *  MapScr.getListYourPart của gốc. (Panel rương không dùng tab nữa:
+     *  hai phía giỏ/rương hiện song song, xem drawChestPanels.) */
     private java.util.List<InvItem> invList(boolean chest) {
-        if (chest) return chestTab == 0 ? chestConItems : chestItems;
         if (bagTab == 0) return bagItems;
         java.util.List<InvItem> out = new ArrayList<>();
         for (int id : playerParts) {
@@ -2899,43 +2907,52 @@ public class WorldScreen extends ScreenAdapter {
         }
     }
 
-    /** Gói −89 trả về thành công: chuyển món đang chọn của panel rương
-     *  sang phía bên kia (đúng cách client gốc tự sắp xếp lại danh sách). */
+    /** Gói −89 trả về thành công: chuyển món đã xác nhận (confirmSide +
+     *  confirmIndex) sang phía bên kia, chọn theo món vừa chuyển. */
     private void moveChestSelection() {
-        if (chestSel < 0) return;
-        if (chestTab == 0) {
-            if (chestSel >= chestConItems.size()) return;
-            InvItem it = chestConItems.remove(chestSel);
+        if (confirmSide == 0) {
+            if (confirmIndex < 0 || confirmIndex >= chestConItems.size()) return;
+            InvItem it = chestConItems.remove(confirmIndex);
             chestItems.add(it);
             removeInvItem(bagItems, it.partId);
-            if (chestSel >= chestConItems.size()) chestSel = Math.max(0, chestConItems.size() - 1);
+            homeSel = chestItems.size() - 1;
+            conSel = Math.min(confirmIndex, Math.max(0, chestConItems.size() - 1));
         } else {
-            if (chestSel >= chestItems.size()) return;
-            InvItem it = chestItems.remove(chestSel);
+            if (confirmIndex < 0 || confirmIndex >= chestItems.size()) return;
+            InvItem it = chestItems.remove(confirmIndex);
             chestConItems.add(it);
             bagItems.add(new InvItem(it.partId, it.time, it.expire));
-            if (chestSel >= chestItems.size()) chestSel = Math.max(0, chestItems.size() - 1);
+            conSel = chestConItems.size() - 1;
+            homeSel = Math.min(confirmIndex, Math.max(0, chestItems.size() - 1));
         }
     }
 
-    /** Nhãn nút hành động của panel theo tab đang xem. */
+    /** Nhãn nút hành động của panel giỏ theo tab đang xem. */
     private String[] invActions(boolean chest) {
-        if (chest) return new String[]{"Di chuyển"};
         return bagTab == 0 ? new String[]{"Dùng", "Xoá"} : new String[]{"Cất đồ", "Xoá"};
     }
 
-    /** Chạm vào nút hành động: mở hộp xác nhận đúng câu hỏi của gốc. */
-    private void invActionTapped(boolean chest, int btn) {
-        java.util.List<InvItem> items = invList(chest);
-        int sel = chest ? chestSel : bagSel;
+    /** Chạm vào nút hành động: mở hộp xác nhận đúng câu hỏi của gốc.
+     *  side chỉ dùng cho rương: 0 = nút ở panel Giỏ, 1 = ở panel Rương. */
+    private void invActionTapped(boolean chest, int btn, int side) {
+        if (chest) {
+            java.util.List<InvItem> items = side == 0 ? chestConItems : chestItems;
+            int sel = side == 0 ? conSel : homeSel;
+            if (sel < 0 || sel >= items.size()) return;
+            confirmAction = 4;
+            confirmSide = side;
+            confirmPart = items.get(sel).partId;
+            confirmIndex = sel;
+            confirmText = side == 0 ? "Bỏ vào rương ?" : "Bỏ vào giỏ đồ ?";
+            return;
+        }
+        java.util.List<InvItem> items = invList(false);
+        int sel = bagSel;
         if (sel < 0 || sel >= items.size()) return;
         InvItem it = items.get(sel);
         confirmPart = it.partId;
         confirmIndex = sel;
-        if (chest) {
-            confirmAction = 4;
-            confirmText = chestTab == 0 ? "Bỏ vào rương ?" : "Bỏ vào giỏ đồ ?";
-        } else if (btn == 1) {
+        if (btn == 1) {
             confirmAction = 3;
             confirmText = "Bỏ món đồ này ?";
         } else if (bagTab == 0) {
@@ -2978,7 +2995,7 @@ public class WorldScreen extends ScreenAdapter {
                     break;
                 }
                 case 4:
-                    AvatarProtocol.transChest(game.connection, chestTab == 0 ? 0 : 1, index, part);
+                    AvatarProtocol.transChest(game.connection, confirmSide, index, part);
                     break;
                 default:
                     break;
@@ -2989,30 +3006,19 @@ public class WorldScreen extends ScreenAdapter {
     }
 
     private void drawInvPanel(boolean chest) {
-        java.util.List<InvItem> items = invList(chest);
-        int tab = chest ? chestTab : bagTab;
-        int sel = chest ? chestSel : bagSel;
+        java.util.List<InvItem> items = invList(false);
+        int sel = bagSel;
         if (sel >= items.size()) sel = Math.max(0, items.size() - 1);
-        if (chest) chestSel = sel; else bagSel = sel;
+        bagSel = sel;
         float px = (Ui.W - INV_W) / 2f, py = (Ui.H - INV_H) / 2f;
         batch.setColor(0f, 0f, 0f, 0.55f);
         batch.draw(whiteTex, 0, 0, Ui.W, Ui.H);
         batch.setColor(Color.WHITE);
         batch.draw(Ui.roundedRect((int) INV_W, (int) INV_H, 18,
             new Color(0.07f, 0.11f, 0.17f, 0.97f), GLASS_RIM), px, py);
-        // tiêu đề + nút đóng tròn trên viền góc (như panel nhân vật);
-        // rương: huy hiệu cấp nằm ngay cạnh tiêu đề, cùng hàng tâm
-        String title = chest ? "Rương đồ" : "Giỏ đồ";
+        // tiêu đề + nút đóng tròn trên viền góc (như panel nhân vật)
         Ui.font.setColor(1f, 0.85f, 0.38f, 1f);
-        Ui.font.draw(batch, title, px + 28, py + INV_H - 24);
-        if (chest) {
-            String badge = "Cấp " + chestLevel;
-            float bw = Ui.textWidth(Ui.fontSmall, badge) + 30;
-            float tw = Ui.textWidth(Ui.font, title);
-            float bx = px + 28 + tw + 16, byy = py + INV_H - 48;
-            batch.draw(Ui.roundedRect((int) bw, 32, 10, new Color(0.95f, 0.55f, 0.20f, 0.9f), GLASS_RIM), bx, byy);
-            Ui.centered(batch, Ui.fontSmall, badge, bx + bw / 2f, byy + 22, Color.WHITE);
-        }
+        Ui.font.draw(batch, "Giỏ đồ", px + 28, py + INV_H - 24);
         float xCx = px + INV_W - 2, xCy = py + INV_H - 2;
         batch.setColor(0.10f, 0.16f, 0.24f, 1f);
         batch.draw(circleTexture(), xCx - 17, xCy - 17, 34, 34);
@@ -3020,24 +3026,19 @@ public class WorldScreen extends ScreenAdapter {
         batch.draw(ringTexture(), xCx - 17, xCy - 17, 34, 34);
         Ui.centered(batch, Ui.font, "X", xCx, xCy + 7, Color.WHITE);
         // tabs; cuối hàng tab là sức chứa của phía đang xem
-        String[] tabs = chest ? new String[]{"Giỏ đồ", "Rương đồ"} : new String[]{"Giỏ đồ", "Đang mặc"};
+        String[] tabs = {"Giỏ đồ", "Đang mặc"};
         float tabY = py + INV_H - 108;
         for (int i = 0; i < 2; i++) {
             float tx = px + 28 + i * 162;
-            boolean act = i == tab;
+            boolean act = i == bagTab;
             batch.draw(Ui.roundedRect(150, 38, 12,
                 act ? new Color(0.25f, 0.45f, 0.65f, 0.95f) : new Color(0f, 0f, 0f, 0.30f), GLASS_RIM), tx, tabY);
             Ui.centered(batch, Ui.fontSmall, tabs[i], tx + 75, tabY + 25,
                 act ? Color.WHITE : new Color(1f, 1f, 1f, 0.65f));
         }
-        String cap;
-        if (!chest && bagTab == 1) {
-            cap = "Đang mặc: " + items.size() + " món";
-        } else if (chest && chestTab == 1) {
-            cap = "Sức chứa: " + items.size() + "/" + chestCapacity + " ô";
-        } else {
-            cap = "Sức chứa: " + items.size() + "/" + bagCapacity + " ô";
-        }
+        String cap = bagTab == 1
+            ? "Đang mặc: " + items.size() + " món"
+            : "Sức chứa: " + items.size() + "/" + bagCapacity + " ô";
         layout.setText(Ui.fontSmall, cap);
         Ui.fontSmall.setColor(1f, 1f, 1f, 0.85f);
         Ui.fontSmall.draw(batch, cap, px + INV_W - 28 - layout.width, tabY + 25);
@@ -3070,7 +3071,7 @@ public class WorldScreen extends ScreenAdapter {
             Ui.fontTiny.setColor(1f, 1f, 1f, 0.72f);
             String exp = cur.expire == null || cur.expire.isEmpty() ? "Vĩnh viễn" : cur.expire;
             Ui.fontTiny.draw(batch, "Hạn dùng: " + exp, px + 100, by + 20);
-            String[] acts = invActions(chest);
+            String[] acts = invActions(false);
             for (int i = 0; i < acts.length; i++) {
                 float bx = px + INV_W - 28 - (acts.length - i) * 132 + 12;
                 batch.draw(Ui.roundedRect(120, 40, 10,
@@ -3082,7 +3083,97 @@ public class WorldScreen extends ScreenAdapter {
         if (confirmText != null) drawInvConfirm();
     }
 
-    /** Hộp xác nhận nhỏ giữa panel đồ (Đồng ý / Huỷ). */
+    // ===== RƯƠNG: HAI PANEL SONG SONG, KHÔNG TAB (chủ dự án chốt
+    // 2026-11-01 thay cho bản 2 tab) — trái Giỏ đồ, phải Rương đồ; mỗi
+    // phía chọn món của mình rồi bấm Di chuyển sang phía bên kia. =====
+    private static final float CH_PW = 604, CH_PH = 500, CH_GAP = 16;
+    private static final float CH_X0 = (Ui.W - (CH_PW * 2 + CH_GAP)) / 2f;
+    private static final float CH_PY = (Ui.H - CH_PH) / 2f;
+
+    private void drawChestPanels() {
+        batch.setColor(0f, 0f, 0f, 0.55f);
+        batch.draw(whiteTex, 0, 0, Ui.W, Ui.H);
+        batch.setColor(Color.WHITE);
+        drawChestSide(CH_X0, 0);
+        drawChestSide(CH_X0 + CH_PW + CH_GAP, 1);
+        // nút đóng tròn trên viền góc của panel phải
+        float xCx = CH_X0 + CH_PW * 2 + CH_GAP - 2, xCy = CH_PY + CH_PH - 2;
+        batch.setColor(0.10f, 0.16f, 0.24f, 1f);
+        batch.draw(circleTexture(), xCx - 17, xCy - 17, 34, 34);
+        batch.setColor(Color.WHITE);
+        batch.draw(ringTexture(), xCx - 17, xCy - 17, 34, 34);
+        Ui.centered(batch, Ui.font, "X", xCx, xCy + 7, Color.WHITE);
+        if (confirmText != null) drawInvConfirm();
+    }
+
+    /** Một phía của panel rương song song: side 0 = Giỏ đồ, 1 = Rương đồ. */
+    private void drawChestSide(float px, int side) {
+        java.util.List<InvItem> items = side == 0 ? chestConItems : chestItems;
+        int sel = side == 0 ? conSel : homeSel;
+        if (sel >= items.size()) sel = Math.max(0, items.size() - 1);
+        if (side == 0) conSel = sel; else homeSel = sel;
+        float py = CH_PY;
+        batch.draw(Ui.roundedRect((int) CH_PW, (int) CH_PH, 18,
+            new Color(0.07f, 0.11f, 0.17f, 0.97f), GLASS_RIM), px, py);
+        // hàng tiêu đề: tên + (rương: huy hiệu cấp) + sức chứa canh phải
+        String title = side == 0 ? "Giỏ đồ" : "Rương đồ";
+        Ui.font.setColor(1f, 0.85f, 0.38f, 1f);
+        Ui.font.draw(batch, title, px + 28, py + CH_PH - 24);
+        if (side == 1) {
+            String badge = "Cấp " + chestLevel;
+            float bw = Ui.textWidth(Ui.fontSmall, badge) + 30;
+            float tw = Ui.textWidth(Ui.font, title);
+            float bx = px + 28 + tw + 16, byy = py + CH_PH - 48;
+            batch.draw(Ui.roundedRect((int) bw, 32, 10, new Color(0.95f, 0.55f, 0.20f, 0.9f), GLASS_RIM), bx, byy);
+            Ui.centered(batch, Ui.fontSmall, badge, bx + bw / 2f, byy + 22, Color.WHITE);
+        }
+        String cap = "Sức chứa: " + items.size() + "/"
+            + (side == 0 ? bagCapacity : chestCapacity) + " ô";
+        layout.setText(Ui.fontSmall, cap);
+        Ui.fontSmall.setColor(1f, 1f, 1f, 0.85f);
+        Ui.fontSmall.draw(batch, cap, px + CH_PW - 28 - layout.width, py + CH_PH - 24);
+        // lưới ô đồ 6 × 3
+        float gridTop = py + CH_PH - 128;
+        int cols = 6, cell = 84, gap = 8;
+        float gridX = px + (CH_PW - (cols * cell + (cols - 1) * gap)) / 2f;
+        for (int idx = 0; idx < cols * 3; idx++) {
+            int col = idx % cols, row = idx / cols;
+            float cx = gridX + col * (cell + gap);
+            float cy = gridTop - (row + 1) * cell - row * gap;
+            boolean has = idx < items.size();
+            boolean isSel = has && idx == sel;
+            batch.draw(Ui.roundedRect(cell, cell, 12,
+                has ? new Color(0.16f, 0.24f, 0.34f, 0.9f) : new Color(0f, 0f, 0f, 0.18f),
+                isSel ? new Color(1f, 0.78f, 0.30f, 1f) : GLASS_RIM), cx, cy);
+            if (has) drawPartIcon(items.get(idx).partId, cx + cell / 2f, cy + cell / 2f, 58);
+        }
+        // thanh dưới: món đang chọn + nút Di chuyển (mũi tên chỉ hướng sang panel kia)
+        float by = py + 22;
+        batch.draw(Ui.roundedRect((int) CH_PW - 56, 66, 12, new Color(0f, 0f, 0f, 0.30f), GLASS_RIM), px + 28, by);
+        if (items.isEmpty()) {
+            Ui.centered(batch, Ui.fontSmall, "Chưa có món nào", px + CH_PW / 2f, by + 41,
+                new Color(1f, 1f, 1f, 0.55f));
+            return;
+        }
+        InvItem cur = items.get(sel);
+        drawPartIcon(cur.partId, px + 66, by + 33, 44);
+        com.avatardk.game.data.PartData pd = game.data.part(cur.partId);
+        Ui.fontSmall.setColor(1f, 1f, 1f, 0.96f);
+        Ui.fontSmall.draw(batch, pd != null ? pd.name : ("Vật phẩm #" + cur.partId), px + 100, by + 44);
+        Ui.fontTiny.setColor(1f, 1f, 1f, 0.72f);
+        String exp = cur.expire == null || cur.expire.isEmpty() ? "Vĩnh viễn" : cur.expire;
+        Ui.fontTiny.draw(batch, "Hạn dùng: " + exp, px + 100, by + 20);
+        float bx = px + CH_PW - 28 - 132 + 12;
+        batch.draw(Ui.roundedRect(120, 40, 10, new Color(0.95f, 0.55f, 0.20f, 1f), GLASS_RIM), bx, by + 13);
+        String label = "Di chuyển";
+        float lw = Ui.textWidth(Ui.fontSmall, label);
+        Ui.fontSmall.setColor(Color.WHITE);
+        Ui.fontSmall.draw(batch, label, bx + 60 - lw / 2f - 8, by + 39);
+        Ui.faIcon(batch, Ui.fa20, side == 0 ? Ui.FA_ARROW_RIGHT : Ui.FA_ARROW_LEFT,
+            bx + 60 + lw / 2f + 6, by + 33, Color.WHITE);
+    }
+
+    /** Hộp xác nhận nhỏ giữa màn hình (Đồng ý / Huỷ). */
     private void drawInvConfirm() {
         float pw = 480, ph = 176, px = (Ui.W - pw) / 2f, py = (Ui.H - ph) / 2f;
         batch.setColor(0f, 0f, 0f, 0.45f);
@@ -3100,30 +3191,30 @@ public class WorldScreen extends ScreenAdapter {
         Ui.centered(batch, Ui.fontSmall, "Huỷ", px + pw - 40 - 85, py + 57, Color.WHITE);
     }
 
-    /** Xử lý chạm khi panel giỏ/rương đang mở (gọi từ touchDown, nuốt
-     *  mọi chạm). Toạ độ khớp tuyệt đối với drawInvPanel. */
-    private void invTouch(float x, float y) {
-        boolean chest = chestPanel;
-        float px = (Ui.W - INV_W) / 2f, py = (Ui.H - INV_H) / 2f;
-        if (confirmText != null) {
-            float pw = 480, ph = 176, cx0 = (Ui.W - pw) / 2f, cy0 = (Ui.H - ph) / 2f;
-            if (x >= cx0 + 40 && x <= cx0 + 210 && y >= cy0 + 26 && y <= cy0 + 74) {
-                invConfirmYes();
-            } else if (x >= cx0 + pw - 210 && x <= cx0 + pw - 40 && y >= cy0 + 26 && y <= cy0 + 74) {
-                confirmText = null;
-            }
-            return;
+    /** Chạm khi hộp xác nhận đang mở: trả true nếu đã nuốt chạm. */
+    private boolean invConfirmTouch(float x, float y) {
+        if (confirmText == null) return false;
+        float pw = 480, ph = 176, cx0 = (Ui.W - pw) / 2f, cy0 = (Ui.H - ph) / 2f;
+        if (x >= cx0 + 40 && x <= cx0 + 210 && y >= cy0 + 26 && y <= cy0 + 74) {
+            invConfirmYes();
+        } else if (x >= cx0 + pw - 210 && x <= cx0 + pw - 40 && y >= cy0 + 26 && y <= cy0 + 74) {
+            confirmText = null;
         }
+        return true;
+    }
+
+    /** Xử lý chạm cho panel GIỎ (2 tab). Toạ độ khớp drawInvPanel. */
+    private void invTouch(float x, float y) {
+        float px = (Ui.W - INV_W) / 2f, py = (Ui.H - INV_H) / 2f;
+        if (invConfirmTouch(x, y)) return;
         // nút đóng tròn trên viền góc
         float xCx = px + INV_W - 2, xCy = py + INV_H - 2;
         if ((x - xCx) * (x - xCx) + (y - xCy) * (y - xCy) <= 28 * 28) {
             bagPanel = false;
-            chestPanel = false;
             return;
         }
         if (x < px || x > px + INV_W || y < py || y > py + INV_H) {
             bagPanel = false;
-            chestPanel = false;
             return;
         }
         // tabs
@@ -3131,12 +3222,13 @@ public class WorldScreen extends ScreenAdapter {
         for (int i = 0; i < 2; i++) {
             float tx = px + 28 + i * 162;
             if (x >= tx && x <= tx + 150 && y >= tabY && y <= tabY + 38) {
-                if (chest) { chestTab = i; chestSel = 0; } else { bagTab = i; bagSel = 0; }
+                bagTab = i;
+                bagSel = 0;
                 return;
             }
         }
         // lưới ô
-        java.util.List<InvItem> items = invList(chest);
+        java.util.List<InvItem> items = invList(false);
         float gridTop = py + INV_H - 128;
         int cols = 7, cell = 84, gap = 10;
         for (int idx = 0; idx < cols * 3; idx++) {
@@ -3144,26 +3236,71 @@ public class WorldScreen extends ScreenAdapter {
             float cx = px + 28 + col * (cell + gap);
             float cy = gridTop - (row + 1) * cell - row * gap;
             if (x >= cx && x <= cx + cell && y >= cy && y <= cy + cell) {
-                if (idx < items.size()) {
-                    if (chest) chestSel = idx; else bagSel = idx;
-                }
+                if (idx < items.size()) bagSel = idx;
                 return;
             }
         }
         // nút hành động ở thanh dưới
-        int sel = chest ? chestSel : bagSel;
-        if (!items.isEmpty() && sel < items.size()) {
-            String[] acts = invActions(chest);
+        if (!items.isEmpty() && bagSel < items.size()) {
+            String[] acts = invActions(false);
             float by = py + 22;
             for (int i = 0; i < acts.length; i++) {
                 float bx = px + INV_W - 28 - (acts.length - i) * 132 + 12;
                 if (x >= bx && x <= bx + 120 && y >= by + 13 && y <= by + 53) {
-                    invActionTapped(chest, i);
+                    invActionTapped(false, i, 0);
                     return;
                 }
             }
         }
     }
+
+    /** Xử lý chạm cho panel RƯƠNG song song. Toạ độ khớp drawChestPanels. */
+    private void chestTouch(float x, float y) {
+        if (invConfirmTouch(x, y)) return;
+        float py = CH_PY;
+        // nút đóng tròn trên viền góc panel phải
+        float xCx = CH_X0 + CH_PW * 2 + CH_GAP - 2, xCy = py + CH_PH - 2;
+        if ((x - xCx) * (x - xCx) + (y - xCy) * (y - xCy) <= 28 * 28) {
+            chestPanel = false;
+            return;
+        }
+        boolean inside = false;
+        for (int side = 0; side < 2; side++) {
+            float px = CH_X0 + side * (CH_PW + CH_GAP);
+            if (x < px || x > px + CH_PW || y < py || y > py + CH_PH) continue;
+            inside = true;
+            java.util.List<InvItem> items = side == 0 ? chestConItems : chestItems;
+            int sel = side == 0 ? conSel : homeSel;
+            // lưới ô 6 × 3
+            float gridTop = py + CH_PH - 128;
+            int cols = 6, cell = 84, gap = 8;
+            float gridX = px + (CH_PW - (cols * cell + (cols - 1) * gap)) / 2f;
+            for (int idx = 0; idx < cols * 3; idx++) {
+                int col = idx % cols, row = idx / cols;
+                float cx = gridX + col * (cell + gap);
+                float cy = gridTop - (row + 1) * cell - row * gap;
+                if (x >= cx && x <= cx + cell && y >= cy && y <= cy + cell) {
+                    if (idx < items.size()) {
+                        if (side == 0) conSel = idx; else homeSel = idx;
+                    }
+                    return;
+                }
+            }
+            // nút Di chuyển ở thanh dưới của phía này
+            if (!items.isEmpty() && sel < items.size()) {
+                float by = py + 22;
+                float bx = px + CH_PW - 28 - 132 + 12;
+                if (x >= bx && x <= bx + 120 && y >= by + 13 && y <= by + 53) {
+                    invActionTapped(true, 0, side);
+                    return;
+                }
+            }
+            return; // trong panel: nuốt chạm
+        }
+        if (!inside) chestPanel = false;
+    }
+
+
 
     /** Sân khấu kiểm chứng: nạp bộ đồ mẫu vào cấu trúc thật rồi mở giỏ. */
     public void debugOpenBag() {
@@ -3188,7 +3325,8 @@ public class WorldScreen extends ScreenAdapter {
         bagSel = 0;
     }
 
-    /** Sân khấu kiểm chứng: nạp bộ đồ mẫu rồi mở rương ở tab Rương đồ. */
+    /** Sân khấu kiểm chứng: nạp bộ đồ mẫu rồi mở rương song song,
+     *  phía rương đang chọn sẵn món thiên thần như mockup đã duyệt. */
     public void debugOpenChest() {
         int[] con = {701, 693, 314, 93};
         int[] ids = {98, 494, 116, 605, 633, 620, 476, 114, 128};
@@ -3201,18 +3339,17 @@ public class WorldScreen extends ScreenAdapter {
         chestLevel = 3;
         bagCapacity = 20;
         chestCapacity = 30;
-        chestTab = 1;
-        chestSel = 5;
+        conSel = 0;
+        homeSel = 5;
         bagPanel = false;
         chestPanel = true;
     }
 
-    /** Sân khấu kiểm chứng: hộp xác nhận chuyển đồ trong panel rương. */
+    /** Sân khấu kiểm chứng: hộp xác nhận chuyển đồ từ phía giỏ. */
     public void debugChestConfirm() {
         debugOpenChest();
-        chestTab = 0;
-        chestSel = 0;
-        invActionTapped(true, 0);
+        conSel = 0;
+        invActionTapped(true, 0, 0);
     }
 
 
@@ -3611,7 +3748,7 @@ public class WorldScreen extends ScreenAdapter {
         if (friendInviteId != 0) drawFriendInvite();
         if (charPanel) drawCharPanel();
         if (bagPanel) drawInvPanel(false);
-        if (chestPanel) drawInvPanel(true);
+        if (chestPanel) drawChestPanels();
         if (boardOpen) drawBoardPanel();
         if (cityMapOpen) drawCityMap();
         batch.end();
