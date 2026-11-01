@@ -75,3 +75,21 @@ tóc cố định + hero đối chứng) — tóc không lộ vòm, mắt mở �
   đợt 5 (Shop/thời trang) hoặc một đợt riêng khi user chốt.
 - Tóc/trang phục phối tự do theo giới; chưa có dữ liệu giá/tên món —
   bổ sung khi làm shop.
+
+## Bản CRISP — khớp ngôn ngữ pixel của game (user yêu cầu 2026-10-31)
+
+Asset nguồn là minh hoạ AI: gradient mềm, chống răng cưa — đứng cạnh
+sprite gốc (pixel cứng, tông phẳng) là lệch hẳn. `tools/crisp_newstyle.py`
+sinh bản `assets/newstyle-crisp/` (game CHỈ nạp bản này):
+
+- Hạ cỡ box-average trên RGBA premultiply về canvas cao 152px (= 2× cỡ vẽ
+  76 trong game); mọi lớp được phóng sẵn về CỠ PHỐI CUỐI (tóc ×kHair×s,
+  đồ ×kOutfit×s) để Java chỉ blit 1:1, không nội suy thêm.
+- Alpha snap nhị phân (≥128), palette tối đa 56 màu/món không dither —
+  tông phẳng kiểu cel như asset gốc; texture khoá filter Nearest.
+- Mắt/miệng của base quá nhỏ nên box-average nuốt nét: cấy lại dải mắt +
+  ô miệng từ hero CRISP (cùng canvas, giữ được nét) với khớp tông da
+  (chỉ dịch pixel da sáng, giữ nguyên pixel tối) + mặt nạ lông vũ 2px.
+- Hiệu chuẩn crisp ghi ở khối `maleCrisp`/`femaleCrisp` trong
+  newstyle.json (k giữ nguyên, hình học ×s). Bản full-res giữ nguyên làm
+  nguồn; phối kiểm chứng ở cỡ full-res vẫn qua composite_test.py.

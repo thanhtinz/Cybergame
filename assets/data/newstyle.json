@@ -342,5 +342,25 @@
   "kOutfit": 1.15,
   "hairFrac": 0.5952380952380952,
   "hairDy": -32
+ },
+ "maleCrisp": {
+  "canvas": [
+   112,
+   152
+  ],
+  "faceCx": 64,
+  "bodyCx": 57,
+  "hairDy": -5,
+  "hairFrac": 0.5733333333333334
+ },
+ "femaleCrisp": {
+  "canvas": [
+   118,
+   152
+  ],
+  "faceCx": 68,
+  "bodyCx": 59,
+  "hairDy": -6,
+  "hairFrac": 0.5952380952380952
  }
 }
