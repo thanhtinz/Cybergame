@@ -4747,12 +4747,12 @@ public class WorldScreen extends ScreenAdapter {
         }
         com.avatardk.game.data.PartData sel = shopSelPart();
         if (sel != null) {
-            float stX = px + 24, bW = 296, bH = 46;
-            if (x >= stX && x <= stX + bW && y >= py + 74 && y <= py + 74 + bH) {
+            float stX = px + 24, bW = 296, bH = 44;
+            if (x >= stX && x <= stX + bW && y >= py + 66 && y <= py + 66 + bH) {
                 shopBuy(2);
                 return;
             }
-            if (x >= stX && x <= stX + bW && y >= py + 20 && y <= py + 20 + bH) {
+            if (x >= stX && x <= stX + bW && y >= py + 14 && y <= py + 14 + bH) {
                 shopBuy(1);
                 return;
             }
@@ -4818,20 +4818,29 @@ public class WorldScreen extends ScreenAdapter {
                 stX + stW / 2f, stY + 52, 6.0f, false);
         }
         com.avatardk.game.data.PartData sel = shopSelPart();
-        float bW = stW, bH = 46;
+        float bW = stW, bH = 44;
         if (sel != null) {
+            // tên món + hai dòng thông tin CHỮ TO RÕ (user sửa 2026-11-01:
+            // bản trước chữ nhỏ và dính vào nút mua): hạn dùng và giới
+            // tính/cấp dùng fontSmall, giãn dòng hẳn hoi, nút mua hạ
+            // xuống để chừa khoảng thở phía dưới dòng meta
             Ui.font.setColor(1f, 1f, 1f, 0.97f);
-            Ui.font.draw(batch, sel.name, stX + 4, py + 176);
-            Ui.fontTiny.setColor(1f, 1f, 1f, 0.72f);
-            Ui.fontTiny.draw(batch, "Hạn dùng: " + (sel.expiredDay > 0
-                ? sel.expiredDay + " ngày" : "Vĩnh viễn"), stX + 4, py + 152);
+            Ui.font.draw(batch, sel.name, stX + 4, py + 182);
+            Ui.fontSmall.setColor(1f, 1f, 1f, 0.88f);
+            String han = "Hạn dùng: ";
+            Ui.fontSmall.draw(batch, han, stX + 4, py + 154);
+            Ui.fontSmall.setColor(1f, 0.85f, 0.38f, 1f);
+            Ui.fontSmall.draw(batch, sel.expiredDay > 0
+                ? sel.expiredDay + " ngày" : "Vĩnh viễn",
+                stX + 4 + Ui.textWidth(Ui.fontSmall, han), py + 154);
             String meta = sel.gender == 1 ? "Chỉ cho Nam"
                 : sel.gender == 2 ? "Chỉ cho Nữ" : "Nam/Nữ đều mặc được";
             if (sel.level > 0) meta += " • Cấp yêu cầu: " + sel.level;
-            Ui.fontTiny.setColor(1f, 1f, 1f, 0.5f);
-            Ui.fontTiny.draw(batch, meta, stX + 4, py + 130);
-            drawShopBuyButton(stX, py + 74, bW, bH, sel.gold, "Lượng", myLuong);
-            drawShopBuyButton(stX, py + 20, bW, bH, sel.coin, "Xu", myXu);
+            Ui.fontSmall.setColor(sel.gender == 0
+                ? new Color(1f, 1f, 1f, 0.75f) : new Color(1f, 0.72f, 0.45f, 1f));
+            Ui.fontSmall.draw(batch, meta, stX + 4, py + 126);
+            drawShopBuyButton(stX, py + 66, bW, bH, sel.gold, "Lượng", myLuong);
+            drawShopBuyButton(stX, py + 14, bW, bH, sel.coin, "Xu", myXu);
         }
         // ===== cột phải: tab danh mục =====
         float rx = shopGridX();
