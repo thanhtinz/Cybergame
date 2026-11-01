@@ -29,8 +29,16 @@ android {
         targetCompatibility JavaVersion.VERSION_17
     }
 }
+configurations { natives }
+
 dependencies {
     coreLibraryDesugaring 'com.android.tools:desugar_jdk_libs:2.1.3'
+    natives "com.badlogicgames.gdx:gdx-platform:$gdxVersion:natives-armeabi-v7a"
+    natives "com.badlogicgames.gdx:gdx-platform:$gdxVersion:natives-arm64-v8a"
+    natives "com.badlogicgames.gdx:gdx-platform:$gdxVersion:natives-x86_64"
+    natives "com.badlogicgames.gdx:gdx-freetype-platform:$gdxVersion:natives-armeabi-v7a"
+    natives "com.badlogicgames.gdx:gdx-freetype-platform:$gdxVersion:natives-arm64-v8a"
+    natives "com.badlogicgames.gdx:gdx-freetype-platform:$gdxVersion:natives-x86_64"
     implementation project(':core')
     implementation "com.badlogicgames.gdx:gdx-backend-android:$gdxVersion"
     implementation "com.badlogicgames.gdx:gdx-platform:$gdxVersion:natives-armeabi-v7a"
@@ -41,3 +49,26 @@ dependencies {
     implementation "com.badlogicgames.gdx:gdx-freetype-platform:$gdxVersion:natives-arm64-v8a"
     implementation "com.badlogicgames.gdx:gdx-freetype-platform:$gdxVersion:natives-x86_64"
 }
+
+// Bóc .so từ các jar natives-* vào src/main/jniLibs/<abi> để AGP đóng
+// vào APK (thiếu bước này APK không có libgdx.so -> mở là văng).
+tasks.register('copyAndroidNatives') {
+    doLast {
+        configurations.natives.files.each { jar ->
+            String abi = null
+            if (jar.name.endsWith('natives-armeabi-v7a.jar')) abi = 'armeabi-v7a'
+            if (jar.name.endsWith('natives-arm64-v8a.jar')) abi = 'arm64-v8a'
+            if (jar.name.endsWith('natives-x86_64.jar')) abi = 'x86_64'
+            if (abi != null) {
+                File outDir = file("src/main/jniLibs/$abi")
+                outDir.mkdirs()
+                copy {
+                    from zipTree(jar)
+                    into outDir
+                    include '*.so'
+                }
+            }
+        }
+    }
+}
+tasks.named('preBuild') { dependsOn 'copyAndroidNatives' }
