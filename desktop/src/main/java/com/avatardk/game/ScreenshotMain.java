@@ -575,6 +575,20 @@ public class ScreenshotMain {
                     case 44:
                         if (frame == 15) {
                             shot("shot-pass-form.png");
+                            world.debugOpenActionSheet();
+                            stage = 45; frame = 0;
+                        }
+                        break;
+                    case 45:
+                        if (frame == 15) {
+                            shot("shot-action-sheet.png");
+                            world.debugSitPose();
+                            stage = 46; frame = 0;
+                        }
+                        break;
+                    case 46:
+                        if (frame == 15) {
+                            shot("shot-action-pose.png");
                             System.out.println("SCREENSHOT DONE");
                             Gdx.app.exit();
                         }

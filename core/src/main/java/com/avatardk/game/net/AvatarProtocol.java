@@ -231,6 +231,16 @@ public final class AvatarProtocol {
         return true;
     }
 
+    /** Gửi hành động nhân vật (gói 57, byte < 100 — cùng gói với biểu
+     *  cảm như gốc: MapScr.doAction gọi AvatarService.doFeel): byte là
+     *  mã Avatar.action (3 = Ngồi bệt, 4 = Nằm, 5 = Quỳ, 10 = Nhảy,
+     *  0 = đứng dậy). */
+    public static void actionPark(GameConnection conn, int actionByte) throws IOException {
+        Msg m = new Msg(AVATAR_FEEL);
+        m.writer().writeByte(actionByte);
+        conn.send(m);
+    }
+
     /** Nhắn tin riêng (gói −6): int id người nhận + UTF nội dung. */
     public static void chatTo(GameConnection conn, int idTo, String text) throws IOException {
         Msg m = new Msg(CHAT_TO);

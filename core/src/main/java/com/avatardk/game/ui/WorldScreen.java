@@ -182,6 +182,10 @@ public class WorldScreen extends ScreenAdapter {
         int tx, ty;           // đích theo server (medium)
         String bubble = null;
         float bubbleTimer = 0f;
+        int pose = 0;         // tư thế hành động đang giữ (gói 57 byte < 100)
+        float jumpT = -1f;    // tiến trình cú nhảy của người này
+
+        float jumpOffY() { return jumpOffsetY(jumpT); }
     }
     private final Map<Integer, RemoteFigure> remotes = new LinkedHashMap<>();
     /** Client map id đã gửi gói join (50); -1 = chưa join / đã rớt mạng. */
@@ -439,12 +443,16 @@ public class WorldScreen extends ScreenAdapter {
     private final StringBuilder typeBuffer = new StringBuilder();
     private boolean menuOpen = false;
     // Menu burger xổ xuống dạng LƯỚI Ô (yêu cầu của chủ dự án): mỗi ô là một
-    // tính năng với icon gốc trong hd/iconmenu. Map mở bản đồ thành phố; các ô
-    // còn lại mở ở các đợt port tương ứng (Thư, Balo...).
+    // tính năng với icon trong hd/iconmenu. Đã nối thật: Map, Balo, Cá nhân,
+    // Cài đặt. Rương KHÔNG nằm ở menu (chủ dự án chốt 2026-11-01: rương là
+    // vào nhà mở rương trong nhà — panel rương sẽ mở từ vật thể rương ở đợt
+    // Nhà); Hành động cũng đưa ra ngoài thành nút HUD cạnh nút biểu cảm.
+    // Icon Balo (asset ba lô vẽ theo tay bộ icon gốc) và Cài đặt (asset
+    // bánh răng) là asset vẽ thật — kho gốc không có hai icon này (giỏ đồ
+    // gốc dùng icon giỏ hàng "30", cài đặt gốc mở từ menu chữ).
     private static final String[][] MENU_ITEMS = {
-        {"50", "Map"}, {"msg0", "Thư"}, {"30", "Balo"},
-        {"40", "Bạn bè"}, {"20", "Cá nhân"}, {"action0", "Hành động"},
-        {"fa", "Rương"}, {"fa-gear", "Cài đặt"},
+        {"50", "Map"}, {"msg0", "Thư"}, {"balo", "Balo"},
+        {"40", "Bạn bè"}, {"20", "Cá nhân"}, {"gear", "Cài đặt"},
     };
     private static final float MENU_PX = Ui.W - 330f, MENU_PW = 312f;
     private static final float MENU_HEADER = 40f, MENU_CELL = 96f, MENU_CELL_H = 92f;
@@ -485,6 +493,30 @@ public class WorldScreen extends ScreenAdapter {
     private boolean feelDragHandle = false;
     private float feelDragStartY = 0f, feelDragStartH = 0f;
     private float feelDragStartScroll = 0f, feelDragMoved = 0f;
+    // Hành động nhân vật (MapScr.doSellectAction của gốc): nút riêng ở HUD
+    // đặt BÊN TRÁI nút biểu cảm (chủ dự án chốt 2026-11-01 đưa ra khỏi
+    // menu burger), mở sheet 4 hành động gốc — tên T.actionStr {Nhảy, Nằm,
+    // Ngồi bệt, Quỳ}, mã gói 57 ac[] {10, 4, 3, 5}, icon là khung 7..10
+    // của sheet effect/cmd (CommandAction.paint của gốc). Tư thế giữ
+    // nguyên cho tới khi di chuyển (đúng Avatar.doAction của gốc).
+    private static final float ACT_BTN_X = FEEL_BTN_X - 68f, ACT_BTN_Y = FEEL_BTN_Y, ACT_BTN_S = FEEL_BTN_S;
+    private static final String[] ACTION_NAMES = {"Nhảy", "Nằm", "Ngồi bệt", "Quỳ"};
+    private static final int[] ACTION_BYTES = {10, 4, 3, 5};
+    private static final int[] ACTION_FRAMES = {7, 8, 9, 10};
+    private static final float ACT_SHEET_W = 372f, ACT_SHEET_H = 118f;
+    private boolean actionOpen = false;
+    private int playerPose = 0;       // tư thế đang giữ (0 = đứng)
+    private float playerJumpT = -1f;  // tiến trình cú nhảy 0..1; -1 = không nhảy
+
+    private float actSheetX() { return ACT_BTN_X + ACT_BTN_S - ACT_SHEET_W; }
+    private float actSheetY() { return ACT_BTN_Y + ACT_BTN_S + 10f; }
+    private float actCellX(int i) { return actSheetX() + 12f + i * 87f; }
+
+    /** Độ nâng hình khi nhảy: cung sin cao 42px trong 0.5s (doJumps của gốc). */
+    private static float jumpOffsetY(float t) {
+        return t < 0f ? 0f : (float) Math.sin(Math.PI * Math.min(1f, t)) * 42f;
+    }
+
     private NpcFigure nearestNpc = null;
 
     // --- Hub theo spec của chủ dự án (2026-10-31) ---
@@ -790,6 +822,41 @@ public class WorldScreen extends ScreenAdapter {
         f.doll = game.newDoll(parts);
     }
 
+    /** Chọn hành động từ sheet: diễn ngay trên máy mình + gửi gói 57 để
+     *  cả khu thấy (đúng MapScr.doAction của gốc). Nhảy (10) là hành động
+     *  thoáng qua không giữ tư thế; chạm lại tư thế đang diễn = đứng dậy
+     *  (gửi byte 0). Di chuyển sẽ tự huỷ tư thế ở vòng cập nhật. */
+    public void applyAction(int b) {
+        int send = b;
+        if (b == 10) {
+            playerJumpT = 0f;
+            playerPose = 0;
+        } else if (b == playerPose) {
+            playerPose = 0;
+            send = 0;
+        } else {
+            playerPose = b;
+        }
+        if (online() && joinedClientMap >= 0) {
+            try {
+                AvatarProtocol.actionPark(game.connection, send);
+            } catch (IOException e) {
+                // mất một gói hành động thì bỏ qua, không chặn việc chọn
+            }
+        }
+    }
+
+    /** Áp hành động (gói 57, byte < 100) cho một người chơi khác — đúng
+     *  MapScr.onFeel của gốc (idFeel < 100 -> avatar.doAction). */
+    private void applyRemoteAction(RemoteFigure f, int b) {
+        if (b == 10) {
+            f.jumpT = 0f;
+            f.pose = 0;
+        } else {
+            f.pose = b; // b = 0 -> đứng dậy
+        }
+    }
+
     /** Đặt người chơi ở điểm vào map khi chuyển map qua menu: x = 200 medium,
      *  y ở 72% chiều cao map (điểm đứng trên đường đi của từng map; khi online,
      *  toạ độ vào map do server cấp trong gói join). */
@@ -837,6 +904,20 @@ public class WorldScreen extends ScreenAdapter {
     public void debugOpenCityMap() { openCityMap(); }
     public void debugCloseCityMap() { cityMapOpen = false; }
     public void debugOpenFeel() { feelOpen = true; }
+
+    /** Harness chụp hình: mở sheet hành động (đóng các panel đang chồng). */
+    public void debugOpenActionSheet() {
+        settingsOpen = false;
+        passFormOpen = false;
+        menuOpen = false;
+        actionOpen = true;
+    }
+
+    /** Harness chụp hình: đóng sheet và ngồi bệt (tư thế gói 57 byte 3). */
+    public void debugSitPose() {
+        actionOpen = false;
+        applyAction(3);
+    }
     public void debugCloseFeel() { feelOpen = false; }
     public void debugClearRemotes() { remotes.clear(); }
     /** Mở sheet biểu cảm ở nấc mở rộng + cuộn xuống (kiểm chứng hình). */
@@ -1289,12 +1370,16 @@ public class WorldScreen extends ScreenAdapter {
                 }
                 case AvatarProtocol.AVATAR_FEEL: {
                     int[] fl = ZonePlayers.parseFeel(m);
-                    // server phát cho cả khu kể cả người gửi — mặt của mình
-                    // đã áp ngay lúc chọn nên bỏ qua gói mang id của mình.
-                    // Byte < 100 là hành động (doAction của gốc) — chưa port.
-                    if (fl[0] != ownId() && fl[1] >= 100) {
+                    // server phát cho cả khu kể cả người gửi — của mình đã
+                    // áp ngay lúc chọn nên bỏ qua gói mang id của mình.
+                    // Byte >= 100 = biểu cảm mặt; byte < 100 = hành động
+                    // (MapScr.onFeel của gốc: < 100 -> doAction).
+                    if (fl[0] != ownId()) {
                         RemoteFigure f = remotes.get(fl[0]);
-                        if (f != null) applyRemoteFeel(f, fl[1] - 100);
+                        if (f != null) {
+                            if (fl[1] >= 100) applyRemoteFeel(f, fl[1] - 100);
+                            else applyRemoteAction(f, fl[1]);
+                        }
                     }
                     break;
                 }
@@ -1672,7 +1757,20 @@ public class WorldScreen extends ScreenAdapter {
                 f.feetX += dx / dist * step;
                 f.feetY += dy / dist * step;
                 if (Math.abs(dx) > 1f) f.anim.facingLeft = dx < 0;
+                // di chuyển huỷ mọi tư thế hành động (đúng gốc)
+                f.pose = 0;
+                f.jumpT = -1f;
                 f.anim.action = AvatarAnimator.RUN;
+            } else if (f.jumpT >= 0f) {
+                f.jumpT += dt / 0.5f;
+                if (f.jumpT >= 1f) {
+                    f.jumpT = -1f;
+                    f.anim.action = AvatarAnimator.STAND;
+                } else {
+                    f.anim.action = 10;
+                }
+            } else if (f.pose != 0) {
+                f.anim.action = f.pose;
             } else {
                 f.anim.action = AvatarAnimator.STAND;
                 f.anim.facingLeft = f.info.direct == 2;
@@ -1994,9 +2092,33 @@ public class WorldScreen extends ScreenAdapter {
             menuOpen = !menuOpen;
             return;
         }
+        // nút hành động (asset action0) bên trái nút biểu cảm: mở/đóng sheet hành động
+        if (x >= ACT_BTN_X && x <= ACT_BTN_X + ACT_BTN_S && y >= ACT_BTN_Y && y <= ACT_BTN_Y + ACT_BTN_S) {
+            actionOpen = !actionOpen;
+            if (actionOpen) feelOpen = false;
+            return;
+        }
+        // sheet hành động đang mở: chạm ô = diễn hành động (sheet giữ mở để
+        // đổi tư thế tiếp); chạm ra ngoài thì đóng
+        if (actionOpen) {
+            float px = actSheetX(), py = actSheetY();
+            if (x >= px && x <= px + ACT_SHEET_W && y >= py && y <= py + ACT_SHEET_H) {
+                for (int i = 0; i < 4; i++) {
+                    float cx = actCellX(i);
+                    if (x >= cx && x <= cx + 84f && y >= py + 8 && y <= py + ACT_SHEET_H - 8) {
+                        applyAction(ACTION_BYTES[i]);
+                        return;
+                    }
+                }
+                return;
+            }
+            actionOpen = false;
+            return;
+        }
         // nút mặt cười kế bên khung chat: mở/đóng hàng chọn biểu cảm
         if (x >= FEEL_BTN_X && x <= FEEL_BTN_X + FEEL_BTN_S && y >= FEEL_BTN_Y && y <= FEEL_BTN_Y + FEEL_BTN_S) {
             feelOpen = !feelOpen;
+            if (feelOpen) actionOpen = false;
             return;
         }
         // sheet biểu cảm đang mở: chạm vào sheet = bắt đầu kéo (30px trên cùng
@@ -2033,9 +2155,7 @@ public class WorldScreen extends ScreenAdapter {
                             openBag();
                         } else if (i == 4) {
                             openCharPanel();
-                        } else if (i == 6) {
-                            openChest();
-                        } else if (i == 7) {
+                        } else if (i == 5) {
                             settingsOpen = true;
                         } else {
                             addChatLog(TAB_SYSTEM, null, "Tính năng " + MENU_ITEMS[i][1] + " đang được port ở đợt tiếp theo.", true);
@@ -3665,7 +3785,20 @@ public class WorldScreen extends ScreenAdapter {
             if (canStand(playerX, ny)) playerY = ny;
             else if (cellTypeAt(playerX, ny) == 29 && boardLatch <= 0f && !boardOpen) openBoardRequest();
             if (Math.abs(mx) > 0.05f) playerAnim.facingLeft = mx < 0;
+            // di chuyển huỷ mọi tư thế hành động (đúng gốc)
+            playerPose = 0;
+            playerJumpT = -1f;
             playerAnim.action = AvatarAnimator.RUN;
+        } else if (playerJumpT >= 0f) {
+            playerJumpT += dt / 0.5f;
+            if (playerJumpT >= 1f) {
+                playerJumpT = -1f;
+                playerAnim.action = AvatarAnimator.STAND;
+            } else {
+                playerAnim.action = 10;
+            }
+        } else if (playerPose != 0) {
+            playerAnim.action = playerPose;
         } else {
             playerAnim.action = AvatarAnimator.STAND;
         }
@@ -3845,19 +3978,23 @@ public class WorldScreen extends ScreenAdapter {
                     }
                     break;
                 case DrawItem.REMOTE:
-                    // tên người chơi khác màu xanh nhạt (NPC vàng, mình đỏ)
-                    drawFigure(it.remote.doll, it.remote.anim, it.remote.feetX, it.remote.feetY,
+                    // tên người chơi khác màu xanh nhạt (NPC vàng, mình đỏ);
+                    // đang nhảy thì hình (và bong bóng) nâng lên theo cung nhảy
+                    drawFigure(it.remote.doll, it.remote.anim, it.remote.feetX,
+                        it.remote.feetY + it.remote.jumpOffY(),
                         com.avatardk.game.data.GameSettings.showName ? it.remote.info.name : null,
                         new Color(0.55f, 0.9f, 1f, 1f));
                     if (it.remote.bubble != null) {
-                        drawBubble(it.remote.doll, it.remote.anim, it.remote.feetX, it.remote.feetY,
-                            it.remote.bubble);
+                        drawBubble(it.remote.doll, it.remote.anim, it.remote.feetX,
+                            it.remote.feetY + it.remote.jumpOffY(), it.remote.bubble);
                     }
                     break;
                 default: // PLAYER
-                    drawFigure(playerDoll, playerAnim, playerFeetX, playerFeetY, displayName, true);
+                    drawFigure(playerDoll, playerAnim, playerFeetX,
+                        playerFeetY + jumpOffsetY(playerJumpT), displayName, true);
                     if (chatBubble != null) {
-                        drawBubble(playerDoll, playerAnim, playerFeetX, playerFeetY, chatBubble);
+                        drawBubble(playerDoll, playerAnim, playerFeetX,
+                            playerFeetY + jumpOffsetY(playerJumpT), chatBubble);
                     }
                     break;
             }
@@ -3966,6 +4103,7 @@ public class WorldScreen extends ScreenAdapter {
         drawInteractButton();
         drawChatFrame();
         drawFeelUi();
+        drawActionUi();
         if (panelPlayer != null) drawPlayerPanel();
         if (friendInviteId != 0) drawFriendInvite();
         if (charPanel) drawCharPanel();
@@ -4488,24 +4626,8 @@ public class WorldScreen extends ScreenAdapter {
             float cy = py + ph - MENU_HEADER - (row + 1) * MENU_CELL_H + 6;
             // Chỉ asset + nhãn, KHÔNG đè ô kính lên icon nữa (yêu cầu của chủ dự án)
             float is = 46f;
-            if (MENU_ITEMS[i][0].equals("fa")) {
-                // Ô Rương: kho icon gốc không có hình rương — dùng glyph
-                // Font Awesome thật (hộp lưu trữ) theo cùng luật icon FA
-                // của các nút chức năng khác trong HUD.
-                Ui.faIcon(batch, Ui.fa30, Ui.FA_BOX_ARCHIVE,
-                    cx + MENU_CELL / 2f, cy + MENU_CELL_H - 8 - is / 2f - 8,
-                    new Color(0.85f, 0.90f, 0.98f, 1f));
-            } else if (MENU_ITEMS[i][0].equals("fa-gear")) {
-                // Ô Cài đặt: mở panel OptionScr của gốc — kho icon gốc
-                // cũng không có icon cài đặt riêng (gốc mở từ menu chữ ở
-                // màn hình đăng nhập) nên dùng glyph bánh răng FA thật.
-                Ui.faIcon(batch, Ui.fa30, Ui.FA_GEAR,
-                    cx + MENU_CELL / 2f, cy + MENU_CELL_H - 8 - is / 2f - 8,
-                    new Color(0.85f, 0.90f, 0.98f, 1f));
-            } else {
-                Texture icon = game.texture("iconmenu/" + MENU_ITEMS[i][0] + ".png");
-                batch.draw(icon, cx + MENU_CELL / 2f - is / 2f, cy + MENU_CELL_H - 8 - is - 8, is, is);
-            }
+            Texture icon = game.texture("iconmenu/" + MENU_ITEMS[i][0] + ".png");
+            batch.draw(icon, cx + MENU_CELL / 2f - is / 2f, cy + MENU_CELL_H - 8 - is - 8, is, is);
             Ui.fontSmall.setColor(1f, 1f, 1f, 0.92f);
             layout.setText(Ui.fontSmall, MENU_ITEMS[i][1]);
             Ui.fontSmall.draw(batch, MENU_ITEMS[i][1], cx + MENU_CELL / 2f - layout.width / 2f, cy + 24);
@@ -5547,6 +5669,38 @@ public class WorldScreen extends ScreenAdapter {
             }
             batch.flush();
             ScissorStack.popScissors();
+        }
+    }
+
+    /** Nút hành động (asset iconmenu/action0 gốc) bên trái nút biểu cảm +
+     *  SHEET hành động: 4 ô — icon là khung 7..10 của sheet effect/cmd vẽ
+     *  nguyên trạng (nền teal của sheet gốc), tên đúng T.actionStr; ô của
+     *  tư thế đang diễn sáng viền vàng như sheet biểu cảm. */
+    private void drawActionUi() {
+        Texture icon = game.texture("iconmenu/action0.png");
+        batch.draw(Ui.roundedRect((int) ACT_BTN_S, (int) ACT_BTN_S, (int) (ACT_BTN_S / 2),
+            actionOpen ? new Color(0.55f, 0.38f, 0.10f, 0.92f) : GLASS_FILL, GLASS_RIM),
+            ACT_BTN_X, ACT_BTN_Y);
+        batch.draw(icon, ACT_BTN_X + 8, ACT_BTN_Y + 8, ACT_BTN_S - 16, ACT_BTN_S - 16);
+        if (!actionOpen) return;
+        float px = actSheetX(), py = actSheetY();
+        batch.draw(Ui.roundedRect((int) ACT_SHEET_W, (int) ACT_SHEET_H, 14, GLASS_FILL_DARK, GLASS_RIM), px, py);
+        Texture cmd = game.texture("effect/cmd.png");
+        for (int i = 0; i < 4; i++) {
+            float cx = actCellX(i);
+            if (playerPose == ACTION_BYTES[i]) {
+                batch.draw(Ui.roundedRect(80, (int) (ACT_SHEET_H - 16), 10,
+                    new Color(0.55f, 0.38f, 0.10f, 0.85f), new Color(1f, 0.8f, 0.35f, 0.9f)),
+                    cx + 2, py + 8);
+            }
+            // sheet cmd: 96x576 = 2 cột x 12 hàng khung 48; khung index ở
+            // cột index/12, hàng index%12 (đúng CommandAction.paint gốc)
+            int fr = ACTION_FRAMES[i];
+            TextureRegion reg = new TextureRegion(cmd, (fr / 12) * 48, (fr % 12) * 48, 48, 48);
+            batch.draw(reg, cx + 14, py + ACT_SHEET_H - 66, 56, 56);
+            Ui.fontSmall.setColor(1f, 1f, 1f, 0.92f);
+            layout.setText(Ui.fontSmall, ACTION_NAMES[i]);
+            Ui.fontSmall.draw(batch, ACTION_NAMES[i], cx + 42 - layout.width / 2f, py + 24);
         }
     }
 
