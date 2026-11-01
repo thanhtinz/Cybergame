@@ -1614,7 +1614,7 @@ public class WorldScreen extends ScreenAdapter {
                     return;
                 }
             }
-            if (x >= px && x <= px + PP_W && y >= py && y <= py + PP_H + 34) return;
+            if (x >= px && x <= px + PP_W && y >= py && y <= py + PP_H) return;
             panelPlayer = null; // chạm ra ngoài: đóng, chạm đó xử lý tiếp ở dưới
             panelSub = false;
         }
@@ -1802,7 +1802,7 @@ public class WorldScreen extends ScreenAdapter {
     // Giao thức đúng client gốc (docs/park-spec.md): nhắn riêng gói −6,
     // kết bạn −21/−19, thông tin −22, Đánh/Hôn gói 59 (mã 100/101);
     // Tặng quà + Mời về nhà thuộc đợt Shop/Nhà nên báo rõ khi bấm.
-    private static final float PP_W = 470f, PP_H = 178f;
+    private static final float PP_W = 470f, PP_H = 184f;
     private static final String[] PP_LABELS = {"Nhắn tin", "Kết bạn", "Tặng quà", "Tương tác", "Khác"};
     private static final String[] PP_ICONS = {Ui.FA_COMMENT_DOTS, Ui.FA_USER_PLUS, Ui.FA_GIFT, Ui.FA_HEART, Ui.FA_FACE_SMILE};
     private static final String[] PP_SUB_LABELS = {"Đánh", "Hôn", "Mời về nhà", "Thông tin"};
@@ -1844,8 +1844,7 @@ public class WorldScreen extends ScreenAdapter {
         int[] b = panelPlayer.doll.bounds(panelPlayer.anim.frameIndex());
         float headTop = feetScr + (-b[1]) * AvatarDkGame.HD + 28f;
         float px = MathUtils.clamp(sx - PP_W / 2f, 8f, Ui.W - PP_W - 8f);
-        // chừa thêm 40px phía trên cho avatar tròn nhô khỏi mép panel
-        float py = Math.min(headTop + PP_TAIL, Ui.H - PP_H - 40f);
+        float py = Math.min(headTop + PP_TAIL, Ui.H - PP_H - 6f);
         return new float[]{px, Math.max(py, 8f), 1f};
     }
     /** Hàng con + thẻ thông tin xếp tiếp PHÍA TRÊN panel nếu đủ chỗ;
@@ -1856,10 +1855,10 @@ public class WorldScreen extends ScreenAdapter {
         boolean infoShown = infoStats != null && panelPlayer != null
             && infoForId == panelPlayer.info.id;
         float extras = (panelSub ? PP_SUB_H + 8f : 0f) + (infoShown ? 118f + 8f : 0f);
-        return g[1] + PP_H + 34f + extras <= Ui.H - 6f;
+        return g[1] + PP_H + extras <= Ui.H - 6f;
     }
     private float ppBtnX(int i) { return playerPanelGeom()[0] + 41f + i * 80f; }
-    private float ppBtnY() { return playerPanelGeom()[1] + 32f; }
+    private float ppBtnY() { return playerPanelGeom()[1] + 28f; }
     private float ppSubBtnX(int i) { return playerPanelGeom()[0] + 23f + i * 108f; }
     private float ppSubY() {
         float[] g = playerPanelGeom();
@@ -2101,12 +2100,12 @@ public class WorldScreen extends ScreenAdapter {
         batch.setColor(0.10f, 0.16f, 0.24f, 0.96f);
         batch.draw(whiteTex, tailCx - 15, py - 1, 30, 6);
         batch.setColor(Color.WHITE);
-        // avatar TRÒN nhô lên khỏi mép trên panel như mẫu: nền tròn +
-        // chân dung doll + vòng viền sáng đè lên góc
-        float avCx = px + 48, avCy = py + PP_H - 4;
-        float avX = avCx - 30, avY = avCy - 30, avS = 60;
+        // avatar TRÒN nằm GỌN TRONG panel như mẫu (hàng riêng phía trên,
+        // không nhô ra ngoài): nền tròn + chân dung doll + vòng viền sáng
+        float avCx = px + 48, avCy = py + PP_H - 44;
+        float avX = avCx - 29, avY = avCy - 29, avS = 58;
         batch.setColor(0.35f, 0.55f, 0.75f, 0.55f);
-        batch.draw(circleTexture(), avCx - 31, avCy - 31, 62, 62);
+        batch.draw(circleTexture(), avCx - 30, avCy - 30, 60, 60);
         batch.setColor(Color.WHITE);
         int[] b = f.doll.bounds(f.anim.frameIndex());
         float unit = 4f;
@@ -2123,7 +2122,7 @@ public class WorldScreen extends ScreenAdapter {
         }
         // vòng viền sáng quanh avatar (đè lên góc vuông của chân dung)
         batch.setColor(0.72f, 0.84f, 1f, 1f);
-        batch.draw(ringTexture(), avCx - 38, avCy - 38, 76, 76);
+        batch.draw(ringTexture(), avCx - 36, avCy - 36, 72, 72);
         batch.setColor(Color.WHITE);
         // tên vàng VIỀN NÂU ĐẬM như mẫu, canh giữa theo avatar tròn
         String nm = f.info.name;
