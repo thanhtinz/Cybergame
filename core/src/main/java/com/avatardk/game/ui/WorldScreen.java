@@ -1633,6 +1633,12 @@ public class WorldScreen extends ScreenAdapter {
         if (charPanel) {
             float[] g = charPanelGeom();
             float px = g[0], py = g[1];
+            // nút đóng tròn nằm trên viền góc (tâm ở góc panel, bán kính bấm 28)
+            float xCx = px + CP_W - 2, xCy = py + CP_H - 2;
+            if ((x - xCx) * (x - xCx) + (y - xCy) * (y - xCy) <= 28 * 28) {
+                charPanel = false;
+                return;
+            }
             if (x >= px + CP_W - 46 && x <= px + CP_W && y >= py + CP_H - 46 && y <= py + CP_H) {
                 charPanel = false;
                 return;
@@ -2517,6 +2523,14 @@ public class WorldScreen extends ScreenAdapter {
         }
         Ui.fontSmall.setColor(1f, 1f, 1f, 0.92f);
         Ui.fontSmall.draw(batch, st != null ? "Cấp " + st[0] : "—", px + 116, avCy - 18);
+        // phía trên dòng người yêu: ngày vào game (đuôi mở rộng gói −22),
+        // canh phải thẳng hàng với dòng người yêu ở dưới
+        if (selfJoinDate != null) {
+            String jd = "Vào game: " + selfJoinDate;
+            layout.setText(Ui.fontSmall, jd);
+            Ui.fontSmall.setColor(1f, 1f, 1f, 0.78f);
+            Ui.fontSmall.draw(batch, jd, px + CP_W - 24 - layout.width, avCy + 14);
+        }
         // bên phải hàng cấp: "Người yêu: <tên>" — chưa có thì để trống
         if (partnerName != null) {
             String rel = (partnerRel != null && !partnerRel.isEmpty() ? partnerRel : "Người yêu")
@@ -2525,8 +2539,13 @@ public class WorldScreen extends ScreenAdapter {
             Ui.fontSmall.setColor(1f, 0.75f, 0.85f, 1f);
             Ui.fontSmall.draw(batch, rel, px + CP_W - 24 - layout.width, avCy - 18);
         }
-        Ui.font.setColor(Color.WHITE);
-        Ui.font.draw(batch, "X", px + CP_W - 34, py + CP_H - 20);
+        // nút đóng: vòng tròn nằm trên viền góc phải trên, nhô ra ngoài panel
+        float xCx = px + CP_W - 2, xCy = py + CP_H - 2;
+        batch.setColor(0.10f, 0.16f, 0.24f, 1f);
+        batch.draw(circleTexture(), xCx - 17, xCy - 17, 34, 34);
+        batch.setColor(Color.WHITE);
+        batch.draw(ringTexture(), xCx - 17, xCy - 17, 34, 34);
+        Ui.centered(batch, Ui.font, "X", xCx, xCy + 7, Color.WHITE);
         // hàng chip tiền (4 chip ngang dưới header)
         int[] icons = {0, 1, 4, 2};
         String[] vals = {fmtMoney(p.xu), fmtMoney(p.luong), fmtMoney(p.luongKhoa), fmtMoney(p.xeng)};
@@ -2538,12 +2557,11 @@ public class WorldScreen extends ScreenAdapter {
             Ui.fontSmall.setColor(1f, 1f, 1f, 0.94f);
             Ui.fontSmall.draw(batch, vals[i], cx + 38, cy + 24);
         }
-        // sân khấu rộng (nới cao 148 để dòng ngày vào game nằm gọn phía
-        // trên đầu nhân vật trong khung)
-        float stX = px + 24, stY = py + 160, stW = CP_W - 48, stH = 148;
+        // sân khấu rộng
+        float stX = px + 24, stY = py + 168, stW = CP_W - 48, stH = 140;
         batch.draw(Ui.roundedRect((int) stW, (int) stH, 14,
             new Color(0.30f, 0.45f, 0.62f, 0.35f), GLASS_RIM), stX, stY);
-        float floorY = stY + 24;
+        float floorY = stY + 26;
         boolean hasPartner = partnerDoll != null;
         float selfCx = hasPartner ? stX + 150 : stX + stW / 2f;
         float partCx = stX + 442;
@@ -2575,13 +2593,6 @@ public class WorldScreen extends ScreenAdapter {
                 Ui.centered(batch, Ui.fontTiny, partnerSlogan, midX, iconCy - 36,
                     new Color(1f, 0.8f, 0.85f, 1f));
             }
-        }
-        // ngày vào game: canh giữa ngay trên đầu nhân vật người yêu
-        // (chưa có người yêu thì trên đầu nhân vật của mình)
-        if (selfJoinDate != null) {
-            Ui.centered(batch, Ui.fontTiny, "Vào game: " + selfJoinDate,
-                hasPartner ? partCx : selfCx, stY + stH - 10,
-                new Color(1f, 1f, 1f, 0.78f));
         }
         // lưới 6 thẻ chỉ số 3×2
         String[] labels = {"Cấp", "Thân thiện", "Gây rối", "Sành điệu", "Vui vẻ", "Sức khỏe"};
