@@ -153,25 +153,12 @@ public class WorldScreen extends ScreenAdapter {
     }
     private final List<NpcFigure> npcFigures = new ArrayList<>();
 
-    /** Nhân vật PHONG CÁCH MỚI trưng bày (docs/newstyle-spec.md): hình phối
-     *  sẵn thành một Texture, vẽ tĩnh + nhịp thở nhẹ; không phải NPC gốc
-     *  (không tương tác/chat) — là gian trưng bày cho hệ trang phục mới. */
-    private static class StyleFigure {
-        Texture tex;
-        float feetX, feetY;
-        String name;
-        float phase;
-    }
-    private final List<StyleFigure> styleFigures = new ArrayList<>();
-    /** Chiều cao vẽ trong thế giới (px hd) của nhân vật phong cách mới. */
-    private static final float STYLE_H = 76f;
-    private float styleTime = 0f;
 
     /** Một món trong lượt vẽ trộn độ sâu (vật thể / NPC / người chơi khác /
      *  chính mình): sắp theo y đáy trong thế giới, y lớn (cao hơn trên màn
      *  hình) vẽ trước — đúng thứ tự merge của paintObject gốc. */
     private static class DrawItem {
-        static final int OBJ = 0, NPC = 1, REMOTE = 2, PLAYER = 3, STYLE = 4;
+        static final int OBJ = 0, NPC = 1, REMOTE = 2, PLAYER = 3;
         int kind;
         float y;
         float x;
@@ -179,7 +166,6 @@ public class WorldScreen extends ScreenAdapter {
         int objId;
         NpcFigure npc;
         RemoteFigure remote;
-        StyleFigure style;
     }
     private final List<DrawItem> drawItems = new ArrayList<>();
 
@@ -581,7 +567,6 @@ public class WorldScreen extends ScreenAdapter {
         }
         loadBackground(def);
         buildNpcs();
-        buildStyleFigures();
         // giữ người chơi trong biên map mới
         playerX = MathUtils.clamp(playerX, 24, worldW / AvatarDkGame.HD - 24);
         playerY = MathUtils.clamp(playerY, 36, Math.max(60, def.hmap * 24 - 30));
@@ -672,30 +657,6 @@ public class WorldScreen extends ScreenAdapter {
             npcFigures.add(f);
         }
     }
-
-    /** Gian trưng bày phong cách mới: chỉ ở map 10 (phố chính), đứng thành
-     *  hai cặp hai bên điểm spawn — cặp hero nguyên mẫu + một cặp phối đồ
-     *  từ kho tóc/trang phục. Tọa độ medium cùng hệ NPC (gốc trên–trái). */
-    private void buildStyleFigures() {
-        styleFigures.clear();
-        if (mapDef.id != 10) return;
-        addStyle(NewStyle.hero("m"), "Người Mẫu Nam", 672f, 114f);
-        addStyle(NewStyle.hero("f"), "Người Mẫu Nữ", 722f, 120f);
-        addStyle(NewStyle.compose("m", "hair_m_08", "outfit_m_03"), "Khách Nam", 538f, 104f);
-        addStyle(NewStyle.compose("f", "hair_f_10", "outfit_f_15"), "Khách Nữ", 592f, 110f);
-    }
-
-    private void addStyle(Texture tex, String name, float mx, float my) {
-        StyleFigure f = new StyleFigure();
-        f.tex = tex;
-        f.name = name;
-        f.feetX = mx * AvatarDkGame.HD;
-        f.feetY = mapBottomPx - my * AvatarDkGame.HD;
-        f.phase = styleFigures.size() * 1.7f;
-        styleFigures.add(f);
-    }
-
-    public int styleCount() { return styleFigures.size(); }
 
     // ---------- API cho ScreenshotMain / kiểm chứng ----------
     public void debugSetMap(int mapId) {
@@ -1785,7 +1746,6 @@ public class WorldScreen extends ScreenAdapter {
     @Override
     public void render(float dt) {
         update(dt);
-        styleTime += dt;
         // Đặt lại glViewport về đúng backbuffer mỗi frame: FitViewport của HUD ở frame
         // trước có thể đã thu viewport (đặc biệt khi resize chưa được chuyển tiếp).
         Gdx.gl.glViewport(0, 0, Gdx.graphics.getBackBufferWidth(), Gdx.graphics.getBackBufferHeight());
@@ -1868,13 +1828,6 @@ public class WorldScreen extends ScreenAdapter {
             it.npc = f;
             drawItems.add(it);
         }
-        for (StyleFigure f : styleFigures) {
-            DrawItem it = new DrawItem();
-            it.kind = DrawItem.STYLE;
-            it.y = f.feetY;
-            it.style = f;
-            drawItems.add(it);
-        }
         for (RemoteFigure f : remotes.values()) {
             DrawItem it = new DrawItem();
             it.kind = DrawItem.REMOTE;
@@ -1911,22 +1864,6 @@ public class WorldScreen extends ScreenAdapter {
                         drawBubble(it.npc.doll, it.npc.anim, it.npc.feetX, it.npc.feetY, it.npc.bubble);
                     }
                     break;
-                case DrawItem.STYLE: {
-                    // nhân vật phong cách mới: hình tĩnh + nhịp thở nhẹ,
-                    // tên vàng như NPC (cùng quy ước drawFigure)
-                    StyleFigure sf = it.style;
-                    float bob = (float) Math.sin(styleTime * 2.2f + sf.phase) * 1.6f;
-                    float sw = STYLE_H * sf.tex.getWidth() / (float) sf.tex.getHeight();
-                    batch.draw(sf.tex, sf.feetX - sw / 2f, sf.feetY + bob, sw, STYLE_H);
-                    Ui.fontSmall.setColor(0f, 0f, 0f, 0.85f);
-                    layout.setText(Ui.fontSmall, sf.name);
-                    Ui.fontSmall.draw(batch, sf.name,
-                        sf.feetX - layout.width / 2f + 1.5f, sf.feetY + STYLE_H + bob + 24f - 1.5f);
-                    Ui.fontSmall.setColor(1f, 0.9f, 0.35f, 1f);
-                    Ui.fontSmall.draw(batch, sf.name,
-                        sf.feetX - layout.width / 2f, sf.feetY + STYLE_H + bob + 24f);
-                    break;
-                }
                 case DrawItem.REMOTE:
                     // tên người chơi khác màu xanh nhạt (NPC vàng, mình đỏ)
                     drawFigure(it.remote.doll, it.remote.anim, it.remote.feetX, it.remote.feetY,
