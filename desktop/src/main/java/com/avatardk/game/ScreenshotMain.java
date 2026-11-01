@@ -589,6 +589,23 @@ public class ScreenshotMain {
                     case 46:
                         if (frame == 15) {
                             shot("shot-action-pose.png");
+                            world.debugSeedMusic(
+                                new java.io.File("tools/yt-fixtures/search_seed.json"),
+                                new java.io.File("tools/yt-fixtures/thumbs"));
+                            world.debugOpenMusic(0);
+                            stage = 47; frame = 0;
+                        }
+                        break;
+                    case 47:
+                        if (frame == 15) {
+                            shot("shot-music-search.png");
+                            world.debugOpenMusic(1);
+                            stage = 48; frame = 0;
+                        }
+                        break;
+                    case 48:
+                        if (frame == 15) {
+                            shot("shot-music-playlist.png");
                             System.out.println("SCREENSHOT DONE");
                             Gdx.app.exit();
                         }

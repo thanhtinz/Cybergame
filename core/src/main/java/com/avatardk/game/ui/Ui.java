@@ -62,6 +62,15 @@ public final class Ui {
     public static final String FA_BOX_ARCHIVE = "\uf187"; // ô Rương trong menu burger
     public static final String FA_STORE = "\uf54e"; // ô Shop trong menu burger
     public static final String FA_GEAR = "\uf013"; // ô Cài đặt trong menu burger
+    // Cụm điều khiển của panel Nhạc (tính năng mới nghe nhạc YouTube)
+    public static final String FA_PAUSE = "\uf04c";
+    public static final String FA_FORWARD_STEP = "\uf051";
+    public static final String FA_BACKWARD_STEP = "\uf048";
+    public static final String FA_SHUFFLE = "\uf074";
+    public static final String FA_REPEAT = "\uf363";
+    public static final String FA_MAGNIFYING_GLASS = "\uf002";
+    public static final String FA_VOLUME_HIGH = "\uf028";
+    public static final String FA_LIST = "\uf03a";
     public static final String FA_CHEVRON_LEFT = "\uf053"; // nút ‹ ở panel Cài đặt
     public static final String FA_CHEVRON_RIGHT = "\uf054"; // nút › ở panel Cài đặt
     public static final String FA_ARROW_RIGHT = "\uf061"; // nút Di chuyển ở panel rương
@@ -87,7 +96,9 @@ public final class Ui {
         + FA_COMMENT_DOTS + FA_USER_PLUS + FA_HAND_FIST + FA_HOUSE + FA_CIRCLE_INFO
         + FA_MARS + FA_VENUS + FA_BOX_ARCHIVE + FA_ARROW_RIGHT + FA_ARROW_LEFT
         + FA_PLUS + FA_MINUS + FA_LOCATION_DOT + FA_LOCATION_CROSSHAIRS + FA_STORE
-        + FA_GEAR + FA_CHEVRON_LEFT + FA_CHEVRON_RIGHT;
+        + FA_GEAR + FA_CHEVRON_LEFT + FA_CHEVRON_RIGHT
+        + FA_PAUSE + FA_FORWARD_STEP + FA_BACKWARD_STEP + FA_SHUFFLE + FA_REPEAT
+        + FA_MAGNIFYING_GLASS + FA_VOLUME_HIGH + FA_LIST;
     // Glyph Font Awesome (brands)
     public static final String FA_GOOGLE = "\uf1a0";
     public static final String FA_APPLE = "\uf179";

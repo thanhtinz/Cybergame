@@ -17,8 +17,16 @@ import com.badlogic.gdx.math.Rectangle;
 import com.badlogic.gdx.math.Vector3;
 import com.badlogic.gdx.scenes.scene2d.utils.ScissorStack;
 import com.badlogic.gdx.utils.viewport.FitViewport;
+import com.badlogic.gdx.utils.JsonReader;
+import com.badlogic.gdx.utils.JsonValue;
 import com.avatardk.game.data.NpcData;
 import com.avatardk.game.data.PaperDoll;
+import com.avatardk.game.music.FfmpegPcmSource;
+import com.avatardk.game.music.MusicLibrary;
+import com.avatardk.game.music.MusicPlayer;
+import com.avatardk.game.music.MusicService;
+import com.avatardk.game.music.ThumbCache;
+import com.avatardk.game.music.YtVideo;
 import com.avatardk.game.net.AvatarProtocol;
 import com.avatardk.game.net.GameConnection;
 import com.avatardk.game.net.Msg;
@@ -204,6 +212,132 @@ public class WorldScreen extends ScreenAdapter {
     private static final float SET_PX = (Ui.W - SET_PW) / 2f, SET_PY = (Ui.H - SET_PH) / 2f;
 
     private float setRowCenter(int i) { return SET_PY + SET_PH - 118 - i * 76; }
+
+    // ---------- Panel NHẠC (tính năng MỚI ngoài gốc, chủ dự án đặt hàng
+    // 2026-11-01): nghe nhạc YouTube ngay trong game thay nhạc gốc — tìm
+    // kiếm bài, thêm nhiều playlist từ YouTube, phát nền không quảng cáo.
+    // Mở từ ô Nhạc của menu burger. Giao diện đã duyệt 12:37; phần ruột là
+    // core thật ở com.avatardk.game.music (MusicService/YoutubeClient/
+    // ffmpeg) — panel này chỉ hiển thị + chuyển thao tác xuống core. ----
+    private boolean musicOpen = false;
+    private int musicTab = 0; // 0 = Tìm kiếm, 1 = Playlist
+    private static final float MUS_PW = 920f, MUS_PH = 600f;
+    private static final float MUS_PX = (Ui.W - MUS_PW) / 2f, MUS_PY = (Ui.H - MUS_PH) / 2f;
+
+    private MusicService music;
+    private ThumbCache musicThumbs;
+    private final StringBuilder musicQuery = new StringBuilder();
+    private final StringBuilder musicLink = new StringBuilder();
+    private int musicFocus = 0; // 0 = không gõ, 1 = ô tìm kiếm, 2 = ô dán link
+    private String musicStatus = "";
+    private int musicListSel = 0;
+    private int musicListCount = 1;
+
+    private MusicLibrary.Playlist curPlaylist() {
+        if (music == null || music.library() == null || music.library().playlists.isEmpty()) return null;
+        return music.library().playlists.get(
+            Math.min(musicListSel, music.library().playlists.size() - 1));
+    }
+
+    /** Khởi tạo core nhạc ở lần chạm/vẽ đầu tiên (thread vẽ — nơi an
+     *  toàn để mở AudioDevice). */
+    private void initMusic() {
+        if (music != null) return;
+        music = new MusicService(new MusicPlayer.Sink() {
+            private com.badlogic.gdx.audio.AudioDevice dev;
+            private final short[] shorts = new short[8192];
+            private float vol = 0.7f;
+
+            {
+                try {
+                    dev = Gdx.audio.newAudioDevice(FfmpegPcmSource.SAMPLE_RATE, false);
+                    dev.setVolume(vol);
+                } catch (Exception e) {
+                    dev = null; // môi trường không có thiết bị âm thanh: panel vẫn chạy
+                }
+            }
+
+            @Override
+            public void write(byte[] b, int off, int len) {
+                if (dev == null) return;
+                int n = Math.min(len / 2, shorts.length);
+                for (int i = 0; i < n; i++) {
+                    shorts[i] = (short) ((b[off + 2 * i] & 0xFF) | (b[off + 2 * i + 1] << 8));
+                }
+                dev.writeSamples(shorts, 0, n);
+            }
+
+            @Override
+            public void setVolume(float v) {
+                vol = v;
+                if (dev != null) dev.setVolume(v);
+            }
+        });
+        music.setVolume(0.7f);
+        music.initLibrary(Gdx.files.local("music/library.json").file());
+        musicListCount = music.library().playlists.size();
+        musicThumbs = new ThumbCache(music.client());
+        music.setListener(new MusicService.Listener() {
+            @Override
+            public void onSearchDone(List<YtVideo> results) {
+                Gdx.app.postRunnable(() -> musicStatus = results.isEmpty()
+                    ? "Không tìm thấy kết quả nào." : "");
+            }
+
+            @Override
+            public void onSearchError(String message) {
+                Gdx.app.postRunnable(() -> musicStatus = message);
+            }
+
+            @Override
+            public void onPlaylistImported(MusicLibrary.Playlist playlist) {
+                Gdx.app.postRunnable(() -> {
+                    musicListSel = music.library().playlists.indexOf(playlist);
+                    musicStatus = "Đã thêm playlist " + playlist.name
+                        + " (" + playlist.tracks.size() + " bài).";
+                    musicLink.setLength(0);
+                });
+            }
+
+            @Override
+            public void onImportError(String message) {
+                Gdx.app.postRunnable(() -> musicStatus = message);
+            }
+
+            @Override
+            public void onTrackLoading(YtVideo track) {
+                Gdx.app.postRunnable(() -> musicStatus = "");
+            }
+
+            @Override
+            public void onTrackStarted(YtVideo track) {
+                Gdx.app.postRunnable(() -> musicStatus = "");
+            }
+
+            @Override
+            public void onTrackError(String message) {
+                Gdx.app.postRunnable(() -> musicStatus = message);
+            }
+
+            @Override
+            public void onQueueEnded() {
+            }
+        });
+        if (!FfmpegPcmSource.isAvailable()) {
+            musicStatus = "Máy chưa có ffmpeg — cài ffmpeg để phát được nhạc (tìm kiếm vẫn dùng được).";
+        }
+    }
+
+    private float musTop() { return MUS_PY + MUS_PH; }
+
+    /** Đáy ô nhập của cột phải: tab Playlist thấp hơn vì còn hàng chip
+     *  chọn playlist (34px + 2 khoảng 12) nằm giữa tab và ô nhập. */
+    private float musInY() {
+        float tabY = musTop() - 80 - 40;
+        return musicTab == 1 ? tabY - 12 - 34 - 12 - 44 : tabY - 14 - 44;
+    }
+
+    private float musListTop() { return musInY() - 12; }
     private float setStepLx() { return SET_PX + 262; }
     private float setStepRx() { return SET_PX + SET_PW - 58; }
     private int[] boardStatus = null;   // trạng thái từng khu từ gói 60
@@ -453,6 +587,7 @@ public class WorldScreen extends ScreenAdapter {
     private static final String[][] MENU_ITEMS = {
         {"50", "Map"}, {"msg0", "Thư"}, {"balo", "Balo"},
         {"40", "Bạn bè"}, {"20", "Cá nhân"}, {"gear", "Cài đặt"},
+        {"music", "Nhạc"},
     };
     private static final float MENU_PX = Ui.W - 330f, MENU_PW = 312f;
     private static final float MENU_HEADER = 40f, MENU_CELL = 96f, MENU_CELL_H = 92f;
@@ -920,6 +1055,63 @@ public class WorldScreen extends ScreenAdapter {
     public void debugSitPose() {
         actionOpen = false;
         applyAction(3);
+    }
+
+    /** Harness chụp hình: mở panel Nhạc ở tab cho trước (mockup). */
+    public void debugOpenMusic(int tab) {
+        settingsOpen = false;
+        passFormOpen = false;
+        menuOpen = false;
+        actionOpen = false;
+        musicTab = tab;
+        musicOpen = true;
+    }
+
+    /** Harness chụp hình: nạp kết quả tìm kiếm THẬT đã bắt từ YouTube
+     *  (tools/yt-fixtures/search_seed.json) + bìa tải sẵn trong thư mục
+     *  thumbs, để panel hiển thị đúng dữ liệu thật khi chụp kiểm chứng
+     *  (mạng Java trong sandbox bị chặn nên không gọi trực tiếp được). */
+    public void debugSeedMusic(java.io.File seedJson, java.io.File thumbsDir) {
+        initMusic();
+        try {
+            String text = new String(java.nio.file.Files.readAllBytes(seedJson.toPath()),
+                java.nio.charset.StandardCharsets.UTF_8);
+            JsonValue root = new JsonReader().parse(text);
+            List<YtVideo> vids = new ArrayList<>();
+            for (JsonValue jv : root.get("videos")) {
+                vids.add(new YtVideo(jv.getString("id", ""), jv.getString("title", ""),
+                    jv.getString("channel", ""), YtVideo.parseDuration(jv.getString("duration", "")),
+                    jv.getString("thumb", "")));
+            }
+            music.searchResults = vids;
+            MusicLibrary lib = music.library();
+            lib.playlists.clear();
+            MusicLibrary.Playlist fav = new MusicLibrary.Playlist("Yêu thích");
+            fav.tracks.addAll(vids.subList(0, Math.min(3, vids.size())));
+            lib.playlists.add(fav);
+            MusicLibrary.Playlist chill = new MusicLibrary.Playlist("Chill đêm khuya");
+            if (vids.size() > 4) chill.tracks.add(vids.get(4));
+            if (!vids.isEmpty()) chill.tracks.add(vids.get(0));
+            lib.playlists.add(chill);
+            musicListSel = 0;
+            musicQuery.append("Sơn Tùng M-TP");
+            for (YtVideo v : vids) {
+                java.io.File f = new java.io.File(thumbsDir, v.id + ".jpg");
+                if (f.isFile()) {
+                    Texture t = new Texture(Gdx.files.absolute(f.getAbsolutePath()));
+                    musicThumbs.putLocal("row:" + v.id, t);
+                    musicThumbs.putLocal("big:" + v.id, t);
+                }
+            }
+            if (!vids.isEmpty()) {
+                music.queue = new ArrayList<>(vids);
+                music.queueIndex = 1 % vids.size();
+                music.current = vids.get(music.queueIndex);
+                music.currentDurationSec = music.current.durationSec;
+            }
+        } catch (Exception e) {
+            musicStatus = "seed lỗi: " + e.getMessage();
+        }
     }
     public void debugCloseFeel() { feelOpen = false; }
     public void debugClearRemotes() { remotes.clear(); }
@@ -1793,6 +1985,18 @@ public class WorldScreen extends ScreenAdapter {
         Gdx.input.setInputProcessor(new InputAdapter() {
             @Override
             public boolean keyTyped(char c) {
+                if (musicOpen && musicFocus != 0) {
+                    StringBuilder b = musicFocus == 1 ? musicQuery : musicLink;
+                    if (c == '\b') {
+                        if (b.length() > 0) b.deleteCharAt(b.length() - 1);
+                    } else if (c == '\r' || c == '\n') {
+                        if (musicFocus == 1) runMusicSearch();
+                        else runMusicImport();
+                    } else if (c >= 32 && b.length() < 300) {
+                        b.append(c);
+                    }
+                    return true;
+                }
                 if (passFormOpen) {
                     StringBuilder b = passFields[passFocus];
                     if (c == '\b') {
@@ -1963,6 +2167,11 @@ public class WorldScreen extends ScreenAdapter {
         // panel Cài đặt đang mở là lớp trên cùng (modal, nuốt mọi chạm)
         if (settingsOpen) {
             settingsTouch(x, y);
+            return;
+        }
+        // panel Nhạc đang mở là lớp trên cùng (modal, nuốt mọi chạm)
+        if (musicOpen) {
+            musicTouch(x, y);
             return;
         }
         // bản đồ thành phố đang mở là lớp trên cùng: nút ăn ngay, còn lại kéo
@@ -2160,6 +2369,8 @@ public class WorldScreen extends ScreenAdapter {
                             openCharPanel();
                         } else if (i == 5) {
                             settingsOpen = true;
+                        } else if (i == 6) {
+                            musicOpen = true;
                         } else {
                             addChatLog(TAB_SYSTEM, null, "Tính năng " + MENU_ITEMS[i][1] + " đang được port ở đợt tiếp theo.", true);
                         }
@@ -3755,6 +3966,8 @@ public class WorldScreen extends ScreenAdapter {
             if (Math.abs(feelHTarget - feelH) < 0.6f) feelH = feelHTarget;
         }
         feelScroll = MathUtils.clamp(feelScroll, 0f, feelMaxScroll());
+        // (nhạc nền do MusicService tự chạy ở thread riêng — panel đóng
+        // vẫn phát tiếp, hết bài tự chuyển theo hàng đợi)
         for (Cloud c : clouds) {
             c.x100 += c.speed * dt;
             if (c.x100 / 100f > 3200f) c.x100 = -40000f;
@@ -4117,8 +4330,401 @@ public class WorldScreen extends ScreenAdapter {
         if (boardOpen) drawBoardPanel();
         if (cityMapOpen) drawCityMap();
         if (settingsOpen) drawSettingsPanel();
+        if (musicOpen) drawMusicPanel();
         if (passFormOpen) drawPassFormPanel();
         batch.end();
+    }
+
+    /** Panel NHẠC: cột trái là trình phát — bìa lớn (thumbnail YouTube
+     *  của bài đang phát), tên bài/kênh, thanh tiến trình chạm để tua,
+     *  hàng nút điều khiển (trộn / trước / phát-dừng / sau / lặp) và
+     *  thanh âm lượng; cột phải là 2 tab Tìm kiếm / Playlist với ô nhập
+     *  gõ trực tiếp, danh sách bài (bìa 16:9 tải thật từ YouTube, bài
+     *  đang phát có chip sóng nhạc) và hàng chip NHIỀU playlist. */
+    private void drawMusicPanel() {
+        initMusic();
+        batch.setColor(0f, 0f, 0f, 0.45f);
+        batch.draw(whiteTex, 0, 0, Ui.W, Ui.H);
+        batch.setColor(Color.WHITE);
+        float px = MUS_PX, py = MUS_PY, top = musTop();
+        batch.draw(Ui.roundedRect((int) MUS_PW, (int) MUS_PH, 16, GLASS_FILL_DARK, GLASS_RIM), px, py);
+        // tiêu đề + nút đóng
+        Texture mIcon = game.texture("iconmenu/music.png");
+        batch.draw(mIcon, px + 24, top - 52, 32, 32);
+        Ui.fontTitle.setColor(1f, 0.85f, 0.45f, 1f);
+        Ui.fontTitle.draw(batch, "Nhạc YouTube", px + 66, top - 27);
+        batch.draw(Ui.roundedRect(36, 36, 10, GLASS_FILL, GLASS_RIM), px + MUS_PW - 54, top - 54);
+        Ui.faIcon(batch, Ui.fa20, Ui.FA_XMARK, px + MUS_PW - 36, top - 36, new Color(0.9f, 0.93f, 1f, 1f));
+        batch.draw(Ui.roundedRect((int) (MUS_PW - 44), 2, 1, new Color(1f, 1f, 1f, 0.14f), null), px + 22, top - 66);
+
+        YtVideo cur = music.current;
+        boolean playing = music.isPlaying();
+        // ----- cột trái: trình phát -----
+        float lx = px + 26;
+        float coverY = top - 80 - 252;
+        batch.draw(Ui.roundedRect(256, 256, 12, new Color(0f, 0f, 0f, 0f), GLASS_RIM), lx - 2, coverY - 2);
+        drawMusicCover(cur, lx, coverY, 252);
+        Ui.font.setColor(1f, 1f, 1f, 0.96f);
+        drawFittedName(cur != null ? cur.title : "Chưa chọn bài", lx, coverY - 18, 252);
+        Ui.fontSmall.setColor(0.75f, 0.82f, 0.95f, 0.9f);
+        drawFittedSmall(cur != null ? cur.channel : "Tìm bài hoặc mở playlist để nghe", lx, coverY - 46, 252);
+        if (music.loadingTrack) {
+            Ui.fontSmall.setColor(1f, 0.72f, 0.35f, 1f);
+            Ui.fontSmall.draw(batch, "Đang tải nhạc…", lx, coverY - 70);
+        }
+        // tiến trình + mốc thời gian
+        float barY = py + 168;
+        int dur = music.currentDurationSec > 0 ? music.currentDurationSec
+            : (cur != null ? cur.durationSec : 0);
+        double pos = music.positionSec();
+        if (dur > 0) pos = Math.min(pos, dur);
+        float ratio = dur == 0 ? 0f : MathUtils.clamp((float) (pos / dur), 0f, 1f);
+        Ui.fontTiny.setColor(0.75f, 0.82f, 0.95f, 0.9f);
+        Ui.fontTiny.draw(batch, pos <= 0 ? "0:00" : YtVideo.fmt((int) pos), lx, barY + 26);
+        layout.setText(Ui.fontTiny, YtVideo.fmt(dur));
+        Ui.fontTiny.draw(batch, YtVideo.fmt(dur), lx + 252 - layout.width, barY + 26);
+        batch.draw(Ui.roundedRect(252, 8, 4, new Color(1f, 1f, 1f, 0.18f), null), lx, barY);
+        batch.draw(Ui.roundedRect(Math.max(8, (int) (252 * ratio)), 8, 4, new Color(1f, 0.62f, 0.25f, 1f), null), lx, barY);
+        batch.setColor(1f, 0.62f, 0.25f, 1f);
+        batch.draw(circleTexture(), lx + 252 * ratio - 7, barY - 3, 14, 14);
+        batch.setColor(Color.WHITE);
+        // hàng điều khiển
+        float cy = py + 104;
+        Color togOn = new Color(1f, 0.62f, 0.25f, 1f), togOff = new Color(0.75f, 0.82f, 0.95f, 0.7f);
+        Ui.faIcon(batch, Ui.fa20, Ui.FA_SHUFFLE, lx + 14, cy, music.shuffle ? togOn : togOff);
+        Ui.faIcon(batch, Ui.fa20, Ui.FA_REPEAT, lx + 238, cy, music.repeatOne ? togOn : togOff);
+        batch.draw(Ui.roundedRect(42, 42, 21, GLASS_FILL, GLASS_RIM), lx + 62 - 21, cy - 21);
+        Ui.faIcon(batch, Ui.fa20, Ui.FA_BACKWARD_STEP, lx + 62, cy, new Color(0.92f, 0.95f, 1f, 1f));
+        batch.draw(Ui.roundedRect(42, 42, 21, GLASS_FILL, GLASS_RIM), lx + 190 - 21, cy - 21);
+        Ui.faIcon(batch, Ui.fa20, Ui.FA_FORWARD_STEP, lx + 190, cy, new Color(0.92f, 0.95f, 1f, 1f));
+        batch.draw(Ui.roundedRect(58, 58, 29, new Color(0.90f, 0.48f, 0.13f, 0.98f), new Color(1f, 0.75f, 0.4f, 0.9f)), lx + 126 - 29, cy - 29);
+        Ui.faIcon(batch, Ui.fa26, playing ? Ui.FA_PAUSE : Ui.FA_PLAY, lx + 126, cy, Color.WHITE);
+        // âm lượng
+        float vy = py + 44;
+        float vol = music.volume();
+        Ui.faIcon(batch, Ui.fa20, Ui.FA_VOLUME_HIGH, lx + 10, vy + 3, togOff);
+        batch.draw(Ui.roundedRect(220, 6, 3, new Color(1f, 1f, 1f, 0.18f), null), lx + 32, vy);
+        batch.draw(Ui.roundedRect(Math.max(6, (int) (220 * vol)), 6, 3, new Color(1f, 0.62f, 0.25f, 1f), null), lx + 32, vy);
+        batch.setColor(Color.WHITE);
+        batch.draw(circleTexture(), lx + 32 + 220 * vol - 6, vy - 3, 12, 12);
+
+        // ----- cột phải: tab + ô nhập + danh sách -----
+        float rx = px + 302, rw = MUS_PW - 302 - 26;
+        float tabY = top - 80 - 40;
+        for (int t = 0; t < 2; t++) {
+            float tx = rx + t * 160;
+            boolean sel = musicTab == t;
+            batch.draw(Ui.roundedRect(148, 40, 12,
+                sel ? new Color(0.85f, 0.45f, 0.12f, 0.95f) : GLASS_FILL,
+                sel ? new Color(1f, 0.75f, 0.4f, 0.9f) : GLASS_RIM), tx, tabY);
+            Ui.centered(batch, Ui.fontSmall, t == 0 ? "Tìm kiếm" : "Playlist", tx + 74, tabY + 26, Color.WHITE);
+        }
+        if (musicTab == 1) {
+            // hàng chip chọn playlist: mỗi playlist một chip, chip cam là
+            // đang chọn; chip + tạo playlist mới; thùng rác ở cuối hàng
+            // xoá playlist đang chọn
+            float chipY = tabY - 12 - 34;
+            float cx = rx;
+            List<MusicLibrary.Playlist> pls = music.library().playlists;
+            for (int i = 0; i < pls.size(); i++) {
+                layout.setText(Ui.fontSmall, pls.get(i).name);
+                float cw = layout.width + 30;
+                if (cx + cw > rx + rw - 46) break; // quá bề ngang thì dừng (bản thật sẽ cuộn ngang)
+                boolean sel = i == musicListSel;
+                batch.draw(Ui.roundedRect((int) cw, 34, 10,
+                    sel ? new Color(0.85f, 0.45f, 0.12f, 0.95f) : GLASS_FILL,
+                    sel ? new Color(1f, 0.75f, 0.4f, 0.9f) : GLASS_RIM), cx, chipY);
+                Ui.centered(batch, Ui.fontSmall, pls.get(i).name, cx + cw / 2f, chipY + 22, Color.WHITE);
+                cx += cw + 8;
+            }
+            batch.draw(Ui.roundedRect(36, 34, 10, GLASS_FILL, GLASS_RIM), cx, chipY);
+            Ui.faIcon(batch, Ui.fa20, Ui.FA_PLUS, cx + 18, chipY + 17, new Color(0.92f, 0.95f, 1f, 1f));
+            batch.draw(Ui.roundedRect(34, 34, 10, GLASS_FILL, GLASS_RIM), rx + rw - 34, chipY);
+            Ui.faIcon(batch, Ui.fa20, Ui.FA_TRASH, rx + rw - 17, chipY + 17, new Color(0.92f, 0.95f, 1f, 1f));
+        }
+        float inY = musInY();
+        boolean focused = musicFocus == (musicTab == 0 ? 1 : 2);
+        batch.draw(Ui.roundedRect((int) (rw - 108), 44, 10, new Color(1f, 1f, 1f, 0.08f),
+            focused ? new Color(1f, 0.62f, 0.25f, 0.95f) : GLASS_RIM), rx, inY);
+        Ui.faIcon(batch, Ui.fa20, musicTab == 0 ? Ui.FA_MAGNIFYING_GLASS : Ui.FA_LIST, rx + 24, inY + 22, togOff);
+        StringBuilder field = musicTab == 0 ? musicQuery : musicLink;
+        String placeholder = musicTab == 0 ? "Tìm bài hát, ca sĩ trên YouTube…"
+            : "Dán link playlist YouTube…";
+        if (field.length() == 0) {
+            Ui.fontSmall.setColor(0.62f, 0.68f, 0.78f, 0.9f);
+            Ui.fontSmall.draw(batch, placeholder, rx + 46, inY + 28);
+        } else {
+            String shown = field.toString();
+            Ui.fontSmall.setColor(0.95f, 0.97f, 1f, 1f);
+            layout.setText(Ui.fontSmall, shown);
+            while (layout.width > rw - 108 - 62 && shown.length() > 4) {
+                shown = shown.substring(1);
+                layout.setText(Ui.fontSmall, shown);
+            }
+            Ui.fontSmall.draw(batch, shown, rx + 46, inY + 28);
+            if (focused && (System.currentTimeMillis() / 500) % 2 == 0) {
+                Ui.fontSmall.draw(batch, "|", rx + 48 + layout.width, inY + 28);
+            }
+        }
+        batch.draw(Ui.roundedRect(96, 44, 10, new Color(0.90f, 0.48f, 0.13f, 0.98f), null), rx + rw - 96, inY);
+        Ui.centered(batch, Ui.fontSmall, musicTab == 0 ? "Tìm" : "Thêm", rx + rw - 48, inY + 28, Color.WHITE);
+        List<YtVideo> list = musicTab == 0 ? music.searchResults
+            : (curPlaylist() != null ? curPlaylist().tracks : new ArrayList<>());
+        float listTop = musListTop();
+        int rows = Math.min(musicTab == 1 ? 4 : 5, list.size());
+        for (int i = 0; i < rows; i++) {
+            YtVideo tr = list.get(i);
+            float ry = listTop - (i + 1) * 66 - i * 6;
+            boolean isCur = cur != null && tr.id.equals(cur.id);
+            batch.draw(Ui.roundedRect((int) rw, 66, 10,
+                isCur ? new Color(0.55f, 0.38f, 0.10f, 0.55f) : new Color(1f, 1f, 1f, 0.05f),
+                isCur ? new Color(1f, 0.8f, 0.35f, 0.8f) : null), rx, ry);
+            drawMusicThumb(tr, rx + 8, ry + 8, 88, 50);
+            if (isCur && playing) {
+                // chip sóng nhạc trên bìa của bài đang phát
+                batch.draw(Ui.roundedRect(30, 20, 5, new Color(0.02f, 0.04f, 0.08f, 0.72f), null), rx + 12, ry + 12);
+                for (int b = 0; b < 3; b++) {
+                    batch.draw(Ui.roundedRect(4, 6 + b * 4, 2, new Color(1f, 0.62f, 0.25f, 1f), null),
+                        rx + 17 + b * 8, ry + 16);
+                }
+            }
+            Ui.font.setColor(1f, 1f, 1f, 0.96f);
+            drawFittedName(tr.title, rx + 106, ry + 42, rw - 226);
+            Ui.fontTiny.setColor(0.72f, 0.79f, 0.92f, 0.9f);
+            Ui.fontTiny.draw(batch, tr.channel + " • " + tr.durationText(), rx + 106, ry + 20);
+            batch.draw(Ui.roundedRect(34, 34, 17, GLASS_FILL, GLASS_RIM), rx + rw - 92, ry + 16);
+            Ui.faIcon(batch, Ui.fa20, isCur && playing ? Ui.FA_PAUSE : Ui.FA_PLAY,
+                rx + rw - 75, ry + 33, new Color(0.92f, 0.95f, 1f, 1f));
+            batch.draw(Ui.roundedRect(34, 34, 17, GLASS_FILL, GLASS_RIM), rx + rw - 50, ry + 16);
+            String sub = musicTab == 0
+                ? (curPlaylist() != null && curPlaylist().contains(tr.id) ? Ui.FA_CHECK : Ui.FA_PLUS)
+                : Ui.FA_XMARK;
+            Ui.faIcon(batch, Ui.fa20, sub, rx + rw - 33, ry + 33, new Color(0.92f, 0.95f, 1f, 1f));
+        }
+        if (list.isEmpty()) {
+            String hint;
+            if (musicTab == 0) {
+                hint = music.searching ? "Đang tìm trên YouTube…"
+                    : "Gõ tên bài hát, ca sĩ rồi bấm Tìm.";
+            } else {
+                hint = music.importing ? "Đang nhập playlist…" : "Playlist này đang trống.";
+            }
+            Ui.fontSmall.setColor(0.72f, 0.79f, 0.92f, 0.9f);
+            Ui.centered(batch, Ui.fontSmall, hint, rx + rw / 2f, listTop - 52, new Color(0.72f, 0.79f, 0.92f, 0.9f));
+        }
+        // chân panel: trạng thái / thông tin playlist
+        Ui.fontSmall.setColor(1f, 0.78f, 0.45f, 0.95f);
+        if (!musicStatus.isEmpty()) {
+            drawFittedSmall(musicStatus, rx, py + 18, rw);
+        } else if (musicTab == 1 && curPlaylist() != null) {
+            Ui.fontSmall.setColor(0.72f, 0.79f, 0.92f, 0.9f);
+            Ui.fontSmall.draw(batch, "Playlist " + curPlaylist().name + " • "
+                + curPlaylist().tracks.size() + " bài • Tổng "
+                + YtVideo.fmt(curPlaylist().totalSec()), rx, py + 18);
+        } else if (musicTab == 0 && !list.isEmpty()) {
+            Ui.fontSmall.setColor(0.72f, 0.79f, 0.92f, 0.9f);
+            Ui.fontSmall.draw(batch, list.size() + " kết quả • Bấm vào bài để phát", rx, py + 18);
+        }
+    }
+
+    /** Bìa lớn của bài đang phát: thumbnail HQ crop vuông giữa; chưa
+     *  tải được thì dùng bìa mẫu theo mã bài. */
+    private void drawMusicCover(YtVideo v, float x, float y, float size) {
+        Texture t = null;
+        if (v != null && musicThumbs != null) {
+            t = musicThumbs.get("big:" + v.id, v.hqThumbUrl(), v.thumbUrl);
+        }
+        if (t != null) {
+            int w = t.getWidth(), h = t.getHeight();
+            int side = Math.min(w, h);
+            batch.draw(new TextureRegion(t, (w - side) / 2, (h - side) / 2, side, side), x, y, size, size);
+        } else {
+            int idx = v == null ? 1 : 1 + Math.floorMod(v.id.hashCode(), 4);
+            batch.draw(game.texture("music/cover" + idx + ".png"), x, y, size, size);
+        }
+    }
+
+    /** Bìa hàng danh sách: thumbnail crop giữa theo khung 16:9 (gỡ
+     *  được cả viền đen của bìa hqdefault 4:3); chưa tải được thì bìa mẫu. */
+    private void drawMusicThumb(YtVideo v, float x, float y, float w, float h) {
+        Texture t = musicThumbs != null ? musicThumbs.get("row:" + v.id, v.thumbUrl, null) : null;
+        if (t != null) {
+            int tw = t.getWidth(), th = t.getHeight();
+            float target = w / h;
+            int rh = Math.min(th, Math.max(1, (int) (tw / target)));
+            int rw2 = Math.min(tw, (int) (rh * target));
+            batch.draw(new TextureRegion(t, (tw - rw2) / 2, (th - rh) / 2, rw2, rh), x, y, w, h);
+        } else {
+            int idx = 1 + Math.floorMod(v.id.hashCode(), 4);
+            Texture ct = game.texture("music/cover" + idx + ".png");
+            batch.draw(new TextureRegion(ct, 0, 52, 240, 136), x, y, w, h);
+        }
+    }
+
+    /** Vẽ một dòng fontSmall cắt ngắn theo bề ngang cho trước. */
+    private void drawFittedSmall(String text, float x, float baseline, float maxW) {
+        String s = text == null ? "" : text;
+        layout.setText(Ui.fontSmall, s);
+        if (layout.width > maxW) {
+            while (s.length() > 4) {
+                s = s.substring(0, s.length() - 1);
+                layout.setText(Ui.fontSmall, s + "…");
+                if (layout.width <= maxW) break;
+            }
+            s = s + "…";
+        }
+        Ui.fontSmall.draw(batch, s, x, baseline);
+    }
+
+    /** Chạm trong panel Nhạc: mọi thao tác chuyển xuống MusicService. */
+    private void musicTouch(float x, float y) {
+        initMusic();
+        float px = MUS_PX, py = MUS_PY, top = musTop();
+        if (x >= px + MUS_PW - 54 && x <= px + MUS_PW - 18 && y >= top - 54 && y <= top - 18) {
+            musicOpen = false;
+            musicFocus = 0;
+            return;
+        }
+        if (x < px || x > px + MUS_PW || y < py || y > py + MUS_PH) {
+            musicOpen = false;
+            musicFocus = 0;
+            return;
+        }
+        float lx = px + 26;
+        float cy = py + 104;
+        if (Math.hypot(x - (lx + 126), y - cy) <= 32) {
+            if (music.current != null) music.togglePlayPause();
+            return;
+        }
+        if (Math.hypot(x - (lx + 62), y - cy) <= 24) { music.prev(); return; }
+        if (Math.hypot(x - (lx + 190), y - cy) <= 24) { music.next(true); return; }
+        if (Math.hypot(x - (lx + 14), y - cy) <= 17) { music.shuffle = !music.shuffle; return; }
+        if (Math.hypot(x - (lx + 238), y - cy) <= 17) { music.repeatOne = !music.repeatOne; return; }
+        float barY = py + 168;
+        if (x >= lx && x <= lx + 252 && y >= barY - 8 && y <= barY + 16) {
+            int dur = music.currentDurationSec > 0 ? music.currentDurationSec
+                : (music.current != null ? music.current.durationSec : 0);
+            if (dur > 0 && music.current != null) {
+                music.seek(dur * MathUtils.clamp((x - lx) / 252f, 0f, 1f));
+            }
+            return;
+        }
+        float vy = py + 44;
+        if (x >= lx + 32 && x <= lx + 252 && y >= vy - 8 && y <= vy + 14) {
+            music.setVolume(MathUtils.clamp((x - (lx + 32)) / 220f, 0f, 1f));
+            return;
+        }
+        float rx = px + 302, rw = MUS_PW - 302 - 26;
+        float tabY = top - 80 - 40;
+        if (y >= tabY && y <= tabY + 40) {
+            for (int t = 0; t < 2; t++) {
+                float tx = rx + t * 160;
+                if (x >= tx && x <= tx + 148) {
+                    musicTab = t;
+                    musicFocus = 0;
+                    return;
+                }
+            }
+        }
+        if (musicTab == 1) {
+            // hàng chip: chọn playlist / chip + tạo mới / thùng rác xoá
+            float chipY = tabY - 12 - 34;
+            if (y >= chipY && y <= chipY + 34) {
+                List<MusicLibrary.Playlist> pls = music.library().playlists;
+                if (x >= rx + rw - 34 && x <= rx + rw) {
+                    if (pls.size() > 1) {
+                        pls.remove(musicListSel);
+                        musicListSel = Math.min(musicListSel, pls.size() - 1);
+                        music.saveLibrary();
+                    }
+                    return;
+                }
+                float cx = rx;
+                for (int i = 0; i < pls.size(); i++) {
+                    layout.setText(Ui.fontSmall, pls.get(i).name);
+                    float cw = layout.width + 30;
+                    if (cx + cw > rx + rw - 46) break;
+                    if (x >= cx && x <= cx + cw) { musicListSel = i; return; }
+                    cx += cw + 8;
+                }
+                if (x >= cx && x <= cx + 36) {
+                    pls.add(new MusicLibrary.Playlist("Playlist mới " + (++musicListCount)));
+                    musicListSel = pls.size() - 1;
+                    music.saveLibrary();
+                    return;
+                }
+                return;
+            }
+        }
+        // ô nhập: chạm vào là đặt focus gõ; nút bấm cạnh ô chạy hành động
+        float inY = musInY();
+        if (y >= inY && y <= inY + 44) {
+            if (x >= rx + rw - 96 && x <= rx + rw) {
+                if (musicTab == 0) runMusicSearch();
+                else runMusicImport();
+                return;
+            }
+            if (x >= rx && x <= rx + rw - 108) {
+                musicFocus = musicTab == 0 ? 1 : 2;
+                return;
+            }
+        }
+        musicFocus = 0;
+        List<YtVideo> list = musicTab == 0 ? music.searchResults
+            : (curPlaylist() != null ? curPlaylist().tracks : new ArrayList<>());
+        float listTop = musListTop();
+        int rows = Math.min(musicTab == 1 ? 4 : 5, list.size());
+        for (int i = 0; i < rows; i++) {
+            float ry = listTop - (i + 1) * 66 - i * 6;
+            if (x >= rx && x <= rx + rw && y >= ry && y <= ry + 66) {
+                YtVideo tr = list.get(i);
+                if (x >= rx + rw - 67 && x <= rx + rw - 33 && y >= ry + 12 && y <= ry + 54) {
+                    if (musicTab == 0) {
+                        MusicLibrary.Playlist p = curPlaylist();
+                        if (p != null && !p.contains(tr.id)) {
+                            p.tracks.add(tr);
+                            music.saveLibrary();
+                            musicStatus = "Đã thêm vào playlist " + p.name + ".";
+                        }
+                    } else if (curPlaylist() != null) {
+                        curPlaylist().tracks.remove(tr);
+                        music.saveLibrary();
+                    }
+                    return;
+                }
+                if (x >= rx + rw - 92 && x <= rx + rw - 58 && y >= ry + 12 && y <= ry + 54
+                    && music.current != null && tr.id.equals(music.current.id)) {
+                    music.togglePlayPause();
+                    return;
+                }
+                music.playQueue(list, i);
+                return;
+            }
+        }
+    }
+
+    /** Bấm Tìm / Enter ở ô tìm kiếm. */
+    private void runMusicSearch() {
+        initMusic();
+        String q = musicQuery.toString().trim();
+        if (q.isEmpty()) {
+            musicStatus = "Hãy gõ tên bài hát hoặc ca sĩ trước.";
+            return;
+        }
+        musicStatus = "Đang tìm trên YouTube…";
+        music.searchAsync(q);
+    }
+
+    /** Bấm Thêm / Enter ở ô dán link playlist. */
+    private void runMusicImport() {
+        initMusic();
+        String link = musicLink.toString().trim();
+        if (link.isEmpty()) {
+            musicStatus = "Hãy dán link playlist YouTube vào ô trên.";
+            return;
+        }
+        musicStatus = "Đang nhập playlist…";
+        music.importPlaylistAsync(link);
     }
 
     /** Panel Cài đặt (OptionScr của gốc) theo tông kính của game — bản 2
