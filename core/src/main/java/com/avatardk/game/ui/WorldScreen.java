@@ -2031,6 +2031,8 @@ public class WorldScreen extends ScreenAdapter {
                             openCityMap();
                         } else if (i == 2) {
                             openBag();
+                        } else if (i == 4) {
+                            openCharPanel();
                         } else if (i == 6) {
                             openChest();
                         } else if (i == 7) {
@@ -4014,8 +4016,6 @@ public class WorldScreen extends ScreenAdapter {
                 Ui.centered(batch, Ui.font, "Đổi", bx + bw / 2f, by + 31, new Color(1f, 1f, 1f, 1f));
             }
         }
-        Ui.centered(batch, Ui.fontTiny, "Thay đổi được lưu ngay",
-            SET_PX + SET_PW / 2f, SET_PY + 22, new Color(1f, 1f, 1f, 0.45f));
     }
 
     private boolean setRowOn(int i) {
