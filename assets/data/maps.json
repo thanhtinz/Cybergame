@@ -619,5 +619,14 @@
   "daydien": false,
   "npcs": [],
   "hmap": 16
+ },
+ {
+  "id": 109,
+  "name": "Phố Chợ",
+  "bg": null,
+  "strips": 3,
+  "daydien": false,
+  "npcs": [],
+  "hmap": 8
  }
 ]

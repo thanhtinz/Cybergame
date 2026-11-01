@@ -425,8 +425,8 @@ public class WorldScreen extends ScreenAdapter {
     // là Nông trại (client 25).
     private static final String[] REGION_NAMES = {
         "Khu nhà ở", "Khu sinh thái", "Sân bay", "Khu giải trí",
-        "Khu mua sắm", "Công viên", "Khu ngoại ô", "Nông trại"};
-    private static final int[] REGION_DEST = {1, 14, 21, 10, 24, 12, 18, 25};
+        "Khu mua sắm", "Công viên", "Phố Chợ", "Khu ngoại ô", "Nông trại"};
+    private static final int[] REGION_DEST = {1, 14, 21, 10, 24, 12, 109, 18, 25};
     private final List<int[]> regionCells = new ArrayList<>(); // {col, row}
     private boolean cityMapOpen = false;
     private Texture minimapTex;
@@ -1264,6 +1264,8 @@ public class WorldScreen extends ScreenAdapter {
         activeChatTab = TAB_NEARBY;
     }
     public int debugArea() { return currentArea; }
+    public String debugMapName() { return mapDef.label(); }
+    public int debugStopX() { return mapDef.stopX; }
 
     /** Số người chơi khác đang hiển thị (kiểm chứng). */
     public int remoteCount() {
