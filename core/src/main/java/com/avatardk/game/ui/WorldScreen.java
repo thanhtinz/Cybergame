@@ -4193,12 +4193,14 @@ public class WorldScreen extends ScreenAdapter {
             float sx = mapSx(p[0]), sy = mapSy(p[1]);
             if (sx < -90 || sx > Ui.W + 90 || sy < -70 || sy > Ui.H + 70) continue;
             boolean isCur = r == cur, sel = r == selRegion;
+            float dotR = isCur ? 12 : 8; // vùng đang đứng: chấm to hơn hẳn
             batch.setColor(isCur ? new Color(0.30f, 0.85f, 0.35f, 1f)
                 : sel ? new Color(1f, 0.55f, 0.12f, 1f) : new Color(0.08f, 0.12f, 0.18f, 0.9f));
-            batch.draw(circleTexture(), sx - 8, sy - 8, 16, 16);
+            batch.draw(circleTexture(), sx - dotR, sy - dotR, dotR * 2, dotR * 2);
             batch.setColor(Color.WHITE);
-            batch.draw(ringTexture(), sx - 8, sy - 8, 16, 16);
-            batch.draw(circleTexture(), sx - 3, sy - 3, 6, 6);
+            batch.draw(ringTexture(), sx - dotR, sy - dotR, dotR * 2, dotR * 2);
+            float inR = isCur ? 5 : 3;
+            batch.draw(circleTexture(), sx - inR, sy - inR, inR * 2, inR * 2);
             String label = REGION_NAMES[r];
             float tw = Ui.textWidth(Ui.fontSmall, label);
             float pw = tw + 24, ph = 32;
@@ -4209,8 +4211,17 @@ public class WorldScreen extends ScreenAdapter {
                 sel ? new Color(0.98f, 0.55f, 0.16f, 0.95f) : new Color(0.05f, 0.09f, 0.14f, 0.82f), GLASS_RIM), lx, ly);
             Ui.centered(batch, Ui.fontSmall, label, lx + pw / 2f, ly + 22, Color.WHITE);
             if (isCur) {
-                Ui.centered(batch, Ui.fontTiny, "Bạn đang ở đây", sx, sy - 18,
-                    new Color(0.45f, 1f, 0.5f, 1f));
+                // nhãn vị trí của mình: pill nền tối viền xanh + chữ xanh
+                // sáng cỡ fontSmall — chữ xanh trần trên nền cỏ xanh của
+                // tranh là chìm hẳn, không ai đọc được (chủ dự án bắt lỗi)
+                String cap = "Bạn đang ở đây";
+                float capW = Ui.textWidth(Ui.fontSmall, cap) + 24;
+                float capX = MathUtils.clamp(sx - capW / 2f, 8, Ui.W - 8 - capW);
+                float capY = sy - 48;
+                batch.draw(Ui.roundedRect((int) capW, 30, 10,
+                    new Color(0.03f, 0.09f, 0.04f, 0.94f), new Color(0.45f, 1f, 0.55f, 0.95f)), capX, capY);
+                Ui.centered(batch, Ui.fontSmall, cap, capX + capW / 2f, capY + 21,
+                    new Color(0.55f, 1f, 0.62f, 1f));
             }
             if (sel) {
                 batch.setColor(0.98f, 0.55f, 0.16f, 1f);
