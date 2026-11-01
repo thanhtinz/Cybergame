@@ -449,6 +449,27 @@ public class ScreenshotMain {
                     case 27:
                         if (frame == 20) {
                             shot("shot-char-panel.png");
+                            world.debugSetCharVariant(1);
+                            stage = 28; frame = 0;
+                        }
+                        break;
+                    case 28:
+                        if (frame == 15) {
+                            shot("shot-char-v1.png");
+                            world.debugSetCharVariant(2);
+                            stage = 29; frame = 0;
+                        }
+                        break;
+                    case 29:
+                        if (frame == 15) {
+                            shot("shot-char-v2.png");
+                            world.debugSetCharVariant(3);
+                            stage = 30; frame = 0;
+                        }
+                        break;
+                    case 30:
+                        if (frame == 15) {
+                            shot("shot-char-v3.png");
                             System.out.println("SCREENSHOT DONE");
                             Gdx.app.exit();
                         }

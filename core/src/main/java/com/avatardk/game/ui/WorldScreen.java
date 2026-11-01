@@ -2258,22 +2258,43 @@ public class WorldScreen extends ScreenAdapter {
         return new float[]{(Ui.W - CP_W) / 2f, (Ui.H - CP_H) / 2f};
     }
 
+    /** Kiểu panel nhân vật (3 = thẻ hiện đại — user đã chốt 2026-11-01;
+     *  0/1/2 giữ lại để so sánh khi cần). */
+    private int charVariant = 3;
+
     private void drawCharPanel() {
+        if (charVariant == 2) {
+            drawCharPanelOriginal();
+            return;
+        }
+        if (charVariant == 3) {
+            drawCharPanelCards();
+            return;
+        }
+        drawCharPanelGlass(charVariant == 1);
+    }
+
+    private void drawCharPanelGlass(boolean light) {
         com.avatardk.game.net.PlayerInfo p = game.player;
         if (p == null) {
             charPanel = false;
             return;
         }
+        Color cTitle = light ? new Color(0.10f, 0.25f, 0.50f, 1f) : new Color(1f, 0.85f, 0.45f, 1f);
+        Color cText = light ? new Color(0.08f, 0.22f, 0.45f, 1f) : new Color(1f, 1f, 1f, 0.94f);
+        Color cStage = light ? new Color(1f, 1f, 1f, 0.38f) : new Color(0.30f, 0.45f, 0.62f, 0.35f);
+        Color cTrack = light ? new Color(1f, 1f, 1f, 0.55f) : new Color(0f, 0f, 0f, 0.45f);
         float[] g = charPanelGeom();
         float px = g[0], py = g[1];
-        batch.setColor(0f, 0f, 0f, 0.55f);
+        batch.setColor(0f, 0f, 0f, light ? 0.35f : 0.55f);
         batch.draw(whiteTex, 0, 0, Ui.W, Ui.H);
         batch.setColor(Color.WHITE);
         batch.draw(Ui.roundedRect((int) CP_W, (int) CP_H, 18,
-            new Color(0.07f, 0.11f, 0.17f, 0.97f), GLASS_RIM), px, py);
-        Ui.fontSmall.setColor(1f, 0.85f, 0.45f, 1f);
+            light ? new Color(0.60f, 0.79f, 0.96f, 0.98f) : new Color(0.07f, 0.11f, 0.17f, 0.97f),
+            GLASS_RIM), px, py);
+        Ui.fontSmall.setColor(cTitle);
         Ui.fontSmall.draw(batch, "THÔNG TIN NHÂN VẬT", px + 24, py + CP_H - 22);
-        Ui.font.setColor(Color.WHITE);
+        Ui.font.setColor(light ? cText : Color.WHITE);
         Ui.font.draw(batch, "X", px + CP_W - 38, py + CP_H - 20);
         int[] st = charStats();
         // cột tiền bằng icon myinfo gốc: Xu, Lượng, Lượng khoá, Xèng, Cấp
@@ -2283,21 +2304,26 @@ public class WorldScreen extends ScreenAdapter {
         for (int i = 0; i < 4; i++) {
             float ry = rowTop - i * 46;
             batch.draw(game.texture("myinfo/icon" + icons[i] + ".png"), px + 24, ry, 26, 26);
-            Ui.fontSmall.setColor(1f, 1f, 1f, 0.94f);
+            Ui.fontSmall.setColor(cText);
             Ui.fontSmall.draw(batch, vals[i], px + 62, ry + 19);
         }
         float ry = rowTop - 4 * 46;
         batch.draw(game.texture("myinfo/icon3.png"), px + 24, ry, 26, 26);
-        Ui.fontSmall.setColor(1f, 1f, 1f, 0.94f);
+        Ui.fontSmall.setColor(cText);
         Ui.fontSmall.draw(batch, st != null ? st[0] + " + " + st[1] + "%" : "—", px + 62, ry + 19);
-        // tên nhân vật (vàng) dưới cột tiền
+        // tên nhân vật (vàng) dưới cột tiền — nền sáng thì thêm viền nâu
+        if (light) {
+            Ui.font.setColor(0.30f, 0.16f, 0.04f, 1f);
+            for (float[] o : new float[][]{{-1.6f, 0}, {1.6f, 0}, {0, -1.6f}, {0, 1.6f}}) {
+                Ui.font.draw(batch, p.username, px + 24 + o[0], py + 176 + o[1]);
+            }
+        }
         Ui.font.setColor(1f, 0.83f, 0.38f, 1f);
         Ui.font.draw(batch, p.username, px + 24, py + 176);
         Ui.font.setColor(Color.WHITE);
         // sân khấu doll bên phải (+ người yêu nếu gói −22 báo có)
         float stX = px + 306, stY = py + 196, stW = 310, stH = 216;
-        batch.draw(Ui.roundedRect((int) stW, (int) stH, 14,
-            new Color(0.30f, 0.45f, 0.62f, 0.35f), GLASS_RIM), stX, stY);
+        batch.draw(Ui.roundedRect((int) stW, (int) stH, 14, cStage, GLASS_RIM), stX, stY);
         float floorY = stY + 36;
         boolean hasPartner = partnerDoll != null;
         float selfCx = hasPartner ? stX + 96 : stX + stW / 2f;
@@ -2311,10 +2337,10 @@ public class WorldScreen extends ScreenAdapter {
             game.dollRenderer.draw(batch, partnerDoll, 0, partCx, floorY, 3.4f, true);
             if (partnerRel != null && !partnerRel.isEmpty()) {
                 Ui.centered(batch, Ui.fontSmall, partnerRel, partCx, stY + stH - 14,
-                    new Color(1f, 0.75f, 0.85f, 1f));
+                    light ? new Color(0.80f, 0.25f, 0.45f, 1f) : new Color(1f, 0.75f, 0.85f, 1f));
             }
             Ui.centered(batch, Ui.fontTiny, partnerName + " · Cấp " + partnerLv + " + " + partnerPct + "%",
-                partCx, stY + 18, new Color(1f, 1f, 1f, 0.9f));
+                partCx, stY + 18, cText);
         }
         // đường chia + 6 thanh chỉ số (2 cột × 3 hàng) như gốc
         batch.setColor(GLASS_RIM);
@@ -2330,22 +2356,217 @@ public class WorldScreen extends ScreenAdapter {
             int col = i % 2, row = i / 2;
             float bx = px + 24 + col * 306;
             float by = py + 118 - row * 38;
-            Ui.fontTiny.setColor(1f, 1f, 1f, 0.85f);
+            Ui.fontTiny.setColor(cText);
             Ui.fontTiny.draw(batch, labels[i], bx, by + 4);
-            batch.draw(Ui.roundedRect(150, 12, 6, new Color(0f, 0f, 0f, 0.45f), GLASS_RIM), bx + 84, by - 4);
+            batch.draw(Ui.roundedRect(150, 12, 6, cTrack, GLASS_RIM), bx + 84, by - 4);
             int v = MathUtils.clamp(barVals[i], 0, 100);
             if (v > 0) {
                 batch.draw(Ui.roundedRect(Math.max(12, 150 * v / 100), 12, 6, cols[i], cols[i]), bx + 84, by - 4);
             }
-            Ui.fontTiny.setColor(1f, 1f, 1f, 0.92f);
+            Ui.fontTiny.setColor(cText);
             Ui.fontTiny.draw(batch, st == null ? "—"
                 : (i == 0 ? st[0] + " · " + st[1] + "%" : String.valueOf(barVals[i])), bx + 242, by + 4);
+        }
+    }
+
+    /** Kiểu C — NGUYÊN BẢN GỐC: nền giấy PopupShop, chữ xanh, nền myinfo/back
+     *  thật, thanh chỉ số bằng ảnh thanh0/1/2 gốc. */
+    private void drawCharPanelOriginal() {
+        com.avatardk.game.net.PlayerInfo p = game.player;
+        if (p == null) {
+            charPanel = false;
+            return;
+        }
+        float[] g = charPanelGeom();
+        float px = g[0], py = g[1];
+        Color blue = new Color(0.10f, 0.28f, 0.62f, 1f);
+        Color brown = new Color(0.45f, 0.32f, 0.18f, 1f);
+        batch.setColor(0f, 0f, 0f, 0.40f);
+        batch.draw(whiteTex, 0, 0, Ui.W, Ui.H);
+        batch.setColor(Color.WHITE);
+        batch.draw(Ui.roundedRect((int) CP_W, (int) CP_H, 14,
+            new Color(0.97f, 0.95f, 0.89f, 1f), brown), px, py);
+        Ui.font.setColor(brown);
+        Ui.font.draw(batch, "X", px + CP_W - 38, py + CP_H - 20);
+        int[] st = charStats();
+        // tên xanh đậm trên cùng trái (vị trí tab tên của PopupShop gốc)
+        Ui.font.setColor(blue);
+        Ui.font.draw(batch, p.username, px + 24, py + CP_H - 24);
+        // cột tiền icon gốc + dòng cấp
+        int[] icons = {0, 1, 4, 2};
+        String[] vals = {fmtMoney(p.xu), fmtMoney(p.luong), fmtMoney(p.luongKhoa), fmtMoney(p.xeng)};
+        for (int i = 0; i < 4; i++) {
+            float ry = py + CP_H - 104 - i * 40;
+            batch.draw(game.texture("myinfo/icon" + icons[i] + ".png"), px + 24, ry, 28, 28);
+            Ui.fontSmall.setColor(blue);
+            Ui.fontSmall.draw(batch, vals[i], px + 64, ry + 20);
+        }
+        float ry = py + CP_H - 104 - 4 * 40;
+        batch.draw(game.texture("myinfo/icon3.png"), px + 24, ry, 28, 28);
+        Ui.fontSmall.setColor(blue);
+        Ui.fontSmall.draw(batch, st != null ? st[0] + " + " + st[1] + "%" : "—", px + 64, ry + 20);
+        // nền sân khấu gốc back.png + doll đứng trên đó
+        float backX = px + CP_W - 345 - 14, backY = py + 262;
+        batch.draw(game.texture("myinfo/back.png"), backX, backY, 345, 145);
+        float floorY = backY + 22;
+        boolean hasPartner = partnerDoll != null;
+        float selfCx = backX + 105;
+        float partCx = backX + 262;
+        game.dollRenderer.draw(batch, playerDoll, playerAnim.frameIndex(), selfCx, floorY, 2.6f, false);
+        if (hasPartner) {
+            game.dollRenderer.draw(batch, partnerDoll, 0, partCx, floorY, 2.6f, true);
+            Ui.centered(batch, Ui.fontSmall, partnerRel != null ? partnerRel : "",
+                partCx, py + CP_H - 28, new Color(0.80f, 0.25f, 0.45f, 1f));
+            Ui.centered(batch, Ui.fontTiny, partnerName + " · " + partnerLv + " + " + partnerPct + "%",
+                partCx, backY + 4, blue);
+        } else {
+            // chưa có người yêu: bóng placeholder như gốc
+            batch.setColor(1f, 1f, 1f, 0.55f);
+            batch.draw(game.texture("myinfo/shadow.png"), partCx - 26, floorY - 2, 52, 84);
+            batch.setColor(Color.WHITE);
+        }
+        // đường chia nâu + 6 chỉ số bằng ảnh thanh gốc
+        batch.setColor(brown);
+        batch.draw(whiteTex, px + 24, py + 186, CP_W - 48, 2);
+        batch.setColor(Color.WHITE);
+        String[] labels = {"Lv:", "Thân thiện", "Gây rối", "Sành điệu", "Vui vẻ", "Sức khỏe"};
+        int[] barVals = st == null ? new int[6]
+            : new int[]{st[1], st[2], st[3], st[4], st[5], st[6]};
+        com.badlogic.gdx.graphics.Texture thanh0 = game.texture("myinfo/thanh0.png");
+        com.badlogic.gdx.graphics.Texture thanh1 = game.texture("myinfo/thanh1.png");
+        com.badlogic.gdx.graphics.Texture thanh2 = game.texture("myinfo/thanh2.png");
+        for (int i = 0; i < 6; i++) {
+            int col = i % 2, row = i / 2;
+            float bx = px + 24 + col * 306;
+            float by = py + 120 - row * 44;
+            Ui.fontTiny.setColor(blue);
+            Ui.fontTiny.draw(batch, i == 0 && st != null ? "Lv: " + st[0] : labels[i], bx, by + 17);
+            batch.draw(thanh2, bx + 84, by, 150, 22);
+            int v = MathUtils.clamp(barVals[i], 0, 100);
+            if (v > 0) {
+                batch.draw(thanh1, bx + 84, by, 150f * v / 100f, 22,
+                    0, 0, Math.max(1, (int) (116f * v / 100f)), 25, false, true);
+            }
+            batch.draw(thanh0, bx + 84, by + 8, 150, 6);
+            Ui.fontTiny.setColor(blue);
+            Ui.fontTiny.draw(batch, st == null ? "—" : String.valueOf(barVals[i]), bx + 244, by + 17);
+        }
+    }
+
+    /** Kiểu D — THẺ HIỆN ĐẠI: header avatar tròn + chip tiền, sân khấu rộng,
+     *  6 thẻ chỉ số dạng lưới 3×2. */
+    private void drawCharPanelCards() {
+        com.avatardk.game.net.PlayerInfo p = game.player;
+        if (p == null) {
+            charPanel = false;
+            return;
+        }
+        float[] g = charPanelGeom();
+        float px = g[0], py = g[1];
+        batch.setColor(0f, 0f, 0f, 0.55f);
+        batch.draw(whiteTex, 0, 0, Ui.W, Ui.H);
+        batch.setColor(Color.WHITE);
+        batch.draw(Ui.roundedRect((int) CP_W, (int) CP_H, 18,
+            new Color(0.07f, 0.11f, 0.17f, 0.97f), GLASS_RIM), px, py);
+        int[] st = charStats();
+        // header: avatar tròn + tên + cấp
+        float avCx = px + 62, avCy = py + CP_H - 52;
+        batch.setColor(0.35f, 0.55f, 0.75f, 0.55f);
+        batch.draw(circleTexture(), avCx - 39, avCy - 39, 78, 78);
+        batch.setColor(Color.WHITE);
+        int[] b = playerDoll.bounds(playerAnim.frameIndex());
+        float unit = 4.2f;
+        float feetX = avCx - ((b[0] + b[2]) / 2f) * unit;
+        // nâng doll lên 14px so với neo đỉnh thuần: tóc Sơn to, neo đỉnh làm
+        // vòng tròn toàn tóc đen — dịch lên để mặt vào giữa vòng
+        float feetY = avCy + 31 + b[1] * unit + 14;
+        Rectangle clip = new Rectangle(avCx - 31, avCy - 31, 62, 62);
+        Rectangle scissors = new Rectangle();
+        batch.flush();
+        ScissorStack.calculateScissors(hudViewport.getCamera(), batch.getTransformMatrix(), clip, scissors);
+        if (ScissorStack.pushScissors(scissors)) {
+            game.dollRenderer.draw(batch, playerDoll, playerAnim.frameIndex(), feetX, feetY, unit, false);
+            batch.flush();
+            ScissorStack.popScissors();
+        }
+        batch.draw(ringTexture(), avCx - 37, avCy - 37, 74, 74);
+        Ui.font.setColor(1f, 0.83f, 0.38f, 1f);
+        Ui.font.draw(batch, p.username, px + 116, avCy + 14);
+        Ui.fontSmall.setColor(1f, 1f, 1f, 0.92f);
+        Ui.fontSmall.draw(batch, st != null ? "Cấp " + st[0] : "—", px + 116, avCy - 18);
+        // bên phải hàng cấp: "Người yêu: <tên>" — chưa có thì để trống
+        if (partnerName != null) {
+            String rel = (partnerRel != null && !partnerRel.isEmpty() ? partnerRel : "Người yêu")
+                + ": " + partnerName;
+            layout.setText(Ui.fontSmall, rel);
+            Ui.fontSmall.setColor(1f, 0.75f, 0.85f, 1f);
+            Ui.fontSmall.draw(batch, rel, px + CP_W - 24 - layout.width, avCy - 18);
+        }
+        Ui.font.setColor(Color.WHITE);
+        Ui.font.draw(batch, "X", px + CP_W - 34, py + CP_H - 20);
+        // hàng chip tiền (4 chip ngang dưới header)
+        int[] icons = {0, 1, 4, 2};
+        String[] vals = {fmtMoney(p.xu), fmtMoney(p.luong), fmtMoney(p.luongKhoa), fmtMoney(p.xeng)};
+        for (int i = 0; i < 4; i++) {
+            float cx = px + 24 + i * 152;
+            float cy = py + CP_H - 148;
+            batch.draw(Ui.roundedRect(140, 36, 10, new Color(0f, 0f, 0f, 0.35f), GLASS_RIM), cx, cy);
+            batch.draw(game.texture("myinfo/icon" + icons[i] + ".png"), cx + 8, cy + 7, 22, 22);
+            Ui.fontSmall.setColor(1f, 1f, 1f, 0.94f);
+            Ui.fontSmall.draw(batch, vals[i], cx + 38, cy + 24);
+        }
+        // sân khấu rộng
+        float stX = px + 24, stY = py + 168, stW = CP_W - 48, stH = 140;
+        batch.draw(Ui.roundedRect((int) stW, (int) stH, 14,
+            new Color(0.30f, 0.45f, 0.62f, 0.35f), GLASS_RIM), stX, stY);
+        float floorY = stY + 26;
+        boolean hasPartner = partnerDoll != null;
+        float selfCx = hasPartner ? stX + 150 : stX + stW / 2f;
+        float partCx = stX + 442;
+        batch.setColor(0f, 0f, 0f, 0.30f);
+        batch.draw(circleTexture(), selfCx - 48, floorY - 7, 96, 15);
+        if (hasPartner) batch.draw(circleTexture(), partCx - 42, floorY - 7, 84, 14);
+        batch.setColor(Color.WHITE);
+        game.dollRenderer.draw(batch, playerDoll, playerAnim.frameIndex(), selfCx, floorY, 2.5f, false);
+        if (hasPartner) {
+            game.dollRenderer.draw(batch, partnerDoll, 0, partCx, floorY, 2.5f, true);
+            Ui.centered(batch, Ui.fontTiny, partnerName + " · " + (partnerRel != null ? partnerRel : "")
+                + " · Cấp " + partnerLv, partCx, stY + 14, new Color(1f, 0.85f, 0.92f, 1f));
+        }
+        // lưới 6 thẻ chỉ số 3×2
+        String[] labels = {"Cấp", "Thân thiện", "Gây rối", "Sành điệu", "Vui vẻ", "Sức khỏe"};
+        Color[] cols = {new Color(0.55f, 0.85f, 1f, 0.95f), new Color(0.45f, 0.9f, 0.5f, 0.95f),
+            new Color(0.9f, 0.45f, 0.6f, 0.95f), new Color(0.6f, 0.72f, 1f, 0.95f),
+            new Color(1f, 0.8f, 0.35f, 0.95f), new Color(1f, 0.55f, 0.4f, 0.95f)};
+        int[] barVals = st == null ? new int[6]
+            : new int[]{st[1], st[2], st[3], st[4], st[5], st[6]};
+        for (int i = 0; i < 6; i++) {
+            int col = i % 3, row = i / 3;
+            float cx = px + 24 + col * 202;
+            float cy = py + 88 - row * 72;
+            batch.draw(Ui.roundedRect(190, 62, 10, new Color(0f, 0f, 0f, 0.30f), GLASS_RIM), cx, cy);
+            Ui.fontTiny.setColor(1f, 1f, 1f, 0.85f);
+            Ui.fontTiny.draw(batch, labels[i], cx + 12, cy + 48);
+            Ui.fontTiny.setColor(1f, 1f, 1f, 0.95f);
+            String vt = st == null ? "—" : (i == 0 ? st[0] + " · " + st[1] + "%" : String.valueOf(barVals[i]));
+            layout.setText(Ui.fontTiny, vt);
+            Ui.fontTiny.draw(batch, vt, cx + 190 - 12 - layout.width, cy + 48);
+            batch.draw(Ui.roundedRect(166, 10, 5, new Color(0f, 0f, 0f, 0.45f), GLASS_RIM), cx + 12, cy + 12);
+            int v = MathUtils.clamp(barVals[i], 0, 100);
+            if (v > 0) {
+                batch.draw(Ui.roundedRect(Math.max(10, 166 * v / 100), 10, 5, cols[i], cols[i]), cx + 12, cy + 12);
+            }
         }
     }
 
     /** Sân khấu chụp kiểm chứng: mở panel nhân vật. */
     public void debugOpenCharPanel() {
         openCharPanel();
+    }
+
+    /** Sân khấu kiểm chứng: đặt kiểu panel nhân vật (0–3). */
+    public void debugSetCharVariant(int v) {
+        charVariant = v;
     }
 
     public void debugOpenPlayerPanel() {
