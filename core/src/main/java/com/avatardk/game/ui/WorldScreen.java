@@ -870,7 +870,20 @@ public class WorldScreen extends ScreenAdapter {
         typeBuffer.setLength(0);
         if (msg.isEmpty()) return;
         activeChatTab = TAB_NEARBY;
-        if (online()) {
+        if (privateTargetId != 0) {
+            // đang nhắn riêng (gói −6): server chỉ chuyển cho người nhận,
+            // không echo lại — tự ghi vào nhật ký như MessageScr của gốc
+            if (online()) {
+                try {
+                    AvatarProtocol.chatTo(game.connection, privateTargetId, msg);
+                    addChatLog(TAB_NEARBY, "Riêng · " + privateTargetName, msg, false);
+                } catch (IOException e) {
+                    addChatLog(TAB_SYSTEM, null, "Không gửi được tin nhắn riêng (mất kết nối?).", true);
+                }
+            } else {
+                addChatLog(TAB_SYSTEM, null, "Mất kết nối — không gửi được tin nhắn riêng.", true);
+            }
+        } else if (online()) {
             try {
                 AvatarProtocol.chatPark(game.connection, msg);
             } catch (IOException e) {
@@ -1121,7 +1134,77 @@ public class WorldScreen extends ScreenAdapter {
                     break;
                 }
                 case AvatarProtocol.PLAYER_LEAVE: {
-                    remotes.remove(ZonePlayers.parseLeave(m));
+                    RemoteFigure lf = remotes.remove(ZonePlayers.parseLeave(m));
+                    if (lf != null && lf == panelPlayer) { panelPlayer = null; panelSub = false; }
+                    break;
+                }
+                case AvatarProtocol.CHAT_TO: {
+                    // nhắn riêng (gói −6): {int type, UTF tên người gửi, UTF}
+                    java.io.DataInputStream r = m.reader();
+                    r.readInt();
+                    String from = r.readUTF();
+                    String text = r.readUTF();
+                    addChatLog(TAB_NEARBY, "Riêng · " + from, text, false);
+                    for (RemoteFigure f : remotes.values()) {
+                        if (f.info.name.equals(from)) {
+                            f.bubble = text;
+                            f.bubbleTimer = 4f;
+                            break;
+                        }
+                    }
+                    break;
+                }
+                case AvatarProtocol.ADD_FRIEND: {
+                    // gói −19: lời mời được chuyển tới (boolean=false) hoặc
+                    // kết quả lời mời mình đã gửi — phân biệt bằng friendPending
+                    java.io.DataInputStream r = m.reader();
+                    int id = r.readInt();
+                    boolean b = r.readBoolean();
+                    if (friendPending.remove(id)) {
+                        addChatLog(TAB_SYSTEM, null, remoteName(id) + (b
+                            ? " đã đồng ý kết bạn với bạn."
+                            : " đã từ chối lời mời kết bạn."), true);
+                    } else {
+                        friendInviteId = id;
+                        friendInviteName = remoteName(id);
+                    }
+                    break;
+                }
+                case AvatarProtocol.REQUEST_YOUR_INFO: {
+                    // gói −22 trả về: {int id, 7 byte chỉ số, ...đuôi hẹn hò bỏ qua}
+                    java.io.DataInputStream r = m.reader();
+                    int id = r.readInt();
+                    int level = r.readByte() & 0xFF, pct = MathUtils.clamp(r.readByte(), 0, 100);
+                    int friendly = MathUtils.clamp(r.readByte(), 0, 100);
+                    r.readByte(); // crazy — server hiện gửi 0
+                    int stylish = MathUtils.clamp(r.readByte(), 0, 100);
+                    int happy = MathUtils.clamp(r.readByte(), 0, 100);
+                    int satiety = MathUtils.clamp(r.readByte(), 0, 100);
+                    infoStats = new int[]{level, pct, friendly, stylish, happy, satiety};
+                    infoForId = id;
+                    RemoteFigure f = remotes.get(id);
+                    if (f != null) panelPlayer = f;
+                    break;
+                }
+                case AvatarProtocol.GIVING_DEFERR: {
+                    // gói 59: {int nguồn, int đích, short mã, short thời gian}
+                    java.io.DataInputStream r = m.reader();
+                    r.readInt();
+                    int to = r.readInt();
+                    int gid = r.readShort();
+                    if (gid == -1) {
+                        if (r.available() > 0) r.readUTF();
+                    } else if (r.available() >= 2) {
+                        r.readShort();
+                    }
+                    if (gid == 100 || gid == 101) {
+                        if (to == ownId()) {
+                            spawnActFx(null, gid);
+                        } else {
+                            RemoteFigure f = remotes.get(to);
+                            if (f != null) spawnActFx(f, gid);
+                        }
+                    }
                     break;
                 }
                 case AvatarProtocol.PLAYER_MOVE: {
@@ -1477,6 +1560,63 @@ public class WorldScreen extends ScreenAdapter {
             }
             return;
         }
+        // hộp thoại mời kết bạn đang chờ trả lời: lớp modal, nuốt mọi chạm
+        if (friendInviteId != 0) {
+            float pw = 440, ph = 168, px = (Ui.W - pw) / 2f, py = (Ui.H - ph) / 2f;
+            boolean accept = x >= px + 52 && x <= px + 52 + 150 && y >= py + 22 && y <= py + 22 + 46;
+            boolean refuse = x >= px + pw - 52 - 150 && x <= px + pw - 52 && y >= py + 22 && y <= py + 22 + 46;
+            if (accept || refuse) {
+                if (online()) {
+                    try {
+                        AvatarProtocol.addFriendReply(game.connection, friendInviteId, accept);
+                    } catch (IOException e) {
+                        addChatLog(TAB_SYSTEM, null, "Không gửi được trả lời (mất kết nối?).", true);
+                    }
+                }
+                addChatLog(TAB_SYSTEM, null, accept
+                    ? "Bạn đã đồng ý kết bạn với " + friendInviteName + "."
+                    : "Bạn đã từ chối lời mời của " + friendInviteName + ".", true);
+                friendInviteId = 0;
+                friendInviteName = null;
+            }
+            return;
+        }
+        // panel tương tác người chơi khác đang mở
+        if (panelPlayer != null) {
+            float[] g = playerPanelGeom();
+            float px = g[0], py = g[1];
+            if (x >= px + PP_W - 46 && x <= px + PP_W && y >= py + PP_H - 46 && y <= py + PP_H) {
+                panelPlayer = null;
+                panelSub = false;
+                return;
+            }
+            if (panelSub) {
+                float sy = ppSubY();
+                for (int i = 0; i < 4; i++) {
+                    float bx = ppSubBtnX(i);
+                    if (x >= bx && x <= bx + 104 && y >= sy + 6 && y <= sy + 52) {
+                        panelSubAction(i);
+                        return;
+                    }
+                }
+                if (x >= px && x <= px + PP_W && y >= sy && y <= sy + 58) return;
+            }
+            // thẻ thông tin đang hiện cũng thuộc panel: chạm vào thì nuốt
+            if (infoStats != null && infoForId == panelPlayer.info.id) {
+                float iy = (panelSub ? ppSubY() + 58 : py + PP_H) + 8;
+                if (x >= px && x <= px + PP_W && y >= iy && y <= iy + 118) return;
+            }
+            for (int i = 0; i < 5; i++) {
+                float bx = ppBtnX(i);
+                if (x >= bx && x <= bx + 80 && y >= ppBtnY() && y <= ppBtnY() + 58) {
+                    panelAction(i);
+                    return;
+                }
+            }
+            if (x >= px && x <= px + PP_W && y >= py && y <= py + PP_H) return;
+            panelPlayer = null; // chạm ra ngoài: đóng, chạm đó xử lý tiếp ở dưới
+            panelSub = false;
+        }
         // nút burger (phải trên): mở/đóng panel kính
         if (x >= BURGER_X && x <= BURGER_X + BURGER_S && y >= BURGER_Y && y <= BURGER_Y + BURGER_S) {
             menuOpen = !menuOpen;
@@ -1604,6 +1744,16 @@ public class WorldScreen extends ScreenAdapter {
         }
         // nút tương tác (phải dưới)
         if (Math.hypot(x - ACT_CX, y - ACT_CY) <= ACT_R + 10) { interact(); return; }
+        // chạm vào người chơi khác trên phố: mở panel tương tác của họ
+        for (RemoteFigure f : remotes.values()) {
+            float sx = f.feetX - lastCamX + Ui.W / 2f;
+            float sy = f.feetY - lastCamY + Ui.H / 2f;
+            if (Math.abs(x - sx) <= 32 && y >= sy - 8 && y <= sy + 112) {
+                panelPlayer = f;
+                panelSub = false;
+                return;
+            }
+        }
         // joystick
         if (Math.hypot(x - JOY_CX, y - JOY_CY) <= JOY_R + 26) {
             joyPointer = pointer;
@@ -1644,6 +1794,289 @@ public class WorldScreen extends ScreenAdapter {
         // Lời NPC chỉ nổi bong bóng trên đầu, KHÔNG đưa vào khung chat (chủ dự án chốt).
     }
 
+    // ---------- Panel tương tác người chơi khác ----------
+    // Chạm vào một người chơi khác → panel KÍNH theo mẫu panel của Avatar
+    // bản mới user gửi (avatar + tên + 5 nút Nhắn tin / Kết bạn / Tặng quà /
+    // Tương tác / Khác) nhưng chất liệu kính mờ đồng bộ HUD của bản port.
+    // Giao thức đúng client gốc (docs/park-spec.md): nhắn riêng gói −6,
+    // kết bạn −21/−19, thông tin −22, Đánh/Hôn gói 59 (mã 100/101);
+    // Tặng quà + Mời về nhà thuộc đợt Shop/Nhà nên báo rõ khi bấm.
+    private static final float PP_W = 470f, PP_H = 150f;
+    private static final String[] PP_LABELS = {"Nhắn tin", "Kết bạn", "Tặng quà", "Tương tác", "Khác"};
+    private static final String[] PP_ICONS = {Ui.FA_COMMENT_DOTS, Ui.FA_USER_PLUS, Ui.FA_GIFT, Ui.FA_HEART, Ui.FA_FACE_SMILE};
+    private static final String[] PP_SUB_LABELS = {"Đánh", "Hôn", "Mời về nhà", "Thông tin"};
+    private static final String[] PP_SUB_ICONS = {Ui.FA_HAND_FIST, Ui.FA_HEART, Ui.FA_HOUSE, Ui.FA_CIRCLE_INFO};
+    private RemoteFigure panelPlayer;
+    private boolean panelSub;
+    private int privateTargetId;
+    private String privateTargetName;
+    private int friendInviteId;
+    private String friendInviteName;
+    private final java.util.Set<Integer> friendPending = new java.util.HashSet<>();
+    private int[] infoStats;   // {cấp, %cấp, thân thiện, phong cách, vui vẻ, độ no} từ gói −22
+    private int infoForId;
+    private float lastCamX = 640f, lastCamY = 360f;
+
+    /** Hiệu ứng Đánh/Hôn (gói 59) đang chạy trên đầu một nhân vật. */
+    private static class ActFx {
+        RemoteFigure target;   // null = chính mình
+        int kind;              // 100 = đánh, 101 = hôn
+        float t;
+    }
+    private final java.util.List<ActFx> actFx = new java.util.ArrayList<>();
+
+    private float[] playerPanelGeom() {
+        return new float[]{(Ui.W - PP_W) / 2f, CHAT_Y + chatH + 14f};
+    }
+    private float ppBtnX(int i) { return playerPanelGeom()[0] + 19f + i * 88f; }
+    private float ppBtnY() { return playerPanelGeom()[1] + 12f; }
+    private float ppSubBtnX(int i) { return playerPanelGeom()[0] + 15f + i * 112f; }
+    private float ppSubY() { return playerPanelGeom()[1] + PP_H + 8f; }
+
+    private String remoteName(int id) {
+        RemoteFigure f = remotes.get(id);
+        return f != null ? f.info.name : ("Người chơi " + id);
+    }
+
+    private void spawnActFx(RemoteFigure target, int kind) {
+        ActFx fx = new ActFx();
+        fx.target = target;
+        fx.kind = kind;
+        fx.t = 0f;
+        actFx.add(fx);
+    }
+
+    private void panelAction(int i) {
+        RemoteFigure f = panelPlayer;
+        if (f == null) return;
+        int id = f.info.id;
+        String name = f.info.name;
+        switch (i) {
+            case 0: // Nhắn tin riêng (gói −6)
+                if (!online()) {
+                    addChatLog(TAB_SYSTEM, null, "Vào thế giới online mới nhắn tin riêng được.", true);
+                    return;
+                }
+                privateTargetId = id;
+                privateTargetName = name;
+                panelPlayer = null;
+                panelSub = false;
+                typing = true;
+                addChatLog(TAB_SYSTEM, null,
+                    "Đang nhắn riêng với " + name + " — gõ tin rồi bấm Gửi; nhấn ESC để thoát nhắn riêng.", true);
+                break;
+            case 1: // Kết bạn (gói −21)
+                if (!online()) {
+                    addChatLog(TAB_SYSTEM, null, "Vào thế giới online mới kết bạn được.", true);
+                    return;
+                }
+                try {
+                    AvatarProtocol.requestAddFriend(game.connection, id);
+                    friendPending.add(id);
+                    addChatLog(TAB_SYSTEM, null, "Đã gửi lời mời kết bạn tới " + name + ".", true);
+                } catch (IOException e) {
+                    addChatLog(TAB_SYSTEM, null, "Không gửi được lời mời (mất kết nối?).", true);
+                }
+                break;
+            case 2: // Tặng quà — shop quà thuộc đợt Shop
+                addChatLog(TAB_SYSTEM, null, "Tặng quà sẽ mở cùng đợt Shop sắp tới.", true);
+                break;
+            case 3: // Tương tác: mở/đóng hàng con
+                panelSub = !panelSub;
+                break;
+            default: // Khác: lệnh đặc biệt do server gửi theo sự kiện (MENU_ROTATE)
+                addChatLog(TAB_SYSTEM, null,
+                    "Mục Khác hiện các lệnh đặc biệt theo sự kiện (server gửi) — hiện chưa có lệnh nào.", true);
+                break;
+        }
+    }
+
+    private void panelSubAction(int i) {
+        RemoteFigure f = panelPlayer;
+        if (f == null) return;
+        int id = f.info.id;
+        switch (i) {
+            case 0:
+            case 1: { // Đánh (100) / Hôn (101) — gói 59
+                int act = i == 0 ? 100 : 101;
+                if (online()) {
+                    try {
+                        AvatarProtocol.givingDeferrent(game.connection, id, act);
+                    } catch (IOException e) {
+                        addChatLog(TAB_SYSTEM, null, "Không gửi được hành động (mất kết nối?).", true);
+                    }
+                } else {
+                    spawnActFx(f, act); // offline: hiệu ứng tại chỗ lên nhân vật mẫu
+                }
+                break;
+            }
+            case 2: // Mời về nhà — đợt Nhà
+                addChatLog(TAB_SYSTEM, null, "Mời về nhà sẽ mở ở đợt Nhà sắp tới.", true);
+                break;
+            default: // Thông tin (gói −22)
+                if (!online()) {
+                    addChatLog(TAB_SYSTEM, null, "Vào thế giới online mới xem được thông tin.", true);
+                    return;
+                }
+                try {
+                    AvatarProtocol.requestYourInfo(game.connection, id);
+                } catch (IOException e) {
+                    addChatLog(TAB_SYSTEM, null, "Không gửi được yêu cầu (mất kết nối?).", true);
+                }
+                break;
+        }
+    }
+
+    /** Vẽ các hiệu ứng Đánh/Hôn trong không gian thế giới (gọi khi batch
+     *  đang ở projection của worldCam, sau khi vẽ nhân vật). */
+    private void drawActFx(float playerFeetX, float playerFeetY) {
+        for (ActFx fx : actFx) {
+            float fxX = fx.target != null ? fx.target.feetX : playerFeetX;
+            float fxY = fx.target != null ? fx.target.feetY : playerFeetY;
+            float headY = fxY + 108f;
+            if (fx.kind == 101) {
+                // hôn: 5 trái tim hồng bay lên và tan dần
+                for (int k = 0; k < 5; k++) {
+                    float ph = fx.t * 0.9f - k * 0.13f;
+                    if (ph < 0f || ph > 1f) continue;
+                    float hx = fxX + (k - 2) * 11f + (float) Math.sin(k * 2.3f + fx.t * 4f) * 5f;
+                    float hy = headY + 6f + ph * 44f;
+                    Color c = new Color(1f, 0.38f, 0.58f, 1f - ph * 0.85f);
+                    Ui.faIcon(batch, k == 2 ? Ui.fa26 : Ui.fa20, Ui.FA_HEART, hx, hy, c);
+                }
+            } else {
+                // đánh: chùm sao vàng bung ra quanh đầu
+                float ph = Math.min(1f, fx.t * 1.6f);
+                for (int k = 0; k < 6; k++) {
+                    float ang = k * (float) Math.PI / 3f + 0.4f;
+                    float r = ph * 27f;
+                    Color c = new Color(1f, 0.8f, 0.3f, 1f - ph * 0.8f);
+                    Ui.faIcon(batch, Ui.fa20, Ui.FA_STAR,
+                        fxX + (float) Math.cos(ang) * r, headY + 8f + (float) Math.sin(ang) * r * 0.7f, c);
+                }
+                Ui.faIcon(batch, Ui.fa26, Ui.FA_STAR, fxX, headY + 8f,
+                    new Color(1f, 0.85f, 0.35f, 1f - ph * 0.6f));
+            }
+        }
+        batch.setColor(Color.WHITE);
+    }
+
+    private void drawPlayerPanel() {
+        RemoteFigure f = panelPlayer;
+        if (f == null) return;
+        if (!remotes.containsValue(f)) { panelPlayer = null; panelSub = false; return; }
+        float[] g = playerPanelGeom();
+        float px = g[0], py = g[1];
+        // thẻ thông tin (gói −22) nằm trên cùng
+        float topY = py + PP_H;
+        if (panelSub) {
+            float sy = ppSubY();
+            batch.draw(Ui.roundedRect((int) PP_W, 58, 14, GLASS_FILL_DARK, GLASS_RIM), px, sy);
+            for (int i = 0; i < 4; i++) {
+                float bx = ppSubBtnX(i);
+                batch.draw(Ui.roundedRect(104, 46, 10, GLASS_FILL, GLASS_RIM), bx, sy + 6);
+                Ui.faIcon(batch, Ui.fa20, PP_SUB_ICONS[i], bx + 52, sy + 35,
+                    i == 1 ? new Color(1f, 0.45f, 0.6f, 1f) : Color.WHITE);
+                Ui.centered(batch, Ui.fontTiny, PP_SUB_LABELS[i], bx + 52, sy + 17,
+                    new Color(1f, 1f, 1f, 0.92f));
+            }
+            topY = sy + 58;
+        }
+        if (infoStats != null && infoForId == f.info.id) {
+            float iy = topY + 8;
+            batch.draw(Ui.roundedRect((int) PP_W, 118, 14, GLASS_FILL_DARK, GLASS_RIM), px, iy);
+            Ui.fontSmall.setColor(1f, 0.85f, 0.45f, 1f);
+            Ui.fontSmall.draw(batch, "THÔNG TIN", px + 18, iy + 118 - 14);
+            Ui.fontSmall.setColor(1f, 1f, 1f, 0.92f);
+            String lv = "Cấp " + infoStats[0] + " · " + infoStats[1] + "%";
+            layout.setText(Ui.fontSmall, lv);
+            Ui.fontSmall.draw(batch, lv, px + PP_W - 18 - layout.width, iy + 118 - 14);
+            String[] labels = {"Thân thiện", "Phong cách", "Vui vẻ", "Độ no"};
+            Color[] cols = {new Color(0.45f, 0.9f, 0.5f, 0.95f), new Color(0.6f, 0.72f, 1f, 0.95f),
+                new Color(1f, 0.8f, 0.35f, 0.95f), new Color(1f, 0.55f, 0.4f, 0.95f)};
+            for (int i = 0; i < 4; i++) {
+                float by = iy + 76 - i * 19;
+                Ui.fontTiny.setColor(1f, 1f, 1f, 0.8f);
+                Ui.fontTiny.draw(batch, labels[i], px + 18, by + 4);
+                batch.draw(Ui.roundedRect(300, 10, 5, new Color(0f, 0f, 0f, 0.45f), GLASS_RIM),
+                    px + 108, by - 4);
+                int v = MathUtils.clamp(infoStats[2 + i], 0, 100);
+                if (v > 0) {
+                    batch.draw(Ui.roundedRect(Math.max(10, 300 * v / 100), 10, 5, cols[i], cols[i]),
+                        px + 108, by - 4);
+                }
+                Ui.fontTiny.setColor(1f, 1f, 1f, 0.9f);
+                Ui.fontTiny.draw(batch, String.valueOf(v), px + 418, by + 4);
+            }
+        }
+        // panel chính
+        batch.draw(Ui.roundedRect((int) PP_W, (int) PP_H, 16, GLASS_FILL_DARK, GLASS_RIM), px, py);
+        // avatar: chân dung doll cắt theo khung như card người chơi
+        float avX = px + 16, avY = py + 68, avS = 66;
+        batch.draw(Ui.roundedRect((int) avS, (int) avS, 8,
+            new Color(0.35f, 0.55f, 0.75f, 0.35f), GLASS_RIM), avX, avY);
+        int[] b = f.doll.bounds(f.anim.frameIndex());
+        float unit = 4f;
+        float feetX = avX + avS / 2f - ((b[0] + b[2]) / 2f) * unit;
+        float feetY = avY + avS + b[1] * unit;
+        Rectangle clip = new Rectangle(avX + 2, avY + 2, avS - 4, avS - 4);
+        Rectangle scissors = new Rectangle();
+        batch.flush();
+        ScissorStack.calculateScissors(hudViewport.getCamera(), batch.getTransformMatrix(), clip, scissors);
+        if (ScissorStack.pushScissors(scissors)) {
+            game.dollRenderer.draw(batch, f.doll, f.anim.frameIndex(), feetX, feetY, unit, f.anim.facingLeft);
+            batch.flush();
+            ScissorStack.popScissors();
+        }
+        // tên (vàng như mẫu) + dòng phụ
+        Ui.font.setColor(1f, 0.83f, 0.38f, 1f);
+        Ui.font.draw(batch, f.info.name, px + 96, py + 122);
+        Ui.fontSmall.setColor(1f, 1f, 1f, 0.66f);
+        Ui.fontSmall.draw(batch, "Người chơi · Khu " + currentArea, px + 96, py + 94);
+        Ui.font.setColor(Color.WHITE);
+        Ui.font.draw(batch, "X", px + PP_W - 38, py + PP_H - 18);
+        // 5 nút chính
+        for (int i = 0; i < 5; i++) {
+            float bx = ppBtnX(i);
+            boolean active = i == 3 && panelSub;
+            batch.draw(Ui.roundedRect(80, 58, 12,
+                active ? new Color(0.16f, 0.3f, 0.44f, 0.9f) : GLASS_FILL, GLASS_RIM), bx, ppBtnY());
+            Ui.faIcon(batch, Ui.fa26, PP_ICONS[i], bx + 40, ppBtnY() + 40,
+                i == 3 ? new Color(1f, 0.45f, 0.6f, 1f) : Color.WHITE);
+            Ui.centered(batch, Ui.fontTiny, PP_LABELS[i], bx + 40, ppBtnY() + 16,
+                new Color(1f, 1f, 1f, 0.92f));
+        }
+    }
+
+    /** Hộp thoại lời mời kết bạn (gói −19 server chuyển tới): Đồng ý /
+     *  Từ chối — trả lời cũng bằng gói −19 như client gốc. */
+    private void drawFriendInvite() {
+        batch.setColor(0f, 0f, 0f, 0.45f);
+        batch.draw(whiteTex, 0, 0, Ui.W, Ui.H);
+        batch.setColor(Color.WHITE);
+        float pw = 440, ph = 168, px = (Ui.W - pw) / 2f, py = (Ui.H - ph) / 2f;
+        batch.draw(Ui.roundedRect((int) pw, (int) ph, 16, GLASS_FILL_DARK, GLASS_RIM), px, py);
+        Ui.font.setColor(1f, 0.85f, 0.45f, 1f);
+        Ui.centered(batch, Ui.font, "LỜI MỜI KẾT BẠN", px + pw / 2f, py + ph - 22, new Color(1f, 0.85f, 0.45f, 1f));
+        Ui.centered(batch, Ui.fontSmall, friendInviteName + " muốn kết bạn với bạn.",
+            px + pw / 2f, py + ph - 62, new Color(1f, 1f, 1f, 0.92f));
+        batch.draw(Ui.roundedRect(150, 46, 10, new Color(0.07f, 0.24f, 0.12f, 0.88f), GLASS_RIM),
+            px + 52, py + 22);
+        Ui.centered(batch, Ui.font, "Đồng ý", px + 52 + 75, py + 22 + 31, Color.WHITE);
+        batch.draw(Ui.roundedRect(150, 46, 10, new Color(0.32f, 0.09f, 0.09f, 0.88f), GLASS_RIM),
+            px + pw - 52 - 150, py + 22);
+        Ui.centered(batch, Ui.font, "Từ chối", px + pw - 52 - 75, py + 22 + 31, Color.WHITE);
+    }
+
+    public void debugOpenPlayerPanel() {
+        if (!remotes.isEmpty()) {
+            panelPlayer = remotes.values().iterator().next();
+            panelSub = false;
+        }
+    }
+    public void debugPanelSub(boolean open) { panelSub = open; }
+    public int debugPanelPlayerId() { return panelPlayer != null ? panelPlayer.info.id : -1; }
+
     /** Điểm chân (medium, hệ trên–trái) có đứng được không. Hai lớp như
      *  gốc: (1) type ô — di chuyển tự do chỉ đi được type 80/51
      *  (LoadMap.isTrans trong Base.detectCollision), còn lại là nền
@@ -1663,6 +2096,12 @@ public class WorldScreen extends ScreenAdapter {
 
     private void update(float dt) {
         if (boardLatch > 0f) boardLatch -= dt;
+        // hiệu ứng Đánh/Hôn: chạy 1,4 giây rồi tự dọn
+        for (int i = actFx.size() - 1; i >= 0; i--) {
+            ActFx fx = actFx.get(i);
+            fx.t += dt;
+            if (fx.t > 1.4f) actFx.remove(i);
+        }
         // nghe thoại: luồng phát chạy nền, phát xong thì tự dọn trạng thái
         if (playingLine != null && playThread != null && !playThread.isAlive()) {
             playingLine.voicePlaying = false;
@@ -1736,6 +2175,17 @@ public class WorldScreen extends ScreenAdapter {
             else sendChat();
         }
         if (typing && Gdx.input.isKeyJustPressed(Input.Keys.ESCAPE)) typing = false;
+        // ESC ngoài lúc gõ: thoát nhắn riêng trước, rồi tới đóng panel người chơi
+        if (Gdx.input.isKeyJustPressed(Input.Keys.ESCAPE)) {
+            if (privateTargetId != 0) {
+                privateTargetId = 0;
+                privateTargetName = null;
+                addChatLog(TAB_SYSTEM, null, "Đã thoát nhắn riêng.", true);
+            } else if (panelPlayer != null) {
+                panelPlayer = null;
+                panelSub = false;
+            }
+        }
     }
 
     @Override
@@ -1782,6 +2232,8 @@ public class WorldScreen extends ScreenAdapter {
             camY -= busLift; // hạ tâm camera = thế giới nhô lên trên màn hình
         }
         if (worldW <= Ui.W) camX = worldW / 2f;
+        lastCamX = camX;
+        lastCamY = camY;
         worldCam.position.set(camX, camY, 0);
         worldCam.update();
 
@@ -1841,6 +2293,13 @@ public class WorldScreen extends ScreenAdapter {
             it.y = playerFeetY;
             drawItems.add(it);
         }
+        // vòng chọn dưới chân người chơi đang mở panel tương tác
+        if (panelPlayer != null && remotes.containsValue(panelPlayer)) {
+            float pulse = 0.55f + 0.3f * (float) Math.sin(netTime * 5f);
+            batch.draw(Ui.roundedRect(64, 18, 9, new Color(0f, 0f, 0f, 0f),
+                new Color(0.45f, 0.95f, 1f, pulse)),
+                panelPlayer.feetX - 32, panelPlayer.feetY - 7);
+        }
         drawItems.sort((a, b) -> Float.compare(b.y, a.y));
         for (DrawItem it : drawItems) {
             switch (it.kind) {
@@ -1885,6 +2344,7 @@ public class WorldScreen extends ScreenAdapter {
         if (busPhase > 0) {
             batch.draw(busTex, busX * AvatarDkGame.HD - busTex.getWidth() / 2f, 2f);
         }
+        drawActFx(playerFeetX, playerFeetY);
         batch.end();
 
         drawSideBars(camX);
@@ -1981,6 +2441,8 @@ public class WorldScreen extends ScreenAdapter {
         drawInteractButton();
         drawChatFrame();
         drawFeelUi();
+        if (panelPlayer != null) drawPlayerPanel();
+        if (friendInviteId != 0) drawFriendInvite();
         if (boardOpen) drawBoardPanel();
         if (cityMapOpen) drawCityMap();
         batch.end();
@@ -2102,7 +2564,9 @@ public class WorldScreen extends ScreenAdapter {
             Ui.fontSmall.draw(batch, "|", endX + 1, CHAT_Y + 30);
         } else {
             Ui.fontSmall.setColor(0.35f, 0.38f, 0.42f, 1f);
-            Ui.fontSmall.draw(batch, "Nhập nội dung", CHAT_X + 20, CHAT_Y + 30);
+            Ui.fontSmall.draw(batch, privateTargetId != 0
+                ? "Nhắn riêng với " + privateTargetName + "…"
+                : "Nhập nội dung", CHAT_X + 20, CHAT_Y + 30);
         }
         // nút mở ô emoji: ảnh emoji cười lăn (rofl) trên nền kính cùng tông
         float micX = CHAT_X + CHAT_W - 8 - CHAT_SEND_W - 6 - MIC_BTN_W;

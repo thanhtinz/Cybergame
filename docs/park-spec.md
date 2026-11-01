@@ -109,3 +109,38 @@ park của server (MessageHandler + ParkMsgHandler) nên dùng cho gói này.
   ghi âm bằng micro thật và phát ra loa (VM không có thiết bị âm thanh;
   client Java cũng không nối TCP ra ngoài được trong sandbox) — code có
   bắt lỗi và báo vào tab Hệ thống khi thiết bị không ghi/phát được.
+
+## Tương tác người chơi khác (panel kính, 2026-10-31)
+
+Chạm vào người chơi khác → panel kính (mẫu panel Avatar bản mới): avatar +
+tên + 5 nút **Nhắn tin / Kết bạn / Tặng quà / Tương tác / Khác**; Tương tác
+mở hàng con **Đánh / Hôn / Mời về nhà / Thông tin**. Giao thức đúng client
+gốc (MainMenu.doExchange + ParkService/GlobalService của C#):
+
+- **Nhắn riêng — gói −6 (CHAT_TO)**: C→S {int id nhận, UTF}. S→C
+  {int type, UTF tên người gửi, UTF}. Server `AvatarService.chatToUser`
+  chuyển thẳng cho người nhận (không echo); Pack5 lấy nhầm tên người nhận
+  làm tên người gửi — bản port đã sửa dùng `session.user`.
+- **Kết bạn — gói −21 / −19**: C→S −21 {int id nhận} xin mời; server
+  `ParkService.handleAddFriendRequest` chuyển cho người nhận gói **−19
+  {int id NGƯỜI MỜI, boolean false}** (Pack5 ghi nhầm id người nhận — đã
+  sửa). Người nhận trả lời C→S −19 {int id người mời, boolean đồng ý};
+  handler mới `handleAddFriendReply` chuyển kết quả về người mời bằng −19
+  {int id người trả lời, boolean}. Client phân biệt "lời mời đến" vs "kết
+  quả" bằng tập id mình đang chờ (friendPending). Lưu danh sách bạn thuộc
+  hệ bạn bè (đợt sau) — hiện chỉ chuyển tiếp thông báo.
+- **Thông tin — gói −22 (REQUEST_YOUR_INFO)**: C→S {int id}. S→C {int id,
+  byte cấp, byte %cấp, byte thân thiện, byte crazy (server gửi 0), byte
+  phong cách, byte vui vẻ, byte độ no (100 − hunger), ...đuôi hẹn hò}.
+  Client hiện thẻ kính: cấp + 4 thanh Thân thiện/Phong cách/Vui vẻ/Độ no.
+- **Đánh/Hôn — gói 59 (GIVING_DEFERR)**: C→S {int id đích, short mã}
+  (100 = đánh, 101 = hôn). Pack5 server THIẾU handler — bản port bổ sung
+  `User.doGivingPark` → `MapService.doGivingPark` phát cả zone (kể cả
+  người gửi) S→C {int nguồn, int đích, short mã, short time=5} đúng format
+  `MapScr.onGivingDefferent` của gốc. Client vẽ hiệu ứng tại chỗ nhận gói:
+  hôn = tim hồng bay lên trên đầu người bị hôn, đánh = chùm sao vàng.
+- **Tặng quà (gói 58)** cần shop quà 26 + trừ tiền → đợt Shop. **Mời về
+  nhà (gói −68 {byte type, int id})** → đợt Nhà. Cả hai nút báo rõ trong
+  tab Hệ thống khi bấm, không giả vờ chạy.
+- **Khác** = danh sách lệnh server gửi qua MENU_ROTATE (−83) theo sự
+  kiện; chưa có lệnh thì báo rõ.

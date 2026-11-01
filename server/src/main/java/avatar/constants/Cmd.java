@@ -163,6 +163,10 @@ public class Cmd {
     // byte[] audio mu-law), khong giai ma am thanh.
     public static final byte AVATAR_VOICE_PARK = 61;
     public static final byte AVATAR_GIFT_GIVING = 58;
+    // Hành động đùa giữa hai người chơi (Đánh = 100, Hôn = 101) — client gốc
+    // gửi gói 59 nhưng server Pack5 thiếu handler; bản port bổ sung: phát cả
+    // zone như gói thoại 61. S→C: {int nguồn, int đích, short mã, short giờ}.
+    public static final byte AVATAR_GIVING_DEFERR = 59;
     public static final byte ACTION = 59;
     public static final byte PARK_BOARD_LIST = 60;
     public static final byte PARK_KICK = 78;

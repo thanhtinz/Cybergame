@@ -173,10 +173,12 @@ public class AvatarService extends Service {
         try {
             int receiverId = ms.reader().readInt();
             String content = ms.reader().readUTF();
-            int senderId = this.session.user.getId(); // ID của người gửi yêu cầu
             User receiver = UserManager.getInstance().find(receiverId);
-            User sender = UserManager.getInstance().find(receiverId);
-            receiver.getAvatarService().chatTo(sender.getUsername(), content,1);
+            if (receiver == null) {
+                return;
+            }
+            // Gửi kèm tên NGƯỜI GỬI (bản Pack5 lấy nhầm tên người nhận — đã sửa)
+            receiver.getAvatarService().chatTo(this.session.user.getUsername(), content, 1);
         } catch (IOException ex) {
             logger.error("chatTo ", ex);
         }

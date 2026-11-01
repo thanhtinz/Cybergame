@@ -30,6 +30,25 @@ public final class AvatarProtocol {
      *  server; server chỉ chuyển tiếp mù theo zone, không giải mã audio. */
     public static final byte VOICE_PARK = 61;
     public static final byte CHAT_FARM = 77;
+    /** Nhắn tin riêng 1-1: C→S {int id người nhận, UTF}; S→C {int type,
+     *  UTF tên người gửi, UTF} (Cmd.CHAT_TO của gốc). */
+    public static final byte CHAT_TO = -6;
+    /** Kết bạn — trả lời lời mời: {int id người mời, boolean đồng ý}. Gói
+     *  này server cũng dùng để CHUYỂN lời mời tới người nhận (boolean=false)
+     *  và báo kết quả về người mời; client phân biệt bằng danh sách lời mời
+     *  mình đang chờ (Cmd.ADD_FRIEND của gốc). */
+    public static final byte ADD_FRIEND = -19;
+    /** Gửi lời mời kết bạn: {int id người nhận} (Cmd.AVATAR_REQUEST_ADD_FRIEND). */
+    public static final byte REQUEST_ADD_FRIEND = -21;
+    /** Xin/xem thông tin nhân vật: C→S {int id}; S→C {int id, byte cấp,
+     *  byte % cấp, byte thân thiện, byte điên rồ, byte phong cách,
+     *  byte vui vẻ, byte độ no, ...} (Cmd.REQUEST_YOUR_INFO của gốc). */
+    public static final byte REQUEST_YOUR_INFO = -22;
+    /** Hành động đùa giữa hai người chơi (Đánh = 100, Hôn = 101):
+     *  C→S {int id đích, short mã hành động}; S→C {int id nguồn, int id
+     *  đích, short mã, short thời gian} — client gốc MapScr.onGivingDefferent.
+     *  Server Pack5 thiếu handler nên bản port bổ sung phát cả zone như gói 61. */
+    public static final byte GIVING_DEFERR = 59;
 
     /** Handler Avatar trong GET_HANDLER (CLIENT_TYPE = 8 của gốc). */
     public static final byte HANDLER_AVATAR = 8;
@@ -165,6 +184,50 @@ public final class AvatarProtocol {
         m.writer().writeByte(enc);
         conn.send(m);
         return true;
+    }
+
+    /** Nhắn tin riêng (gói −6): int id người nhận + UTF nội dung. */
+    public static void chatTo(GameConnection conn, int idTo, String text) throws IOException {
+        Msg m = new Msg(CHAT_TO);
+        DataOutputStream w = m.writer();
+        w.writeInt(idTo);
+        w.writeUTF(text);
+        conn.send(m);
+    }
+
+    /** Gửi lời mời kết bạn (gói −21): int id người nhận. */
+    public static void requestAddFriend(GameConnection conn, int idTo) throws IOException {
+        Msg m = new Msg(REQUEST_ADD_FRIEND);
+        m.writer().writeInt(idTo);
+        conn.send(m);
+    }
+
+    /** Trả lời lời mời kết bạn (gói −19): int id người mời + boolean đồng ý. */
+    public static void addFriendReply(GameConnection conn, int idFrom, boolean accept)
+            throws IOException {
+        Msg m = new Msg(ADD_FRIEND);
+        DataOutputStream w = m.writer();
+        w.writeInt(idFrom);
+        w.writeBoolean(accept);
+        conn.send(m);
+    }
+
+    /** Xin thông tin nhân vật của người khác (gói −22): int id. */
+    public static void requestYourInfo(GameConnection conn, int id) throws IOException {
+        Msg m = new Msg(REQUEST_YOUR_INFO);
+        m.writer().writeInt(id);
+        conn.send(m);
+    }
+
+    /** Hành động đùa với người chơi khác (gói 59): int id đích + short mã
+     *  (100 = đánh, 101 = hôn). Hiệu ứng hiện khi server phát lại cho zone. */
+    public static void givingDeferrent(GameConnection conn, int idTo, int actionId)
+            throws IOException {
+        Msg m = new Msg(GIVING_DEFERR);
+        DataOutputStream w = m.writer();
+        w.writeInt(idTo);
+        w.writeShort(actionId);
+        conn.send(m);
     }
 
     /** Gửi một mẩu tin nhắn thoại (gói 61): int clipId, short seq,

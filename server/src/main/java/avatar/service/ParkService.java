@@ -70,12 +70,40 @@ public class ParkService extends Service {
         try {
             int userId = ms.reader().readInt(); // id người nhận
             User user = UserManager.getInstance().find(userId);
+            if (user == null || user.session == null) {
+                return;
+            }
+            // Chuyển lời mời tới người nhận bằng gói -19 mang ID NGƯỜI MỜI
+            // (bản Pack5 ghi nhầm id người nhận — đã sửa ở bản port) kèm
+            // boolean false như client gốc.
             ms = new Message(-19);
             DataOutputStream ds = ms.writer();
-            ds.writeInt(userId);
+            ds.writeInt(this.session.user.getId());
             ds.writeBoolean(false);
             ds.flush();
             user.session.sendMessage(ms);
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+
+    /** Trả lời lời mời kết bạn (gói -19 từ người nhận): {int id người mời,
+     *  boolean đồng ý} — chuyển kết quả về người mời, cũng bằng gói -19
+     *  mang id người trả lời. Lưu danh sách bạn thuộc hệ bạn bè (đợt sau). */
+    public void handleAddFriendReply(Message ms) {
+        try {
+            int requesterId = ms.reader().readInt();
+            boolean accept = ms.reader().readBoolean();
+            User requester = UserManager.getInstance().find(requesterId);
+            if (requester == null || requester.session == null) {
+                return;
+            }
+            Message out = new Message(-19);
+            DataOutputStream ds = out.writer();
+            ds.writeInt(this.session.user.getId());
+            ds.writeBoolean(accept);
+            ds.flush();
+            requester.session.sendMessage(out);
         } catch (IOException e) {
             e.printStackTrace();
         }

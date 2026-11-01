@@ -357,6 +357,64 @@ public class ScreenshotMain {
                     case 24:
                         if (frame == 25) {
                             shot("shot-chat-voice.png");
+                            // Sân khấu panel tương tác người chơi khác: Linh +
+                            // Tuấn đứng cạnh Sơn ở map 10, chạm vào Linh để
+                            // mở panel kính của cô ấy
+                            world.debugSetMap(10);
+                            world.debugSetPlayer(455f, 95f);
+                            world.debugClearRemotes();
+                            try {
+                                int[][] npcParts = new int[2][];
+                                for (int i = 0; i < 2; i++) {
+                                    java.util.List<Integer> items = game.data.npcs.get(i + 3).items;
+                                    npcParts[i] = items.stream().mapToInt(Integer::intValue).toArray();
+                                }
+                                world.debugInjectNet((byte) 51, joinPayload(7, "Linh", npcParts[0], 395, 100));
+                                world.debugInjectNet((byte) 51, joinPayload(8, "Tuấn", npcParts[1], 525, 88));
+                            } catch (java.io.IOException ioe) {
+                                throw new RuntimeException(ioe);
+                            }
+                            world.debugOpenPlayerPanel();
+                            stage = 25; frame = 0;
+                        }
+                        break;
+                    case 25:
+                        if (frame == 20) {
+                            System.out.println("PLAYER PANEL STAGE: panelId=" + world.debugPanelPlayerId());
+                            if (world.debugPanelPlayerId() != 7)
+                                throw new IllegalStateException("Panel không mở đúng người chơi Linh (7)");
+                            shot("shot-player-panel.png");
+                            // mở hàng con Tương tác + bơm gói 59 Hôn vào Linh
+                            world.debugPanelSub(true);
+                            try {
+                                java.io.ByteArrayOutputStream bos = new java.io.ByteArrayOutputStream();
+                                java.io.DataOutputStream w = new java.io.DataOutputStream(bos);
+                                w.writeInt(999); w.writeInt(7); w.writeShort(101); w.writeShort(5);
+                                w.flush();
+                                world.debugInjectNet((byte) 59, bos.toByteArray());
+                            } catch (java.io.IOException ioe) {
+                                throw new RuntimeException(ioe);
+                            }
+                            stage = 26; frame = 0;
+                        }
+                        break;
+                    case 26:
+                        if (frame == 6) {
+                            // bơm gói −22: thẻ thông tin của Linh hiện trên panel
+                            try {
+                                java.io.ByteArrayOutputStream bos = new java.io.ByteArrayOutputStream();
+                                java.io.DataOutputStream w = new java.io.DataOutputStream(bos);
+                                w.writeInt(7);
+                                w.writeByte(12); w.writeByte(40); w.writeByte(80);
+                                w.writeByte(0); w.writeByte(65); w.writeByte(90); w.writeByte(55);
+                                w.flush();
+                                world.debugInjectNet((byte) -22, bos.toByteArray());
+                            } catch (java.io.IOException ioe) {
+                                throw new RuntimeException(ioe);
+                            }
+                        }
+                        if (frame == 25) {
+                            shot("shot-player-panel-sub.png");
                             System.out.println("SCREENSHOT DONE");
                             Gdx.app.exit();
                         }
