@@ -340,6 +340,14 @@ public class ScreenshotMain {
                     case 22:
                         if (frame == 25) {
                             shot("shot-feel-sync.png");
+                            // Kiểm ô emoji của khung chat (mở popover)
+                            world.debugOpenEmoji();
+                            stage = 23; frame = 0;
+                        }
+                        break;
+                    case 23:
+                        if (frame == 25) {
+                            shot("shot-chat-emoji.png");
                             System.out.println("SCREENSHOT DONE");
                             Gdx.app.exit();
                         }

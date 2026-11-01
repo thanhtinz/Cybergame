@@ -266,7 +266,7 @@ public class WorldScreen extends ScreenAdapter {
     private static final String[] CHAT_TABS = {"Hệ thống", "Thế giới", "Gần đây"};
     private int activeChatTab = TAB_NEARBY;
     private boolean chatSeeded = false;
-    private static class ChatLine { String name, text; boolean system; }
+    private static class ChatLine { String name, text, time; boolean system; }
     @SuppressWarnings("unchecked")
     private final List<ChatLine>[] chatLogs = new List[]{
         new ArrayList<ChatLine>(), new ArrayList<ChatLine>(), new ArrayList<ChatLine>()};
@@ -274,8 +274,114 @@ public class WorldScreen extends ScreenAdapter {
     private void addChatLog(int tab, String name, String text, boolean system) {
         ChatLine l = new ChatLine();
         l.name = name; l.text = text; l.system = system;
+        // giờ gửi hiện ở góc phải mỗi tin nhắn: lấy giờ máy lúc tin tới
+        // (giao thức gốc không chở mốc giờ — đồng hồ người nhận là chuẩn chung)
+        l.time = new java.text.SimpleDateFormat("HH:mm").format(new java.util.Date());
         chatLogs[tab].add(l);
         while (chatLogs[tab].size() > 40) chatLogs[tab].remove(0);
+    }
+
+    // Ô emoji của khung chat (chủ dự án yêu cầu): icon Font Awesome chèn
+    // vào nội dung dạng mã :ten:, vẽ inline cùng dòng chữ. KHÔNG có icon
+    // mặt — đổi mặt nhân vật đã có sheet biểu cảm riêng (chốt 2026-10-31).
+    private static final String[][] CHAT_EMOJIS = {
+        {"heart", Ui.FA_HEART}, {"star", Ui.FA_STAR}, {"up", Ui.FA_THUMBS_UP},
+        {"down", Ui.FA_THUMBS_DOWN}, {"fire", Ui.FA_FIRE}, {"gift", Ui.FA_GIFT},
+        {"music", Ui.FA_MUSIC}, {"bolt", Ui.FA_BOLT}, {"crown", Ui.FA_CROWN},
+        {"gem", Ui.FA_GEM}, {"trophy", Ui.FA_TROPHY}, {"cake", Ui.FA_CAKE},
+        {"pizza", Ui.FA_PIZZA}, {"ice", Ui.FA_ICE_CREAM}, {"cat", Ui.FA_CAT},
+        {"dog", Ui.FA_DOG}, {"rocket", Ui.FA_ROCKET}, {"sun", Ui.FA_SUN},
+    };
+    private static final Color[] EMOJI_COLORS = {
+        new Color(1f, 0.45f, 0.55f, 1f), new Color(1f, 0.85f, 0.35f, 1f),
+        new Color(0.55f, 0.85f, 1f, 1f), new Color(0.65f, 0.65f, 0.75f, 1f),
+        new Color(1f, 0.55f, 0.25f, 1f), new Color(0.95f, 0.55f, 0.85f, 1f),
+        new Color(0.75f, 0.6f, 1f, 1f), new Color(1f, 0.9f, 0.4f, 1f),
+        new Color(1f, 0.8f, 0.3f, 1f), new Color(0.45f, 0.9f, 0.95f, 1f),
+        new Color(1f, 0.75f, 0.3f, 1f), new Color(1f, 0.6f, 0.7f, 1f),
+        new Color(1f, 0.65f, 0.4f, 1f), new Color(0.6f, 0.9f, 1f, 1f),
+        new Color(0.95f, 0.75f, 0.5f, 1f), new Color(0.7f, 0.8f, 0.9f, 1f),
+        new Color(0.6f, 0.75f, 1f, 1f), new Color(1f, 0.85f, 0.4f, 1f),
+    };
+    private static final Color RICH_DEFAULT = new Color(1f, 1f, 1f, 0.95f);
+    private boolean emojiOpen = false;
+    private static final float EMOJI_BTN_W = 40f, EMOJI_CELL = 38f;
+    private static final float EMOJI_PANEL_W = 6 * EMOJI_CELL + 12f;
+    private static final float EMOJI_PANEL_H = 3 * EMOJI_CELL + 12f;
+
+    /** Glyph của mã emoji :ten:, null nếu không phải mã hợp lệ. */
+    private static String emojiGlyph(String name) {
+        for (String[] e : CHAT_EMOJIS) if (e[0].equals(name)) return e[1];
+        return null;
+    }
+
+    /** Bề rộng thật của một dòng chat (chữ + icon emoji inline). */
+    private float richWidth(String text) {
+        float w = 0;
+        int i = 0;
+        while (i < text.length()) {
+            int s = text.indexOf(':', i);
+            if (s < 0) { layout.setText(Ui.fontSmall, text.substring(i)); w += layout.width; break; }
+            int e = text.indexOf(':', s + 1);
+            String glyph = e > s + 1 ? emojiGlyph(text.substring(s + 1, e)) : null;
+            if (glyph == null) {
+                layout.setText(Ui.fontSmall, text.substring(i, s + 1));
+                w += layout.width;
+                i = s + 1;
+            } else {
+                if (s > i) { layout.setText(Ui.fontSmall, text.substring(i, s)); w += layout.width; }
+                layout.setText(Ui.fa20, glyph);
+                w += layout.width + 3;
+                i = e + 1;
+            }
+        }
+        return w;
+    }
+
+    /** Vẽ một dòng chat có thể chứa mã emoji :ten: (icon FA vẽ inline,
+     *  màu riêng của icon khi color = null, ngược lại dùng color chung).
+     *  Trả về x ngay sau ký tự cuối. */
+    private float drawRichText(String text, float x, float baselineY, Color color) {
+        float cx = x;
+        int i = 0;
+        while (i < text.length()) {
+            int s = text.indexOf(':', i);
+            if (s < 0) {
+                Ui.fontSmall.setColor(color != null ? color : RICH_DEFAULT);
+                Ui.fontSmall.draw(batch, text.substring(i), cx, baselineY);
+                layout.setText(Ui.fontSmall, text.substring(i));
+                cx += layout.width;
+                break;
+            }
+            int e = text.indexOf(':', s + 1);
+            String name = e > s + 1 ? text.substring(s + 1, e) : null;
+            String glyph = name != null ? emojiGlyph(name) : null;
+            if (glyph == null) {
+                Ui.fontSmall.setColor(color != null ? color : RICH_DEFAULT);
+                Ui.fontSmall.draw(batch, text.substring(i, s + 1), cx, baselineY);
+                layout.setText(Ui.fontSmall, text.substring(i, s + 1));
+                cx += layout.width;
+                i = s + 1;
+            } else {
+                if (s > i) {
+                    Ui.fontSmall.setColor(color != null ? color : RICH_DEFAULT);
+                    Ui.fontSmall.draw(batch, text.substring(i, s), cx, baselineY);
+                    layout.setText(Ui.fontSmall, text.substring(i, s));
+                    cx += layout.width;
+                }
+                layout.setText(Ui.fa20, glyph);
+                float iw = layout.width + 3;
+                Color ic = color;
+                if (ic == null) {
+                    for (int k = 0; k < CHAT_EMOJIS.length; k++)
+                        if (CHAT_EMOJIS[k][0].equals(name)) { ic = EMOJI_COLORS[k]; break; }
+                }
+                Ui.faIcon(batch, Ui.fa20, glyph, cx + iw / 2f, baselineY - 5, ic);
+                cx += iw;
+                i = e + 1;
+            }
+        }
+        return cx;
     }
     private final StringBuilder typeBuffer = new StringBuilder();
     private boolean menuOpen = false;
@@ -733,6 +839,7 @@ public class WorldScreen extends ScreenAdapter {
      *  và dòng chat của mình hiện khi server phát lại (echo) như client gốc. */
     private void sendChat() {
         typing = false;
+        emojiOpen = false;
         String msg = typeBuffer.toString().trim();
         typeBuffer.setLength(0);
         if (msg.isEmpty()) return;
@@ -904,17 +1011,18 @@ public class WorldScreen extends ScreenAdapter {
     }
     public void debugCloseBoard() { boardOpen = false; }
     public void debugToggleChatBig() { chatExpanded = !chatExpanded; }
+    public void debugOpenEmoji() { emojiOpen = true; typing = true; }
     /** Nạp vài dòng chat mẫu vào tab Gần đây để kiểm chứng panel chat. */
     public void debugChatDemo() {
         String[][] demo = {
             {"Linh", "Chào Sơn! Map đông vui quá nè"},
             {"Sơn", "Ừ, khu này đang đông thật"},
             {"Tuấn", "Ai đi săn boss chung không?"},
-            {"Linh", "Tớ nè, chờ tớ qua cổng cái"},
+            {"Linh", "Tớ nè :heart: chờ tớ qua cổng cái"},
             {"Sơn", "Ok đứng ở trạm xe nhé"},
-            {"Tuấn", "Xe buýt sắp tới rồi đó"},
+            {"Tuấn", "Xe buýt sắp tới rồi đó :rocket:"},
             {"Linh", "Thấy rồi, lên xe thôi nào"},
-            {"Sơn", "Nhớ đổi khu 2 cho đỡ lag nha"},
+            {"Sơn", "Nhớ đổi khu 2 cho đỡ lag nha :up:"},
         };
         for (String[] d : demo) addChatLog(TAB_NEARBY, d[0], d[1], false);
         activeChatTab = TAB_NEARBY;
@@ -1187,6 +1295,31 @@ public class WorldScreen extends ScreenAdapter {
             float ebX = CHAT_X + CHAT_W - 48, ebY = CHAT_Y + chatH - 48;
             if (x >= ebX && x <= ebX + 38 && y >= ebY && y <= ebY + 38) {
                 chatExpanded = !chatExpanded;
+                return;
+            }
+        }
+        // ô emoji đang mở: chạm một icon để chèn mã :ten: vào ô nhập
+        if (emojiOpen) {
+            float[] g = emojiPanelGeom();
+            if (x >= g[0] && x <= g[0] + EMOJI_PANEL_W && y >= g[1] && y <= g[1] + EMOJI_PANEL_H) {
+                int col = (int) ((x - g[0] - 6) / EMOJI_CELL);
+                int row = (int) ((g[1] + EMOJI_PANEL_H - 6 - y) / EMOJI_CELL);
+                int idx = row * 6 + col;
+                if (col >= 0 && col < 6 && row >= 0 && row < 3 && idx < CHAT_EMOJIS.length) {
+                    String token = ":" + CHAT_EMOJIS[idx][0] + ":";
+                    if (typeBuffer.length() + token.length() <= 60) typeBuffer.append(token);
+                    typing = true;
+                }
+                return;
+            }
+        }
+        // nút mở ô emoji (nằm giữa ô nhập và nút Gửi)
+        {
+            float emojiX = CHAT_X + CHAT_W - 8 - CHAT_SEND_W - 6 - EMOJI_BTN_W;
+            if (x >= emojiX && x <= emojiX + EMOJI_BTN_W
+                    && y >= CHAT_Y + 7 && y <= CHAT_Y + 7 + CHAT_INPUT_H) {
+                emojiOpen = !emojiOpen;
+                if (emojiOpen) typing = true;
                 return;
             }
         }
@@ -1566,13 +1699,11 @@ public class WorldScreen extends ScreenAdapter {
     }
 
     private void drawBubble(PaperDoll doll, AvatarAnimator anim, float feetX, float feetY, String text) {
-        layout.setText(Ui.fontSmall, text);
-        float w = layout.width + 28f, h = 40f;
+        float w = richWidth(text) + 28f, h = 40f;
         float topY = feetY + game.dollRenderer.heightPx(doll, anim.frameIndex(), AvatarDkGame.HD);
         float x = feetX - w / 2f, y = topY + 32f;
         batch.draw(Ui.roundedRect((int) w, (int) h, 12, new Color(1f, 1f, 1f, 0.95f), new Color(0.2f, 0.2f, 0.2f, 0.9f)), x, y);
-        Ui.fontSmall.setColor(0.08f, 0.08f, 0.1f, 1f);
-        Ui.fontSmall.draw(batch, text, x + 14f, y + 27f);
+        drawRichText(text, x + 14f, y + 27f, new Color(0.08f, 0.08f, 0.1f, 1f));
     }
 
     private void drawHud(float playerFeetX, float playerFeetY) {
@@ -1645,15 +1776,20 @@ public class WorldScreen extends ScreenAdapter {
             ChatLine l = log.get(log.size() - n + i);
             float ly = CHAT_Y + CHAT_INPUT_H + 14 + (n - 1 - i) * CHAT_LINE_H + 15;
             if (l.system) {
-                Ui.fontSmall.setColor(1f, 0.62f, 0.35f, 1f);
-                Ui.fontSmall.draw(batch, l.text, CHAT_X + 14, ly);
+                drawRichText(l.text, CHAT_X + 14, ly, new Color(1f, 0.62f, 0.35f, 1f));
             } else {
                 Ui.fontSmall.setColor(0.65f, 0.9f, 1f, 1f);
                 Ui.fontSmall.draw(batch, l.name + ":", CHAT_X + 14, ly);
                 layout.setText(Ui.fontSmall, l.name + ":");
-                Ui.fontSmall.setColor(1f, 1f, 1f, 0.95f);
-                Ui.fontSmall.draw(batch, l.text, CHAT_X + 14 + layout.width + 6, ly);
+                drawRichText(l.text, CHAT_X + 14 + layout.width + 6, ly, null);
             }
+            // giờ gửi nằm ở góc phải của chính dòng tin nhắn đó (chữ mờ);
+            // dòng trên cùng né sang trái nút phóng to ở góc panel
+            float timeRight = ly > CHAT_Y + chatH - 56
+                ? CHAT_X + CHAT_W - 48 - 8 : CHAT_X + CHAT_W - 14;
+            Ui.fontSmall.setColor(1f, 1f, 1f, 0.42f);
+            layout.setText(Ui.fontSmall, l.time);
+            Ui.fontSmall.draw(batch, l.time, timeRight - layout.width, ly);
         }
         if (n == 0) {
             Ui.fontSmall.setColor(1f, 1f, 1f, 0.45f);
@@ -1661,18 +1797,27 @@ public class WorldScreen extends ScreenAdapter {
                 ? "Chưa có tin nhắn thế giới nào." : "Chưa có tin nhắn nào.",
                 CHAT_X + 14, CHAT_Y + CHAT_INPUT_H + 35);
         }
-        // ô nhập (chừa chỗ cho nút Gửi ở cuối)
-        float inputW = CHAT_W - 16 - CHAT_SEND_W - 8;
+        // ô nhập (chừa chỗ cho nút emoji + nút Gửi ở cuối)
+        float inputW = CHAT_W - 16 - CHAT_SEND_W - 8 - EMOJI_BTN_W - 6;
         Color inRim = typing ? new Color(1f, 0.8f, 0.35f, 0.95f) : GLASS_RIM;
         batch.draw(Ui.roundedRect((int) inputW, (int) CHAT_INPUT_H, 10,
             new Color(1f, 1f, 1f, typing ? 0.96f : 0.88f), inRim), CHAT_X + 8, CHAT_Y + 7);
         if (typing) {
+            float endX = drawRichText(typeBuffer.toString(), CHAT_X + 20, CHAT_Y + 30,
+                new Color(0.1f, 0.1f, 0.12f, 1f));
             Ui.fontSmall.setColor(0.1f, 0.1f, 0.12f, 1f);
-            Ui.fontSmall.draw(batch, typeBuffer.toString() + "|", CHAT_X + 20, CHAT_Y + 30);
+            Ui.fontSmall.draw(batch, "|", endX + 1, CHAT_Y + 30);
         } else {
             Ui.fontSmall.setColor(0.35f, 0.38f, 0.42f, 1f);
-            Ui.fontSmall.draw(batch, "Nhấn Enter hoặc chạm vào đây để chat…", CHAT_X + 20, CHAT_Y + 30);
+            Ui.fontSmall.draw(batch, "Nhập nội dung", CHAT_X + 20, CHAT_Y + 30);
         }
+        // nút mở ô emoji: icon mặt cười FA trên nền kính cùng tông panel
+        float emojiX = CHAT_X + CHAT_W - 8 - CHAT_SEND_W - 6 - EMOJI_BTN_W;
+        batch.draw(Ui.roundedRect((int) EMOJI_BTN_W, (int) CHAT_INPUT_H, 10,
+            new Color(0.10f, 0.17f, 0.26f, 0.97f), GLASS_RIM), emojiX, CHAT_Y + 7);
+        Ui.faIcon(batch, Ui.fa20, Ui.FA_FACE_SMILE,
+            emojiX + EMOJI_BTN_W / 2f, CHAT_Y + 7 + CHAT_INPUT_H / 2f,
+            emojiOpen ? new Color(1f, 0.85f, 0.4f, 1f) : Color.WHITE);
         // nút Gửi: ICON máy bay giấy Font Awesome trên nền kính cùng tông
         // panel (chủ dự án chốt: bỏ chữ "Gửi" + bỏ màu cam)
         float sendX = CHAT_X + CHAT_W - 8 - CHAT_SEND_W;
@@ -1687,6 +1832,24 @@ public class WorldScreen extends ScreenAdapter {
             new Color(0.10f, 0.17f, 0.26f, 0.97f), GLASS_RIM), ebX, ebY);
         Ui.faIcon(batch, Ui.fa20, chatExpanded ? Ui.FA_COMPRESS : Ui.FA_EXPAND,
             ebX + ebS / 2f, ebY + ebS / 2f, Color.WHITE);
+        // ô emoji (popover): lưới 6×3 icon FA ngay trên hàng nhập, neo phải;
+        // chạm một icon là chèn mã :ten: vào ô nhập, panel giữ mở để chèn tiếp
+        if (emojiOpen) {
+            float[] g = emojiPanelGeom();
+            batch.draw(Ui.roundedRect((int) EMOJI_PANEL_W, (int) EMOJI_PANEL_H, 12,
+                new Color(0.05f, 0.10f, 0.17f, 0.97f), GLASS_RIM), g[0], g[1]);
+            for (int i = 0; i < CHAT_EMOJIS.length; i++) {
+                int col = i % 6, row = i / 6;
+                float cx = g[0] + 6 + col * EMOJI_CELL + EMOJI_CELL / 2f;
+                float cy = g[1] + EMOJI_PANEL_H - 6 - row * EMOJI_CELL - EMOJI_CELL / 2f;
+                Ui.faIcon(batch, Ui.fa20, CHAT_EMOJIS[i][1], cx, cy, EMOJI_COLORS[i]);
+            }
+        }
+    }
+
+    /** Hình học ô emoji {px, py} dùng chung cho vẽ và chạm. */
+    private float[] emojiPanelGeom() {
+        return new float[]{CHAT_X + CHAT_W - 8 - EMOJI_PANEL_W, CHAT_Y + CHAT_INPUT_H + 14};
     }
 
     /** Trái trên — card glass gọn: avatar trong KHUNG VUÔNG (huy hiệu Lv nằm ở góc

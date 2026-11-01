@@ -37,9 +37,33 @@ public final class Ui {
     public static final String FA_SEND = "\uf1d8";
     public static final String FA_EXPAND = "\uf065";
     public static final String FA_COMPRESS = "\uf066";
+    public static final String FA_FACE_SMILE = "\uf118";
+    public static final String FA_MICROPHONE = "\uf130";
+    // Bộ icon dùng làm emoji trong chat (không có icon mặt — mặt đã có
+    // sheet đổi biểu cảm riêng cho nhân vật, chủ dự án chốt 2026-10-31)
+    public static final String FA_HEART = "\uf004";
+    public static final String FA_STAR = "\uf005";
+    public static final String FA_THUMBS_UP = "\uf164";
+    public static final String FA_THUMBS_DOWN = "\uf165";
+    public static final String FA_FIRE = "\uf06d";
+    public static final String FA_GIFT = "\uf06b";
+    public static final String FA_MUSIC = "\uf001";
+    public static final String FA_BOLT = "\uf0e7";
+    public static final String FA_CROWN = "\uf521";
+    public static final String FA_GEM = "\uf3a5";
+    public static final String FA_TROPHY = "\uf091";
+    public static final String FA_CAKE = "\uf1fd";
+    public static final String FA_PIZZA = "\uf818";
+    public static final String FA_ICE_CREAM = "\uf810";
+    public static final String FA_CAT = "\uf6be";
+    public static final String FA_DOG = "\uf6d3";
+    public static final String FA_ROCKET = "\uf135";
     private static final String FA_SOLID_CHARS = FA_BELL + FA_TRASH + FA_HEADSET + FA_SUN
         + FA_USER + FA_LOCK + FA_EYE + FA_EYE_SLASH + FA_CHECK + FA_XMARK + FA_SEND
-        + FA_EXPAND + FA_COMPRESS;
+        + FA_EXPAND + FA_COMPRESS + FA_FACE_SMILE + FA_MICROPHONE
+        + FA_HEART + FA_STAR + FA_THUMBS_UP + FA_THUMBS_DOWN + FA_FIRE + FA_GIFT
+        + FA_MUSIC + FA_BOLT + FA_CROWN + FA_GEM + FA_TROPHY + FA_CAKE + FA_PIZZA
+        + FA_ICE_CREAM + FA_CAT + FA_DOG + FA_ROCKET;
     // Glyph Font Awesome (brands)
     public static final String FA_GOOGLE = "\uf1a0";
     public static final String FA_APPLE = "\uf179";
