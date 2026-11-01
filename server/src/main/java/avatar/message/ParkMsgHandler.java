@@ -62,7 +62,7 @@ public class ParkMsgHandler extends MessageHandler {
                     break;
 
                 case Cmd.AVATAR_GIVING_DEFERR:
-                    this.client.user.doGivingPark(mss);
+                    this.client.user.doAction(mss);
                     break;
 
                 case Cmd.ADD_FRIEND:

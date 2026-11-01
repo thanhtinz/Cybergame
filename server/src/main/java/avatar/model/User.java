@@ -1357,21 +1357,6 @@ public class User {
         }
     }
 
-    /** Hành động đùa gói 59 (Đánh/Hôn): đọc {int id đích, short mã} từ
-     *  reader() rồi nhờ MapService phát cho cả zone. */
-    public void doGivingPark(Message ms) {
-        try {
-            java.io.DataInputStream r = ms.reader();
-            int idTo = r.readInt();
-            int actionId = r.readShort();
-            if (this.getMapService() != null) {
-                this.getMapService().doGivingPark(id, idTo, actionId);
-            }
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
-    }
-
     public void close() throws IOException {
         if (zone != null) {
             zone.leave(this);

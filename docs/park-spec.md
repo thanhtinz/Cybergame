@@ -133,12 +133,21 @@ gốc (MainMenu.doExchange + ParkService/GlobalService của C#):
   byte cấp, byte %cấp, byte thân thiện, byte crazy (server gửi 0), byte
   phong cách, byte vui vẻ, byte độ no (100 − hunger), ...đuôi hẹn hò}.
   Client hiện thẻ kính: cấp + 4 thanh Thân thiện/Phong cách/Vui vẻ/Độ no.
-- **Đánh/Hôn — gói 59 (GIVING_DEFERR)**: C→S {int id đích, short mã}
-  (100 = đánh, 101 = hôn). Pack5 server THIẾU handler — bản port bổ sung
-  `User.doGivingPark` → `MapService.doGivingPark` phát cả zone (kể cả
-  người gửi) S→C {int nguồn, int đích, short mã, short time=5} đúng format
-  `MapScr.onGivingDefferent` của gốc. Client vẽ hiệu ứng tại chỗ nhận gói:
-  hôn = tim hồng bay lên trên đầu người bị hôn, đánh = chùm sao vàng.
+- **Đánh/Hôn — gói 59 (Cmd.ACTION)**: C→S {int id đích, short mã}
+  (100 = đánh, 101 = hôn). Server gốc CÓ sẵn đường này ở MessageHandler:
+  `User.doAction` → `MapService.doAction` phát cả zone (kể cả người gửi)
+  S→C {int nguồn, int đích, short mã, short time=10} (mã −1 thì thay
+  time bằng UTF text) đúng format `MapScr.onGivingDefferent` của gốc.
+  Client vẽ hiệu ứng tại chỗ nhận gói: hôn = tim hồng bay lên trên đầu
+  người bị hôn, đánh = chùm sao vàng.
+- **LƯU Ý HANDLER (đã kiểm chứng bằng log + test sống)**: phiên chơi park
+  sống ở **MessageHandler** từ đầu tới cuối — client gốc không hề đổi
+  handler khi vào park (GET_HANDLER 9 → ParkMsgHandler chỉ là chế độ
+  riêng). Mọi gói park (50/54/55/57/59/60/61, −22) đều do MessageHandler
+  xử lý. Riêng −6/−21/−19 Pack5 CHỈ có ở AvatarMsgHandler/ParkMsgHandler
+  nên ở phiên park thật chúng bị rơi — bản port đã bổ sung 3 case vào
+  MessageHandler, uỷ thác cho cùng AvatarService.chatToUser /
+  ParkService.handleAddFriendRequest / handleAddFriendReply.
 - **Tặng quà (gói 58)** cần shop quà 26 + trừ tiền → đợt Shop. **Mời về
   nhà (gói −68 {byte type, int id})** → đợt Nhà. Cả hai nút báo rõ trong
   tab Hệ thống khi bấm, không giả vờ chạy.

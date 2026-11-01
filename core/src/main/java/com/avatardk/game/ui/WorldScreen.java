@@ -1614,7 +1614,7 @@ public class WorldScreen extends ScreenAdapter {
                     return;
                 }
             }
-            if (x >= px && x <= px + PP_W && y >= py && y <= py + PP_H) return;
+            if (x >= px && x <= px + PP_W && y >= py && y <= py + PP_H + 34) return;
             panelPlayer = null; // chạm ra ngoài: đóng, chạm đó xử lý tiếp ở dưới
             panelSub = false;
         }
@@ -1844,7 +1844,8 @@ public class WorldScreen extends ScreenAdapter {
         int[] b = panelPlayer.doll.bounds(panelPlayer.anim.frameIndex());
         float headTop = feetScr + (-b[1]) * AvatarDkGame.HD + 28f;
         float px = MathUtils.clamp(sx - PP_W / 2f, 8f, Ui.W - PP_W - 8f);
-        float py = Math.min(headTop + PP_TAIL, Ui.H - PP_H - 6f);
+        // chừa thêm 40px phía trên cho avatar tròn nhô khỏi mép panel
+        float py = Math.min(headTop + PP_TAIL, Ui.H - PP_H - 40f);
         return new float[]{px, Math.max(py, 8f), 1f};
     }
     /** Hàng con + thẻ thông tin xếp tiếp PHÍA TRÊN panel nếu đủ chỗ;
@@ -1855,7 +1856,7 @@ public class WorldScreen extends ScreenAdapter {
         boolean infoShown = infoStats != null && panelPlayer != null
             && infoForId == panelPlayer.info.id;
         float extras = (panelSub ? PP_SUB_H + 8f : 0f) + (infoShown ? 118f + 8f : 0f);
-        return g[1] + PP_H + extras <= Ui.H - 6f;
+        return g[1] + PP_H + 34f + extras <= Ui.H - 6f;
     }
     private float ppBtnX(int i) { return playerPanelGeom()[0] + 41f + i * 80f; }
     private float ppBtnY() { return playerPanelGeom()[1] + 32f; }
@@ -1885,6 +1886,30 @@ public class WorldScreen extends ScreenAdapter {
             pm.dispose();
         }
         return tailTex;
+    }
+    private Texture circleTex, ringTex;
+    private Texture circleTexture() {
+        if (circleTex == null) {
+            Pixmap pm = new Pixmap(76, 76, Pixmap.Format.RGBA8888);
+            pm.setColor(1f, 1f, 1f, 1f);
+            pm.fillCircle(38, 38, 37);
+            circleTex = new Texture(pm);
+            pm.dispose();
+        }
+        return circleTex;
+    }
+    private Texture ringTexture() {
+        if (ringTex == null) {
+            Pixmap pm = new Pixmap(76, 76, Pixmap.Format.RGBA8888);
+            pm.setColor(1f, 1f, 1f, 1f);
+            pm.fillCircle(38, 38, 37);
+            pm.setBlending(Pixmap.Blending.None);
+            pm.setColor(0f, 0f, 0f, 0f);
+            pm.fillCircle(38, 38, 30);
+            ringTex = new Texture(pm);
+            pm.dispose();
+        }
+        return ringTex;
     }
 
     private String remoteName(int id) {
@@ -2021,13 +2046,14 @@ public class WorldScreen extends ScreenAdapter {
         if (!remotes.containsValue(f)) { panelPlayer = null; panelSub = false; return; }
         float[] g = playerPanelGeom();
         float px = g[0], py = g[1];
-        // đuôi nhọn dưới đáy panel, chỉ xuống đầu nhân vật được chọn
-        // (đặc hơn nền panel để đọc rõ trên nền phố sáng)
+        // đuôi nhọn dưới đáy panel, chỉ xuống đầu nhân vật được chọn;
+        // gốc đuôi cắm sâu vào trong panel + miếng vá cùng màu phủ lên
+        // viền đáy panel ở đúng đoạn đuôi mọc ra -> LIỀN MẠCH một khối
         float tailCx = panelTailCx();
         batch.setColor(GLASS_RIM);
-        batch.draw(tailTexture(), tailCx - 22, py - 25, 44, 27);
+        batch.draw(tailTexture(), tailCx - 22, py - 25, 44, 31);
         batch.setColor(0.10f, 0.16f, 0.24f, 0.96f);
-        batch.draw(tailTexture(), tailCx - 17, py - 21, 34, 21);
+        batch.draw(tailTexture(), tailCx - 17, py - 21, 34, 25);
         batch.setColor(Color.WHITE);
         // hàng con Tương tác (ô icon + nhãn DƯỚI ô như panel chính)
         if (panelSub) {
@@ -2071,10 +2097,17 @@ public class WorldScreen extends ScreenAdapter {
         }
         // panel chính
         batch.draw(Ui.roundedRect((int) PP_W, (int) PP_H, 16, GLASS_FILL_DARK, GLASS_RIM), px, py);
-        // avatar: chân dung doll cắt theo khung như card người chơi
-        float avX = px + 16, avY = py + PP_H - 14 - 64, avS = 64;
-        batch.draw(Ui.roundedRect((int) avS, (int) avS, 8,
-            new Color(0.35f, 0.55f, 0.75f, 0.35f), GLASS_RIM), avX, avY);
+        // vá liền mạch: phủ viền đáy panel đúng đoạn đuôi mọc ra
+        batch.setColor(0.10f, 0.16f, 0.24f, 0.96f);
+        batch.draw(whiteTex, tailCx - 15, py - 1, 30, 6);
+        batch.setColor(Color.WHITE);
+        // avatar TRÒN nhô lên khỏi mép trên panel như mẫu: nền tròn +
+        // chân dung doll + vòng viền sáng đè lên góc
+        float avCx = px + 48, avCy = py + PP_H - 4;
+        float avX = avCx - 30, avY = avCy - 30, avS = 60;
+        batch.setColor(0.35f, 0.55f, 0.75f, 0.55f);
+        batch.draw(circleTexture(), avCx - 31, avCy - 31, 62, 62);
+        batch.setColor(Color.WHITE);
         int[] b = f.doll.bounds(f.anim.frameIndex());
         float unit = 4f;
         float feetX = avX + avS / 2f - ((b[0] + b[2]) / 2f) * unit;
@@ -2088,9 +2121,20 @@ public class WorldScreen extends ScreenAdapter {
             batch.flush();
             ScissorStack.popScissors();
         }
-        // tên vàng như mẫu, canh giữa theo chiều cao avatar
+        // vòng viền sáng quanh avatar (đè lên góc vuông của chân dung)
+        batch.setColor(0.72f, 0.84f, 1f, 1f);
+        batch.draw(ringTexture(), avCx - 38, avCy - 38, 76, 76);
+        batch.setColor(Color.WHITE);
+        // tên vàng VIỀN NÂU ĐẬM như mẫu, canh giữa theo avatar tròn
+        String nm = f.info.name;
+        float nx = px + 100, ny = avCy + 11;
+        Ui.font.setColor(0.30f, 0.16f, 0.04f, 1f);
+        Ui.font.draw(batch, nm, nx - 1.6f, ny);
+        Ui.font.draw(batch, nm, nx + 1.6f, ny);
+        Ui.font.draw(batch, nm, nx, ny - 1.6f);
+        Ui.font.draw(batch, nm, nx, ny + 1.6f);
         Ui.font.setColor(1f, 0.83f, 0.38f, 1f);
-        Ui.font.draw(batch, f.info.name, px + 94, avY + 42);
+        Ui.font.draw(batch, nm, nx, ny);
         Ui.font.setColor(Color.WHITE);
         Ui.font.draw(batch, "X", px + PP_W - 38, py + PP_H - 18);
         // 5 nút chính: ô icon bo góc + nhãn nằm DƯỚI ô (đúng mẫu)

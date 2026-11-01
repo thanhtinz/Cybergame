@@ -225,6 +225,32 @@ public class MessageHandler implements IMessageHandler {
                         }
                         break;
                     }
+                    // [BỔ SUNG CỦA BẢN PORT] 3 gói tương tác Pack5 chỉ có ở
+                    // AvatarMsgHandler/ParkMsgHandler, nhưng phiên chơi park
+                    // thực tế sống ở MessageHandler (client không đổi handler
+                    // khi vào park) nên phải có ở đây thì mới chạy được:
+                    // nhắn riêng −6, mời kết bạn −21, trả lời kết bạn −19.
+                    case Cmd.CHAT_TO: {
+                        if (this.client.user != null) {
+                            this.client.getAvatarService().chatToUser(mss);
+                            break;
+                        }
+                        break;
+                    }
+                    case Cmd.AVATAR_REQUEST_ADD_FRIEND: {
+                        if (this.client.user != null) {
+                            this.client.getParkService().handleAddFriendRequest(mss);
+                            break;
+                        }
+                        break;
+                    }
+                    case Cmd.ADD_FRIEND: {
+                        if (this.client.user != null) {
+                            this.client.getParkService().handleAddFriendReply(mss);
+                            break;
+                        }
+                        break;
+                    }
                     case -27: {
                         this.client.handshakeMessage();
                         break;

@@ -157,23 +157,6 @@ public class MapService extends Service {
         }
     }
 
-    /** Phát hành động đùa (gói 59: Đánh/Hôn) cho cả zone, kể cả người gửi
-     *  — hiệu ứng bên client chạy khi nhận gói này, như client gốc. */
-    public void doGivingPark(int fromId, int toId, int actionId) {
-        try {
-            Message ms = new Message(Cmd.AVATAR_GIVING_DEFERR);
-            DataOutputStream ds = ms.writer();
-            ds.writeInt(fromId);
-            ds.writeInt(toId);
-            ds.writeShort(actionId);
-            ds.writeShort(5); // "time" theo format onGivingDefferent của gốc
-            ds.flush();
-            sendMessage(ms);
-        } catch (IOException ex) {
-            logger.error("doGivingPark()", ex);
-        }
-    }
-
     public void addPlayer(User us) {
         try {
             Message ms = new Message(51);
