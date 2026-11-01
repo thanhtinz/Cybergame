@@ -18,6 +18,9 @@ public class PlayerInfo {
     public int luong;
     public int luongKhoa;
     public int xeng;
+    /** 5 chỉ số trong gói đăng nhập (cùng thứ tự gói −22): thân thiện,
+     *  gây rối, sành điệu, vui vẻ, sức khỏe (= 100 − đói). */
+    public int friendly, crazy, stylish, happy, health;
     public String username = "";
 
     public static PlayerInfo parse(Msg m) throws IOException {
@@ -31,11 +34,11 @@ public class PlayerInfo {
         p.levelMain = r.readByte();
         p.levelPercent = r.readByte();
         p.xu = r.readInt();
-        r.readByte(); // friendly
-        r.readByte(); // crazy (gốc ghi cứng 10)
-        r.readByte(); // stylish (100)
-        r.readByte(); // happy (100)
-        r.readByte(); // 100 - hunger
+        p.friendly = r.readByte();
+        p.crazy = r.readByte(); // gốc ghi cứng 10
+        p.stylish = r.readByte(); // 100
+        p.happy = r.readByte(); // 100
+        p.health = r.readByte(); // 100 - hunger
         p.luong = r.readInt();
         r.readByte(); // star
         for (int i = 0; i < nParts; i++) {

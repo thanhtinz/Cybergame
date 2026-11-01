@@ -130,9 +130,18 @@ gốc (MainMenu.doExchange + ParkService/GlobalService của C#):
   quả" bằng tập id mình đang chờ (friendPending). Lưu danh sách bạn thuộc
   hệ bạn bè (đợt sau) — hiện chỉ chuyển tiếp thông báo.
 - **Thông tin — gói −22 (REQUEST_YOUR_INFO)**: C→S {int id}. S→C {int id,
-  byte cấp, byte %cấp, byte thân thiện, byte crazy (server gửi 0), byte
-  phong cách, byte vui vẻ, byte độ no (100 − hunger), ...đuôi hẹn hò}.
-  Client hiện thẻ kính: cấp + 4 thanh Thân thiện/Phong cách/Vui vẻ/Độ no.
+  byte cấp, byte %cấp, byte thân thiện, byte gây rối (crazy), byte sành
+  điệu, byte vui vẻ, byte sức khỏe (100 − hunger), int id người yêu
+  (−1 = không có); nếu có: UTF tên, byte số part + short partIds (doll
+  người yêu), UTF slogan, short idImage, byte cấp, byte %cấp, UTF tên
+  quan hệ, short idAction (−1 = không có; có thì thêm UTF tên hành động);
+  cuối gói có thể còn short cấp của chính mình}. Đích khác mình → thẻ
+  kính trên panel người chơi (cấp + 5 thanh). Đích là mình → **panel
+  nhân vật** (bấm card góc trái trên): cột tiền icon myinfo gốc (Xu,
+  Lượng, Lượng khoá, Xèng, Cấp+%), doll đứng lớn + người yêu đứng cạnh
+  nếu có, 6 thanh chỉ số như CommandInfo của gốc (myIndex: Lv, T.Thiện,
+  G.Rối, S.Điệu, V.Vẻ, S.Khỏe). PlayerInfo.parse cũng đã giữ 5 chỉ số
+  trong gói đăng nhập làm số dự phòng khi chưa có −22.
 - **Đánh/Hôn — gói 59 (Cmd.ACTION)**: C→S {int id đích, short mã}
   (100 = đánh, 101 = hôn). Server gốc CÓ sẵn đường này ở MessageHandler:
   `User.doAction` → `MapService.doAction` phát cả zone (kể cả người gửi)

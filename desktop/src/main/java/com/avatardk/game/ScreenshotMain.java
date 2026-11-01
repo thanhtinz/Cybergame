@@ -415,6 +415,40 @@ public class ScreenshotMain {
                         }
                         if (frame == 25) {
                             shot("shot-player-panel-sub.png");
+                            // Sân khấu panel nhân vật: bơm gói −22 của CHÍNH
+                            // Sơn (id 999) kèm khối người yêu (Linh) rồi mở
+                            game.player.xu = 12500;
+                            game.player.luong = 260;
+                            game.player.luongKhoa = 1500;
+                            game.player.xeng = 42;
+                            try {
+                                java.io.ByteArrayOutputStream bos = new java.io.ByteArrayOutputStream();
+                                java.io.DataOutputStream w = new java.io.DataOutputStream(bos);
+                                w.writeInt(999);
+                                w.writeByte(50); w.writeByte(35); w.writeByte(90);
+                                w.writeByte(10); w.writeByte(75); w.writeByte(95); w.writeByte(60);
+                                w.writeInt(7);
+                                w.writeUTF("Linh");
+                                java.util.List<Integer> lp = game.data.npcs.get(3).items;
+                                w.writeByte(lp.size());
+                                for (int pid : lp) w.writeShort(pid);
+                                w.writeUTF("Mãi mãi bên nhau");
+                                w.writeShort(0);
+                                w.writeByte(12); w.writeByte(40);
+                                w.writeUTF("Người yêu");
+                                w.writeShort(-1);
+                                w.flush();
+                                world.debugInjectNet((byte) -22, bos.toByteArray());
+                            } catch (java.io.IOException ioe) {
+                                throw new RuntimeException(ioe);
+                            }
+                            world.debugOpenCharPanel();
+                            stage = 27; frame = 0;
+                        }
+                        break;
+                    case 27:
+                        if (frame == 20) {
+                            shot("shot-char-panel.png");
                             System.out.println("SCREENSHOT DONE");
                             Gdx.app.exit();
                         }

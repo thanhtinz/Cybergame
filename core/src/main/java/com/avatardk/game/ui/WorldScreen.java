@@ -1172,19 +1172,52 @@ public class WorldScreen extends ScreenAdapter {
                     break;
                 }
                 case AvatarProtocol.REQUEST_YOUR_INFO: {
-                    // gói −22 trả về: {int id, 7 byte chỉ số, ...đuôi hẹn hò bỏ qua}
+                    // gói −22: {int id, byte cấp, byte %cấp, byte thân thiện,
+                    // byte gây rối, byte sành điệu, byte vui vẻ, byte sức khỏe,
+                    // int id người yêu (−1 = không có) + khối người yêu}
                     java.io.DataInputStream r = m.reader();
                     int id = r.readInt();
-                    int level = r.readByte() & 0xFF, pct = MathUtils.clamp(r.readByte(), 0, 100);
-                    int friendly = MathUtils.clamp(r.readByte(), 0, 100);
-                    r.readByte(); // crazy — server hiện gửi 0
-                    int stylish = MathUtils.clamp(r.readByte(), 0, 100);
-                    int happy = MathUtils.clamp(r.readByte(), 0, 100);
-                    int satiety = MathUtils.clamp(r.readByte(), 0, 100);
-                    infoStats = new int[]{level, pct, friendly, stylish, happy, satiety};
-                    infoForId = id;
-                    RemoteFigure f = remotes.get(id);
-                    if (f != null) panelPlayer = f;
+                    int[] st = new int[]{
+                        r.readByte() & 0xFF,
+                        MathUtils.clamp(r.readByte(), 0, 100),
+                        MathUtils.clamp(r.readByte(), 0, 100),
+                        MathUtils.clamp(r.readByte(), 0, 100),
+                        MathUtils.clamp(r.readByte(), 0, 100),
+                        MathUtils.clamp(r.readByte(), 0, 100),
+                        MathUtils.clamp(r.readByte(), 0, 100)};
+                    if (id == ownId()) {
+                        selfStats = st;
+                        partnerName = null;
+                        partnerDoll = null;
+                        try {
+                            if (r.available() >= 4) {
+                                int pid = r.readInt();
+                                if (pid != -1) {
+                                    partnerName = r.readUTF();
+                                    int n = r.readByte();
+                                    java.util.List<Integer> parts = new java.util.ArrayList<>();
+                                    for (int i = 0; i < n; i++) parts.add((int) r.readShort());
+                                    partnerSlogan = r.readUTF();
+                                    r.readShort(); // idImage quan hệ
+                                    partnerLv = r.readByte() & 0xFF;
+                                    partnerPct = MathUtils.clamp(r.readByte(), 0, 100);
+                                    partnerRel = r.readUTF();
+                                    if (r.available() >= 2) {
+                                        short act = r.readShort();
+                                        if (act != -1 && r.available() > 0) r.readUTF();
+                                    }
+                                    partnerDoll = new PaperDoll(game.data, parts);
+                                }
+                            }
+                        } catch (Exception ignored) {
+                            // đuôi người yêu thiếu/hỏng: bỏ qua, chỉ số chính vẫn dùng được
+                        }
+                    } else {
+                        infoStats = st;
+                        infoForId = id;
+                        RemoteFigure f = remotes.get(id);
+                        if (f != null) panelPlayer = f;
+                    }
                     break;
                 }
                 case AvatarProtocol.GIVING_DEFERR: {
@@ -1582,6 +1615,18 @@ public class WorldScreen extends ScreenAdapter {
             }
             return;
         }
+        // panel nhân vật đang mở: X đóng / trong panel nuốt / ngoài thì đóng
+        if (charPanel) {
+            float[] g = charPanelGeom();
+            float px = g[0], py = g[1];
+            if (x >= px + CP_W - 46 && x <= px + CP_W && y >= py + CP_H - 46 && y <= py + CP_H) {
+                charPanel = false;
+                return;
+            }
+            if (x >= px && x <= px + CP_W && y >= py && y <= py + CP_H) return;
+            charPanel = false;
+            return;
+        }
         // panel tương tác người chơi khác đang mở
         if (panelPlayer != null) {
             float[] g = playerPanelGeom();
@@ -1605,7 +1650,7 @@ public class WorldScreen extends ScreenAdapter {
             // thẻ thông tin đang hiện cũng thuộc panel: chạm vào thì nuốt
             if (infoStats != null && infoForId == panelPlayer.info.id) {
                 float iy = ppInfoY();
-                if (x >= px && x <= px + PP_W && y >= iy && y <= iy + 118) return;
+                if (x >= px && x <= px + PP_W && y >= iy && y <= iy + 130) return;
             }
             for (int i = 0; i < 5; i++) {
                 float bx = ppBtnX(i);
@@ -1617,6 +1662,11 @@ public class WorldScreen extends ScreenAdapter {
             if (x >= px && x <= px + PP_W && y >= py && y <= py + PP_H) return;
             panelPlayer = null; // chạm ra ngoài: đóng, chạm đó xử lý tiếp ở dưới
             panelSub = false;
+        }
+        // card nhân vật (trái trên): mở panel nhân vật
+        if (x >= CARD_X && x <= CARD_X + CARD_W && y >= Ui.H - 14 - CARD_H && y <= Ui.H - 14) {
+            openCharPanel();
+            return;
         }
         // nút burger (phải trên): mở/đóng panel kính
         if (x >= BURGER_X && x <= BURGER_X + BURGER_S && y >= BURGER_Y && y <= BURGER_Y + BURGER_S) {
@@ -1854,7 +1904,7 @@ public class WorldScreen extends ScreenAdapter {
         float[] g = playerPanelGeom();
         boolean infoShown = infoStats != null && panelPlayer != null
             && infoForId == panelPlayer.info.id;
-        float extras = (panelSub ? PP_SUB_H + 8f : 0f) + (infoShown ? 118f + 8f : 0f);
+        float extras = (panelSub ? PP_SUB_H + 8f : 0f) + (infoShown ? 130f + 8f : 0f);
         return g[1] + PP_H + extras <= Ui.H - 6f;
     }
     private float ppBtnX(int i) { return playerPanelGeom()[0] + 41f + i * 80f; }
@@ -1869,7 +1919,7 @@ public class WorldScreen extends ScreenAdapter {
         if (ppExtrasUp()) {
             return (panelSub ? ppSubY() + PP_SUB_H : g[1] + PP_H) + 8f;
         }
-        return (panelSub ? ppSubY() : g[1]) - 8f - 118f;
+        return (panelSub ? ppSubY() : g[1]) - 8f - 130f;
     }
     private float panelTailCx() {
         float[] g = playerPanelGeom();
@@ -2069,18 +2119,19 @@ public class WorldScreen extends ScreenAdapter {
         }
         if (infoStats != null && infoForId == f.info.id) {
             float iy = ppInfoY();
-            batch.draw(Ui.roundedRect((int) PP_W, 118, 14, GLASS_FILL_DARK, GLASS_RIM), px, iy);
+            batch.draw(Ui.roundedRect((int) PP_W, 130, 14, GLASS_FILL_DARK, GLASS_RIM), px, iy);
             Ui.fontSmall.setColor(1f, 0.85f, 0.45f, 1f);
-            Ui.fontSmall.draw(batch, "THÔNG TIN", px + 18, iy + 118 - 14);
+            Ui.fontSmall.draw(batch, "THÔNG TIN", px + 18, iy + 130 - 14);
             Ui.fontSmall.setColor(1f, 1f, 1f, 0.92f);
             String lv = "Cấp " + infoStats[0] + " · " + infoStats[1] + "%";
             layout.setText(Ui.fontSmall, lv);
-            Ui.fontSmall.draw(batch, lv, px + PP_W - 18 - layout.width, iy + 118 - 14);
-            String[] labels = {"Thân thiện", "Phong cách", "Vui vẻ", "Độ no"};
-            Color[] cols = {new Color(0.45f, 0.9f, 0.5f, 0.95f), new Color(0.6f, 0.72f, 1f, 0.95f),
-                new Color(1f, 0.8f, 0.35f, 0.95f), new Color(1f, 0.55f, 0.4f, 0.95f)};
-            for (int i = 0; i < 4; i++) {
-                float by = iy + 76 - i * 19;
+            Ui.fontSmall.draw(batch, lv, px + PP_W - 18 - layout.width, iy + 130 - 14);
+            String[] labels = {"Thân thiện", "Gây rối", "Sành điệu", "Vui vẻ", "Sức khỏe"};
+            Color[] cols = {new Color(0.45f, 0.9f, 0.5f, 0.95f), new Color(0.9f, 0.45f, 0.6f, 0.95f),
+                new Color(0.6f, 0.72f, 1f, 0.95f), new Color(1f, 0.8f, 0.35f, 0.95f),
+                new Color(1f, 0.55f, 0.4f, 0.95f)};
+            for (int i = 0; i < 5; i++) {
+                float by = iy + 90 - i * 19;
                 Ui.fontTiny.setColor(1f, 1f, 1f, 0.8f);
                 Ui.fontTiny.draw(batch, labels[i], px + 18, by + 4);
                 batch.draw(Ui.roundedRect(300, 10, 5, new Color(0f, 0f, 0f, 0.45f), GLASS_RIM),
@@ -2167,6 +2218,134 @@ public class WorldScreen extends ScreenAdapter {
         batch.draw(Ui.roundedRect(150, 46, 10, new Color(0.32f, 0.09f, 0.09f, 0.88f), GLASS_RIM),
             px + pw - 52 - 150, py + 22);
         Ui.centered(batch, Ui.font, "Từ chối", px + pw - 52 - 75, py + 22 + 31, Color.WHITE);
+    }
+
+    // ================= Panel nhân vật (bấm card góc trái) =================
+    // Theo CommandInfo của gốc: cột tiền bằng icon myinfo + doll đứng lớn
+    // (+ người yêu nếu có) + 6 thanh chỉ số ở dưới.
+    private static final float CP_W = 640f, CP_H = 470f;
+    private boolean charPanel = false;
+    private int[] selfStats;
+    private String partnerName, partnerRel, partnerSlogan;
+    private int partnerLv, partnerPct;
+    private PaperDoll partnerDoll;
+
+    private void openCharPanel() {
+        charPanel = true;
+        panelPlayer = null;
+        panelSub = false;
+        GameConnection conn = game.connection;
+        if (conn != null && !conn.isClosed()) {
+            try {
+                AvatarProtocol.requestYourInfo(conn, ownId());
+            } catch (Exception ignored) {
+            }
+        }
+    }
+
+    /** Chỉ số hiển thị: ưu tiên −22 tươi, chưa có thì lấy số lúc đăng nhập. */
+    private int[] charStats() {
+        if (selfStats != null) return selfStats;
+        com.avatardk.game.net.PlayerInfo p = game.player;
+        if (p == null) return null;
+        return new int[]{p.levelMain, p.levelPercent,
+            MathUtils.clamp(p.friendly, 0, 100), MathUtils.clamp(p.crazy, 0, 100),
+            MathUtils.clamp(p.stylish, 0, 100), MathUtils.clamp(p.happy, 0, 100),
+            MathUtils.clamp(p.health, 0, 100)};
+    }
+
+    private float[] charPanelGeom() {
+        return new float[]{(Ui.W - CP_W) / 2f, (Ui.H - CP_H) / 2f};
+    }
+
+    private void drawCharPanel() {
+        com.avatardk.game.net.PlayerInfo p = game.player;
+        if (p == null) {
+            charPanel = false;
+            return;
+        }
+        float[] g = charPanelGeom();
+        float px = g[0], py = g[1];
+        batch.setColor(0f, 0f, 0f, 0.55f);
+        batch.draw(whiteTex, 0, 0, Ui.W, Ui.H);
+        batch.setColor(Color.WHITE);
+        batch.draw(Ui.roundedRect((int) CP_W, (int) CP_H, 18,
+            new Color(0.07f, 0.11f, 0.17f, 0.97f), GLASS_RIM), px, py);
+        Ui.fontSmall.setColor(1f, 0.85f, 0.45f, 1f);
+        Ui.fontSmall.draw(batch, "THÔNG TIN NHÂN VẬT", px + 24, py + CP_H - 22);
+        Ui.font.setColor(Color.WHITE);
+        Ui.font.draw(batch, "X", px + CP_W - 38, py + CP_H - 20);
+        int[] st = charStats();
+        // cột tiền bằng icon myinfo gốc: Xu, Lượng, Lượng khoá, Xèng, Cấp
+        int[] icons = {0, 1, 4, 2};
+        String[] vals = {fmtMoney(p.xu), fmtMoney(p.luong), fmtMoney(p.luongKhoa), fmtMoney(p.xeng)};
+        float rowTop = py + CP_H - 78;
+        for (int i = 0; i < 4; i++) {
+            float ry = rowTop - i * 46;
+            batch.draw(game.texture("myinfo/icon" + icons[i] + ".png"), px + 24, ry, 26, 26);
+            Ui.fontSmall.setColor(1f, 1f, 1f, 0.94f);
+            Ui.fontSmall.draw(batch, vals[i], px + 62, ry + 19);
+        }
+        float ry = rowTop - 4 * 46;
+        batch.draw(game.texture("myinfo/icon3.png"), px + 24, ry, 26, 26);
+        Ui.fontSmall.setColor(1f, 1f, 1f, 0.94f);
+        Ui.fontSmall.draw(batch, st != null ? st[0] + " + " + st[1] + "%" : "—", px + 62, ry + 19);
+        // tên nhân vật (vàng) dưới cột tiền
+        Ui.font.setColor(1f, 0.83f, 0.38f, 1f);
+        Ui.font.draw(batch, p.username, px + 24, py + 176);
+        Ui.font.setColor(Color.WHITE);
+        // sân khấu doll bên phải (+ người yêu nếu gói −22 báo có)
+        float stX = px + 306, stY = py + 196, stW = 310, stH = 216;
+        batch.draw(Ui.roundedRect((int) stW, (int) stH, 14,
+            new Color(0.30f, 0.45f, 0.62f, 0.35f), GLASS_RIM), stX, stY);
+        float floorY = stY + 36;
+        boolean hasPartner = partnerDoll != null;
+        float selfCx = hasPartner ? stX + 96 : stX + stW / 2f;
+        float partCx = stX + 218;
+        batch.setColor(0f, 0f, 0f, 0.30f);
+        batch.draw(circleTexture(), selfCx - 52, floorY - 8, 104, 16);
+        if (hasPartner) batch.draw(circleTexture(), partCx - 46, floorY - 8, 92, 15);
+        batch.setColor(Color.WHITE);
+        game.dollRenderer.draw(batch, playerDoll, playerAnim.frameIndex(), selfCx, floorY, 3.4f, false);
+        if (hasPartner) {
+            game.dollRenderer.draw(batch, partnerDoll, 0, partCx, floorY, 3.4f, true);
+            if (partnerRel != null && !partnerRel.isEmpty()) {
+                Ui.centered(batch, Ui.fontSmall, partnerRel, partCx, stY + stH - 14,
+                    new Color(1f, 0.75f, 0.85f, 1f));
+            }
+            Ui.centered(batch, Ui.fontTiny, partnerName + " · Cấp " + partnerLv + " + " + partnerPct + "%",
+                partCx, stY + 18, new Color(1f, 1f, 1f, 0.9f));
+        }
+        // đường chia + 6 thanh chỉ số (2 cột × 3 hàng) như gốc
+        batch.setColor(GLASS_RIM);
+        batch.draw(whiteTex, px + 24, py + 158, CP_W - 48, 2);
+        batch.setColor(Color.WHITE);
+        String[] labels = {"Cấp", "Thân thiện", "Gây rối", "Sành điệu", "Vui vẻ", "Sức khỏe"};
+        Color[] cols = {new Color(0.55f, 0.85f, 1f, 0.95f), new Color(0.45f, 0.9f, 0.5f, 0.95f),
+            new Color(0.9f, 0.45f, 0.6f, 0.95f), new Color(0.6f, 0.72f, 1f, 0.95f),
+            new Color(1f, 0.8f, 0.35f, 0.95f), new Color(1f, 0.55f, 0.4f, 0.95f)};
+        int[] barVals = st == null ? new int[6]
+            : new int[]{st[1], st[2], st[3], st[4], st[5], st[6]};
+        for (int i = 0; i < 6; i++) {
+            int col = i % 2, row = i / 2;
+            float bx = px + 24 + col * 306;
+            float by = py + 118 - row * 38;
+            Ui.fontTiny.setColor(1f, 1f, 1f, 0.85f);
+            Ui.fontTiny.draw(batch, labels[i], bx, by + 4);
+            batch.draw(Ui.roundedRect(150, 12, 6, new Color(0f, 0f, 0f, 0.45f), GLASS_RIM), bx + 84, by - 4);
+            int v = MathUtils.clamp(barVals[i], 0, 100);
+            if (v > 0) {
+                batch.draw(Ui.roundedRect(Math.max(12, 150 * v / 100), 12, 6, cols[i], cols[i]), bx + 84, by - 4);
+            }
+            Ui.fontTiny.setColor(1f, 1f, 1f, 0.92f);
+            Ui.fontTiny.draw(batch, st == null ? "—"
+                : (i == 0 ? st[0] + " · " + st[1] + "%" : String.valueOf(barVals[i])), bx + 242, by + 4);
+        }
+    }
+
+    /** Sân khấu chụp kiểm chứng: mở panel nhân vật. */
+    public void debugOpenCharPanel() {
+        openCharPanel();
     }
 
     public void debugOpenPlayerPanel() {
@@ -2276,9 +2455,12 @@ public class WorldScreen extends ScreenAdapter {
             else sendChat();
         }
         if (typing && Gdx.input.isKeyJustPressed(Input.Keys.ESCAPE)) typing = false;
-        // ESC ngoài lúc gõ: thoát nhắn riêng trước, rồi tới đóng panel người chơi
+        // ESC ngoài lúc gõ: đóng panel nhân vật trước, rồi thoát nhắn
+        // riêng, rồi tới đóng panel người chơi
         if (Gdx.input.isKeyJustPressed(Input.Keys.ESCAPE)) {
-            if (privateTargetId != 0) {
+            if (charPanel) {
+                charPanel = false;
+            } else if (privateTargetId != 0) {
                 privateTargetId = 0;
                 privateTargetName = null;
                 addChatLog(TAB_SYSTEM, null, "Đã thoát nhắn riêng.", true);
@@ -2544,6 +2726,7 @@ public class WorldScreen extends ScreenAdapter {
         drawFeelUi();
         if (panelPlayer != null) drawPlayerPanel();
         if (friendInviteId != 0) drawFriendInvite();
+        if (charPanel) drawCharPanel();
         if (boardOpen) drawBoardPanel();
         if (cityMapOpen) drawCityMap();
         batch.end();
