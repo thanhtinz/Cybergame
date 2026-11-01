@@ -7,6 +7,7 @@ import com.badlogic.gdx.ScreenAdapter;
 import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.GL20;
 import com.badlogic.gdx.graphics.OrthographicCamera;
+import com.badlogic.gdx.graphics.Pixmap;
 import com.badlogic.gdx.graphics.Texture;
 import com.badlogic.gdx.graphics.g2d.GlyphLayout;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
@@ -1594,21 +1595,21 @@ public class WorldScreen extends ScreenAdapter {
                 float sy = ppSubY();
                 for (int i = 0; i < 4; i++) {
                     float bx = ppSubBtnX(i);
-                    if (x >= bx && x <= bx + 104 && y >= sy + 6 && y <= sy + 52) {
+                    if (x >= bx && x <= bx + 100 && y >= sy + 6 && y <= sy + 82) {
                         panelSubAction(i);
                         return;
                     }
                 }
-                if (x >= px && x <= px + PP_W && y >= sy && y <= sy + 58) return;
+                if (x >= px && x <= px + PP_W && y >= sy && y <= sy + PP_SUB_H) return;
             }
             // thẻ thông tin đang hiện cũng thuộc panel: chạm vào thì nuốt
             if (infoStats != null && infoForId == panelPlayer.info.id) {
-                float iy = (panelSub ? ppSubY() + 58 : py + PP_H) + 8;
+                float iy = ppInfoY();
                 if (x >= px && x <= px + PP_W && y >= iy && y <= iy + 118) return;
             }
             for (int i = 0; i < 5; i++) {
                 float bx = ppBtnX(i);
-                if (x >= bx && x <= bx + 80 && y >= ppBtnY() && y <= ppBtnY() + 58) {
+                if (x >= bx && x <= bx + 68 && y >= py + 6 && y <= ppBtnY() + 62) {
                     panelAction(i);
                     return;
                 }
@@ -1801,7 +1802,7 @@ public class WorldScreen extends ScreenAdapter {
     // Giao thức đúng client gốc (docs/park-spec.md): nhắn riêng gói −6,
     // kết bạn −21/−19, thông tin −22, Đánh/Hôn gói 59 (mã 100/101);
     // Tặng quà + Mời về nhà thuộc đợt Shop/Nhà nên báo rõ khi bấm.
-    private static final float PP_W = 470f, PP_H = 150f;
+    private static final float PP_W = 470f, PP_H = 178f;
     private static final String[] PP_LABELS = {"Nhắn tin", "Kết bạn", "Tặng quà", "Tương tác", "Khác"};
     private static final String[] PP_ICONS = {Ui.FA_COMMENT_DOTS, Ui.FA_USER_PLUS, Ui.FA_GIFT, Ui.FA_HEART, Ui.FA_FACE_SMILE};
     private static final String[] PP_SUB_LABELS = {"Đánh", "Hôn", "Mời về nhà", "Thông tin"};
@@ -1825,13 +1826,66 @@ public class WorldScreen extends ScreenAdapter {
     }
     private final java.util.List<ActFx> actFx = new java.util.ArrayList<>();
 
+    private static final float PP_SUB_H = 88f;
+    private static final float PP_TAIL = 14f;
+    private Texture tailTex;
+
+    /** Hình học panel: panel chính LUÔN neo trên đầu người được chọn
+     *  (đáy panel cách đỉnh đầu một đoạn đuôi nhọn), kẹp mép màn hình.
+     *  Trả {px, py = đáy panel, 1}. */
     private float[] playerPanelGeom() {
-        return new float[]{(Ui.W - PP_W) / 2f, CHAT_Y + chatH + 14f};
+        if (panelPlayer == null) {
+            return new float[]{(Ui.W - PP_W) / 2f, CHAT_Y + chatH + 14f, 1f};
+        }
+        float sx = panelPlayer.feetX - lastCamX + Ui.W / 2f;
+        float feetScr = panelPlayer.feetY - lastCamY + Ui.H / 2f;
+        // đỉnh đầu thật theo bounds của doll (mỗi doll cao thấp khác nhau)
+        // + khoảng cho tên nhân vật vẽ trên đầu
+        int[] b = panelPlayer.doll.bounds(panelPlayer.anim.frameIndex());
+        float headTop = feetScr + (-b[1]) * AvatarDkGame.HD + 28f;
+        float px = MathUtils.clamp(sx - PP_W / 2f, 8f, Ui.W - PP_W - 8f);
+        float py = Math.min(headTop + PP_TAIL, Ui.H - PP_H - 6f);
+        return new float[]{px, Math.max(py, 8f), 1f};
     }
-    private float ppBtnX(int i) { return playerPanelGeom()[0] + 19f + i * 88f; }
-    private float ppBtnY() { return playerPanelGeom()[1] + 12f; }
-    private float ppSubBtnX(int i) { return playerPanelGeom()[0] + 15f + i * 112f; }
-    private float ppSubY() { return playerPanelGeom()[1] + PP_H + 8f; }
+    /** Hàng con + thẻ thông tin xếp tiếp PHÍA TRÊN panel nếu đủ chỗ;
+     *  không đủ thì cả cụm phụ xếp xuống DƯỚI panel (panel chính vẫn
+     *  bám trên đầu nhân vật). */
+    private boolean ppExtrasUp() {
+        float[] g = playerPanelGeom();
+        boolean infoShown = infoStats != null && panelPlayer != null
+            && infoForId == panelPlayer.info.id;
+        float extras = (panelSub ? PP_SUB_H + 8f : 0f) + (infoShown ? 118f + 8f : 0f);
+        return g[1] + PP_H + extras <= Ui.H - 6f;
+    }
+    private float ppBtnX(int i) { return playerPanelGeom()[0] + 41f + i * 80f; }
+    private float ppBtnY() { return playerPanelGeom()[1] + 32f; }
+    private float ppSubBtnX(int i) { return playerPanelGeom()[0] + 23f + i * 108f; }
+    private float ppSubY() {
+        float[] g = playerPanelGeom();
+        return ppExtrasUp() ? g[1] + PP_H + 8f : g[1] - 8f - PP_SUB_H;
+    }
+    private float ppInfoY() {
+        float[] g = playerPanelGeom();
+        if (ppExtrasUp()) {
+            return (panelSub ? ppSubY() + PP_SUB_H : g[1] + PP_H) + 8f;
+        }
+        return (panelSub ? ppSubY() : g[1]) - 8f - 118f;
+    }
+    private float panelTailCx() {
+        float[] g = playerPanelGeom();
+        float sx = panelPlayer != null ? panelPlayer.feetX - lastCamX + Ui.W / 2f : Ui.W / 2f;
+        return MathUtils.clamp(sx, g[0] + 26f, g[0] + PP_W - 26f);
+    }
+    private Texture tailTexture() {
+        if (tailTex == null) {
+            Pixmap pm = new Pixmap(28, 16, Pixmap.Format.RGBA8888);
+            pm.setColor(1f, 1f, 1f, 1f);
+            pm.fillTriangle(1, 1, 27, 1, 14, 15);
+            tailTex = new Texture(pm);
+            pm.dispose();
+        }
+        return tailTex;
+    }
 
     private String remoteName(int id) {
         RemoteFigure f = remotes.get(id);
@@ -1967,23 +2021,29 @@ public class WorldScreen extends ScreenAdapter {
         if (!remotes.containsValue(f)) { panelPlayer = null; panelSub = false; return; }
         float[] g = playerPanelGeom();
         float px = g[0], py = g[1];
-        // thẻ thông tin (gói −22) nằm trên cùng
-        float topY = py + PP_H;
+        // đuôi nhọn dưới đáy panel, chỉ xuống đầu nhân vật được chọn
+        // (đặc hơn nền panel để đọc rõ trên nền phố sáng)
+        float tailCx = panelTailCx();
+        batch.setColor(GLASS_RIM);
+        batch.draw(tailTexture(), tailCx - 22, py - 25, 44, 27);
+        batch.setColor(0.10f, 0.16f, 0.24f, 0.96f);
+        batch.draw(tailTexture(), tailCx - 17, py - 21, 34, 21);
+        batch.setColor(Color.WHITE);
+        // hàng con Tương tác (ô icon + nhãn DƯỚI ô như panel chính)
         if (panelSub) {
             float sy = ppSubY();
-            batch.draw(Ui.roundedRect((int) PP_W, 58, 14, GLASS_FILL_DARK, GLASS_RIM), px, sy);
+            batch.draw(Ui.roundedRect((int) PP_W, (int) PP_SUB_H, 14, GLASS_FILL_DARK, GLASS_RIM), px, sy);
             for (int i = 0; i < 4; i++) {
                 float bx = ppSubBtnX(i);
-                batch.draw(Ui.roundedRect(104, 46, 10, GLASS_FILL, GLASS_RIM), bx, sy + 6);
-                Ui.faIcon(batch, Ui.fa20, PP_SUB_ICONS[i], bx + 52, sy + 35,
+                batch.draw(Ui.roundedRect(100, 52, 10, GLASS_FILL, GLASS_RIM), bx, sy + 24);
+                Ui.faIcon(batch, Ui.fa20, PP_SUB_ICONS[i], bx + 50, sy + 50,
                     i == 1 ? new Color(1f, 0.45f, 0.6f, 1f) : Color.WHITE);
-                Ui.centered(batch, Ui.fontTiny, PP_SUB_LABELS[i], bx + 52, sy + 17,
+                Ui.centered(batch, Ui.fontTiny, PP_SUB_LABELS[i], bx + 50, sy + 15,
                     new Color(1f, 1f, 1f, 0.92f));
             }
-            topY = sy + 58;
         }
         if (infoStats != null && infoForId == f.info.id) {
-            float iy = topY + 8;
+            float iy = ppInfoY();
             batch.draw(Ui.roundedRect((int) PP_W, 118, 14, GLASS_FILL_DARK, GLASS_RIM), px, iy);
             Ui.fontSmall.setColor(1f, 0.85f, 0.45f, 1f);
             Ui.fontSmall.draw(batch, "THÔNG TIN", px + 18, iy + 118 - 14);
@@ -2012,7 +2072,7 @@ public class WorldScreen extends ScreenAdapter {
         // panel chính
         batch.draw(Ui.roundedRect((int) PP_W, (int) PP_H, 16, GLASS_FILL_DARK, GLASS_RIM), px, py);
         // avatar: chân dung doll cắt theo khung như card người chơi
-        float avX = px + 16, avY = py + 68, avS = 66;
+        float avX = px + 16, avY = py + PP_H - 14 - 64, avS = 64;
         batch.draw(Ui.roundedRect((int) avS, (int) avS, 8,
             new Color(0.35f, 0.55f, 0.75f, 0.35f), GLASS_RIM), avX, avY);
         int[] b = f.doll.bounds(f.anim.frameIndex());
@@ -2028,22 +2088,20 @@ public class WorldScreen extends ScreenAdapter {
             batch.flush();
             ScissorStack.popScissors();
         }
-        // tên (vàng như mẫu) + dòng phụ
+        // tên vàng như mẫu, canh giữa theo chiều cao avatar
         Ui.font.setColor(1f, 0.83f, 0.38f, 1f);
-        Ui.font.draw(batch, f.info.name, px + 96, py + 122);
-        Ui.fontSmall.setColor(1f, 1f, 1f, 0.66f);
-        Ui.fontSmall.draw(batch, "Người chơi · Khu " + currentArea, px + 96, py + 94);
+        Ui.font.draw(batch, f.info.name, px + 94, avY + 42);
         Ui.font.setColor(Color.WHITE);
         Ui.font.draw(batch, "X", px + PP_W - 38, py + PP_H - 18);
-        // 5 nút chính
+        // 5 nút chính: ô icon bo góc + nhãn nằm DƯỚI ô (đúng mẫu)
         for (int i = 0; i < 5; i++) {
             float bx = ppBtnX(i);
             boolean active = i == 3 && panelSub;
-            batch.draw(Ui.roundedRect(80, 58, 12,
+            batch.draw(Ui.roundedRect(68, 62, 12,
                 active ? new Color(0.16f, 0.3f, 0.44f, 0.9f) : GLASS_FILL, GLASS_RIM), bx, ppBtnY());
-            Ui.faIcon(batch, Ui.fa26, PP_ICONS[i], bx + 40, ppBtnY() + 40,
+            Ui.faIcon(batch, Ui.fa26, PP_ICONS[i], bx + 34, ppBtnY() + 31,
                 i == 3 ? new Color(1f, 0.45f, 0.6f, 1f) : Color.WHITE);
-            Ui.centered(batch, Ui.fontTiny, PP_LABELS[i], bx + 40, ppBtnY() + 16,
+            Ui.centered(batch, Ui.fontTiny, PP_LABELS[i], bx + 34, py + 20,
                 new Color(1f, 1f, 1f, 0.92f));
         }
     }

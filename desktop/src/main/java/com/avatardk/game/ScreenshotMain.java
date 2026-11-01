@@ -361,7 +361,7 @@ public class ScreenshotMain {
                             // Tuấn đứng cạnh Sơn ở map 10, chạm vào Linh để
                             // mở panel kính của cô ấy
                             world.debugSetMap(10);
-                            world.debugSetPlayer(455f, 95f);
+                            world.debugSetPlayer(455f, 85f);
                             world.debugClearRemotes();
                             try {
                                 int[][] npcParts = new int[2][];
@@ -369,8 +369,8 @@ public class ScreenshotMain {
                                     java.util.List<Integer> items = game.data.npcs.get(i + 3).items;
                                     npcParts[i] = items.stream().mapToInt(Integer::intValue).toArray();
                                 }
-                                world.debugInjectNet((byte) 51, joinPayload(7, "Linh", npcParts[0], 395, 100));
-                                world.debugInjectNet((byte) 51, joinPayload(8, "Tuấn", npcParts[1], 525, 88));
+                                world.debugInjectNet((byte) 51, joinPayload(7, "Linh", npcParts[0], 395, 88));
+                                world.debugInjectNet((byte) 51, joinPayload(8, "Tuấn", npcParts[1], 525, 80));
                             } catch (java.io.IOException ioe) {
                                 throw new RuntimeException(ioe);
                             }
