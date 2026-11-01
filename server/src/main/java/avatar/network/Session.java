@@ -1139,14 +1139,17 @@ public void NhanThuongEventXuBoss() throws IOException {
                         || (type == 2 && priceLuong == -1)) {
                     return;
                 }
-                if (priceXu > 0) {
+                // PORT: ton trong type nguoi mua chon (1 = Xu, 2 = Luong) —
+                // code goc Pack5 luon uu tien tru Xu khi coin > 0 bat ke type,
+                // khien nut "Mua bang Luong" tru nham Xu. Gia cua loai tien da
+                // chon da duoc kiem tra ton tai o nhanh return phia tren.
+                if (type == 1) {
                     price = priceXu;
                     if (user.getXu() < price) {
                         this.user.getService().serverMessage("Bạn không đủ xu!");
                         return;
                     }
                     this.user.updateXu(-price);
-                    this.getAvatarService().updateMoney(0);
                 } else {
                     price = priceLuong;
                     if (user.getLuong() < price) {
@@ -1154,8 +1157,8 @@ public void NhanThuongEventXuBoss() throws IOException {
                         return;
                     }
                     this.user.updateLuong(-price);
-                    this.getAvatarService().updateMoney(0);
                 }
+                this.getAvatarService().updateMoney(0);
                 long expired = System.currentTimeMillis() + ((long) part.getExpiredDay() * 86400000L);
                 if (part.getExpiredDay() == 0) {
                     expired = -1;

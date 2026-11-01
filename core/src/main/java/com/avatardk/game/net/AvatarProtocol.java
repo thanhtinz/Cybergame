@@ -71,6 +71,28 @@ public final class AvatarProtocol {
     public static final byte TRANS_CHEST = -89;
     /** Hộp thoại từ server (Cmd.SET_MONEY_ERROR của gốc): S→C {UTF}. */
     public static final byte SERVER_DIALOG = -10;
+    /** Mua đồ ở shop: C→S {short idPart, byte type} (1 = trả Xu, 2 = trả
+     *  Lượng); S→C khi thành công {short idPart, int giá đã trừ, byte 1,
+     *  UTF thông báo, int xu, int lượng, int lượng khoá} — server tự mặc
+     *  món mới và phát gói −48 cho cả khu (Cmd.AVATAR_BUY_ITEM của gốc). */
+    public static final byte BUY_ITEM = -24;
+    /** Server báo số tiền hiện tại: S→C {int xèng, byte type, int xu,
+     *  int lượng, int lượng khoá} (Cmd.UPDATE_MONEY của gốc). */
+    public static final byte UPDATE_MONEY = -33;
+    /** Nói chuyện với NPC: C→S {int id NPC} — id trên đường truyền =
+     *  2.000.000.000 + mã NPC (Npc.ID_ADD của gốc). Server trả menu của
+     *  NPC qua gói −59 (Cmd.COMMUNICATE của gốc; khác hẳn gói thoại +61
+     *  mở rộng của bản port). */
+    public static final byte COMMUNICATE = -61;
+    /** Menu lựa chọn của NPC/server: S→C {int id, byte menuId, byte số
+     *  mục, các UTF tên mục, các short id mục, UTF tên NPC, UTF lời NPC,
+     *  các boolean có-menu-con}; C→S chọn mục {int id, byte menuId,
+     *  byte vị trí chọn} (Cmd.MENU_OPTION của gốc, dùng hai chiều). */
+    public static final byte MENU_OPTION = -59;
+    /** Server mở shop: S→C {byte idShop, UTF tên shop, short số món,
+     *  các short idPart} — danh sách hàng do server quyết (Cmd.OPEN_SHOP
+     *  của gốc, tới sau khi chọn mục shop trong menu NPC cửa hàng). */
+    public static final byte OPEN_SHOP = -49;
 
     /** Handler Avatar trong GET_HANDLER (CLIENT_TYPE = 8 của gốc). */
     public static final byte HANDLER_AVATAR = 8;
@@ -269,6 +291,32 @@ public final class AvatarProtocol {
     /** Xin dữ liệu rương nhà (gói −87): gói rỗng. */
     public static void requestChest(GameConnection conn) throws IOException {
         conn.send(new Msg(CUSTOM_CHEST));
+    }
+
+    /** Mua một món ở shop (gói −24): type 1 = trả bằng Xu, 2 = bằng Lượng. */
+    public static void buyItem(GameConnection conn, int partId, int type) throws IOException {
+        Msg m = new Msg(BUY_ITEM);
+        DataOutputStream w = m.writer();
+        w.writeShort(partId);
+        w.writeByte(type);
+        conn.send(m);
+    }
+
+    /** Nói chuyện với NPC (gói −61): id truyền = 2.000.000.000 + mã NPC. */
+    public static void communicate(GameConnection conn, int npcWireId) throws IOException {
+        Msg m = new Msg(COMMUNICATE);
+        m.writer().writeInt(npcWireId);
+        conn.send(m);
+    }
+
+    /** Chọn một mục trong menu NPC/server (gói −59 chiều đi). */
+    public static void selectMenuOption(GameConnection conn, int userId, int menuId, int select) throws IOException {
+        Msg m = new Msg(MENU_OPTION);
+        DataOutputStream w = m.writer();
+        w.writeInt(userId);
+        w.writeByte(menuId);
+        w.writeByte(select);
+        conn.send(m);
     }
 
     /** Chuyển một món giữa giỏ và rương (gói −89): dir 0 = giỏ→rương,

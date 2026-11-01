@@ -48,7 +48,12 @@ public class AvatarDataSet {
                 r.getInt("zorder", 0),
                 r.getInt("gender", 0),
                 r.getInt("level", 0),
-                r.getInt("icon", -1));
+                r.getInt("icon", -1),
+                r.getInt("coin", -1),
+                r.getInt("gold", -1),
+                r.getInt("sell", -1),
+                r.getInt("expired_day", 0),
+                r.getInt("type", -1));
             parseAnimation(r.getString("animation", ""), p);
             ds.parts.put(p.id, p);
         }

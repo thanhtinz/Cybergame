@@ -60,6 +60,7 @@ public final class Ui {
     public static final String FA_MARS = "\uf222";
     public static final String FA_VENUS = "\uf221";
     public static final String FA_BOX_ARCHIVE = "\uf187"; // ô Rương trong menu burger
+    public static final String FA_STORE = "\uf54e"; // ô Shop trong menu burger
     public static final String FA_ARROW_RIGHT = "\uf061"; // nút Di chuyển ở panel rương
     public static final String FA_ARROW_LEFT = "\uf060";
     public static final String FA_PLUS = "\uf067"; // cụm zoom bản đồ
@@ -82,7 +83,7 @@ public final class Ui {
         + FA_ICE_CREAM + FA_CAT + FA_DOG + FA_ROCKET
         + FA_COMMENT_DOTS + FA_USER_PLUS + FA_HAND_FIST + FA_HOUSE + FA_CIRCLE_INFO
         + FA_MARS + FA_VENUS + FA_BOX_ARCHIVE + FA_ARROW_RIGHT + FA_ARROW_LEFT
-        + FA_PLUS + FA_MINUS + FA_LOCATION_DOT + FA_LOCATION_CROSSHAIRS;
+        + FA_PLUS + FA_MINUS + FA_LOCATION_DOT + FA_LOCATION_CROSSHAIRS + FA_STORE;
     // Glyph Font Awesome (brands)
     public static final String FA_GOOGLE = "\uf1a0";
     public static final String FA_APPLE = "\uf179";

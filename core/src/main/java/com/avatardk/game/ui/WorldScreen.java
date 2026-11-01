@@ -216,6 +216,14 @@ public class WorldScreen extends ScreenAdapter {
     private String displayXu = "12.500";
     private String displayLuong = "260";
     private String displayLevel = "Lv.50";
+    /** Số tiền dạng số (khớp hai chuỗi hiển thị ở trên) — panel shop dùng để
+     *  xét đủ/thiếu tiền theo giá thật; cập nhật từ gói −4/−33/−24. */
+    private int myXu = 12500, myLuong = 260, myLuongKhoa = 0, myXeng = 0;
+
+    private void syncMoneyText() {
+        displayXu = fmtMoney(myXu);
+        displayLuong = fmtMoney(myLuong);
+    }
 
     private static String fmtMoney(int v) {
         String s = String.valueOf(v);
@@ -231,8 +239,11 @@ public class WorldScreen extends ScreenAdapter {
      *  trên card và lắp lại paper-doll theo đúng part đang mặc của tài khoản. */
     public void applyPlayerInfo(com.avatardk.game.net.PlayerInfo p) {
         displayName = p.username;
-        displayXu = fmtMoney(p.xu);
-        displayLuong = fmtMoney(p.luong);
+        myXu = p.xu;
+        myLuong = p.luong;
+        myLuongKhoa = p.luongKhoa;
+        myXeng = p.xeng;
+        syncMoneyText();
         displayLevel = "Lv." + p.levelMain;
         java.util.List<Integer> parts = new ArrayList<>();
         for (int id : p.wearing) parts.add(id);
@@ -1302,6 +1313,83 @@ public class WorldScreen extends ScreenAdapter {
                     }
                     break;
                 }
+                case AvatarProtocol.UPDATE_MONEY: {
+                    // gói −33: {int xèng, byte type, int xu, int lượng,
+                    // int lượng khoá} — server báo lại số tiền hiện tại
+                    java.io.DataInputStream r = m.reader();
+                    myXeng = r.readInt();
+                    r.readByte();
+                    myXu = r.readInt();
+                    myLuong = r.readInt();
+                    myLuongKhoa = r.readInt();
+                    syncMoneyText();
+                    break;
+                }
+                case AvatarProtocol.MENU_OPTION: {
+                    // gói −59: menu lựa chọn server gửi (mở từ NPC) —
+                    // {int id, byte menuId, byte n, n×UTF tên mục,
+                    // n×short id mục, UTF tên NPC, UTF lời NPC, n×boolean
+                    // có menu con}; phần đuôi có thể vắng ở biến thể
+                    // openMenuOption khác nên đọc phòng thủ
+                    java.io.DataInputStream r = m.reader();
+                    int uid = r.readInt();
+                    int mid = r.readByte();
+                    int n = r.readByte() & 0xFF;
+                    java.util.List<String> names = new ArrayList<>();
+                    for (int i = 0; i < n; i++) names.add(r.readUTF());
+                    try {
+                        if (r.available() >= 2 * n) {
+                            for (int i = 0; i < n; i++) r.readShort();
+                        }
+                        if (r.available() > 0) {
+                            r.readUTF();
+                            if (r.available() > 0) r.readUTF();
+                            for (int i = 0; i < n && r.available() > 0; i++) r.readBoolean();
+                        }
+                    } catch (Exception ignored) {
+                        // tên các mục đã đọc đủ để hiện menu
+                    }
+                    npcMenuUserId = uid;
+                    npcMenuId = mid;
+                    npcMenuItems.clear();
+                    npcMenuItems.addAll(names);
+                    npcMenuTitle = uid >= NPC_ID_ADD
+                        ? npcDisplayName(uid - NPC_ID_ADD) : "Menu";
+                    npcMenuOpen = true;
+                    break;
+                }
+                case AvatarProtocol.OPEN_SHOP: {
+                    // gói −49: {byte idShop, UTF tên shop, short n,
+                    // n×short idPart} — mở panel shop theo danh sách này
+                    java.io.DataInputStream r = m.reader();
+                    r.readByte();
+                    String shopName = r.readUTF();
+                    int n = r.readShort();
+                    java.util.List<Integer> ids = new ArrayList<>();
+                    for (int i = 0; i < n; i++) ids.add((int) r.readShort());
+                    openShopFromServer(ids, shopName);
+                    break;
+                }
+                case AvatarProtocol.BUY_ITEM: {
+                    // gói −24 báo mua thành công: {short idPart, int giá,
+                    // byte 1, UTF thông báo, int xu, int lượng, int lượng
+                    // khoá}. Server đã tự mặc món mới và phát −48 (về trước
+                    // gói này) nên ở đây chỉ cập nhật tiền + báo người chơi;
+                    // panel shop đang mở thì dựng lại doll mặc thử theo
+                    // đúng bộ đồ hiện tại.
+                    java.io.DataInputStream r = m.reader();
+                    r.readShort();
+                    r.readInt();
+                    r.readByte();
+                    String msgBuy = r.readUTF();
+                    myXu = r.readInt();
+                    myLuong = r.readInt();
+                    myLuongKhoa = r.readInt();
+                    syncMoneyText();
+                    addChatLog(TAB_SYSTEM, null, msgBuy, true);
+                    if (shopOpen) refreshShopTryDoll();
+                    break;
+                }
                 case AvatarProtocol.CONTAINER: {
                     // gói −47: danh sách giỏ đồ -> mở panel giỏ (gốc:
                     // MapScr.onContainer -> doStore)
@@ -1594,6 +1682,14 @@ public class WorldScreen extends ScreenAdapter {
             }
             @Override
             public boolean touchDragged(int sx, int sy, int pointer) {
+                if (pointer == shopPointer && shopOpen) {
+                    // kéo trong lưới shop: cuộn theo tay như sheet biểu cảm
+                    Vector3 v = hudViewport.unproject(new Vector3(sx, sy, 0));
+                    float dy = v.y - shopDragStartY;
+                    shopDragMoved = Math.max(shopDragMoved, Math.abs(dy));
+                    shopScroll = MathUtils.clamp(shopDragStartScroll + dy, 0f, shopMaxScroll());
+                    return true;
+                }
                 if (pointer == mapPointer && cityMapOpen) {
                     // kéo bản đồ: nội dung đi theo tay, tâm camera trừ hao theo zoom
                     Vector3 v = hudViewport.unproject(new Vector3(sx, sy, 0));
@@ -1630,6 +1726,29 @@ public class WorldScreen extends ScreenAdapter {
             public boolean touchUp(int sx, int sy, int pointer, int button) {
                 // đang giữ micro ghi âm: thả tay ra là gửi tin nhắn thoại
                 if (recording) { finishRecording(); return true; }
+                if (pointer == shopPointer) {
+                    Vector3 v = hudViewport.unproject(new Vector3(sx, sy, 0));
+                    if (shopOpen && shopDragMoved < 10f) {
+                        // chạm nhẹ (không kéo) = chọn ô tại điểm thả
+                        float gx = shopGridX(), gt = shopGridTop();
+                        java.util.List<com.avatardk.game.data.PartData> l = shopLists.get(shopTab);
+                        for (int i = 0; i < l.size(); i++) {
+                            float cx = gx + (i % SHOP_COLS) * (SHOP_CELL + SHOP_GAP);
+                            float cy = gt + shopScroll - (i / SHOP_COLS + 1) * SHOP_CELL
+                                - (i / SHOP_COLS) * SHOP_GAP;
+                            if (v.x >= cx && v.x <= cx + SHOP_CELL
+                                && v.y >= cy && v.y <= cy + SHOP_CELL) {
+                                if (i != shopSel) {
+                                    shopSel = i;
+                                    refreshShopTryDoll();
+                                }
+                                break;
+                            }
+                        }
+                    }
+                    shopPointer = -1;
+                    return true;
+                }
                 if (pointer == mapPointer) {
                     mapPointer = -1;
                     if (cityMapOpen && mapDragMoved < 10f) {
@@ -1680,6 +1799,10 @@ public class WorldScreen extends ScreenAdapter {
             }
             @Override
             public boolean scrolled(float amountX, float amountY) {
+                if (shopOpen) {
+                    shopScroll = MathUtils.clamp(shopScroll + amountY * 36f, 0f, shopMaxScroll());
+                    return true;
+                }
                 if (cityMapOpen) {
                     zoomMap(amountY < 0 ? 1.12f : 1f / 1.12f);
                     return true;
@@ -1757,6 +1880,16 @@ public class WorldScreen extends ScreenAdapter {
             }
             if (x >= px && x <= px + CP_W && y >= py && y <= py + CP_H) return;
             charPanel = false;
+            return;
+        }
+        // menu NPC đang mở: modal, nuốt mọi chạm
+        if (npcMenuOpen) {
+            npcMenuTouch(x, y);
+            return;
+        }
+        // panel shop đang mở: modal, nuốt mọi chạm
+        if (shopOpen) {
+            shopTouch(x, y, pointer);
             return;
         }
         // panel giỏ đồ / rương đồ đang mở: modal, nuốt mọi chạm
@@ -1983,6 +2116,17 @@ public class WorldScreen extends ScreenAdapter {
             chatTimer = 4f;
             addChatLog(TAB_SYSTEM, null, "Không có ai ở gần để tương tác.", true);
             return;
+        }
+        // NPC Cửa Hàng: nói chuyện qua server (gói −61) để nhận menu NPC
+        // rồi mở shop bằng gói −49 — đúng luồng gốc, thay cho lời chào;
+        // chế độ offline (không có kết nối) thì vẫn chào như NPC thường
+        if (n.data.id == NPC_CUA_HANG && game.connection != null) {
+            try {
+                AvatarProtocol.communicate(game.connection, NPC_ID_ADD + n.data.id);
+                return;
+            } catch (Exception e) {
+                // gửi hỏng: rơi xuống lời chào mặc định phía dưới
+            }
         }
         n.bubble = (n.data.chat != null && !n.data.chat.isEmpty())
             ? n.data.chat.get(0) : "Xin chào, ta là " + n.data.name + ".";
@@ -3756,6 +3900,8 @@ public class WorldScreen extends ScreenAdapter {
         if (charPanel) drawCharPanel();
         if (bagPanel) drawInvPanel(false);
         if (chestPanel) drawChestPanels();
+        if (shopOpen) drawShop();
+        if (npcMenuOpen) drawNpcMenu();
         if (boardOpen) drawBoardPanel();
         if (cityMapOpen) drawCityMap();
         batch.end();
@@ -4318,6 +4464,450 @@ public class WorldScreen extends ScreenAdapter {
         mapDragCamX = mapCamX;
         mapDragCamY = mapCamY;
         mapDragMoved = 0f;
+    }
+
+
+    // ---------- Menu NPC (gói −59, mở bằng gói −61 khi tương tác NPC) ----
+    // Server gửi danh sách lựa chọn dạng chữ; người chơi chạm một mục thì
+    // client gửi lại vị trí chọn qua chính gói −59 (chiều đi) và server tự
+    // chạy hành động tương ứng (mở shop, mở hướng dẫn, đóng...). Panel vẽ
+    // theo ngôn ngữ kính của các panel đã chốt, neo giữa màn hình.
+    private boolean npcMenuOpen = false;
+    private int npcMenuUserId, npcMenuId;
+    private String npcMenuTitle = "";
+    private final java.util.List<String> npcMenuItems = new ArrayList<>();
+    private static final float NM_W = 400f, NM_HEAD = 56f, NM_ROW = 56f;
+
+    private String npcDisplayName(int code) {
+        if (code == NPC_CUA_HANG) return "Cửa Hàng";
+        for (com.avatardk.game.data.NpcData nd : game.data.npcs) {
+            if (nd.id == code) return nd.name.replace('.', ' ');
+        }
+        return "NPC";
+    }
+
+    private float npcMenuH() {
+        return NM_HEAD + npcMenuItems.size() * NM_ROW + 16;
+    }
+
+    private void drawNpcMenu() {
+        float w = NM_W, h = npcMenuH();
+        float px = (Ui.W - w) / 2f, py = (Ui.H - h) / 2f;
+        batch.setColor(0f, 0f, 0f, 0.45f);
+        batch.draw(whiteTex, 0, 0, Ui.W, Ui.H);
+        batch.setColor(Color.WHITE);
+        batch.draw(Ui.roundedRect((int) w, (int) h, 16,
+            new Color(0.07f, 0.11f, 0.17f, 0.97f), GLASS_RIM), px, py);
+        Ui.font.setColor(1f, 0.85f, 0.38f, 1f);
+        Ui.font.draw(batch, npcMenuTitle, px + 24, py + h - 22);
+        float xCx = px + w - 2, xCy = py + h - 2;
+        batch.setColor(0.10f, 0.16f, 0.24f, 1f);
+        batch.draw(circleTexture(), xCx - 15, xCy - 15, 30, 30);
+        batch.setColor(Color.WHITE);
+        batch.draw(ringTexture(), xCx - 15, xCy - 15, 30, 30);
+        Ui.centered(batch, Ui.fontSmall, "X", xCx, xCy + 6, Color.WHITE);
+        for (int i = 0; i < npcMenuItems.size(); i++) {
+            float ry = py + h - NM_HEAD - (i + 1) * NM_ROW + 6;
+            batch.draw(Ui.roundedRect((int) w - 32, (int) NM_ROW - 10, 12,
+                new Color(0f, 0f, 0f, 0.30f), GLASS_RIM), px + 16, ry);
+            Ui.fontSmall.setColor(1f, 1f, 1f, 0.95f);
+            Ui.fontSmall.draw(batch, npcMenuItems.get(i), px + 36, ry + 31);
+        }
+    }
+
+    /** Sân khấu chụp: hiện menu NPC Cửa Hàng như server sẽ gửi qua −59. */
+    public void debugOpenNpcMenu() {
+        npcMenuUserId = NPC_ID_ADD + NPC_CUA_HANG;
+        npcMenuId = 0;
+        npcMenuTitle = "Cửa Hàng";
+        npcMenuItems.clear();
+        npcMenuItems.add("Mua sắm");
+        npcMenuItems.add("Hướng dẫn");
+        npcMenuItems.add("Thoát");
+        npcMenuOpen = true;
+    }
+
+    private void npcMenuTouch(float x, float y) {
+        float w = NM_W, h = npcMenuH();
+        float px = (Ui.W - w) / 2f, py = (Ui.H - h) / 2f;
+        float xCx = px + w - 2, xCy = py + h - 2;
+        if ((x - xCx) * (x - xCx) + (y - xCy) * (y - xCy) <= 28 * 28) {
+            npcMenuOpen = false;
+            return;
+        }
+        if (x < px || x > px + w || y < py || y > py + h) {
+            npcMenuOpen = false;
+            return;
+        }
+        for (int i = 0; i < npcMenuItems.size(); i++) {
+            float ry = py + h - NM_HEAD - (i + 1) * NM_ROW + 6;
+            if (x >= px + 16 && x <= px + w - 16 && y >= ry && y <= ry + NM_ROW - 10) {
+                npcMenuOpen = false;
+                if (game.connection != null) {
+                    try {
+                        AvatarProtocol.selectMenuOption(game.connection,
+                            npcMenuUserId, npcMenuId, i);
+                    } catch (Exception e) {
+                        // mất kết nối: menu đã đóng, server không chạy gì thêm
+                    }
+                }
+                return;
+            }
+        }
+    }
+
+
+    // ===== PANEL SHOP (nối thật 2026-11-01 theo mockup user đã duyệt) =====
+    // Điểm mở ĐÚNG GỐC (user sửa 2026-11-01: "shop là phải đến shop"):
+    // người chơi tới gặp NPC Cửa Hàng (mã 761, map 28), bấm Tương tác →
+    // client gửi gói −61 → server trả menu NPC qua gói −59 → chọn mục
+    // shop → server gửi gói −49 kèm DANH SÁCH HÀNG (món có sell 8/14,
+    // PartManager.Shop0 phía server) → panel mở theo đúng danh sách đó.
+    // Phân mục theo zOrder đúng luật của gốc (MapScr.onOpenShop của menu
+    // tặng quà): 20 Áo, 10 Quần, 52/53/5 Trang sức, 60 Nón, 70 Cầm tay;
+    // bản port tách thêm 50 thành Tóc và gọi 70 là Phương tiện như
+    // mockup đã chốt — vẫn thuần theo zOrder, không món nào lạc mục.
+    // Mặc thử chép đúng setAvatarShop của gốc: lấy bộ đang mặc, thay món
+    // cùng zOrder bằng món đang chọn (chưa có thì thêm vào). Mua bằng
+    // gói −24: server trừ tiền theo loại đã chọn (bản port đã sửa quirk
+    // gốc luôn trừ Xu), tự mặc món mới, món cũ cùng loại trả về giỏ,
+    // phát −48 cho cả khu; tiền cập nhật qua gói −24/−33.
+    private boolean shopOpen = false;
+    private PaperDoll shopTryDoll;
+    private String shopTitle = "Cửa hàng";
+    private int shopTab = 0;
+    private int shopSel = 0;
+    private float shopScroll = 0f;
+    private int shopPointer = -1;
+    private float shopDragStartY, shopDragStartScroll, shopDragMoved;
+    private java.util.List<java.util.List<com.avatardk.game.data.PartData>> shopLists;
+    private static final String[] SHOP_TABS = {"Áo", "Quần", "Tóc", "Nón", "Trang sức", "Phương tiện", "Khác"};
+    private static final float SHOP_PW = 1160f, SHOP_PH = 620f;
+    private static final int SHOP_COLS = 6, SHOP_CELL = 96, SHOP_GAP = 12;
+    /** Mã NPC Cửa Hàng trong npcs.json (NpcName.CUA_HANG của gốc). */
+    private static final int NPC_CUA_HANG = 761;
+    /** Cộng số này vào mã NPC ra id trên đường truyền (Npc.ID_ADD). */
+    private static final int NPC_ID_ADD = 2000000000;
+
+    private float shopPx() { return (Ui.W - SHOP_PW) / 2f; }
+    private float shopPy() { return (Ui.H - SHOP_PH) / 2f; }
+    private float shopGridX() { return shopPx() + 344; }
+    private float shopGridTop() { return shopPy() + SHOP_PH - 122 - 14; }
+    private float shopGridBottom() { return shopGridTop() - 3 * SHOP_CELL - 2 * SHOP_GAP; }
+
+    /** Mục của một món theo zOrder — đúng luật phân mục của gốc. */
+    static int shopCategory(com.avatardk.game.data.PartData p) {
+        switch (p.zorder) {
+            case 20: return 0; // Áo
+            case 10: return 1; // Quần
+            case 50: return 2; // Tóc
+            case 60: return 3; // Nón
+            case 52: case 53: case 5: case 65: return 4; // Trang sức
+            case 70: return 5; // Phương tiện / cầm tay
+            default: return 6; // Khác
+        }
+    }
+
+    /** Dựng các danh sách theo mục từ danh sách id hàng (giữ nguyên thứ
+     *  tự server đưa; món lạ/không tên thì bỏ qua). */
+    private java.util.List<java.util.List<com.avatardk.game.data.PartData>> buildShopLists(
+            java.util.List<Integer> ids) {
+        java.util.List<java.util.List<com.avatardk.game.data.PartData>> lists = new ArrayList<>();
+        for (int i = 0; i < SHOP_TABS.length; i++) lists.add(new ArrayList<>());
+        for (int id : ids) {
+            com.avatardk.game.data.PartData p = game.data.part(id);
+            if (p != null && p.name != null && !p.name.isEmpty()) {
+                lists.get(shopCategory(p)).add(p);
+            }
+        }
+        return lists;
+    }
+
+    /** Mở panel shop theo danh sách hàng server cấp qua gói −49. */
+    public void openShopFromServer(java.util.List<Integer> ids, String title) {
+        bagPanel = false;
+        chestPanel = false;
+        charPanel = false;
+        menuOpen = false;
+        cityMapOpen = false;
+        boardOpen = false;
+        npcMenuOpen = false;
+        shopLists = buildShopLists(ids);
+        // tên "shop 0" là chữ tạm của dev fan phía server — hiện tên tử tế
+        shopTitle = (title == null || title.startsWith("shop")) ? "Cửa hàng" : title;
+        shopOpen = true;
+        // mở vào mục đầu tiên có hàng
+        shopTab = 0;
+        for (int i = 0; i < SHOP_TABS.length; i++) {
+            if (!shopLists.get(i).isEmpty()) { shopTab = i; break; }
+        }
+        shopSel = 0;
+        shopScroll = 0f;
+        refreshShopTryDoll();
+    }
+
+    /** Mở shop offline (sân khấu chụp + chế độ chơi thử): dựng danh sách
+     *  hàng y như server — món có sell 8/14 và có giá (PartManager.Shop0). */
+    public void openShop() {
+        java.util.List<com.avatardk.game.data.PartData> all =
+            new ArrayList<>(game.data.parts.values());
+        all.sort(java.util.Comparator.comparingInt(p -> p.id));
+        java.util.List<Integer> ids = new ArrayList<>();
+        for (com.avatardk.game.data.PartData p : all) {
+            if ((p.sell == 8 || p.sell == 14) && (p.coin > 0 || p.gold > 0)) {
+                ids.add(p.id);
+            }
+        }
+        openShopFromServer(ids, "Cửa hàng");
+    }
+
+    private com.avatardk.game.data.PartData shopSelPart() {
+        if (shopLists == null) return null;
+        java.util.List<com.avatardk.game.data.PartData> l = shopLists.get(shopTab);
+        if (l.isEmpty()) return null;
+        return l.get(Math.min(shopSel, l.size() - 1));
+    }
+
+    /** Dựng lại doll mặc thử theo món đang chọn (luật setAvatarShop của gốc). */
+    private void refreshShopTryDoll() {
+        com.avatardk.game.data.PartData sel = shopSelPart();
+        if (sel == null) {
+            shopTryDoll = null;
+            return;
+        }
+        java.util.List<Integer> parts = new ArrayList<>();
+        boolean replaced = false;
+        for (int id : playerParts) {
+            com.avatardk.game.data.PartData pd = game.data.part(id);
+            if (pd != null && pd.zorder == sel.zorder) {
+                parts.add(sel.id);
+                replaced = true;
+            } else {
+                parts.add(id);
+            }
+        }
+        if (!replaced) parts.add(sel.id);
+        shopTryDoll = game.newDoll(parts);
+    }
+
+    private float shopMaxScroll() {
+        if (shopLists == null) return 0f;
+        int n = shopLists.get(shopTab).size();
+        int rows = (n + SHOP_COLS - 1) / SHOP_COLS;
+        float content = rows * (SHOP_CELL + SHOP_GAP) - SHOP_GAP;
+        return Math.max(0f, content - (3 * SHOP_CELL + 2 * SHOP_GAP));
+    }
+
+    /** Gửi gói mua −24 cho món đang chọn; type 1 = Xu, 2 = Lượng. Nút bấm
+     *  đã tự mờ khi món không bán bằng loại tiền đó hoặc tiền không đủ. */
+    private void shopBuy(int type) {
+        com.avatardk.game.data.PartData sel = shopSelPart();
+        if (sel == null || game.connection == null) return;
+        int price = type == 1 ? sel.coin : sel.gold;
+        if (price <= 0) return;
+        if ((type == 1 ? myXu : myLuong) < price) return;
+        try {
+            AvatarProtocol.buyItem(game.connection, sel.id, type);
+        } catch (Exception e) {
+            // mất kết nối giữa chừng: server chưa trừ tiền, bỏ qua lần bấm này
+        }
+    }
+
+    /** Chạm trong panel shop (modal): đóng / chọn tab / mua / kéo lưới. */
+    private void shopTouch(float x, float y, int pointer) {
+        float px = shopPx(), py = shopPy();
+        float xCx = px + SHOP_PW - 2, xCy = py + SHOP_PH - 2;
+        if ((x - xCx) * (x - xCx) + (y - xCy) * (y - xCy) <= 28 * 28) {
+            shopOpen = false;
+            shopPointer = -1;
+            return;
+        }
+        if (x < px || x > px + SHOP_PW || y < py || y > py + SHOP_PH) {
+            shopOpen = false;
+            shopPointer = -1;
+            return;
+        }
+        float tabY = py + SHOP_PH - 122;
+        if (y >= tabY && y <= tabY + 38) {
+            float tx = shopGridX();
+            for (int i = 0; i < SHOP_TABS.length; i++) {
+                float tw = Ui.textWidth(Ui.fontSmall, SHOP_TABS[i]) + 28;
+                if (x >= tx && x <= tx + tw) {
+                    if (i != shopTab) {
+                        shopTab = i;
+                        shopSel = 0;
+                        shopScroll = 0f;
+                        refreshShopTryDoll();
+                    }
+                    return;
+                }
+                tx += tw + 8;
+            }
+            return;
+        }
+        com.avatardk.game.data.PartData sel = shopSelPart();
+        if (sel != null) {
+            float stX = px + 24, bW = 296, bH = 46;
+            if (x >= stX && x <= stX + bW && y >= py + 74 && y <= py + 74 + bH) {
+                shopBuy(2);
+                return;
+            }
+            if (x >= stX && x <= stX + bW && y >= py + 20 && y <= py + 20 + bH) {
+                shopBuy(1);
+                return;
+            }
+        }
+        float gx = shopGridX(), gt = shopGridTop(), gb = shopGridBottom();
+        if (x >= gx - 6 && x <= gx + SHOP_COLS * (SHOP_CELL + SHOP_GAP)
+            && y >= gb - 6 && y <= gt + 6) {
+            shopPointer = pointer;
+            shopDragStartY = y;
+            shopDragStartScroll = shopScroll;
+            shopDragMoved = 0f;
+        }
+    }
+
+    /** Nút mua một loại tiền: price <= 0 = món không bán bằng loại tiền
+     *  này; balance là số dư hiện tại để quyết định đủ/thiếu. */
+    private void drawShopBuyButton(float x, float y, float w, float h, int price, String unit, int balance) {
+        if (price <= 0) {
+            batch.draw(Ui.roundedRect((int) w, (int) h, 12, new Color(0f, 0f, 0f, 0.35f), GLASS_RIM), x, y);
+            Ui.centered(batch, Ui.fontSmall, "Chỉ bán bằng " + ("Xu".equals(unit) ? "Lượng" : "Xu"),
+                x + w / 2f, y + 30, new Color(1f, 1f, 1f, 0.45f));
+        } else if (balance >= price) {
+            batch.draw(Ui.roundedRect((int) w, (int) h, 12, new Color(0.95f, 0.55f, 0.20f, 1f), GLASS_RIM), x, y);
+            Ui.centered(batch, Ui.fontSmall, "Mua — " + fmtMoney(price) + " " + unit, x + w / 2f, y + 30, Color.WHITE);
+        } else {
+            batch.draw(Ui.roundedRect((int) w, (int) h, 12, new Color(0f, 0f, 0f, 0.35f), GLASS_RIM), x, y);
+            Ui.centered(batch, Ui.fontSmall, "Mua — " + fmtMoney(price) + " " + unit + " (không đủ)",
+                x + w / 2f, y + 30, new Color(1f, 1f, 1f, 0.45f));
+        }
+    }
+
+    private void drawShop() {
+        float pw = SHOP_PW, ph = SHOP_PH, px = shopPx(), py = shopPy();
+        batch.setColor(0f, 0f, 0f, 0.55f);
+        batch.draw(whiteTex, 0, 0, Ui.W, Ui.H);
+        batch.setColor(Color.WHITE);
+        batch.draw(Ui.roundedRect((int) pw, (int) ph, 18,
+            new Color(0.07f, 0.11f, 0.17f, 0.97f), GLASS_RIM), px, py);
+        // tiêu đề + chip tiền của mình + nút đóng trên viền
+        Ui.font.setColor(1f, 0.85f, 0.38f, 1f);
+        Ui.font.draw(batch, shopTitle, px + 28, py + ph - 26);
+        String[] chips = {"Xu: " + fmtMoney(myXu), "Lượng: " + fmtMoney(myLuong)};
+        for (int i = 0; i < chips.length; i++) {
+            float cx = px + pw - 368 + i * 166;
+            batch.draw(Ui.roundedRect(150, 38, 12, new Color(0f, 0f, 0f, 0.30f), GLASS_RIM), cx, py + ph - 64);
+            Ui.centered(batch, Ui.fontSmall, chips[i], cx + 75, py + ph - 39,
+                i == 0 ? new Color(1f, 1f, 1f, 0.95f) : new Color(1f, 0.85f, 0.38f, 1f));
+        }
+        float xCx = px + pw - 2, xCy = py + ph - 2;
+        batch.setColor(0.10f, 0.16f, 0.24f, 1f);
+        batch.draw(circleTexture(), xCx - 17, xCy - 17, 34, 34);
+        batch.setColor(Color.WHITE);
+        batch.draw(ringTexture(), xCx - 17, xCy - 17, 34, 34);
+        Ui.centered(batch, Ui.font, "X", xCx, xCy + 7, Color.WHITE);
+        // ===== cột trái: sân khấu mặc thử =====
+        float stX = px + 24, stW = 296, stY = py + 196, stH = ph - 84 - 196;
+        batch.draw(Ui.roundedRect((int) stW, (int) stH, 14, new Color(0.10f, 0.16f, 0.23f, 0.9f), GLASS_RIM), stX, stY);
+        batch.setColor(0f, 0f, 0f, 0.35f);
+        batch.draw(circleTexture(), stX + stW / 2f - 80, stY + 18, 160, 26);
+        batch.setColor(Color.WHITE);
+        if (shopTryDoll != null) {
+            game.dollRenderer.draw(batch, shopTryDoll, 0,
+                stX + stW / 2f, stY + 52, 6.0f, false);
+        }
+        com.avatardk.game.data.PartData sel = shopSelPart();
+        float bW = stW, bH = 46;
+        if (sel != null) {
+            Ui.font.setColor(1f, 1f, 1f, 0.97f);
+            Ui.font.draw(batch, sel.name, stX + 4, py + 176);
+            Ui.fontTiny.setColor(1f, 1f, 1f, 0.72f);
+            Ui.fontTiny.draw(batch, "Hạn dùng: " + (sel.expiredDay > 0
+                ? sel.expiredDay + " ngày" : "Vĩnh viễn"), stX + 4, py + 152);
+            String meta = sel.gender == 1 ? "Chỉ cho Nam"
+                : sel.gender == 2 ? "Chỉ cho Nữ" : "Nam/Nữ đều mặc được";
+            if (sel.level > 0) meta += " • Cấp yêu cầu: " + sel.level;
+            Ui.fontTiny.setColor(1f, 1f, 1f, 0.5f);
+            Ui.fontTiny.draw(batch, meta, stX + 4, py + 130);
+            drawShopBuyButton(stX, py + 74, bW, bH, sel.gold, "Lượng", myLuong);
+            drawShopBuyButton(stX, py + 20, bW, bH, sel.coin, "Xu", myXu);
+        }
+        // ===== cột phải: tab danh mục =====
+        float rx = shopGridX();
+        float tabY = py + ph - 122;
+        float tabX = rx;
+        for (int i = 0; i < SHOP_TABS.length; i++) {
+            float tw = Ui.textWidth(Ui.fontSmall, SHOP_TABS[i]) + 28;
+            boolean act = i == shopTab;
+            batch.draw(Ui.roundedRect((int) tw, 38, 12,
+                act ? new Color(0.25f, 0.45f, 0.65f, 0.95f) : new Color(0f, 0f, 0f, 0.30f), GLASS_RIM), tabX, tabY);
+            Ui.centered(batch, Ui.fontSmall, SHOP_TABS[i], tabX + tw / 2f, tabY + 25,
+                act ? Color.WHITE : new Color(1f, 1f, 1f, 0.65f));
+            tabX += tw + 8;
+        }
+        // lưới món: cuộn dọc, cắt đúng khung 3 hàng bằng scissor
+        java.util.List<com.avatardk.game.data.PartData> list = shopLists.get(shopTab);
+        float gridTop = shopGridTop(), gridBottom = shopGridBottom();
+        com.badlogic.gdx.math.Rectangle clip =
+            new com.badlogic.gdx.math.Rectangle(rx - 4, gridBottom - 4,
+                SHOP_COLS * (SHOP_CELL + SHOP_GAP) - SHOP_GAP + 8, gridTop - gridBottom + 8);
+        com.badlogic.gdx.math.Rectangle scissors = new com.badlogic.gdx.math.Rectangle();
+        batch.flush();
+        com.badlogic.gdx.scenes.scene2d.utils.ScissorStack.calculateScissors(
+            hudViewport.getCamera(), batch.getTransformMatrix(), clip, scissors);
+        if (com.badlogic.gdx.scenes.scene2d.utils.ScissorStack.pushScissors(scissors)) {
+            for (int idx = 0; idx < list.size(); idx++) {
+                int col = idx % SHOP_COLS, row = idx / SHOP_COLS;
+                float cx = rx + col * (SHOP_CELL + SHOP_GAP);
+                float cy = gridTop + shopScroll - (row + 1) * SHOP_CELL - row * SHOP_GAP;
+                if (cy + SHOP_CELL < gridBottom - 8 || cy > gridTop + 8) continue;
+                com.avatardk.game.data.PartData it = list.get(idx);
+                boolean isSel = idx == shopSel;
+                batch.draw(Ui.roundedRect(SHOP_CELL, SHOP_CELL, 12,
+                    new Color(0.16f, 0.24f, 0.34f, 0.9f),
+                    isSel ? new Color(1f, 0.78f, 0.30f, 1f) : GLASS_RIM), cx, cy);
+                drawPartIcon(it.id, cx + SHOP_CELL / 2f, cy + SHOP_CELL / 2f + 8, 56);
+                String price = it.coin > 0 ? fmtMoney(it.coin) + " xu" : fmtMoney(it.gold) + " lượng";
+                Ui.centered(batch, Ui.fontTiny, price, cx + SHOP_CELL / 2f, cy + 16,
+                    it.coin > 0 ? new Color(1f, 1f, 1f, 0.9f) : new Color(1f, 0.85f, 0.38f, 1f));
+            }
+            batch.flush();
+            com.badlogic.gdx.scenes.scene2d.utils.ScissorStack.popScissors();
+        }
+        if (list.isEmpty()) {
+            Ui.centered(batch, Ui.fontSmall, "Mục này chưa có món nào trong shop",
+                rx + (SHOP_COLS * (SHOP_CELL + SHOP_GAP) - SHOP_GAP) / 2f,
+                (gridTop + gridBottom) / 2f, new Color(1f, 1f, 1f, 0.6f));
+        }
+        // thanh cuộn mảnh ở mép phải lưới + chú thích số món
+        float sbX = rx + SHOP_COLS * (SHOP_CELL + SHOP_GAP) + 6;
+        float trackH = gridTop - gridBottom;
+        batch.draw(Ui.roundedRect(8, (int) trackH, 4, new Color(0f, 0f, 0f, 0.30f), GLASS_RIM),
+            sbX, gridBottom);
+        float maxSc = shopMaxScroll();
+        if (maxSc > 0f) {
+            float contentH = trackH + maxSc;
+            float thumbH = Math.max(36f, trackH * trackH / contentH);
+            float thumbY = gridTop - thumbH - (shopScroll / maxSc) * (trackH - thumbH);
+            batch.draw(Ui.roundedRect(8, (int) thumbH, 4, new Color(1f, 1f, 1f, 0.45f), GLASS_RIM), sbX, thumbY);
+        }
+        Ui.fontTiny.setColor(1f, 1f, 1f, 0.55f);
+        Ui.fontTiny.draw(batch, list.size() + " món trong mục " + SHOP_TABS[shopTab]
+            + (maxSc > 0f ? " — kéo để xem thêm" : ""), rx, py + 34);
+    }
+
+    /** Sân khấu chụp: mở shop thật tại một tab và chọn sẵn một món theo id. */
+    public void debugOpenShop(int tab, int partId) {
+        openShop();
+        shopTab = tab;
+        shopScroll = 0f;
+        shopSel = 0;
+        java.util.List<com.avatardk.game.data.PartData> l = shopLists.get(tab);
+        for (int i = 0; i < l.size(); i++) {
+            if (l.get(i).id == partId) { shopSel = i; break; }
+        }
+        refreshShopTryDoll();
     }
 
 

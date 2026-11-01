@@ -518,6 +518,27 @@ public class ScreenshotMain {
                     case 36:
                         if (frame == 15) {
                             shot("shot-mapzoom-in.png");
+                            world.debugOpenShop(0, 470);
+                            stage = 37; frame = 0;
+                        }
+                        break;
+                    case 37:
+                        if (frame == 15) {
+                            shot("shot-shop.png");
+                            world.debugOpenShop(5, 480);
+                            stage = 38; frame = 0;
+                        }
+                        break;
+                    case 38:
+                        if (frame == 15) {
+                            shot("shot-shop-vehicle.png");
+                            world.debugOpenNpcMenu();
+                            stage = 39; frame = 0;
+                        }
+                        break;
+                    case 39:
+                        if (frame == 15) {
+                            shot("shot-npc-menu.png");
                             System.out.println("SCREENSHOT DONE");
                             Gdx.app.exit();
                         }

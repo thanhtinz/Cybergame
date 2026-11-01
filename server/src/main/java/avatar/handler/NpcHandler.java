@@ -635,7 +635,7 @@ public class NpcHandler {
                     List<Menu> listet = new ArrayList<>();
                     List<Item> Items = new ArrayList<>();
 
-                    Menu quaySo = Menu.builder().name("shop noname").action(() ->{
+                    Menu quaySo = Menu.builder().name("Mua sắm").action(() ->{
                         List<Item> itemshop0 = Part.shopByPart(PartManager.getInstance().getShop0());
 
                         if (itemshop0 == null) {
