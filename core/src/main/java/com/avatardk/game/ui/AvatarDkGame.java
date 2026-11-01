@@ -44,6 +44,15 @@ public class AvatarDkGame extends Game {
             Gdx.files.internal("data/items.json").readString("UTF-8"),
             Gdx.files.internal("data/imgdata.json").readString("UTF-8"),
             Gdx.files.internal("data/npcs.json").readString("UTF-8"));
+        // atlas icon của part động (đóng gói từ res Pack5) — thiếu file
+        // thì bỏ qua, icon món động để trống như bản trước
+        try {
+            if (Gdx.files.internal("data/icondata.json").exists()) {
+                data.loadDynIcons(Gdx.files.internal("data/icondata.json").readString("UTF-8"));
+            }
+        } catch (Exception e) {
+            // icon động không hiện; phần còn lại của game không bị ảnh hưởng
+        }
         dollRenderer = new PaperDollRenderer(this);
         world = new WorldScreen(this);
         login = new LoginScreen(this);

@@ -2929,6 +2929,21 @@ public class WorldScreen extends ScreenAdapter {
     private void drawPartIcon(int partId, float cx, float cy, float maxBox) {
         com.avatardk.game.data.PartData pd = game.data.parts.get(partId);
         if (pd == null) return;
+        // Part.cs của gốc: part ĐỘNG (id >= 2000) lấy icon từ ảnh riêng
+        // theo id icon (atlas iconatlas của bản port), part TĨNH lấy từ
+        // imgdata. Trộn hai nguồn này là nguyên nhân icon hiện sai hình
+        // (món động vớ phải hình món tĩnh trùng số icon).
+        if (pd.isDynamic()) {
+            com.avatardk.game.data.ImgInfo di = game.data.dynIconById.get(pd.icon);
+            if (di != null) {
+                Texture tex = game.texture("iconatlas/" + di.bigId + ".png");
+                TextureRegion reg = new TextureRegion(tex, di.x, di.y, di.w, di.h);
+                float sc = Math.min(maxBox / Math.max(1, di.w), maxBox / Math.max(1, di.h));
+                float dw = di.w * sc, dh = di.h * sc;
+                batch.draw(reg, cx - dw / 2f, cy - dh / 2f, dw, dh);
+                return;
+            }
+        }
         com.avatardk.game.data.ImgInfo ii = game.data.imgByItemId.get(pd.icon);
         if (ii == null) return;
         Texture tex = game.texture("big/" + ii.bigId + ".png");

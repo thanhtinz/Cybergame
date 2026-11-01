@@ -22,6 +22,13 @@ public class AvatarDataSet {
     /** Tra theo ID ảnh của gốc (ImageInfo.ID) — dữ liệu trích có id dòng
      *  = item_id + 1 trên toàn bộ bảng nên ánh xạ được (xem ImgInfo). */
     public final Map<Integer, ImgInfo> imgById = new HashMap<>();
+    /** Icon của part ĐỘNG (id >= 2000): theo Part.cs của gốc, part động
+     *  lấy icon từ ảnh riêng theo id icon (server stream, gói −14) chứ
+     *  KHÔNG dùng imgdata — tra nhầm imgdata sẽ vớ phải hình của part
+     *  tĩnh trùng số. Bản port đóng gói các ảnh đó vào atlas
+     *  iconatlas/<image_id>.png + data/icondata.json (toạ độ pixel HD
+     *  thật, khác imgdata vốn là đơn vị medium); tra theo ICON id. */
+    public final Map<Integer, ImgInfo> dynIconById = new HashMap<>();
     public final List<NpcData> npcs = new ArrayList<>();
 
     private static final Pattern INT = Pattern.compile("-?\\d+");
@@ -78,6 +85,20 @@ public class AvatarDataSet {
             ds.npcs.add(n);
         }
         return ds;
+    }
+
+    /** Nạp icondata.json (atlas icon của part động) vào dataset đã có.
+     *  Tách khỏi fromJson để test/khởi chạy thiếu file vẫn chạy được —
+     *  khi đó icon món động đơn giản là không hiện, như trước khi có atlas. */
+    public void loadDynIcons(String iconDataJson) {
+        JsonReader reader = new JsonReader();
+        JsonValue rows = reader.parse(iconDataJson);
+        for (JsonValue r = rows.child; r != null; r = r.next) {
+            ImgInfo info = new ImgInfo(
+                r.getInt("item_id"), r.getInt("image_id"),
+                r.getInt("x"), r.getInt("y"), r.getInt("w"), r.getInt("h"));
+            dynIconById.put(info.itemId, info);
+        }
     }
 
     static void parseAnimation(String animation, PartData p) {

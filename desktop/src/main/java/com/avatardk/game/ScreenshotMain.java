@@ -539,6 +539,13 @@ public class ScreenshotMain {
                     case 39:
                         if (frame == 15) {
                             shot("shot-npc-menu.png");
+                            world.debugOpenShop(1, 2321);
+                            stage = 40; frame = 0;
+                        }
+                        break;
+                    case 40:
+                        if (frame == 15) {
+                            shot("shot-shop-quan.png");
                             System.out.println("SCREENSHOT DONE");
                             Gdx.app.exit();
                         }
