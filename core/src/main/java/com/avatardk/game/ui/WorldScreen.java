@@ -2517,18 +2517,6 @@ public class WorldScreen extends ScreenAdapter {
         }
         Ui.fontSmall.setColor(1f, 1f, 1f, 0.92f);
         Ui.fontSmall.draw(batch, st != null ? "Cấp " + st[0] : "—", px + 116, avCy - 18);
-        // dòng phụ: giới tính · ngày vào game (ngày từ đuôi mở rộng gói −22)
-        StringBuilder meta = new StringBuilder();
-        if (p.gender == 1) meta.append("Nam");
-        else if (p.gender == 2) meta.append("Nữ");
-        if (selfJoinDate != null) {
-            if (meta.length() > 0) meta.append("  ·  ");
-            meta.append("Vào game: ").append(selfJoinDate);
-        }
-        if (meta.length() > 0) {
-            Ui.fontTiny.setColor(1f, 1f, 1f, 0.72f);
-            Ui.fontTiny.draw(batch, meta.toString(), px + 116, avCy - 40);
-        }
         // bên phải hàng cấp: "Người yêu: <tên>" — chưa có thì để trống
         if (partnerName != null) {
             String rel = (partnerRel != null && !partnerRel.isEmpty() ? partnerRel : "Người yêu")
@@ -2550,11 +2538,12 @@ public class WorldScreen extends ScreenAdapter {
             Ui.fontSmall.setColor(1f, 1f, 1f, 0.94f);
             Ui.fontSmall.draw(batch, vals[i], cx + 38, cy + 24);
         }
-        // sân khấu rộng
-        float stX = px + 24, stY = py + 168, stW = CP_W - 48, stH = 140;
+        // sân khấu rộng (nới cao 148 để dòng ngày vào game nằm gọn phía
+        // trên đầu nhân vật trong khung)
+        float stX = px + 24, stY = py + 160, stW = CP_W - 48, stH = 148;
         batch.draw(Ui.roundedRect((int) stW, (int) stH, 14,
             new Color(0.30f, 0.45f, 0.62f, 0.35f), GLASS_RIM), stX, stY);
-        float floorY = stY + 26;
+        float floorY = stY + 24;
         boolean hasPartner = partnerDoll != null;
         float selfCx = hasPartner ? stX + 150 : stX + stW / 2f;
         float partCx = stX + 442;
@@ -2586,6 +2575,13 @@ public class WorldScreen extends ScreenAdapter {
                 Ui.centered(batch, Ui.fontTiny, partnerSlogan, midX, iconCy - 36,
                     new Color(1f, 0.8f, 0.85f, 1f));
             }
+        }
+        // ngày vào game: canh giữa ngay trên đầu nhân vật người yêu
+        // (chưa có người yêu thì trên đầu nhân vật của mình)
+        if (selfJoinDate != null) {
+            Ui.centered(batch, Ui.fontTiny, "Vào game: " + selfJoinDate,
+                hasPartner ? partCx : selfCx, stY + stH - 10,
+                new Color(1f, 1f, 1f, 0.78f));
         }
         // lưới 6 thẻ chỉ số 3×2
         String[] labels = {"Cấp", "Thân thiện", "Gây rối", "Sành điệu", "Vui vẻ", "Sức khỏe"};
