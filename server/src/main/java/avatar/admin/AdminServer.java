@@ -35,8 +35,10 @@ import org.json.simple.parser.JSONParser;
  *  com.sun.net.httpserver, không thêm thư viện), phục vụ giao diện web
  *  ở thư mục admin-web/ và API JSON ở /api/*.
  *
- *  Đăng nhập bằng TÀI KHOẢN GAME có role >= 2 (mật khẩu MD5 như game).
- *  Tài khoản admin đầu tiên: UPDATE users SET role = 2 WHERE username = '...';
+ *  Đăng nhập bằng TÀI KHOẢN GAME có role 0 hoặc 1 (mật khẩu MD5
+ *  như game; chủ dự án chốt 2026-11-01: admin là role 0/1, người
+ *  chơi thường role -1). Tài khoản admin đầu tiên:
+ *  UPDATE users SET role = 1 WHERE username = '...';
  *
  *  Cổng mặc định 19129, đổi bằng key admin_port trong database.properties.
  *  Mọi thay đổi (giá/shop/NPC/giftcode/cờ) ghi thẳng vào MariaDB và nạp
@@ -223,8 +225,8 @@ public class AdminServer {
             try (ResultSet rs = ps.executeQuery()) {
                 if (rs.next() && Utils.md5(pass).equals(rs.getString("password"))) {
                     int role = rs.getInt("role");
-                    if (role < 2) {
-                        sendJson(ex, 403, err("Tài khoản này không có quyền admin (cần role >= 2)"));
+                    if (role != 0 && role != 1) {
+                        sendJson(ex, 403, err("Tài khoản này không có quyền admin (cần role 0 hoặc 1)"));
                         return;
                     }
                     String token = UUID.randomUUID().toString();

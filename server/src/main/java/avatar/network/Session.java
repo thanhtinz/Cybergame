@@ -460,10 +460,10 @@ public class Session implements ISession {
         us.setSession(this);
         boolean result = us.login();
         if (result) {
-            // [ADMIN] Cờ bảo trì: chỉ tài khoản admin (role >= 2) vào được.
+            // [ADMIN] Cờ bảo trì: chỉ tài khoản admin (role 0 hoặc 1) vào được.
             // User.login() đã set login_lock = 1 nên phải mở khoá lại ngay,
             // nếu không tài khoản bị kẹt khoá tới lượt quét mở khoá kế tiếp.
-            if (avatar.admin.FeatureFlags.maintenance() && us.getRole() < 2) {
+            if (avatar.admin.FeatureFlags.maintenance() && us.getRole() != 0 && us.getRole() != 1) {
                 DbManager.getInstance().executeUpdate(
                     "UPDATE `users` SET `login_lock` = 0 WHERE `id` = ?;", us.getId());
                 Message mt = new Message(Cmd.SERVER_MESSAGE);

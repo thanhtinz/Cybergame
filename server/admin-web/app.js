@@ -111,7 +111,7 @@ async function loadPlayers() {
       '<td><input type="number" id="luong-' + p.id + '" value="' + p.luong + '"></td>' +
       '<td><input type="number" id="lk-' + p.id + '" value="' + p.luongKhoa + '"></td>' +
       '<td><input type="number" id="xeng-' + p.id + '" value="' + p.xeng + '"></td>' +
-      '<td><input type="number" id="role-' + p.id + '" value="' + p.role + '" title="Role: -1 thường, >= 2 admin"></td>' +
+      '<td><input type="number" id="role-' + p.id + '" value="' + p.role + '" title="Role: -1 thường, 0/1 là admin"></td>' +
       "<td>" + esc(p.timeCreate) + "</td>" +
       '<td><button class="btn small primary" data-money="' + p.id + '">Lưu tiền + role</button>' + banBtn + "</td></tr>";
   }).join("");
@@ -350,7 +350,7 @@ LOADERS.events = loadEvents;
 
 // ===== Bật / Tắt tính năng =====
 const FLAG_DEFS = [
-  ["maintenance", "Bảo trì toàn server", "Chặn mọi đăng nhập (trừ tài khoản admin role >= 2). Người đang chơi không bị văng.", true],
+  ["maintenance", "Bảo trì toàn server", "Chặn mọi đăng nhập (trừ tài khoản admin role 0/1). Người đang chơi không bị văng.", true],
   ["register", "Cho đăng ký tài khoản mới", "Tắt là người chơi mới không tạo được tài khoản.", false],
   ["shop", "Cửa Hàng (NPC Cửa Hàng + mua đồ)", "Tắt là NPC Cửa Hàng không mở menu và gói mua đồ bị chặn.", false],
   ["wheel", "Vòng quay may mắn", "Tắt là không quay được vòng quay.", false],
