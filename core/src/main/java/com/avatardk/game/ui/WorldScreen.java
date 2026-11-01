@@ -192,6 +192,16 @@ public class WorldScreen extends ScreenAdapter {
     private int currentArea = 0;
     private Integer pendingArea = null; // khu muốn chuyển tới ở lần join sau
     private boolean boardOpen = false;
+    // Panel CÀI ĐẶT (OptionScr của gốc): mở từ ô Cài đặt trong menu
+    // burger; 3 hàng Tên / Chỉ đường / Âm thanh với nút bước ‹ › hai bên
+    // như gốc, nút "Xong" đóng và lưu (gốc lưu RMS khi đóng).
+    private boolean settingsOpen = false;
+    private static final float SET_PW = 560f, SET_PH = 392f;
+    private static final float SET_PX = (Ui.W - SET_PW) / 2f, SET_PY = (Ui.H - SET_PH) / 2f;
+
+    private float setRowCenter(int i) { return SET_PY + SET_PH - 118 - i * 76; }
+    private float setStepLx() { return SET_PX + 262; }
+    private float setStepRx() { return SET_PX + SET_PW - 58; }
     private int[] boardStatus = null;   // trạng thái từng khu từ gói 60
     private float boardLatch = 0f;      // chống mở panel liên tục khi va bảng
     private float lastMoveSentAt = 0f, netTime = 0f;
@@ -434,7 +444,7 @@ public class WorldScreen extends ScreenAdapter {
     private static final String[][] MENU_ITEMS = {
         {"50", "Map"}, {"msg0", "Thư"}, {"30", "Balo"},
         {"40", "Bạn bè"}, {"20", "Cá nhân"}, {"action0", "Hành động"},
-        {"fa", "Rương"},
+        {"fa", "Rương"}, {"fa-gear", "Cài đặt"},
     };
     private static final float MENU_PX = Ui.W - 330f, MENU_PW = 312f;
     private static final float MENU_HEADER = 40f, MENU_CELL = 96f, MENU_CELL_H = 92f;
@@ -1068,6 +1078,7 @@ public class WorldScreen extends ScreenAdapter {
             com.badlogic.gdx.audio.AudioDevice dev = null;
             try {
                 dev = Gdx.audio.newAudioDevice(VOICE_RATE, true);
+                dev.setVolume(com.avatardk.game.data.GameSettings.volumeScale());
                 int o = 0;
                 while (o < pcm.length && gen == playGen) {
                     int n = Math.min(4096, pcm.length - o);
@@ -1817,6 +1828,11 @@ public class WorldScreen extends ScreenAdapter {
     }
 
     private void onTouch(float x, float y, int pointer) {
+        // panel Cài đặt đang mở là lớp trên cùng (modal, nuốt mọi chạm)
+        if (settingsOpen) {
+            settingsTouch(x, y);
+            return;
+        }
         // bản đồ thành phố đang mở là lớp trên cùng: nút ăn ngay, còn lại kéo
         if (cityMapOpen) {
             cityMapTouchDown(x, y, pointer);
@@ -1986,6 +2002,8 @@ public class WorldScreen extends ScreenAdapter {
                             openBag();
                         } else if (i == 6) {
                             openChest();
+                        } else if (i == 7) {
+                            settingsOpen = true;
                         } else {
                             addChatLog(TAB_SYSTEM, null, "Tính năng " + MENU_ITEMS[i][1] + " đang được port ở đợt tiếp theo.", true);
                         }
@@ -3787,7 +3805,8 @@ public class WorldScreen extends ScreenAdapter {
                     break;
                 case DrawItem.NPC:
                     drawFigure(it.npc.doll, it.npc.anim, it.npc.feetX, it.npc.feetY,
-                        it.npc.data.name, false);
+                        com.avatardk.game.data.GameSettings.showName ? it.npc.data.name : null,
+                        false);
                     if (it.npc.bubble != null) {
                         drawBubble(it.npc.doll, it.npc.anim, it.npc.feetX, it.npc.feetY, it.npc.bubble);
                     }
@@ -3795,7 +3814,8 @@ public class WorldScreen extends ScreenAdapter {
                 case DrawItem.REMOTE:
                     // tên người chơi khác màu xanh nhạt (NPC vàng, mình đỏ)
                     drawFigure(it.remote.doll, it.remote.anim, it.remote.feetX, it.remote.feetY,
-                        it.remote.info.name, new Color(0.55f, 0.9f, 1f, 1f));
+                        com.avatardk.game.data.GameSettings.showName ? it.remote.info.name : null,
+                        new Color(0.55f, 0.9f, 1f, 1f));
                     if (it.remote.bubble != null) {
                         drawBubble(it.remote.doll, it.remote.anim, it.remote.feetX, it.remote.feetY,
                             it.remote.bubble);
@@ -3881,6 +3901,9 @@ public class WorldScreen extends ScreenAdapter {
     private void drawFigure(PaperDoll doll, AvatarAnimator anim, float feetX, float feetY, String name, Color nameColor) {
         int frame = anim.frameIndex();
         game.dollRenderer.draw(batch, doll, frame, feetX, feetY, AvatarDkGame.HD, anim.facingLeft);
+        if (name == null) {
+            return; // cài đặt "Tên: ẩn" — nơi gọi truyền null cho người khác/NPC
+        }
         float topY = feetY + game.dollRenderer.heightPx(doll, frame, AvatarDkGame.HD);
         Color c = nameColor;
         Ui.fontSmall.setColor(0f, 0f, 0f, 0.85f);
@@ -3919,8 +3942,127 @@ public class WorldScreen extends ScreenAdapter {
         if (npcMenuOpen) drawNpcMenu();
         if (boardOpen) drawBoardPanel();
         if (cityMapOpen) drawCityMap();
+        if (settingsOpen) drawSettingsPanel();
         batch.end();
     }
+
+    /** Panel Cài đặt theo OptionScr của gốc, vẽ theo tông kính của game:
+     *  mỗi hàng gồm nhãn trái, giá trị ở giữa và hai nút bước ‹ › hai bên
+     *  (bản gốc dùng ảnh mũi tên imgMuiIOS; bản port dùng glyph chevron
+     *  Font Awesome thật). Hàng 0 "Tên": hiện/ẩn; hàng 1 "Chỉ đường":
+     *  hiện/ẩn; hàng 2 "Âm thanh": 0..100 nấc 10. Đóng = lưu như gốc. */
+    private void drawSettingsPanel() {
+        batch.setColor(0f, 0f, 0f, 0.45f);
+        batch.draw(whiteTex, 0, 0, Ui.W, Ui.H);
+        batch.setColor(Color.WHITE);
+        batch.draw(Ui.roundedRect((int) SET_PW, (int) SET_PH, 16, GLASS_FILL_DARK, GLASS_RIM),
+            SET_PX, SET_PY);
+        Ui.font.setColor(1f, 0.85f, 0.38f, 1f);
+        Ui.font.draw(batch, "Cài đặt", SET_PX + 26, SET_PY + SET_PH - 30);
+        // nút X nằm gọn trong góc panel
+        float xCx = SET_PX + SET_PW - 27, xCy = SET_PY + SET_PH - 27;
+        batch.draw(Ui.roundedRect(36, 36, 18,
+            new Color(0.13f, 0.18f, 0.28f, 0.95f), GLASS_RIM), xCx - 18, xCy - 18);
+        Ui.faIcon(batch, Ui.fa20, Ui.FA_XMARK, xCx, xCy, new Color(1f, 1f, 1f, 0.9f));
+        String[] labels = {"Tên", "Chỉ đường", "Âm thanh"};
+        for (int i = 0; i < 3; i++) {
+            float cy = setRowCenter(i);
+            if (i > 0) {
+                batch.draw(Ui.roundedRect((int) SET_PW - 48, 2, 1,
+                    new Color(1f, 1f, 1f, 0.07f), new Color(1f, 1f, 1f, 0.07f)),
+                    SET_PX + 24, cy + 38);
+            }
+            Ui.font.setColor(1f, 1f, 1f, 0.95f);
+            Ui.font.draw(batch, labels[i], SET_PX + 30, cy + 10);
+            // hai nút bước
+            drawSetStepper(setStepLx(), cy, Ui.FA_CHEVRON_LEFT);
+            drawSetStepper(setStepRx(), cy, Ui.FA_CHEVRON_RIGHT);
+            // giá trị ở giữa hai nút bước
+            String val;
+            Color vc;
+            if (i == 0) {
+                val = com.avatardk.game.data.GameSettings.showName ? "hiện" : "ẩn";
+                vc = com.avatardk.game.data.GameSettings.showName
+                    ? new Color(0.55f, 0.95f, 0.60f, 1f) : new Color(0.65f, 0.68f, 0.72f, 1f);
+            } else if (i == 1) {
+                val = com.avatardk.game.data.GameSettings.showDir ? "hiện" : "ẩn";
+                vc = com.avatardk.game.data.GameSettings.showDir
+                    ? new Color(0.55f, 0.95f, 0.60f, 1f) : new Color(0.65f, 0.68f, 0.72f, 1f);
+            } else {
+                val = String.valueOf(com.avatardk.game.data.GameSettings.volume);
+                vc = new Color(1f, 0.85f, 0.45f, 1f);
+            }
+            float midX = (setStepLx() + setStepRx()) / 2f;
+            Ui.centered(batch, Ui.font, val, midX, cy + 10, vc);
+        }
+        // nút Xong cam ở đáy — đóng và lưu như lệnh "Xong" của gốc
+        float bw = 200, bh = 54, bx = SET_PX + (SET_PW - bw) / 2f, by = SET_PY + 24;
+        batch.draw(Ui.roundedRect((int) bw, (int) bh, 14,
+            new Color(0.98f, 0.58f, 0.16f, 1f), new Color(0.98f, 0.58f, 0.16f, 1f)), bx, by);
+        Ui.centered(batch, Ui.font, "Xong", SET_PX + SET_PW / 2f, by + 36,
+            new Color(1f, 1f, 1f, 1f));
+    }
+
+    private void drawSetStepper(float cx, float cy, String glyph) {
+        batch.draw(Ui.roundedRect(54, 54, 12,
+            new Color(0.16f, 0.22f, 0.34f, 0.95f), GLASS_RIM), cx - 27, cy - 27);
+        Ui.faIcon(batch, Ui.fa26, glyph, cx, cy, new Color(1f, 1f, 1f, 0.92f));
+    }
+
+    private void closeSettings() {
+        com.avatardk.game.data.GameSettings.save();
+        settingsOpen = false;
+    }
+
+    /** Một nấc chỉnh ở panel Cài đặt: hai hàng đầu lật hiện/ẩn (gốc bỏ
+     *  qua hướng mũi tên với hai hàng này), hàng Âm thanh ±10 kẹp 0..100. */
+    private void applySettingsStep(int row, int dir) {
+        if (row == 0) {
+            com.avatardk.game.data.GameSettings.showName =
+                !com.avatardk.game.data.GameSettings.showName;
+        } else if (row == 1) {
+            com.avatardk.game.data.GameSettings.showDir =
+                !com.avatardk.game.data.GameSettings.showDir;
+        } else {
+            int v = com.avatardk.game.data.GameSettings.volume + dir * 10;
+            com.avatardk.game.data.GameSettings.volume = Math.max(0, Math.min(100, v));
+        }
+    }
+
+    private void settingsTouch(float x, float y) {
+        float xCx = SET_PX + SET_PW - 27, xCy = SET_PY + SET_PH - 27;
+        if ((x - xCx) * (x - xCx) + (y - xCy) * (y - xCy) <= 24 * 24) {
+            closeSettings();
+            return;
+        }
+        float bw = 200, bh = 54, bx = SET_PX + (SET_PW - bw) / 2f, by = SET_PY + 24;
+        if (x >= bx && x <= bx + bw && y >= by && y <= by + bh) {
+            closeSettings();
+            return;
+        }
+        for (int i = 0; i < 3; i++) {
+            float cy = setRowCenter(i);
+            if (Math.abs(y - cy) <= 27) {
+                if (Math.abs(x - setStepLx()) <= 27) {
+                    applySettingsStep(i, -1);
+                    return;
+                }
+                if (Math.abs(x - setStepRx()) <= 27) {
+                    applySettingsStep(i, 1);
+                    return;
+                }
+            }
+        }
+        if (x < SET_PX || x > SET_PX + SET_PW || y < SET_PY || y > SET_PY + SET_PH) {
+            closeSettings();
+        }
+    }
+
+    /** Mở panel Cài đặt cho harness chụp kiểm chứng. */
+    public void debugOpenSettings() { settingsOpen = true; }
+
+    /** Đóng shop + hoá đơn cho harness chụp kiểm chứng. */
+    public void debugCloseShop() { shopOpen = false; billOpen = false; }
 
     /** Rộng của mỗi tab chat: nhãn dài nhất + lề, dùng chung cho vẽ và chạm
      *  để cả 3 tab rộng bằng nhau. */
@@ -4185,6 +4327,13 @@ public class WorldScreen extends ScreenAdapter {
                 Ui.faIcon(batch, Ui.fa30, Ui.FA_BOX_ARCHIVE,
                     cx + MENU_CELL / 2f, cy + MENU_CELL_H - 8 - is / 2f - 8,
                     new Color(0.85f, 0.90f, 0.98f, 1f));
+            } else if (MENU_ITEMS[i][0].equals("fa-gear")) {
+                // Ô Cài đặt: mở panel OptionScr của gốc — kho icon gốc
+                // cũng không có icon cài đặt riêng (gốc mở từ menu chữ ở
+                // màn hình đăng nhập) nên dùng glyph bánh răng FA thật.
+                Ui.faIcon(batch, Ui.fa30, Ui.FA_GEAR,
+                    cx + MENU_CELL / 2f, cy + MENU_CELL_H - 8 - is / 2f - 8,
+                    new Color(0.85f, 0.90f, 0.98f, 1f));
             } else {
                 Texture icon = game.texture("iconmenu/" + MENU_ITEMS[i][0] + ".png");
                 batch.draw(icon, cx + MENU_CELL / 2f - is / 2f, cy + MENU_CELL_H - 8 - is - 8, is, is);
@@ -4335,8 +4484,10 @@ public class WorldScreen extends ScreenAdapter {
         float dx = Ui.W / 2f - mapCamX * mapScale;
         float dy = Ui.H / 2f + mapCamY * mapScale - 900f * mapScale;
         batch.draw(minimapTex, dx, dy, 1600f * mapScale, 900f * mapScale);
-        // đường chấm tuyến: vùng đang đứng -> vùng đang chọn
-        if (cur >= 0 && selRegion >= 0 && selRegion != cur && selRegion < regionCells.size()) {
+        // đường chấm tuyến: vùng đang đứng -> vùng đang chọn (cài đặt
+        // "Chỉ đường: ẩn" thì không vẽ — tương đương ẩn PopupName của gốc)
+        if (com.avatardk.game.data.GameSettings.showDir
+            && cur >= 0 && selRegion >= 0 && selRegion != cur && selRegion < regionCells.size()) {
             float[] a = regionPoint(cur), b = regionPoint(selRegion);
             float ax = mapSx(a[0]), ay = mapSy(a[1]), bx = mapSx(b[0]), by = mapSy(b[1]);
             float dist = (float) Math.hypot(bx - ax, by - ay);
@@ -5039,30 +5190,27 @@ public class WorldScreen extends ScreenAdapter {
         Ui.fontSmall.setColor(sel.gender == 0
             ? new Color(1f, 1f, 1f, 0.75f) : new Color(1f, 0.72f, 0.45f, 1f));
         Ui.fontSmall.draw(batch, meta, cx + 116, cy + ch - 110);
-        // chọn loại tiền
-        Ui.fontSmall.setColor(1f, 1f, 1f, 0.75f);
-        Ui.fontSmall.draw(batch, "Thanh toán bằng", cx + 24, cy + ch - 158);
-        drawBillPill(cx + 24, cy + ch - 218, 180, 44, "Xu", sel.coin > 0, billCur == 1);
-        drawBillPill(cx + 216, cy + ch - 218, 180, 44, "Lượng", sel.gold > 0, billCur == 2);
+        // chọn loại tiền (cả mục hạ xuống một chút cho thoáng theo ý
+        // user 2026-11-01; số dư KHÔNG hiện trong hoá đơn nữa)
         int bal = billCur == 2 ? myLuong : myXu;
-        String balTxt = "Số dư: " + fmtMoney(bal) + (billCur == 2 ? " Lượng" : " Xu");
-        Ui.fontSmall.setColor(1f, 1f, 1f, 0.6f);
-        Ui.fontSmall.draw(batch, balTxt,
-            cx + cw - 24 - Ui.textWidth(Ui.fontSmall, balTxt), cy + ch - 188);
+        Ui.fontSmall.setColor(1f, 1f, 1f, 0.75f);
+        Ui.fontSmall.draw(batch, "Thanh toán bằng", cx + 24, cy + ch - 174);
+        drawBillPill(cx + 24, cy + ch - 234, 180, 44, "Xu", sel.coin > 0, billCur == 1);
+        drawBillPill(cx + 216, cy + ch - 234, 180, 44, "Lượng", sel.gold > 0, billCur == 2);
         // thời hạn
         Ui.fontSmall.setColor(1f, 1f, 1f, 0.75f);
-        Ui.fontSmall.draw(batch, "Thời hạn", cx + 24, cy + ch - 248);
+        Ui.fontSmall.draw(batch, "Thời hạn", cx + 24, cy + ch - 264);
         if (billCur == 2) {
             batch.draw(Ui.roundedRect((int) (cw - 48), 48, 12,
                 new Color(0.20f, 0.16f, 0.10f, 0.95f), new Color(1f, 0.62f, 0.25f, 1f)),
-                cx + 24, cy + ch - 324);
+                cx + 24, cy + ch - 340);
             Ui.centered(batch, Ui.fontSmall, "Vĩnh viễn — mua bằng Lượng luôn là vĩnh viễn",
-                cx + cw / 2f, cy + ch - 292, new Color(1f, 0.85f, 0.45f, 1f));
+                cx + cw / 2f, cy + ch - 308, new Color(1f, 0.85f, 0.45f, 1f));
         } else {
             for (int i = 0; i <= BILL_DAY_TIERS.length; i++) {
                 String label = i < BILL_DAY_TIERS.length
                     ? BILL_DAY_TIERS[i] + " ngày" : "Vĩnh viễn";
-                drawBillPill(cx + 24 + i * 96, cy + ch - 324, 88, 48, label,
+                drawBillPill(cx + 24 + i * 96, cy + ch - 340, 88, 48, label,
                     true, billTier == i);
             }
         }
@@ -5074,13 +5222,9 @@ public class WorldScreen extends ScreenAdapter {
             String tot = fmtMoney(total) + (billCur == 2 ? " Lượng" : " Xu");
             Ui.font.setColor(1f, 0.85f, 0.38f, 1f);
             Ui.font.draw(batch, tot, cx + cw - 24 - Ui.textWidth(Ui.font, tot), cy + ch - 376);
-            if (bal >= total) {
-                String after = "Số dư sau khi mua: " + fmtMoney(bal - total)
-                    + (billCur == 2 ? " Lượng" : " Xu");
-                Ui.fontSmall.setColor(1f, 1f, 1f, 0.55f);
-                Ui.fontSmall.draw(batch, after, cx + 24, cy + ch - 412);
-            } else {
-                // không đủ tiền: báo còn thiếu bao nhiêu thay vì hiện số dư âm
+            if (bal < total) {
+                // không đủ tiền: chỉ báo còn thiếu bao nhiêu (hoá đơn
+                // không hiện số dư theo ý user 2026-11-01)
                 String lack = "Còn thiếu: " + fmtMoney(total - bal)
                     + (billCur == 2 ? " Lượng" : " Xu");
                 Ui.fontSmall.setColor(1f, 0.45f, 0.40f, 1f);
@@ -5135,12 +5279,12 @@ public class WorldScreen extends ScreenAdapter {
             billOpen = false;
             return;
         }
-        if (y >= cy + ch - 218 && y <= cy + ch - 174) {
+        if (y >= cy + ch - 234 && y <= cy + ch - 190) {
             if (x >= cx + 24 && x <= cx + 204 && sel.coin > 0) billCur = 1;
             if (x >= cx + 216 && x <= cx + 396 && sel.gold > 0) billCur = 2;
             return;
         }
-        if (billCur == 1 && y >= cy + ch - 324 && y <= cy + ch - 276) {
+        if (billCur == 1 && y >= cy + ch - 340 && y <= cy + ch - 292) {
             for (int i = 0; i <= BILL_DAY_TIERS.length; i++) {
                 if (x >= cx + 24 + i * 96 && x <= cx + 24 + i * 96 + 88) {
                     billTier = i;

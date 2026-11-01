@@ -560,6 +560,14 @@ public class ScreenshotMain {
                     case 42:
                         if (frame == 15) {
                             shot("shot-shop-bill-xu.png");
+                            world.debugCloseShop();
+                            world.debugOpenSettings();
+                            stage = 43; frame = 0;
+                        }
+                        break;
+                    case 43:
+                        if (frame == 15) {
+                            shot("shot-settings.png");
                             System.out.println("SCREENSHOT DONE");
                             Gdx.app.exit();
                         }

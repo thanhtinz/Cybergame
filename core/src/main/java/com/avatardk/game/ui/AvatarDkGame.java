@@ -40,6 +40,7 @@ public class AvatarDkGame extends Game {
     @Override
     public void create() {
         Ui.initFonts();
+        com.avatardk.game.data.GameSettings.load();
         data = AvatarDataSet.fromJson(
             Gdx.files.internal("data/items.json").readString("UTF-8"),
             Gdx.files.internal("data/imgdata.json").readString("UTF-8"),
