@@ -1527,10 +1527,10 @@ public class WorldScreen extends ScreenAdapter {
             menuOpen = false;
             return;
         }
-        // khung chat: nút phóng to/thu nhỏ — tâm nút nằm đúng góc trên
-        // phải của panel (khớp vị trí vẽ trong drawChatFrame)
+        // khung chat: nút phóng to/thu nhỏ ở góc trên phải của panel,
+        // xích vào trong chỉ nhô ra ~12px (khớp vị trí vẽ ở drawChatFrame)
         {
-            float ebX = CHAT_X + CHAT_W - 19, ebY = CHAT_Y + chatH - 19;
+            float ebX = CHAT_X + CHAT_W - 26, ebY = CHAT_Y + chatH - 26;
             if (x >= ebX && x <= ebX + 38 && y >= ebY && y <= ebY + 38) {
                 chatExpanded = !chatExpanded;
                 return;
@@ -2065,8 +2065,8 @@ public class WorldScreen extends ScreenAdapter {
                 }
             }
             // giờ gửi nằm ở góc phải của chính dòng tin nhắn đó (chữ mờ).
-            // Nút phóng to giờ vắt trên GÓC panel (chỉ lấn 19px từ mép
-            // trên) nên dòng trên cùng không còn phải né sang trái nữa.
+            // Nút phóng to nằm ở góc panel nhưng dòng trên cùng cách mép
+            // trên đủ xa (và góc nút bo tròn) nên không phải né nữa.
             float timeRight = CHAT_X + CHAT_W - 14;
             Ui.fontSmall.setColor(1f, 1f, 1f, 0.42f);
             layout.setText(Ui.fontSmall, l.time);
@@ -2129,12 +2129,12 @@ public class WorldScreen extends ScreenAdapter {
             new Color(0.10f, 0.17f, 0.26f, 0.97f), GLASS_RIM), sendX, CHAT_Y + 7);
         Ui.faIcon(batch, Ui.fa20, Ui.FA_SEND,
             sendX + CHAT_SEND_W / 2f, CHAT_Y + 7 + CHAT_INPUT_H / 2f, Color.WHITE);
-        // nút phóng to / thu nhỏ panel chat: TÂM nút nằm đúng GÓC trên phải
-        // của panel (nửa trong nửa ngoài như tab vắt ngang viền — chủ dự án
-        // chốt "đưa cái phóng to lên góc của panel chat"); FA expand khi
-        // đang nhỏ, FA compress khi đang to
+        // nút phóng to / thu nhỏ panel chat: nằm ở GÓC trên phải của panel,
+        // xích vào trong — chỉ nhô ra ngoài ~12px (chủ dự án chốt: lên góc
+        // nhưng "đừng ra ngoài nhiều quá"); FA expand khi đang nhỏ,
+        // FA compress khi đang to
         float ebS = 38;
-        float ebX = CHAT_X + CHAT_W - ebS / 2f, ebY = CHAT_Y + chatH - ebS / 2f;
+        float ebX = CHAT_X + CHAT_W - ebS + 12, ebY = CHAT_Y + chatH - ebS + 12;
         batch.draw(Ui.roundedRect((int) ebS, (int) ebS, 9,
             new Color(0.10f, 0.17f, 0.26f, 0.97f), GLASS_RIM), ebX, ebY);
         Ui.faIcon(batch, Ui.fa20, chatExpanded ? Ui.FA_COMPRESS : Ui.FA_EXPAND,
