@@ -504,6 +504,20 @@ public class ScreenshotMain {
                     case 34:
                         if (frame == 15) {
                             shot("shot-chest-confirm.png");
+                            world.debugMapZoomMock(0);
+                            stage = 35; frame = 0;
+                        }
+                        break;
+                    case 35:
+                        if (frame == 15) {
+                            shot("shot-mapzoom.png");
+                            world.debugMapZoomMock(1);
+                            stage = 36; frame = 0;
+                        }
+                        break;
+                    case 36:
+                        if (frame == 15) {
+                            shot("shot-mapzoom-in.png");
                             System.out.println("SCREENSHOT DONE");
                             Gdx.app.exit();
                         }

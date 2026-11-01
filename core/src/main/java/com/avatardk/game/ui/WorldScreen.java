@@ -696,15 +696,6 @@ public class WorldScreen extends ScreenAdapter {
         playerY = mapDef.stopY;
     }
 
-    /** Hình học panel bản đồ thành phố dùng chung cho vẽ + chạm:
-     *  {px, py, iw, ih, ix, iy} = panel trái/dưới, ảnh rộng/cao, ảnh trái/dưới. */
-    private float[] cityMapGeom() {
-        float pw = 940f, ph = 600f;
-        float px = (Ui.W - pw) / 2f, py = (Ui.H - ph) / 2f;
-        float iw = pw - 48, ih = iw * 900f / 1600f;
-        return new float[]{px, py, iw, ih, px + 24, py + ph - 64 - ih};
-    }
-
     /** Hình học sheet biểu cảm {px, py, pw, ph, cell, pad}: sheet neo đáy
      *  ngay phía trên khung chat, cạnh phải thẳng hàng nút mặt cười, chiều
      *  cao ph = feelH hiện tại (thay đổi khi kéo tay cầm). Lưới 7 cột. */
@@ -822,7 +813,7 @@ public class WorldScreen extends ScreenAdapter {
     }
     public void debugOpenMenu() { menuOpen = true; }
     public void debugCloseMenu() { menuOpen = false; }
-    public void debugOpenCityMap() { cityMapOpen = true; }
+    public void debugOpenCityMap() { openCityMap(); }
     public void debugCloseCityMap() { cityMapOpen = false; }
     public void debugOpenFeel() { feelOpen = true; }
     public void debugCloseFeel() { feelOpen = false; }
@@ -1603,6 +1594,16 @@ public class WorldScreen extends ScreenAdapter {
             }
             @Override
             public boolean touchDragged(int sx, int sy, int pointer) {
+                if (pointer == mapPointer && cityMapOpen) {
+                    // kéo bản đồ: nội dung đi theo tay, tâm camera trừ hao theo zoom
+                    Vector3 v = hudViewport.unproject(new Vector3(sx, sy, 0));
+                    float dx = v.x - mapDragStartX, dy = v.y - mapDragStartY;
+                    mapDragMoved = Math.max(mapDragMoved, (float) Math.hypot(dx, dy));
+                    mapCamX = mapDragCamX - dx / mapScale;
+                    mapCamY = mapDragCamY + dy / mapScale;
+                    clampMapCam();
+                    return true;
+                }
                 if (pointer == feelPointer) {
                     Vector3 v = hudViewport.unproject(new Vector3(sx, sy, 0));
                     float dy = v.y - feelDragStartY;
@@ -1629,6 +1630,22 @@ public class WorldScreen extends ScreenAdapter {
             public boolean touchUp(int sx, int sy, int pointer, int button) {
                 // đang giữ micro ghi âm: thả tay ra là gửi tin nhắn thoại
                 if (recording) { finishRecording(); return true; }
+                if (pointer == mapPointer) {
+                    mapPointer = -1;
+                    if (cityMapOpen && mapDragMoved < 10f) {
+                        // chạm nhẹ (không kéo) = chọn vùng gần nhất trong tầm 48px
+                        Vector3 v = hudViewport.unproject(new Vector3(sx, sy, 0));
+                        int best = -1;
+                        float bd = 48f;
+                        for (int r = 0; r < regionCells.size() && r < REGION_NAMES.length; r++) {
+                            float[] p = regionPoint(r);
+                            float d = (float) Math.hypot(v.x - mapSx(p[0]), v.y - mapSy(p[1]));
+                            if (d < bd) { bd = d; best = r; }
+                        }
+                        if (best >= 0) selRegion = best;
+                    }
+                    return true;
+                }
                 if (pointer == feelPointer) {
                     Vector3 v = hudViewport.unproject(new Vector3(sx, sy, 0));
                     if (feelDragHandle) {
@@ -1663,6 +1680,10 @@ public class WorldScreen extends ScreenAdapter {
             }
             @Override
             public boolean scrolled(float amountX, float amountY) {
+                if (cityMapOpen) {
+                    zoomMap(amountY < 0 ? 1.12f : 1f / 1.12f);
+                    return true;
+                }
                 if (feelOpen) {
                     feelScroll = MathUtils.clamp(feelScroll + amountY * 36f, 0f, feelMaxScroll());
                     return true;
@@ -1673,23 +1694,9 @@ public class WorldScreen extends ScreenAdapter {
     }
 
     private void onTouch(float x, float y, int pointer) {
-        // bản đồ thành phố đang mở là lớp trên cùng: X đóng / chạm vùng để đi
+        // bản đồ thành phố đang mở là lớp trên cùng: nút ăn ngay, còn lại kéo
         if (cityMapOpen) {
-            float[] g = cityMapGeom();
-            float px = g[0], py = g[1], iw = g[2], ih = g[3], ix = g[4], iy = g[5];
-            if (x >= px + 900 - 40 && x <= px + 940 && y >= py + 600 - 52 && y <= py + 600) { cityMapOpen = false; return; }
-            for (int r = 0; r < regionCells.size() && r < REGION_NAMES.length; r++) {
-                int[] cell = regionCells.get(r);
-                float cx = ix + (cell[0] + 0.5f) / 50f * iw;
-                float cy = iy + ih - (cell[1] + 0.5f) / 26f * ih;
-                if (Math.abs(x - cx) <= 30 && Math.abs(y - cy) <= 30) {
-                    cityMapOpen = false;
-                    loadMap(findMap(REGION_DEST[r]));
-                    spawnPlayer();
-                    return;
-                }
-            }
-            if (x < px || x > px + 940 || y < py || y > py + 600) cityMapOpen = false;
+            cityMapTouchDown(x, y, pointer);
             return;
         }
         // panel chọn khu đang mở là lớp trên (sau bản đồ thành phố)
@@ -1841,7 +1848,7 @@ public class WorldScreen extends ScreenAdapter {
                     if (x >= cx && x <= cx + MENU_CELL && y >= cy && y <= cy + MENU_CELL_H) {
                         menuOpen = false;
                         if (i == 0) {
-                            cityMapOpen = true;
+                            openCityMap();
                         } else if (i == 2) {
                             openBag();
                         } else if (i == 6) {
@@ -4081,38 +4088,227 @@ public class WorldScreen extends ScreenAdapter {
             BOARD_PX + 22, BOARD_PY + 30);
     }
 
-    /** Bản đồ thành phố toàn màn hình (MiniMap của gốc): ảnh minimap + các điểm
-     *  vùng theo lưới citiMap; chạm một vùng để di chuyển tới map của vùng đó. */
-    private void drawCityMap() {
-        batch.setColor(0f, 0f, 0f, 0.55f);
-        batch.draw(whiteTex, 0, 0, Ui.W, Ui.H);
-        batch.setColor(Color.WHITE);
-        float[] g = cityMapGeom();
-        float px = g[0], py = g[1], iw = g[2], ih = g[3], ix = g[4], iy = g[5];
-        float pw = 940f, ph = 600f;
-        batch.draw(Ui.roundedRect((int) pw, (int) ph, 16, GLASS_FILL_DARK, GLASS_RIM), px, py);
-        Ui.font.setColor(1f, 0.85f, 0.45f, 1f);
-        Ui.font.draw(batch, "BẢN ĐỒ THÀNH PHỐ", px + 24, py + ph - 20);
-        Ui.font.setColor(Color.WHITE);
-        Ui.font.draw(batch, "X", px + pw - 40, py + ph - 18);
-        if (minimapTex == null) minimapTex = game.texture("minimap.png");
-        batch.draw(minimapTex, ix, iy, iw, ih);
-        Ui.fontSmall.setColor(1f, 1f, 1f, 0.75f);
-        Ui.fontSmall.draw(batch, "Chạm vào một vùng để di chuyển đến đó.", px + 24, py + 30);
-        for (int r = 0; r < regionCells.size() && r < REGION_NAMES.length; r++) {
-            int[] cell = regionCells.get(r);
-            float cx = ix + (cell[0] + 0.5f) / 50f * iw;
-            float cy = iy + ih - (cell[1] + 0.5f) / 26f * ih;
-            boolean current = mapDef.id == REGION_DEST[r];
-            batch.setColor(current ? new Color(0.3f, 0.9f, 0.4f, 1f) : new Color(1f, 0.55f, 0.1f, 1f));
-            batch.draw(whiteTex, cx - 6, cy - 6, 12, 12);
-            batch.setColor(Color.WHITE);
-            layout.setText(Ui.fontSmall, REGION_NAMES[r]);
-            float lx = MathUtils.clamp(cx - layout.width / 2f, px + 8, px + pw - 8 - layout.width);
-            Ui.fontSmall.setColor(1f, 0.95f, 0.6f, 1f);
-            Ui.fontSmall.draw(batch, REGION_NAMES[r], lx, cy + 26);
+    // ===== BẢN ĐỒ THÀNH PHỐ ZOOM/KÉO (chủ dự án chốt 2026-11-01, thay
+    // bản đồ panel cũ): toàn màn hình trên tranh minimap gốc 1600×900;
+    // kéo để xem xung quanh, nút +/− (và lăn chuột) để zoom, chạm vùng để
+    // chọn điểm đến rồi bấm "Di chuyển đến" mới bay tới (đích REGION_DEST
+    // theo MapScr.doJoin của gốc, đi bằng loadMap + spawnPlayer như cũ). =====
+    private float mapScale = 0.8f, mapCamX = 800f, mapCamY = 450f;
+    private int selRegion = -1;
+    private int mapPointer = -1;
+    private float mapDragStartX, mapDragStartY, mapDragCamX, mapDragCamY, mapDragMoved;
+    private static final String[] REGION_DESC = {
+        "Khu dân cư yên bình — nhà của bạn ở đây.",
+        "Rừng xanh, hồ nước và thảm cỏ mát.",
+        "Cổng trời của thị trấn — đi xa từ đây.",
+        "Mini-game, lễ hội và khu vui chơi.",
+        "Chợ và các cửa hàng thời trang.",
+        "Tản bộ, hẹn hò bên hồ nước.",
+        "Vùng ven yên tĩnh, đường ra nông trại.",
+        "Trồng trọt, chăn nuôi và thu hoạch."};
+
+    /** Tâm vùng theo không gian ảnh gốc 1600×900 (y tính từ trên xuống). */
+    private float[] regionPoint(int r) {
+        int[] cell = regionCells.get(r);
+        return new float[]{(cell[0] + 0.5f) / 50f * 1600f, (cell[1] + 0.5f) / 26f * 900f};
+    }
+
+    private float mapSx(float mx) { return Ui.W / 2f + (mx - mapCamX) * mapScale; }
+    private float mapSy(float my) { return Ui.H / 2f - (my - mapCamY) * mapScale; }
+
+    /** Vùng chứa map hiện tại, −1 nếu map hiện tại không phải đích vùng nào. */
+    private int currentRegion() {
+        if (mapDef == null) return -1;
+        for (int r = 0; r < REGION_DEST.length; r++) {
+            if (mapDef.id == REGION_DEST[r]) return r;
+        }
+        return -1;
+    }
+
+    /** Mở bản đồ: toàn cảnh 100%, chọn sẵn vùng đang đứng (nếu có). */
+    public void openCityMap() {
+        cityMapOpen = true;
+        mapScale = 0.8f;
+        mapCamX = 800f;
+        mapCamY = 450f;
+        selRegion = currentRegion();
+        mapPointer = -1;
+    }
+
+    /** Kẹp tâm camera: không cho kéo bản đồ tuột khỏi màn hình (chừa mép nhỏ). */
+    private void clampMapCam() {
+        float hw = Ui.W / 2f / mapScale, hh = Ui.H / 2f / mapScale;
+        if (1600f * mapScale <= Ui.W) mapCamX = 800f;
+        else mapCamX = MathUtils.clamp(mapCamX, hw - 90, 1600f - hw + 90);
+        if (900f * mapScale <= Ui.H) mapCamY = 450f;
+        else mapCamY = MathUtils.clamp(mapCamY, hh - 50, 900f - hh + 50);
+    }
+
+    private void zoomMap(float factor) {
+        mapScale = MathUtils.clamp(mapScale * factor, 0.8f, 2.4f);
+        clampMapCam();
+    }
+
+    /** Sân khấu kiểm chứng bản đồ: mode 0 = toàn cảnh đã chọn Sân bay,
+     *  mode 1 = phóng to vào Sân bay. */
+    public void debugMapZoomMock(int mode) {
+        bagPanel = false;
+        chestPanel = false;
+        openCityMap();
+        selRegion = 2; // Sân bay
+        if (mode == 1) {
+            float[] p = regionPoint(2);
+            mapScale = 1.9f;
+            mapCamX = p[0];
+            mapCamY = p[1];
+            clampMapCam();
         }
     }
+
+    private void drawCityMap() {
+        if (minimapTex == null) minimapTex = game.texture("minimap.png");
+        int cur = currentRegion();
+        batch.setColor(0.03f, 0.05f, 0.09f, 1f);
+        batch.draw(whiteTex, 0, 0, Ui.W, Ui.H);
+        batch.setColor(Color.WHITE);
+        float dx = Ui.W / 2f - mapCamX * mapScale;
+        float dy = Ui.H / 2f + mapCamY * mapScale - 900f * mapScale;
+        batch.draw(minimapTex, dx, dy, 1600f * mapScale, 900f * mapScale);
+        // đường chấm tuyến: vùng đang đứng -> vùng đang chọn
+        if (cur >= 0 && selRegion >= 0 && selRegion != cur && selRegion < regionCells.size()) {
+            float[] a = regionPoint(cur), b = regionPoint(selRegion);
+            float ax = mapSx(a[0]), ay = mapSy(a[1]), bx = mapSx(b[0]), by = mapSy(b[1]);
+            float dist = (float) Math.hypot(bx - ax, by - ay);
+            int dots = (int) (dist / 30f);
+            batch.setColor(1f, 0.62f, 0.18f, 0.95f);
+            for (int i = 1; i < dots; i++) {
+                float t = (float) i / dots;
+                batch.draw(circleTexture(), ax + (bx - ax) * t - 4, ay + (by - ay) * t - 4, 8, 8);
+            }
+            batch.setColor(Color.WHITE);
+        }
+        // các điểm vùng: chấm + pill tên; vùng chọn có thêm ghim cam
+        for (int r = 0; r < regionCells.size() && r < REGION_NAMES.length; r++) {
+            float[] p = regionPoint(r);
+            float sx = mapSx(p[0]), sy = mapSy(p[1]);
+            if (sx < -90 || sx > Ui.W + 90 || sy < -70 || sy > Ui.H + 70) continue;
+            boolean isCur = r == cur, sel = r == selRegion;
+            batch.setColor(isCur ? new Color(0.30f, 0.85f, 0.35f, 1f)
+                : sel ? new Color(1f, 0.55f, 0.12f, 1f) : new Color(0.08f, 0.12f, 0.18f, 0.9f));
+            batch.draw(circleTexture(), sx - 8, sy - 8, 16, 16);
+            batch.setColor(Color.WHITE);
+            batch.draw(ringTexture(), sx - 8, sy - 8, 16, 16);
+            batch.draw(circleTexture(), sx - 3, sy - 3, 6, 6);
+            String label = REGION_NAMES[r];
+            float tw = Ui.textWidth(Ui.fontSmall, label);
+            float pw = tw + 24, ph = 32;
+            float lx = MathUtils.clamp(sx - pw / 2f, 8, Ui.W - 8 - pw);
+            float ly = sy + 16;
+            if (ly + ph > Ui.H - 8) ly = sy - 16 - ph;
+            batch.draw(Ui.roundedRect((int) pw, (int) ph, 10,
+                sel ? new Color(0.98f, 0.55f, 0.16f, 0.95f) : new Color(0.05f, 0.09f, 0.14f, 0.82f), GLASS_RIM), lx, ly);
+            Ui.centered(batch, Ui.fontSmall, label, lx + pw / 2f, ly + 22, Color.WHITE);
+            if (isCur) {
+                Ui.centered(batch, Ui.fontTiny, "Bạn đang ở đây", sx, sy - 18,
+                    new Color(0.45f, 1f, 0.5f, 1f));
+            }
+            if (sel) {
+                batch.setColor(0.98f, 0.55f, 0.16f, 1f);
+                batch.draw(circleTexture(), sx - 17, ly + ph + 6, 34, 34);
+                batch.setColor(Color.WHITE);
+                Ui.faIcon(batch, Ui.fa20, Ui.FA_LOCATION_DOT, sx, ly + ph + 23, Color.WHITE);
+            }
+        }
+        // khối tiêu đề + gợi ý thao tác ở góc trên trái
+        String title = "Bản đồ thị trấn";
+        String hint = "Kéo để di chuyển • Chạm vùng để chọn điểm đến";
+        float bw = Math.max(Ui.textWidth(Ui.font, title), Ui.textWidth(Ui.fontTiny, hint)) + 40;
+        batch.draw(Ui.roundedRect((int) bw, 80, 14, new Color(0.05f, 0.09f, 0.14f, 0.85f), GLASS_RIM),
+            22, Ui.H - 102);
+        Ui.font.setColor(1f, 0.85f, 0.45f, 1f);
+        Ui.font.draw(batch, title, 42, Ui.H - 44);
+        Ui.fontTiny.setColor(1f, 1f, 1f, 0.75f);
+        Ui.fontTiny.draw(batch, hint, 42, Ui.H - 76);
+        // nút đóng tròn ở góc trên phải
+        batch.draw(Ui.roundedRect(52, 52, 26, new Color(0.05f, 0.09f, 0.14f, 0.85f), GLASS_RIM),
+            Ui.W - 74, Ui.H - 78);
+        Ui.centered(batch, Ui.font, "X", Ui.W - 48, Ui.H - 41, Color.WHITE);
+        // cụm zoom ở mép phải: + / mức zoom / −, dưới là nút về vị trí của bạn
+        float zx = Ui.W - 80, zy = 300;
+        batch.draw(Ui.roundedRect(58, 176, 16, new Color(0.05f, 0.09f, 0.14f, 0.85f), GLASS_RIM), zx, zy);
+        Ui.faIcon(batch, Ui.fa26, Ui.FA_PLUS, zx + 29, zy + 140, Color.WHITE);
+        Ui.centered(batch, Ui.fontTiny, Math.round(mapScale / 0.8f * 100f) + "%", zx + 29, zy + 93,
+            new Color(1f, 1f, 1f, 0.8f));
+        Ui.faIcon(batch, Ui.fa26, Ui.FA_MINUS, zx + 29, zy + 38, Color.WHITE);
+        batch.draw(Ui.roundedRect(58, 58, 16, new Color(0.05f, 0.09f, 0.14f, 0.85f), GLASS_RIM), zx, zy - 74);
+        Ui.faIcon(batch, Ui.fa26, Ui.FA_LOCATION_CROSSHAIRS, zx + 29, zy - 45,
+            new Color(0.45f, 0.9f, 1f, 1f));
+        // thẻ điểm đến ở đáy giữa
+        if (selRegion >= 0 && selRegion < REGION_NAMES.length) {
+            float cw = 620, ch = 106, cx = (Ui.W - cw) / 2f, cy = 22;
+            batch.draw(Ui.roundedRect((int) cw, (int) ch, 16,
+                new Color(0.06f, 0.10f, 0.16f, 0.94f), GLASS_RIM), cx, cy);
+            Ui.font.setColor(1f, 0.85f, 0.45f, 1f);
+            Ui.font.draw(batch, REGION_NAMES[selRegion], cx + 24, cy + ch - 26);
+            Ui.fontSmall.setColor(1f, 1f, 1f, 0.82f);
+            Ui.fontSmall.draw(batch, REGION_DESC[selRegion], cx + 24, cy + 34);
+            if (selRegion == cur) {
+                batch.draw(Ui.roundedRect(190, 52, 12, new Color(0.16f, 0.45f, 0.20f, 0.95f), GLASS_RIM),
+                    cx + cw - 214, cy + 27);
+                Ui.centered(batch, Ui.fontSmall, "Bạn đang ở đây", cx + cw - 119, cy + 61, Color.WHITE);
+            } else {
+                batch.draw(Ui.roundedRect(190, 52, 12, new Color(0.95f, 0.55f, 0.20f, 1f), GLASS_RIM),
+                    cx + cw - 214, cy + 27);
+                Ui.centered(batch, Ui.fontSmall, "Di chuyển đến", cx + cw - 119, cy + 61, Color.WHITE);
+            }
+        }
+    }
+
+    /** Chạm xuống khi bản đồ mở: các nút ăn ngay; còn lại bắt đầu kéo.
+     *  Chọn vùng xảy ra ở touchUp khi chạm nhẹ không kéo (mẫu sheet biểu cảm). */
+    private void cityMapTouchDown(float x, float y, int pointer) {
+        if (x >= Ui.W - 74 && x <= Ui.W - 22 && y >= Ui.H - 78 && y <= Ui.H - 26) {
+            cityMapOpen = false;
+            mapPointer = -1;
+            return;
+        }
+        float zx = Ui.W - 80, zy = 300;
+        if (x >= zx && x <= zx + 58 && y >= zy + 118 && y <= zy + 176) { zoomMap(1.3f); return; }
+        if (x >= zx && x <= zx + 58 && y >= zy && y <= zy + 58) { zoomMap(1f / 1.3f); return; }
+        if (x >= zx && x <= zx + 58 && y >= zy - 74 && y <= zy - 16) {
+            int cur = currentRegion();
+            if (cur >= 0) {
+                float[] p = regionPoint(cur);
+                mapScale = Math.max(mapScale, 1.5f);
+                mapCamX = p[0];
+                mapCamY = p[1];
+                clampMapCam();
+            } else {
+                mapScale = 0.8f;
+                mapCamX = 800f;
+                mapCamY = 450f;
+            }
+            return;
+        }
+        if (selRegion >= 0 && selRegion != currentRegion()) {
+            float cw = 620, cx = (Ui.W - cw) / 2f, cy = 22;
+            if (x >= cx + cw - 214 && x <= cx + cw - 24 && y >= cy + 27 && y <= cy + 79) {
+                int dest = REGION_DEST[selRegion];
+                cityMapOpen = false;
+                mapPointer = -1;
+                loadMap(findMap(dest));
+                spawnPlayer();
+                return;
+            }
+        }
+        mapPointer = pointer;
+        mapDragStartX = x;
+        mapDragStartY = y;
+        mapDragCamX = mapCamX;
+        mapDragCamY = mapCamY;
+        mapDragMoved = 0f;
+    }
+
 
     /** Nút mặt cười (asset iconmenu/feel0 gốc) kế bên khung chat + SHEET biểu
      *  cảm kéo lên được: viên pill ở mép trên là tay cầm kéo (kéo lên mở rộng,
