@@ -42,7 +42,7 @@ public final class EntryUi {
 
     public static Texture banner() {
         if (bannerTex == null) {
-            bannerTex = new Texture(Gdx.files.internal("banner.jpg"));
+            bannerTex = new Texture(com.avatardk.game.GameFiles.data("banner.jpg"));
             bannerTex.setFilter(Texture.TextureFilter.Linear, Texture.TextureFilter.Linear);
         }
         return bannerTex;
@@ -54,6 +54,13 @@ public final class EntryUi {
 
     /** Logo + tagline + 3 nút dọc, giống hệt màn banner đã duyệt. */
     public static void drawHeader(SpriteBatch batch) {
+        drawLogoOnly(batch);
+        drawUtilButtons(batch);
+    }
+
+    /** Chỉ logo + tên + tagline (không có 3 nút tiện ích) — dùng cho các
+     *  màn mở đầu khác như màn tải dữ liệu lần đầu. */
+    public static void drawLogoOnly(SpriteBatch batch) {
         batch.draw(Ui.topShade((int) Ui.W, 300, 0.47f), 0, Ui.H - 300);
         // logo có viền nâu: vẽ 4 bản lệch 2px rồi bản chính vàng ở giữa
         String name = GAME_NAME;
@@ -69,7 +76,6 @@ public final class EntryUi {
         Ui.fontLogo.draw(batch, name, x, base);
         Ui.centered(batch, Ui.font, GAME_NAME_EN, Ui.W / 2f, Ui.H - 160, Color.WHITE);
         Ui.centered(batch, Ui.fontBig, TAGLINE, Ui.W / 2f, Ui.H - 200, Color.WHITE);
-        drawUtilButtons(batch);
     }
 
     public static void drawUtilButtons(SpriteBatch batch) {

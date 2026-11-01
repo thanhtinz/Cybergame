@@ -140,7 +140,7 @@ public class WorldScreen extends ScreenAdapter {
         if (objTexCache.containsKey(id)) return objTexCache.get(id);
         Texture t = null;
         String p = "sprites/obj" + id + ".png";
-        if (Gdx.files.internal(p).exists()) t = game.texture(p);
+        if (com.avatardk.game.GameFiles.data(p).exists()) t = game.texture(p);
         objTexCache.put(id, t);
         return t;
     }
@@ -495,7 +495,7 @@ public class WorldScreen extends ScreenAdapter {
         if (t == null) {
             for (String[] e : CHAT_EMOJIS) {
                 if (e[0].equals(name)) {
-                    t = new Texture(Gdx.files.internal("emoji/" + e[1] + ".png"));
+                    t = new Texture(com.avatardk.game.GameFiles.data("emoji/" + e[1] + ".png"));
                     EMOJI_TEX.put(name, t);
                     break;
                 }
@@ -678,12 +678,12 @@ public class WorldScreen extends ScreenAdapter {
         this.playerDoll = game.newDoll(AvatarDkGame.SON_PARTS);
         // nạp danh sách map từ maps.json — chỉ giữ map dựng được bằng dải imagemap
         MapDef[] all = new com.badlogic.gdx.utils.Json().fromJson(MapDef[].class,
-            Gdx.files.internal("data/maps.json").readString("UTF-8"));
+            com.avatardk.game.GameFiles.data("data/maps.json").readString("UTF-8"));
         for (MapDef d : all) if (d.strips > 0) maps.add(d);
         maps.sort((a, b) -> Integer.compare(a.id, b.id));
         // trạm xe buýt từ lưới ô gốc (ô 139) — docs/mapgrid-spec.md
         com.avatardk.game.data.MapGrids grids = new com.avatardk.game.data.MapGrids(
-            Gdx.files.internal("data/mapgrids.json").readString("UTF-8"));
+            com.avatardk.game.GameFiles.data("data/mapgrids.json").readString("UTF-8"));
         for (MapDef d : maps) {
             com.avatardk.game.data.MapGrids.Grid g = grids.grid(d.id);
             if (g == null) continue;
@@ -717,7 +717,7 @@ public class WorldScreen extends ScreenAdapter {
         }
         busTex = game.texture("sprites/bus.png");
         // lưới bản đồ thành phố: byte 69 = điểm vùng, thứ tự quét trên->dưới, trái->phải
-        byte[] grid = Gdx.files.internal("data/citymap.bin").readBytes();
+        byte[] grid = com.avatardk.game.GameFiles.data("data/citymap.bin").readBytes();
         for (int i = 0; i < 26 && i * 50 < grid.length; i++)
             for (int j = 0; j < 50 && i * 50 + j < grid.length; j++)
                 if (grid[i * 50 + j] == 69) regionCells.add(new int[]{j, i});
@@ -763,7 +763,7 @@ public class WorldScreen extends ScreenAdapter {
         if (def.daydien) {
             for (int i = 0; i < 4; i++) {
                 String path = "imagemap/" + def.id + "/daydien" + i + ".png";
-                if (!Gdx.files.internal(path).exists()) break;
+                if (!com.avatardk.game.GameFiles.data(path).exists()) break;
                 daydien.add(game.texture(path));
             }
         }

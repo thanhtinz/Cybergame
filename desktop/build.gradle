@@ -36,3 +36,17 @@ tasks.register('tour', JavaExec) {
 }
 jar { archiveFileName = 'avatardk-desktop.jar' }
 
+// Bản phát hành chơi thử GỌN: gộp hết thư viện vào 1 jar chạy thẳng,
+// KHÔNG nhúng dữ liệu game — chỉ đóng sẵn fonts + banner.jpg để hiện
+// được màn hình tải dữ liệu ở lần mở đầu tiên (phần data còn lại client
+// tự tải từ GitHub Release gamedata-v1, xem DataUpdater).
+tasks.register('slimJar', Jar) {
+    archiveFileName = 'ThiTranMatTroi.jar'
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+    manifest { attributes 'Main-Class': 'com.avatardk.game.DesktopLauncher' }
+    exclude 'META-INF/*.SF', 'META-INF/*.DSA', 'META-INF/*.RSA'
+    from(sourceSets.main.output.classesDirs)
+    from({ configurations.runtimeClasspath.collect { it.isDirectory() ? it : zipTree(it) } })
+    from('../assets') { include 'banner.jpg'; include 'fonts/**' }
+}
+

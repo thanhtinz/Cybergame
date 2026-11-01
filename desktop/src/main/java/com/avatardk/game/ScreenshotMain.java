@@ -17,6 +17,7 @@ public class ScreenshotMain {
     private static boolean tourMode = false;
 
     public static void main(String[] args) {
+        System.setProperty("avatardk.dataUrl", "off");
         tourMode = args.length > 0 && args[0].equals("tour");
         Lwjgl3ApplicationConfiguration cfg = new Lwjgl3ApplicationConfiguration();
         cfg.setTitle("AvatarDK Screenshot");
@@ -606,6 +607,13 @@ public class ScreenshotMain {
                     case 48:
                         if (frame == 15) {
                             shot("shot-music-playlist.png");
+                            game.setScreen(new com.avatardk.game.ui.DataDownloadScreen(game, null, true));
+                            stage = 49; frame = 0;
+                        }
+                        break;
+                    case 49:
+                        if (frame == 55) {
+                            shot("shot-download.png");
                             System.out.println("SCREENSHOT DONE");
                             Gdx.app.exit();
                         }

@@ -26,6 +26,8 @@ public class AvatarDkGame extends Game {
     public String playerName = "";
     /** Kết nối tới server khi chơi online (null khi offline). */
     public com.avatardk.game.net.GameConnection connection;
+    /** Bộ tải dữ liệu lần đầu (null khi tắt bằng avatardk.dataUrl=off). */
+    public com.avatardk.game.update.DataUpdater dataUpdater;
     /** Thông tin nhân vật từ gói LOGIN_SUCESS (null khi offline). */
     public com.avatardk.game.net.PlayerInfo player;
     private final Map<Integer, Texture> atlases = new HashMap<>();
@@ -40,16 +42,37 @@ public class AvatarDkGame extends Game {
     @Override
     public void create() {
         Ui.initFonts();
+        // Tải dữ liệu về máy ở lần vào đầu tiên: nếu máy đã có dữ liệu khớp
+        // phiên bản đã biết thì vào thẳng; chưa có (hoặc bản đã biết cũ hơn)
+        // hiện màn hình tải trước. avatardk.dataUrl=off = tắt hẳn (test/dev).
+        if ("off".equals(System.getProperty("avatardk.dataUrl"))) {
+            initGameData();
+            return;
+        }
+        dataUpdater = new com.avatardk.game.update.DataUpdater(
+            Gdx.files.local(com.avatardk.game.GameFiles.DATA_DIR).file(),
+            com.avatardk.game.update.DataUpdater.baseUrl());
+        com.avatardk.game.update.DataUpdater.Manifest cached = dataUpdater.cachedManifest();
+        if (cached != null && dataUpdater.installedVersion() >= cached.version && cached.version > 0) {
+            initGameData();
+            return;
+        }
+        setScreen(new DataDownloadScreen(this, dataUpdater, false));
+    }
+
+    /** Nạp dữ liệu game + dựng các màn chính — gọi sau khi dữ liệu đã sẵn
+     *  sàng (đã tải về máy hoặc có sẵn trong bản cài). */
+    public void initGameData() {
         com.avatardk.game.data.GameSettings.load();
         data = AvatarDataSet.fromJson(
-            Gdx.files.internal("data/items.json").readString("UTF-8"),
-            Gdx.files.internal("data/imgdata.json").readString("UTF-8"),
-            Gdx.files.internal("data/npcs.json").readString("UTF-8"));
+            com.avatardk.game.GameFiles.data("data/items.json").readString("UTF-8"),
+            com.avatardk.game.GameFiles.data("data/imgdata.json").readString("UTF-8"),
+            com.avatardk.game.GameFiles.data("data/npcs.json").readString("UTF-8"));
         // atlas icon của part động (đóng gói từ res Pack5) — thiếu file
         // thì bỏ qua, icon món động để trống như bản trước
         try {
-            if (Gdx.files.internal("data/icondata.json").exists()) {
-                data.loadDynIcons(Gdx.files.internal("data/icondata.json").readString("UTF-8"));
+            if (com.avatardk.game.GameFiles.data("data/icondata.json").exists()) {
+                data.loadDynIcons(com.avatardk.game.GameFiles.data("data/icondata.json").readString("UTF-8"));
             }
         } catch (Exception e) {
             // icon động không hiện; phần còn lại của game không bị ảnh hưởng
@@ -73,7 +96,7 @@ public class AvatarDkGame extends Game {
     public Texture atlas(int bigId) {
         Texture t = atlases.get(bigId);
         if (t == null) {
-            t = new Texture(Gdx.files.internal("big/" + bigId + ".png"));
+            t = new Texture(com.avatardk.game.GameFiles.data("big/" + bigId + ".png"));
             t.setFilter(Texture.TextureFilter.Nearest, Texture.TextureFilter.Nearest);
             atlases.put(bigId, t);
         }
@@ -83,7 +106,7 @@ public class AvatarDkGame extends Game {
     public Texture texture(String path) {
         Texture t = textures.get(path);
         if (t == null) {
-            t = new Texture(Gdx.files.internal(path));
+            t = new Texture(com.avatardk.game.GameFiles.data(path));
             t.setFilter(Texture.TextureFilter.Nearest, Texture.TextureFilter.Nearest);
             textures.put(path, t);
         }

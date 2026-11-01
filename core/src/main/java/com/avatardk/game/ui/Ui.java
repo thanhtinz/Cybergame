@@ -127,7 +127,7 @@ public final class Ui {
     }
 
     private static BitmapFont makeFont(String path, int size) {
-        FreeTypeFontGenerator gen = new FreeTypeFontGenerator(Gdx.files.internal(path));
+        FreeTypeFontGenerator gen = new FreeTypeFontGenerator(com.avatardk.game.GameFiles.data(path));
         FreeTypeFontGenerator.FreeTypeFontParameter p = new FreeTypeFontGenerator.FreeTypeFontParameter();
         p.size = size;
         p.characters = CHARS;
@@ -138,7 +138,7 @@ public final class Ui {
     }
 
     private static BitmapFont makeFaFont(String path, int size, String glyphs) {
-        FreeTypeFontGenerator gen = new FreeTypeFontGenerator(Gdx.files.internal(path));
+        FreeTypeFontGenerator gen = new FreeTypeFontGenerator(com.avatardk.game.GameFiles.data(path));
         FreeTypeFontGenerator.FreeTypeFontParameter p = new FreeTypeFontGenerator.FreeTypeFontParameter();
         p.size = size;
         p.characters = glyphs;
