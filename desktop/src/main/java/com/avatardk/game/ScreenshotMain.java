@@ -357,6 +357,20 @@ public class ScreenshotMain {
                     case 24:
                         if (frame == 25) {
                             shot("shot-chat-voice.png");
+                            // Kiểm gian trưng bày PHONG CÁCH MỚI ở map 10:
+                            // 2 hero + 2 nhân vật phối tóc/đồ quanh người chơi
+                            world.debugSetMap(10);
+                            world.debugBusSkip();
+                            world.debugSetPlayer(462f, 100f);
+                            stage = 25; frame = 0;
+                        }
+                        break;
+                    case 25:
+                        if (frame == 25) {
+                            System.out.println("STYLE STAGE: styleFigures=" + world.styleCount());
+                            if (world.styleCount() != 4)
+                                throw new IllegalStateException("Kỳ vọng 4 nhân vật phong cách mới, thấy " + world.styleCount());
+                            shot("shot-newstyle.png");
                             System.out.println("SCREENSHOT DONE");
                             Gdx.app.exit();
                         }
