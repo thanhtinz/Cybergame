@@ -553,6 +553,13 @@ public class ScreenshotMain {
                     case 41:
                         if (frame == 15) {
                             shot("shot-shop-choice.png");
+                            world.debugOpenBillMockXu();
+                            stage = 42; frame = 0;
+                        }
+                        break;
+                    case 42:
+                        if (frame == 15) {
+                            shot("shot-shop-bill-xu.png");
                             System.out.println("SCREENSHOT DONE");
                             Gdx.app.exit();
                         }
