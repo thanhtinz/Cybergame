@@ -23,12 +23,18 @@ public class PaperDollRenderer {
     public PaperDollRenderer(AvatarDkGame game) { this.game = game; }
 
     private TextureRegion region(PaperDoll.DrawPart d, boolean flip) {
-        String key = d.partId + ":" + d.img.itemId + ":" + flip;
+        String key = d.partId + ":" + d.img.itemId + ":" + (d.dyn ? "d" : "s") + ":" + flip;
         TextureRegion r = cache.get(key);
         if (r == null) {
-            Texture atlas = game.atlas(d.img.bigId);
-            r = new TextureRegion(atlas, d.img.x * AvatarDkGame.HD, d.img.y * AvatarDkGame.HD,
-                d.img.w * AvatarDkGame.HD, d.img.h * AvatarDkGame.HD);
+            if (d.dyn) {
+                // ảnh động: vùng pixel HD thật trên atlas iconatlas
+                Texture atlas = game.texture("iconatlas/" + d.img.bigId + ".png");
+                r = new TextureRegion(atlas, d.img.x, d.img.y, d.img.w, d.img.h);
+            } else {
+                Texture atlas = game.atlas(d.img.bigId);
+                r = new TextureRegion(atlas, d.img.x * AvatarDkGame.HD, d.img.y * AvatarDkGame.HD,
+                    d.img.w * AvatarDkGame.HD, d.img.h * AvatarDkGame.HD);
+            }
             if (flip) r.flip(true, false);
             cache.put(key, r);
         }
@@ -40,8 +46,8 @@ public class PaperDollRenderer {
                      float unit, boolean facingLeft) {
         for (PaperDoll.DrawPart d : doll.frame(frameIndex)) {
             TextureRegion r = region(d, facingLeft);
-            float wPx = d.img.w * unit;
-            float hPx = d.img.h * unit;
+            float wPx = d.wMed() * unit;
+            float hPx = d.hMed() * unit;
             float x = facingLeft ? feetX - d.dx * unit - wPx : feetX + d.dx * unit;
             float y = feetY - d.dy * unit - hPx;
             batch.draw(r, x, y, wPx, hPx);

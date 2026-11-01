@@ -518,7 +518,7 @@ public class ScreenshotMain {
                     case 36:
                         if (frame == 15) {
                             shot("shot-mapzoom-in.png");
-                            world.debugOpenShop(0, 470);
+                            world.debugOpenShop(0, 2169);
                             stage = 37; frame = 0;
                         }
                         break;
@@ -546,6 +546,13 @@ public class ScreenshotMain {
                     case 40:
                         if (frame == 15) {
                             shot("shot-shop-quan.png");
+                            world.debugOpenShopChoiceMock();
+                            stage = 41; frame = 0;
+                        }
+                        break;
+                    case 41:
+                        if (frame == 15) {
+                            shot("shot-shop-choice.png");
                             System.out.println("SCREENSHOT DONE");
                             Gdx.app.exit();
                         }

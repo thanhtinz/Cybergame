@@ -9,8 +9,9 @@ import java.util.List;
  *  - Avatar.paint (Avatar.cs): duyệt seriPart ĐÃ SẮP theo zOrder tăng dần
  *    (Avatar.orderSeriesPath sắp lại seriPart theo Part.zOrder), với mỗi part gọi
  *    part.paintAvatar(g, frame, x*hd, y*hd, direct, 0).
- *  - APartInfo.paintAvatar (APartInfo.cs): nếu IDPart >= 2000 -> ảnh động do server stream
- *    (bỏ qua ở bản offline, ghi vào skippedParts). Ngược lại:
+ *  - APartInfo.paintAvatar (APartInfo.cs): nếu IDPart >= 2000 -> ảnh động do server stream;
+ *    bản port đã đóng gói toàn bộ ảnh stream có trong Pack5 vào atlas iconatlas nên lắp
+ *    được như part tĩnh (chỉ bỏ qua khi thiếu file/thiếu frame, ghi vào skippedParts). Ngược lại:
  *    ImageInfo = AvatarData.listImgInfo[imgID[frame]] rồi paintPart(g, bigID, x0, y0, w, h,
  *    x + dx[frame]*hd - (direct==LEFT ? dx[frame]*hd*2 + w*hd : 0), y + dy[frame]*hd, direct).
  *    Tức vùng atlas = big[bigID] tại (x0*hd, y0*hd, w*hd, h*hd); vị trí vẽ = điểm chân nhân vật
@@ -21,21 +22,30 @@ import java.util.List;
  *  DrawPart đã sắp z-order với vùng atlas (đơn vị medium) + offset (đơn vị medium).
  *  Tầng vẽ (UI) nhân hd=2 và xử lý lật ngang. */
 public class PaperDoll {
-    /** Một lớp vẽ của một frame: vùng atlas + offset so với điểm chân. */
+    /** Một lớp vẽ của một frame: vùng atlas + offset so với điểm chân.
+     *  dyn = ảnh thuộc không gian part động (atlas iconatlas, toạ độ
+     *  pixel HD thật); ngược lại img là vùng imgdata đơn vị medium trên
+     *  sheet big. Kích thước logic (medium) của ảnh động = pixel / 2. */
     public static class DrawPart {
         public final int partId;
         public final int zorder;
         public final ImgInfo img;
         public final int dx, dy;
-        public DrawPart(int partId, int zorder, ImgInfo img, int dx, int dy) {
+        public final boolean dyn;
+        public DrawPart(int partId, int zorder, ImgInfo img, int dx, int dy, boolean dyn) {
             this.partId = partId; this.zorder = zorder; this.img = img; this.dx = dx; this.dy = dy;
+            this.dyn = dyn;
         }
+        /** Chiều rộng logic (đơn vị medium) của lớp vẽ này. */
+        public float wMed() { return dyn ? img.w / 2f : img.w; }
+        /** Chiều cao logic (đơn vị medium) của lớp vẽ này. */
+        public float hMed() { return dyn ? img.h / 2f : img.h; }
     }
 
     public static final int FRAMES = 15;
 
     private final AvatarDataSet data;
-    /** partId đã yêu cầu nhưng không lắp được (động >= 2000, không có trong items, hoặc frame thiếu ảnh). */
+    /** partId đã yêu cầu nhưng không lắp được (không có trong items, frame != 15, hoặc thiếu ảnh trong đúng không gian tĩnh/động). */
     public final List<Integer> skippedParts = new ArrayList<>();
     private final List<PartData> ordered = new ArrayList<>();
 
@@ -43,13 +53,21 @@ public class PaperDoll {
         this.data = data;
         for (int id : partIds) {
             PartData p = data.part(id);
-            if (p == null || p.isDynamic() || p.frames.size() != FRAMES) {
+            if (p == null || p.frames.size() != FRAMES) {
                 if (!skippedParts.contains(id)) skippedParts.add(id);
                 continue;
             }
-            // mọi frame phải tra được ImageInfo, nếu không coi như part hỏng
+            // Mọi frame phải tra được ảnh trong ĐÚNG không gian của part:
+            // part tĩnh tra imgdata, part động tra atlas ảnh động. Trộn
+            // hai không gian (dùng imgdata cho frame của part động) sẽ
+            // vớ phải hình của part tĩnh trùng số — đúng lỗi "mất hình /
+            // sai hình" đã gặp ở shop. Thiếu một frame là bỏ cả part.
             boolean ok = true;
-            for (PartData.Frame f : p.frames) if (data.imgByItemId.get(f.img) == null) { ok = false; break; }
+            for (PartData.Frame f : p.frames) {
+                ImgInfo src = p.isDynamic() ? data.dynImgById.get(f.img)
+                                            : data.imgByItemId.get(f.img);
+                if (src == null) { ok = false; break; }
+            }
             if (!ok) { if (!skippedParts.contains(id)) skippedParts.add(id); continue; }
             ordered.add(p);
         }
@@ -66,7 +84,9 @@ public class PaperDoll {
         List<DrawPart> out = new ArrayList<>();
         for (PartData p : ordered) {
             PartData.Frame f = p.frames.get(frameIndex);
-            out.add(new DrawPart(p.id, p.zorder, data.imgByItemId.get(f.img), f.dx, f.dy));
+            ImgInfo src = p.isDynamic() ? data.dynImgById.get(f.img)
+                                        : data.imgByItemId.get(f.img);
+            out.add(new DrawPart(p.id, p.zorder, src, f.dx, f.dy, p.isDynamic()));
         }
         return out;
     }
@@ -77,8 +97,8 @@ public class PaperDoll {
         for (DrawPart d : frame(frameIndex)) {
             minX = Math.min(minX, d.dx);
             minY = Math.min(minY, d.dy);
-            maxX = Math.max(maxX, d.dx + d.img.w);
-            maxY = Math.max(maxY, d.dy + d.img.h);
+            maxX = Math.max(maxX, d.dx + Math.round(d.wMed()));
+            maxY = Math.max(maxY, d.dy + Math.round(d.hMed()));
         }
         if (minX == Integer.MAX_VALUE) return new int[]{0, 0, 0, 0};
         return new int[]{minX, minY, maxX, maxY};

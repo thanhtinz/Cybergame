@@ -2934,7 +2934,7 @@ public class WorldScreen extends ScreenAdapter {
         // imgdata. Trộn hai nguồn này là nguyên nhân icon hiện sai hình
         // (món động vớ phải hình món tĩnh trùng số icon).
         if (pd.isDynamic()) {
-            com.avatardk.game.data.ImgInfo di = game.data.dynIconById.get(pd.icon);
+            com.avatardk.game.data.ImgInfo di = game.data.dynImgById.get(pd.icon);
             if (di != null) {
                 Texture tex = game.texture("iconatlas/" + di.bigId + ".png");
                 TextureRegion reg = new TextureRegion(tex, di.x, di.y, di.w, di.h);
@@ -4596,6 +4596,18 @@ public class WorldScreen extends ScreenAdapter {
     private int shopPointer = -1;
     private float shopDragStartY, shopDragStartScroll, shopDragMoved;
     private java.util.List<java.util.List<com.avatardk.game.data.PartData>> shopLists;
+    /** MOCKUP luồng mua mới (user yêu cầu 2026-11-01, đang chờ duyệt):
+     *  true = cột chi tiết KHÔNG hiện dòng "Hạn dùng" nữa; bấm nút Mua
+     *  Xu/Lượng sẽ mở panel riêng chọn thời hạn (Theo ngày / Vĩnh viễn)
+     *  thay vì mua ngay. Bản đang chạy giữ false cho tới khi user chốt
+     *  mockup + luật giá; khi đó mới bật thật và nối server. */
+    private boolean shopNewFlow = false;
+    /** Panel chọn thời hạn đang mở: 0 = đóng, 1 = đang mua bằng Xu, 2 = bằng Lượng. */
+    private int shopChoiceType = 0;
+    /** Hệ số giá Vĩnh viễn so với giá Theo ngày — con số ĐỀ XUẤT trong mockup. */
+    private static final int SHOP_PERM_MULT = 5;
+    /** Số ngày của lựa chọn "Theo ngày" đối với món vốn vĩnh viễn trong dữ liệu. */
+    private static final int SHOP_RENT_DAYS = 30;
     private static final String[] SHOP_TABS = {"Áo", "Quần", "Tóc", "Nón", "Trang sức", "Phương tiện", "Khác"};
     private static final float SHOP_PW = 1160f, SHOP_PH = 620f;
     private static final int SHOP_COLS = 6, SHOP_CELL = 96, SHOP_GAP = 12;
@@ -4730,6 +4742,10 @@ public class WorldScreen extends ScreenAdapter {
 
     /** Chạm trong panel shop (modal): đóng / chọn tab / mua / kéo lưới. */
     private void shopTouch(float x, float y, int pointer) {
+        if (shopChoiceType > 0) {
+            shopChoiceTouch(x, y);
+            return;
+        }
         float px = shopPx(), py = shopPy();
         float xCx = px + SHOP_PW - 2, xCy = py + SHOP_PH - 2;
         if ((x - xCx) * (x - xCx) + (y - xCy) * (y - xCy) <= 28 * 28) {
@@ -4764,11 +4780,12 @@ public class WorldScreen extends ScreenAdapter {
         if (sel != null) {
             float stX = px + 24, bW = 296, bH = 44;
             if (x >= stX && x <= stX + bW && y >= py + 66 && y <= py + 66 + bH) {
-                shopBuy(2);
+                // luồng mới (mockup): mở panel chọn thời hạn thay vì mua ngay
+                if (shopNewFlow && sel.gold > 0) shopChoiceType = 2; else shopBuy(2);
                 return;
             }
             if (x >= stX && x <= stX + bW && y >= py + 14 && y <= py + 14 + bH) {
-                shopBuy(1);
+                if (shopNewFlow && sel.coin > 0) shopChoiceType = 1; else shopBuy(1);
                 return;
             }
         }
@@ -4825,8 +4842,10 @@ public class WorldScreen extends ScreenAdapter {
         // ===== cột trái: sân khấu mặc thử =====
         float stX = px + 24, stW = 296, stY = py + 196, stH = ph - 84 - 196;
         batch.draw(Ui.roundedRect((int) stW, (int) stH, 14, new Color(0.10f, 0.16f, 0.23f, 0.9f), GLASS_RIM), stX, stY);
+        // bóng đổ phải NẰM ĐÚNG dưới chân doll (chân ở stY + 52): trước
+        // đây bóng đặt thấp hơn chân 20px nên doll trông như lơ lửng
         batch.setColor(0f, 0f, 0f, 0.35f);
-        batch.draw(circleTexture(), stX + stW / 2f - 80, stY + 18, 160, 26);
+        batch.draw(circleTexture(), stX + stW / 2f - 80, stY + 39, 160, 26);
         batch.setColor(Color.WHITE);
         if (shopTryDoll != null) {
             game.dollRenderer.draw(batch, shopTryDoll, 0,
@@ -4841,19 +4860,24 @@ public class WorldScreen extends ScreenAdapter {
             // xuống để chừa khoảng thở phía dưới dòng meta
             Ui.font.setColor(1f, 1f, 1f, 0.97f);
             Ui.font.draw(batch, sel.name, stX + 4, py + 182);
-            Ui.fontSmall.setColor(1f, 1f, 1f, 0.88f);
-            String han = "Hạn dùng: ";
-            Ui.fontSmall.draw(batch, han, stX + 4, py + 154);
-            Ui.fontSmall.setColor(1f, 0.85f, 0.38f, 1f);
-            Ui.fontSmall.draw(batch, sel.expiredDay > 0
-                ? sel.expiredDay + " ngày" : "Vĩnh viễn",
-                stX + 4 + Ui.textWidth(Ui.fontSmall, han), py + 154);
+            // Luồng mua mới (mockup): hạn dùng KHÔNG hiện ở đây nữa —
+            // người chơi chọn thời hạn trong panel riêng sau khi bấm
+            // nút mua. Luồng cũ vẫn giữ dòng hạn dùng như đã chốt.
+            if (!shopNewFlow) {
+                Ui.fontSmall.setColor(1f, 1f, 1f, 0.88f);
+                String han = "Hạn dùng: ";
+                Ui.fontSmall.draw(batch, han, stX + 4, py + 154);
+                Ui.fontSmall.setColor(1f, 0.85f, 0.38f, 1f);
+                Ui.fontSmall.draw(batch, sel.expiredDay > 0
+                    ? sel.expiredDay + " ngày" : "Vĩnh viễn",
+                    stX + 4 + Ui.textWidth(Ui.fontSmall, han), py + 154);
+            }
             String meta = sel.gender == 1 ? "Chỉ cho Nam"
                 : sel.gender == 2 ? "Chỉ cho Nữ" : "Nam/Nữ đều mặc được";
             if (sel.level > 0) meta += " • Cấp yêu cầu: " + sel.level;
             Ui.fontSmall.setColor(sel.gender == 0
                 ? new Color(1f, 1f, 1f, 0.75f) : new Color(1f, 0.72f, 0.45f, 1f));
-            Ui.fontSmall.draw(batch, meta, stX + 4, py + 126);
+            Ui.fontSmall.draw(batch, meta, stX + 4, shopNewFlow ? py + 148 : py + 126);
             drawShopBuyButton(stX, py + 66, bW, bH, sel.gold, "Lượng", myLuong);
             drawShopBuyButton(stX, py + 14, bW, bH, sel.coin, "Xu", myXu);
         }
@@ -4919,6 +4943,77 @@ public class WorldScreen extends ScreenAdapter {
         Ui.fontTiny.setColor(1f, 1f, 1f, 0.55f);
         Ui.fontTiny.draw(batch, list.size() + " món trong mục " + SHOP_TABS[shopTab]
             + (maxSc > 0f ? " — kéo để xem thêm" : ""), rx, py + 34);
+        if (shopChoiceType > 0) drawShopChoice();
+    }
+
+    /** Panel chọn thời hạn mua (luồng mới, đang ở dạng mockup chờ
+     *  duyệt): hiện đè giữa màn hình sau khi người chơi bấm nút Mua
+     *  Xu/Lượng — hai thẻ Theo ngày / Vĩnh viễn với giá tương ứng của
+     *  đúng loại tiền vừa bấm. */
+    private void drawShopChoice() {
+        com.avatardk.game.data.PartData sel = shopSelPart();
+        if (sel == null) { shopChoiceType = 0; return; }
+        float cw = 620, ch = 400, cx = (Ui.W - cw) / 2f, cy = (Ui.H - ch) / 2f;
+        batch.setColor(0f, 0f, 0f, 0.45f);
+        batch.draw(whiteTex, 0, 0, Ui.W, Ui.H);
+        batch.setColor(Color.WHITE);
+        batch.draw(Ui.roundedRect((int) cw, (int) ch, 18,
+            new Color(0.08f, 0.12f, 0.19f, 0.98f), GLASS_RIM), cx, cy);
+        Ui.font.setColor(1f, 0.85f, 0.38f, 1f);
+        Ui.font.draw(batch, "Chọn thời hạn mua", cx + 28, cy + ch - 28);
+        float xCx = cx + cw - 2, xCy = cy + ch - 2;
+        batch.setColor(0.10f, 0.16f, 0.24f, 1f);
+        batch.draw(circleTexture(), xCx - 17, xCy - 17, 34, 34);
+        batch.setColor(Color.WHITE);
+        batch.draw(ringTexture(), xCx - 17, xCy - 17, 34, 34);
+        Ui.centered(batch, Ui.font, "X", xCx, xCy + 7, Color.WHITE);
+        drawPartIcon(sel.id, Ui.W / 2f, cy + ch - 116, 76);
+        Ui.centered(batch, Ui.font, sel.name, Ui.W / 2f, cy + ch - 172,
+            new Color(1f, 1f, 1f, 0.97f));
+        int base = shopChoiceType == 2 ? sel.gold : sel.coin;
+        String cur = shopChoiceType == 2 ? "Lượng" : "Xu";
+        int days = sel.expiredDay > 0 ? sel.expiredDay : SHOP_RENT_DAYS;
+        drawShopChoiceCard(cx + 24, cy + 34, 272, 148, "Theo ngày",
+            "Dùng trong " + days + " ngày", fmtMoney(base) + " " + cur, false);
+        drawShopChoiceCard(cx + cw - 296, cy + 34, 272, 148, "Vĩnh viễn",
+            "Không bao giờ hết hạn", fmtMoney(base * SHOP_PERM_MULT) + " " + cur, true);
+    }
+
+    /** Một thẻ lựa chọn thời hạn trong panel mua: tiêu đề lớn, dòng mô
+     *  tả và giá. Thẻ Vĩnh viễn viền cam nổi bật (gói cao cấp). */
+    private void drawShopChoiceCard(float x, float y, float w, float h,
+                                    String title, String sub, String price, boolean hot) {
+        batch.draw(Ui.roundedRect((int) w, (int) h, 14,
+            hot ? new Color(0.20f, 0.16f, 0.10f, 0.95f) : new Color(0.13f, 0.20f, 0.29f, 0.95f),
+            hot ? new Color(1f, 0.62f, 0.25f, 1f) : GLASS_RIM), x, y);
+        Ui.centered(batch, Ui.font, title, x + w / 2f, y + h - 34,
+            hot ? new Color(1f, 0.78f, 0.35f, 1f) : Color.WHITE);
+        Ui.centered(batch, Ui.fontSmall, sub, x + w / 2f, y + h - 66,
+            new Color(1f, 1f, 1f, 0.70f));
+        Ui.centered(batch, Ui.font, price, x + w / 2f, y + 44,
+            new Color(1f, 0.85f, 0.38f, 1f));
+    }
+
+    /** Chạm khi panel chọn thời hạn đang mở (mockup): chạm X, chạm ra
+     *  ngoài hoặc chạm vào một thẻ đều đóng panel — hành động mua thật
+     *  theo thời hạn sẽ nối khi user chốt mockup + luật giá. */
+    private void shopChoiceTouch(float x, float y) {
+        float cw = 620, ch = 400, cx = (Ui.W - cw) / 2f, cy = (Ui.H - ch) / 2f;
+        float xCx = cx + cw - 2, xCy = cy + ch - 2;
+        if ((x - xCx) * (x - xCx) + (y - xCy) * (y - xCy) <= 28 * 28
+            || x < cx || x > cx + cw || y < cy || y > cy + ch
+            || (y >= cy + 34 && y <= cy + 182 && x >= cx + 24 && x <= cx + cw - 24)) {
+            shopChoiceType = 0;
+        }
+    }
+
+    /** Sân khấu chụp MOCKUP luồng mua mới: shop bật shopNewFlow, chọn
+     *  món 2169 "thuyền trưởng" (giá 25 Lượng, vốn vĩnh viễn trong dữ
+     *  liệu) và mở sẵn panel chọn thời hạn theo nút Lượng. */
+    public void debugOpenShopChoiceMock() {
+        debugOpenShop(0, 2169);
+        shopNewFlow = true;
+        shopChoiceType = 2;
     }
 
     /** Sân khấu chụp: mở shop thật tại một tab và chọn sẵn một món theo id. */

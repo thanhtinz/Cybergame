@@ -19,8 +19,8 @@ public final class Ui {
     public static final float W = 1280f, H = 720f;
 
     private static final String CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
-        + "àáâãèéêìíòóôõùúũýăđơưạảấầẩẫậắằẳẵặẹẻẽếềểễệỉịọỏốồổỗộớờởỡợụủứừửữựỳỵỷỹ"
-        + "ÀÁÂÃÈÉÊÌÍÒÓÔÕÙÚŨÝĂĐƠƯẠẢẤẦẨẪẬẮẰẲẴẶẸẺẼẾỀỂỄỆỈỊỌỎỐỒỔỖỘỚỜỞỠỢỤỦỨỪỬỮỰỲỴỶỸ"
+        + "àáâãèéêìíĩòóôõùúũýăđơưạảấầẩẫậắằẳẵặẹẻẽếềểễệỉịọỏốồổỗộớờởỡợụủứừửữựỳỵỷỹ"
+        + "ÀÁÂÃÈÉÊÌÍĨÒÓÔÕÙÚŨÝĂĐƠƯẠẢẤẦẨẪẬẮẰẲẴẶẸẺẼẾỀỂỄỆỈỊỌỎỐỒỔỖỘỚỜỞỠỢỤỦỨỪỬỮỰỲỴỶỸ"
         + " .,;:!?()[]{}+-*/=%'\"<>|_@#&•·—–…";
 
     // Glyph Font Awesome (solid) dùng trong game — mã private-use của FA Free 6.

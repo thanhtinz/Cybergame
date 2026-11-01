@@ -36,16 +36,30 @@ def main():
     # Không gian id ảnh của part động ĐỘC LẬP với imgdata: cùng một số
     # icon có thể tồn tại ở cả hai nơi với hai hình khác nhau (ví dụ 537:
     # trong imgdata là frame con chó của part tĩnh 605, còn ảnh động 537
-    # là vải áo của "thuyền trưởng" 2169). Nên icon của part động luôn
-    # lấy từ ảnh riêng nếu có file, bất kể imgdata có trùng số hay không.
+    # là vải áo của "thuyền trưởng" 2169). Nên ảnh của part động (icon VÀ
+    # từng frame trong animation) luôn lấy từ ảnh riêng nếu có file, bất
+    # kể imgdata có trùng số hay không.
     need = {}
+
+    def take(img_id):
+        if img_id is None or img_id in need:
+            return
+        path = f"{RES_ITEM}/{img_id}.png"
+        if os.path.exists(path):
+            need[img_id] = path
+
     for it in items:
-        icon = it.get("icon")
-        if it["id"] >= 2000 and icon is not None:
-            path = f"{RES_ITEM}/{icon}.png"
-            if os.path.exists(path):
-                need[icon] = path
-    print(f"icon động cần đóng gói: {len(need)}")
+        if it["id"] < 2000:
+            continue
+        take(it.get("icon"))
+        anim = it.get("animation")
+        if isinstance(anim, str) and anim:
+            try:
+                for fr in json.loads(anim.replace('\\"', '"')):
+                    take(fr.get("img"))
+            except Exception:
+                pass
+    print(f"anh dong can dong goi: {len(need)}")
 
     # shelf packing: xếp theo chiều cao giảm dần cho gọn
     entries = []

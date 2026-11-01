@@ -22,13 +22,14 @@ public class AvatarDataSet {
     /** Tra theo ID ảnh của gốc (ImageInfo.ID) — dữ liệu trích có id dòng
      *  = item_id + 1 trên toàn bộ bảng nên ánh xạ được (xem ImgInfo). */
     public final Map<Integer, ImgInfo> imgById = new HashMap<>();
-    /** Icon của part ĐỘNG (id >= 2000): theo Part.cs của gốc, part động
-     *  lấy icon từ ảnh riêng theo id icon (server stream, gói −14) chứ
-     *  KHÔNG dùng imgdata — tra nhầm imgdata sẽ vớ phải hình của part
-     *  tĩnh trùng số. Bản port đóng gói các ảnh đó vào atlas
+    /** Ảnh của part ĐỘNG (id >= 2000) — cả icon lẫn từng frame mặc lên
+     *  người: theo Part.cs/APartInfo.cs của gốc, part động lấy ảnh từ
+     *  ảnh riêng theo id ảnh (server stream, gói −14) chứ KHÔNG dùng
+     *  imgdata — tra nhầm imgdata sẽ vớ phải hình của part tĩnh trùng
+     *  số. Bản port đóng gói các ảnh đó vào atlas
      *  iconatlas/<image_id>.png + data/icondata.json (toạ độ pixel HD
-     *  thật, khác imgdata vốn là đơn vị medium); tra theo ICON id. */
-    public final Map<Integer, ImgInfo> dynIconById = new HashMap<>();
+     *  thật, khác imgdata vốn là đơn vị medium); tra theo ID ẢNH. */
+    public final Map<Integer, ImgInfo> dynImgById = new HashMap<>();
     public final List<NpcData> npcs = new ArrayList<>();
 
     private static final Pattern INT = Pattern.compile("-?\\d+");
@@ -97,7 +98,7 @@ public class AvatarDataSet {
             ImgInfo info = new ImgInfo(
                 r.getInt("item_id"), r.getInt("image_id"),
                 r.getInt("x"), r.getInt("y"), r.getInt("w"), r.getInt("h"));
-            dynIconById.put(info.itemId, info);
+            dynImgById.put(info.itemId, info);
         }
     }
 
