@@ -357,20 +357,6 @@ public class ScreenshotMain {
                     case 24:
                         if (frame == 25) {
                             shot("shot-chat-voice.png");
-                            // Kiểm map MỚI 109 Phố Chợ: xe buýt đến trạm như
-                            // map gốc (ô 139), người chơi xuống tại điểm trạm
-                            world.debugSetMap(109);
-                            stage = 25; frame = 0;
-                        }
-                        break;
-                    case 25:
-                        if (frame == 10) world.debugBusDwell();
-                        if (frame == 25) {
-                            System.out.println("PHO CHO STAGE: map=" + world.debugMapName()
-                                + " stopX=" + world.debugStopX());
-                            if (world.debugStopX() < 0)
-                                throw new IllegalStateException("Map 109 thiếu điểm trạm xe");
-                            shot("shot-pho-cho.png");
                             System.out.println("SCREENSHOT DONE");
                             Gdx.app.exit();
                         }
