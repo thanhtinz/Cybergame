@@ -1,0 +1,60 @@
+<!doctype html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Thị Trấn Mặt Trời — chơi thử trên web</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
+    <style>
+        html, body {
+            margin: 0;
+            padding: 0;
+            background: #0a1626;
+            height: 100%;
+            overflow: hidden;
+        }
+        canvas {
+            display: block;
+            margin: 0 auto;
+            outline: none;
+        }
+        #embed-html {
+            width: 100%;
+            height: 100%;
+        }
+        #loading {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: #ffd23e;
+            font-family: sans-serif;
+            font-size: 18px;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+<div id="embed-html">
+    <div id="loading">Đang tải Thị Trấn Mặt Trời…<br>
+        <span style="font-size:13px;color:#9db8d6">Lần đầu hơi lâu (tải dữ liệu game ~37 MB), các lần sau nhanh hơn.</span>
+    </div>
+</div>
+<script type="text/javascript" src="html/html.nocache.js"></script>
+<script>
+    // chặn phím cách/mũi tên cuộn trang khi chơi
+    window.addEventListener("keydown", function (e) {
+        if ([32, 37, 38, 39, 40].indexOf(e.keyCode) > -1) e.preventDefault();
+    }, false);
+    // ẩn dòng "đang tải" khi canvas của game xuất hiện
+    var timer = setInterval(function () {
+        if (document.querySelector("#embed-html canvas")) {
+            var el = document.getElementById("loading");
+            if (el) el.style.display = "none";
+            clearInterval(timer);
+        }
+    }, 300);
+</script>
+</body>
+</html>
