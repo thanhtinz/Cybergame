@@ -3927,11 +3927,8 @@ public class WorldScreen extends ScreenAdapter {
     }
 
     private static Color mailKindFg(String kind) {
-        if ("daily".equals(kind) || "gift".equals(kind)) return new Color(1f, 0.478f, 0.659f, 1f);
-        if ("event".equals(kind)) return new Color(1f, 0.718f, 0.302f, 1f);
-        if ("friend".equals(kind)) return new Color(1f, 0.478f, 0.659f, 1f);
-        if ("update".equals(kind)) return new Color(0.486f, 0.769f, 1f, 1f);
-        return new Color(0.706f, 0.616f, 0.867f, 1f);
+        // một màu thống nhất cho mọi icon thư (user chê nhiều màu)
+        return new Color(0.85f, 0.92f, 1f, 1f);
     }
 
     private static String trimToWidth(com.badlogic.gdx.graphics.g2d.BitmapFont f,
@@ -4029,7 +4026,7 @@ public class WorldScreen extends ScreenAdapter {
         boolean sel = mailSelected() == l;
         batch.draw(Ui.roundedRect(404, 92, 12,
             sel ? new Color(0.16f, 0.30f, 0.44f, 0.92f) : GLASS_FILL,
-            sel ? new Color(1f, 0.78f, 0.30f, 1f) : GLASS_RIM), lx, cy);
+            sel ? new Color(0.62f, 0.82f, 1f, 0.95f) : GLASS_RIM), lx, cy);
         batch.draw(Ui.roundedRect(58, 58, 12, mailKindBg(l.kind), null), lx + 14, cy + 17);
         Ui.faIcon(batch, Ui.fa26, mailKindIcon(l.kind), lx + 43, cy + 46, mailKindFg(l.kind));
         if (l.read) {
@@ -4064,11 +4061,11 @@ public class WorldScreen extends ScreenAdapter {
         Ui.fontBaloo36.draw(batch, trimToWidth(Ui.fontBaloo36, l.title, dw - 200), dx + 80, dTop - 20);
         // tem mèo trang trí góc phải (theo mẫu) — bản kính mờ
         com.badlogic.gdx.graphics.Texture stamp = Ui.roundedRect(74, 88, 8,
-            GLASS_FILL, new Color(0.949f, 0.655f, 0.765f, 0.55f));
+            GLASS_FILL, GLASS_RIM);
         batch.draw(stamp, dx + dw - 84, dTop - 92, 37, 44, 74, 88, 1f, 1f, -8f,
             0, 0, 74, 88, false, false);
         Ui.faIcon(batch, Ui.fa30, Ui.FA_CAT, dx + dw - 47, dTop - 48,
-            new Color(0.949f, 0.545f, 0.706f, 0.9f));
+            new Color(0.85f, 0.92f, 1f, 0.8f));
         // chip người gửi + giờ gửi
         float chipY = dTop - 108;
         float chipW = Ui.textWidth(Ui.fontSmall, l.sender) + 36;
@@ -4102,7 +4099,7 @@ public class WorldScreen extends ScreenAdapter {
         batch.draw(Ui.roundedRect((int) dw, 168, 14,
             new Color(0f, 0f, 0f, 0.30f), GLASS_RIM), dx, boxY);
         Ui.faIcon(batch, Ui.fa20, Ui.FA_GIFT, dx + 34, boxY + 140,
-            new Color(1f, 0.85f, 0.45f, 1f));
+            new Color(0.9f, 0.93f, 1f, 1f));
         Ui.font.setColor(Color.WHITE);
         Ui.font.draw(batch, "Vật phẩm đính kèm", dx + 54, boxY + 148);
         if (l.atts.isEmpty()) {
