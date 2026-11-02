@@ -85144,3 +85144,11 @@ COMMIT;
 /*!40101 SET CHARACTER_SET_CLIENT=@OLD_CHARACTER_SET_CLIENT */;
 /*!40101 SET CHARACTER_SET_RESULTS=@OLD_CHARACTER_SET_RESULTS */;
 /*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
+
+-- Bảng bạn bè (bản port bổ sung: server Pack5 không có lưu trữ bạn bè;
+-- mỗi quan hệ lưu 2 chiều, tạo thêm khi server chạy qua ensureSchema)
+CREATE TABLE IF NOT EXISTS `friends` (
+  `user_id` int(11) NOT NULL,
+  `friend_id` int(11) NOT NULL,
+  PRIMARY KEY (`user_id`, `friend_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

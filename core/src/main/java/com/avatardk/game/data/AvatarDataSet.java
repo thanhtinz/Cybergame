@@ -72,7 +72,7 @@ public class AvatarDataSet {
                 r.getInt("id"), r.getString("name", ""),
                 r.getInt("map"), r.getInt("x"), r.getInt("y"));
             Matcher mi = INT.matcher(r.getString("items", "[]"));
-            while (mi.find()) n.items.add(Integer.parseInt(mi.group()));
+            while (mi.find()) n.items.add(Integer.parseInt(mi.group(0)));
             // chat: chuỗi JSON lồng, bị escape hai lớp giống animation
             String chatRaw = r.getString("chat", "[]").replace("\\", "");
             Matcher mc = QUOTED.matcher(chatRaw);
@@ -82,6 +82,20 @@ public class AvatarDataSet {
                 String s = mc.group(1).trim();
                 if (!s.isEmpty()) n.chat.add(s);
                 first = false;
+            }
+            // Dự phòng cho bản WEB: dữ liệu web ghi chat dạng "câu 1 | câu 2"
+            // (không có ngoặc kép vì bộ parse JSON của GWT không nuốt được
+            // ký tự escape — xem tools/build_web.py). Dữ liệu gốc luôn có
+            // ngoặc kép khi có thoại nên nhánh này không bao giờ chạy ở
+            // bản cài.
+            if (n.chat.isEmpty()) {
+                String flat = chatRaw.replace("[", "").replace("]", "").trim();
+                if (!flat.isEmpty()) {
+                    for (String s : flat.split("\\|")) {
+                        String t = s.trim();
+                        if (!t.isEmpty()) n.chat.add(t);
+                    }
+                }
             }
             ds.npcs.add(n);
         }
@@ -113,7 +127,7 @@ public class AvatarDataSet {
             if (close < 0) break;
             Matcher m = INT.matcher(clean.substring(open, close));
             List<Integer> nums = new ArrayList<>();
-            while (m.find()) nums.add(Integer.parseInt(m.group()));
+            while (m.find()) nums.add(Integer.parseInt(m.group(0)));
             if (nums.size() >= 3) p.frames.add(new PartData.Frame(nums.get(0), nums.get(1), nums.get(2)));
             start = close + 1;
         }

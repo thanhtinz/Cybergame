@@ -591,8 +591,8 @@ public class ScreenshotMain {
                         if (frame == 15) {
                             shot("shot-action-pose.png");
                             world.debugSeedMusic(
-                                new java.io.File("tools/yt-fixtures/search_seed.json"),
-                                new java.io.File("tools/yt-fixtures/thumbs"));
+                                new java.io.File("tools/yt-fixtures/search_seed.json").getAbsolutePath(),
+                                new java.io.File("tools/yt-fixtures/thumbs").getAbsolutePath());
                             world.debugOpenMusic(0);
                             stage = 47; frame = 0;
                         }
@@ -614,6 +614,28 @@ public class ScreenshotMain {
                     case 49:
                         if (frame == 55) {
                             shot("shot-download.png");
+                            game.setScreen(world);
+                            world.debugOpenMsgInbox();
+                            stage = 50; frame = 0;
+                        }
+                        break;
+                    case 50:
+                        if (frame == 15) {
+                            shot("shot-msg-inbox.png");
+                            world.debugOpenMsgChat();
+                            stage = 51; frame = 0;
+                        }
+                        break;
+                    case 51:
+                        if (frame == 15) {
+                            shot("shot-msg-chat.png");
+                            world.debugOpenFriendPanel();
+                            stage = 52; frame = 0;
+                        }
+                        break;
+                    case 52:
+                        if (frame == 15) {
+                            shot("shot-friends.png");
                             System.out.println("SCREENSHOT DONE");
                             Gdx.app.exit();
                         }

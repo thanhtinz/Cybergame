@@ -2020,14 +2020,97 @@ public void NhanThuongEventXuBoss() throws IOException {
         }
     }
 
+    /** Danh sách bạn (gói -18): trả gói CUSTOM_LIST -81 đúng định dạng
+     *  ListScr.readList của client gốc cho id "friendlist":
+     *  {UTF "friendlist", bytes: UTF tiêu đề, int idList, byte loại = 1,
+     *  byte trang, short số bạn, mỗi bạn: byte số part, short part...,
+     *  int IDDB, short idImg, short idWedding, short idStatus, UTF tên,
+     *  UTF dòng trạng thái}, cuối là byte số mục menu.
+     *  (Server Pack5 chỉ là stub trả "comingsion" — bản port làm thật,
+     *  dữ liệu từ bảng `friends`.) */
     public void requestFriendList(Message ms) throws IOException {
+        java.util.List<Integer> ids = new java.util.ArrayList<>();
+        java.util.Map<Integer, String> names = new java.util.HashMap<>();
+        try (Connection connection = DbManager.getInstance().getConnection();
+             PreparedStatement ps = connection.prepareStatement(
+                     "SELECT u.`id`, u.`username` FROM `friends` f"
+                             + " JOIN `users` u ON u.`id` = f.`friend_id`"
+                             + " WHERE f.`user_id` = ? ORDER BY u.`username`")) {
+            ps.setInt(1, this.user.getId());
+            try (ResultSet res = ps.executeQuery()) {
+                while (res.next()) {
+                    int fid = res.getInt(1);
+                    ids.add(fid);
+                    names.put(fid, res.getString(2));
+                }
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        java.io.ByteArrayOutputStream baos = new java.io.ByteArrayOutputStream();
+        DataOutputStream inner = new DataOutputStream(baos);
+        inner.writeUTF("Bạn bè");
+        inner.writeInt(0);   // idList
+        inner.writeByte(1);  // loại 1 = danh sách avatar
+        inner.writeByte(0);  // trang
+        inner.writeShort(ids.size());
+        for (int fid : ids) {
+            java.util.List<Integer> parts = friendWearingPartIds(fid);
+            int n = Math.min(parts.size(), 127);
+            inner.writeByte(n);
+            for (int i = 0; i < n; i++) {
+                inner.writeShort(parts.get(i));
+            }
+            inner.writeInt(fid);
+            inner.writeShort(0);   // idImg
+            inner.writeShort(-1);  // idWedding: hệ kết hôn chưa port
+            inner.writeShort(-1);  // idStatus: không dùng icon trạng thái
+            inner.writeUTF(names.getOrDefault(fid, ""));
+            inner.writeUTF(UserManager.getInstance().find(fid) != null
+                    ? "Đang trực tuyến" : "Ngoại tuyến");
+        }
+        inner.writeByte(0);  // số mục menu (client tự vẽ Nhắn tin / Xoá bạn)
+        inner.flush();
+        Message out = new Message(Cmd.CUSTOM_LIST);
+        DataOutputStream ds = out.writer();
+        ds.writeUTF("friendlist");
+        ds.write(baos.toByteArray());
+        ds.flush();
+        sendMessage(out);
+    }
 
-        this.user.getAvatarService().chatTo("admin","ok",-1);
-        this.user.getAvatarService().serverDialog("comingsion");
-        return;
-//        ms = new Message(Cmd.CUSTOM_LIST);
-//        DataOutputStream ds = ms.writer();
-//        ds.flush();
+    /** Part đang mặc của một người chơi: lấy từ phiên online nếu có,
+     *  không thì đọc cột wearing trong DB. */
+    private java.util.List<Integer> friendWearingPartIds(int userId) {
+        java.util.List<Integer> parts = new java.util.ArrayList<>();
+        User online = UserManager.getInstance().find(userId);
+        if (online != null) {
+            for (Item itm : online.getWearing()) {
+                parts.add((int) itm.getId());
+            }
+            return parts;
+        }
+        try (Connection connection = DbManager.getInstance().getConnection();
+             PreparedStatement ps = connection.prepareStatement(
+                     "SELECT `wearing` FROM `players` WHERE `user_id` = ?")) {
+            ps.setInt(1, userId);
+            try (ResultSet res = ps.executeQuery()) {
+                if (res.next()) {
+                    JSONArray ja = (JSONArray) JSONValue.parse(res.getString(1));
+                    if (ja != null) {
+                        for (Object o : ja) {
+                            Object idv = ((org.json.simple.JSONObject) o).get("id");
+                            if (idv instanceof Number) {
+                                parts.add(((Number) idv).intValue());
+                            }
+                        }
+                    }
+                }
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        return parts;
     }
 
     public void joinHouse(Message ms) throws IOException {

@@ -50,7 +50,7 @@ public class AvatarDkGame extends Game {
             return;
         }
         dataUpdater = new com.avatardk.game.update.DataUpdater(
-            Gdx.files.local(com.avatardk.game.GameFiles.DATA_DIR).file(),
+            com.avatardk.game.GameFiles.dataRootFile(),
             com.avatardk.game.update.DataUpdater.baseUrl());
         com.avatardk.game.update.DataUpdater.Manifest cached = dataUpdater.cachedManifest();
         if (cached != null && dataUpdater.installedVersion() >= cached.version && cached.version > 0) {

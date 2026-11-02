@@ -281,6 +281,13 @@ public class MessageHandler implements IMessageHandler {
                         }
                         break;
                     }
+                    case Cmd.REMOVE_FRIEND: {
+                        if (this.client.user != null) {
+                            this.client.getParkService().handleRemoveFriend(mss);
+                            break;
+                        }
+                        break;
+                    }
                     case -27: {
                         this.client.handshakeMessage();
                         break;

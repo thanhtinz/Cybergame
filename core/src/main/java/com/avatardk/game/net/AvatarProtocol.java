@@ -38,6 +38,9 @@ public final class AvatarProtocol {
      *  và báo kết quả về người mời; client phân biệt bằng danh sách lời mời
      *  mình đang chờ (Cmd.ADD_FRIEND của gốc). */
     public static final byte ADD_FRIEND = -19;
+    public static final byte REMOVE_FRIEND = -20;
+    public static final byte REQUEST_FRIENDLIST = -18;
+    public static final byte CUSTOM_LIST = -81;
     /** Gửi lời mời kết bạn: {int id người nhận} (Cmd.AVATAR_REQUEST_ADD_FRIEND). */
     public static final byte REQUEST_ADD_FRIEND = -21;
     /** Xin/xem thông tin nhân vật: C→S {int id}; S→C {int id, byte cấp,
@@ -254,6 +257,19 @@ public final class AvatarProtocol {
     public static void requestAddFriend(GameConnection conn, int idTo) throws IOException {
         Msg m = new Msg(REQUEST_ADD_FRIEND);
         m.writer().writeInt(idTo);
+        conn.send(m);
+    }
+
+    /** Xin danh sách bạn (gói −18, không payload) — server trả gói −81
+     *  CUSTOM_LIST với id "friendlist" (định dạng ListScr của gốc). */
+    public static void requestFriendList(GameConnection conn) throws IOException {
+        conn.send(new Msg(REQUEST_FRIENDLIST));
+    }
+
+    /** Xoá bạn (gói −20): int id của bạn cần xoá. */
+    public static void removeFriend(GameConnection conn, int idFriend) throws IOException {
+        Msg m = new Msg(REMOVE_FRIEND);
+        m.writer().writeInt(idFriend);
         conn.send(m);
     }
 

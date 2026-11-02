@@ -74,6 +74,10 @@ public class AdminServer {
             } catch (Exception ignore) {
                 // cột đã tồn tại
             }
+            // Bảng bạn bè (hệ bạn bè của bản port): mỗi quan hệ lưu 2 chiều
+            st.execute("CREATE TABLE IF NOT EXISTS `friends` ("
+                    + "`user_id` INT NOT NULL, `friend_id` INT NOT NULL,"
+                    + " PRIMARY KEY (`user_id`, `friend_id`))");
         } catch (Exception e) {
             System.out.println("[Admin] ensureSchema loi: " + e.getMessage());
         }

@@ -26,6 +26,7 @@ import com.avatardk.game.music.MusicLibrary;
 import com.avatardk.game.music.MusicPlayer;
 import com.avatardk.game.music.MusicService;
 import com.avatardk.game.music.ThumbCache;
+import com.avatardk.game.util.BgThread;
 import com.avatardk.game.music.YtVideo;
 import com.avatardk.game.net.AvatarProtocol;
 import com.avatardk.game.net.GameConnection;
@@ -274,7 +275,9 @@ public class WorldScreen extends ScreenAdapter {
             }
         });
         music.setVolume(0.7f);
-        music.initLibrary(Gdx.files.local("music/library.json").file());
+        // bản web không có file local: truyền null, thư viện nhạc sống trong bộ nhớ
+        music.initLibrary(Gdx.app.getType() == com.badlogic.gdx.Application.ApplicationType.WebGL
+            ? null : Gdx.files.local("music/library.json").file());
         musicListCount = music.library().playlists.size();
         musicThumbs = new ThumbCache(music.client());
         music.setListener(new MusicService.Listener() {
@@ -447,14 +450,28 @@ public class WorldScreen extends ScreenAdapter {
     private final List<ChatLine>[] chatLogs = new List[]{
         new ArrayList<ChatLine>(), new ArrayList<ChatLine>(), new ArrayList<ChatLine>()};
 
+    /** Giờ hiện tại dạng HH:mm (viết tay để chạy được cả trên bản web —
+     *  SimpleDateFormat không có trong GWT). */
+    static String hhmmNow() {
+        java.util.Date d = new java.util.Date();
+        int h = d.getHours(), m = d.getMinutes();
+        return (h < 10 ? "0" : "") + h + ":" + (m < 10 ? "0" : "") + m;
+    }
+
     private void addChatLog(int tab, String name, String text, boolean system) {
         ChatLine l = new ChatLine();
         l.name = name; l.text = text; l.system = system;
         // giờ gửi hiện ở góc phải mỗi tin nhắn: lấy giờ máy lúc tin tới
         // (giao thức gốc không chở mốc giờ — đồng hồ người nhận là chuẩn chung)
-        l.time = new java.text.SimpleDateFormat("HH:mm").format(new java.util.Date());
+        l.time = hhmmNow();
         chatLogs[tab].add(l);
         while (chatLogs[tab].size() > 40) chatLogs[tab].remove(0);
+        // tab "Chung" của panel Tin nhắn (MessageScr) soi cùng dòng chat
+        // công cộng này (chat map + chat thế giới), giữ tối đa 100 dòng
+        if (tab != TAB_SYSTEM && name != null) {
+            publicLog.add(new String[]{name, text});
+            while (publicLog.size() > 100) publicLog.remove(0);
+        }
     }
 
     /** Thêm một tin nhắn THOẠI vào nhật ký (chip nghe lại vẽ ở drawChatFrame). */
@@ -463,7 +480,7 @@ public class WorldScreen extends ScreenAdapter {
         l.name = name;
         l.voice = samples;
         l.voiceSecs = Math.max(1, (samples.length + VOICE_RATE - 1) / VOICE_RATE);
-        l.time = new java.text.SimpleDateFormat("HH:mm").format(new java.util.Date());
+        l.time = hhmmNow();
         chatLogs[tab].add(l);
         while (chatLogs[tab].size() > 40) chatLogs[tab].remove(0);
     }
@@ -800,7 +817,7 @@ public class WorldScreen extends ScreenAdapter {
      *  ảnh trời bghd/may<num><status> và ảnh silhouette bghd/<num><status>,
      *  mây trôi effect/cl<anchor><status>. */
     private void loadBackground(MapDef def) {
-        int hour = java.time.LocalTime.now().getHour();
+        int hour = new java.util.Date().getHours();
         bgStatus = bgStatusOverride >= 0 ? bgStatusOverride
             : (hour >= 18 || hour < 6) ? 1 : 0;
         if (def.bg == null) {
@@ -1071,11 +1088,10 @@ public class WorldScreen extends ScreenAdapter {
      *  (tools/yt-fixtures/search_seed.json) + bìa tải sẵn trong thư mục
      *  thumbs, để panel hiển thị đúng dữ liệu thật khi chụp kiểm chứng
      *  (mạng Java trong sandbox bị chặn nên không gọi trực tiếp được). */
-    public void debugSeedMusic(java.io.File seedJson, java.io.File thumbsDir) {
+    public void debugSeedMusic(String seedJsonPath, String thumbsDirPath) {
         initMusic();
         try {
-            String text = new String(java.nio.file.Files.readAllBytes(seedJson.toPath()),
-                java.nio.charset.StandardCharsets.UTF_8);
+            String text = Gdx.files.absolute(seedJsonPath).readString("UTF-8");
             JsonValue root = new JsonReader().parse(text);
             List<YtVideo> vids = new ArrayList<>();
             for (JsonValue jv : root.get("videos")) {
@@ -1096,9 +1112,10 @@ public class WorldScreen extends ScreenAdapter {
             musicListSel = 0;
             musicQuery.append("Sơn Tùng M-TP");
             for (YtVideo v : vids) {
-                java.io.File f = new java.io.File(thumbsDir, v.id + ".jpg");
-                if (f.isFile()) {
-                    Texture t = new Texture(Gdx.files.absolute(f.getAbsolutePath()));
+                com.badlogic.gdx.files.FileHandle f =
+                    Gdx.files.absolute(thumbsDirPath + "/" + v.id + ".jpg");
+                if (f.exists()) {
+                    Texture t = new Texture(f);
                     musicThumbs.putLocal("row:" + v.id, t);
                     musicThumbs.putLocal("big:" + v.id, t);
                 }
@@ -1204,7 +1221,7 @@ public class WorldScreen extends ScreenAdapter {
     private static final float MIC_BTN_W = 40f;
     private boolean recording = false;
     private com.badlogic.gdx.audio.AudioRecorder recorder;
-    private Thread recThread;
+    private BgThread recThread;
     private volatile boolean recActive;
     private final short[] recBuf = new short[VOICE_RATE * VOICE_MAX_SECS];
     private volatile int recCount;
@@ -1214,7 +1231,7 @@ public class WorldScreen extends ScreenAdapter {
     private final Map<String, VoiceAsm> voiceAsm = new java.util.HashMap<>();
 
     private ChatLine playingLine;
-    private Thread playThread;
+    private BgThread playThread;
     private volatile int playGen;
     /** Vùng chạm các chip thoại đã vẽ ở khung hình trước: {x, y, w, h, ChatLine}. */
     private final List<Object[]> voiceHits = new ArrayList<>();
@@ -1238,7 +1255,7 @@ public class WorldScreen extends ScreenAdapter {
         recError = false;
         recActive = true;
         recording = true;
-        recThread = new Thread(() -> {
+        recThread = new BgThread(() -> {
             short[] chunk = new short[1600];
             while (recActive && recCount < recBuf.length) {
                 int n = Math.min(chunk.length, recBuf.length - recCount);
@@ -1350,7 +1367,7 @@ public class WorldScreen extends ScreenAdapter {
         l.voicePlaying = true;
         final int gen = ++playGen;
         final short[] pcm = l.voice;
-        playThread = new Thread(() -> {
+        playThread = new BgThread(() -> {
             com.badlogic.gdx.audio.AudioDevice dev = null;
             try {
                 dev = Gdx.audio.newAudioDevice(VOICE_RATE, true);
@@ -1439,14 +1456,16 @@ public class WorldScreen extends ScreenAdapter {
                     break;
                 }
                 case AvatarProtocol.CHAT_TO: {
-                    // nhắn riêng (gói −6): {int type, UTF tên người gửi, UTF}
+                    // nhắn riêng (gói −6): {int id NGƯỜI GỬI, UTF tên
+                    // người gửi, UTF nội dung} -> vào cuộc trò chuyện trong
+                    // hộp Tin đến (MessageScr.addPlayer của gốc)
                     java.io.DataInputStream r = m.reader();
-                    r.readInt();
+                    int fromId = r.readInt();
                     String from = r.readUTF();
                     String text = r.readUTF();
-                    addChatLog(TAB_NEARBY, "Riêng · " + from, text, false);
+                    convoAdd(fromId, from, text, false);
                     for (RemoteFigure f : remotes.values()) {
-                        if (f.info.name.equals(from)) {
+                        if (f.info.id == fromId) {
                             f.bubble = text;
                             f.bubbleTimer = 4f;
                             break;
@@ -1454,20 +1473,47 @@ public class WorldScreen extends ScreenAdapter {
                     }
                     break;
                 }
-                case AvatarProtocol.ADD_FRIEND: {
-                    // gói −19: lời mời được chuyển tới (boolean=false) hoặc
-                    // kết quả lời mời mình đã gửi — phân biệt bằng friendPending
+                case AvatarProtocol.REQUEST_ADD_FRIEND: {
+                    // lời mời kết bạn (gói −21): {int id người mời, UTF
+                    // tên, UTF nội dung} -> một mục "Lời mời kết bạn"
+                    // trong hộp Tin đến (MessageScr của gốc); panel đang
+                    // đóng thì bật thêm hộp thoại Đồng ý/Từ chối ngay.
                     java.io.DataInputStream r = m.reader();
                     int id = r.readInt();
-                    boolean b = r.readBoolean();
-                    if (friendPending.remove(id)) {
-                        addChatLog(TAB_SYSTEM, null, remoteName(id) + (b
-                            ? " đã đồng ý kết bạn với bạn."
-                            : " đã từ chối lời mời kết bạn."), true);
-                    } else {
+                    String name = r.readUTF();
+                    String text = r.readUTF();
+                    Convo c = convo(id, name);
+                    c.friendReq = true;
+                    c.reqText = text;
+                    c.preview = "Lời mời kết bạn";
+                    if (!(msgOpen && msgTab == 2 && chatConvo == c)) c.unread++;
+                    if (!msgOpen && !friendOpen) {
                         friendInviteId = id;
-                        friendInviteName = remoteName(id);
+                        friendInviteName = name;
                     }
+                    break;
+                }
+                case AvatarProtocol.ADD_FRIEND: {
+                    // kết quả lời mời mình đã gửi (gói −19): {int id người
+                    // trả lời, UTF tên, boolean đồng ý, UTF nội dung} —
+                    // client gốc hiện nội dung bằng OK dialog; ở đây ghi
+                    // vào tab Hệ thống của khung chat.
+                    java.io.DataInputStream r = m.reader();
+                    r.readInt();
+                    r.readUTF();
+                    r.readBoolean();
+                    String text = r.readUTF();
+                    addChatLog(TAB_SYSTEM, null, text, true);
+                    if (friendOpen) requestFriends();
+                    break;
+                }
+                case AvatarProtocol.CUSTOM_LIST: {
+                    // gói −81: {UTF id danh sách, bytes dữ liệu} — chỉ xử
+                    // "friendlist" (ListScr của gốc), các danh sách khác
+                    // thuộc các đợt sau.
+                    java.io.DataInputStream r = m.reader();
+                    String listId = r.readUTF();
+                    if ("friendlist".equals(listId)) parseFriendList(r);
                     break;
                 }
                 case AvatarProtocol.REQUEST_YOUR_INFO: {
@@ -1985,6 +2031,16 @@ public class WorldScreen extends ScreenAdapter {
         Gdx.input.setInputProcessor(new InputAdapter() {
             @Override
             public boolean keyTyped(char c) {
+                if (msgOpen && msgTab != 1) {
+                    if (c == '\b') {
+                        if (msgInput.length() > 0) msgInput.deleteCharAt(msgInput.length() - 1);
+                    } else if (c == '\r' || c == '\n') {
+                        msgSend();
+                    } else if (c >= 32 && msgInput.length() < 200) {
+                        msgInput.append(c);
+                    }
+                    return true;
+                }
                 if (musicOpen && musicFocus != 0) {
                     StringBuilder b = musicFocus == 1 ? musicQuery : musicLink;
                     if (c == '\b') {
@@ -2024,6 +2080,20 @@ public class WorldScreen extends ScreenAdapter {
             }
             @Override
             public boolean touchDragged(int sx, int sy, int pointer) {
+                if (pointer == msgPointer && msgOpen) {
+                    Vector3 v = hudViewport.unproject(new Vector3(sx, sy, 0));
+                    float dy = v.y - msgDragStartY;
+                    msgDragMoved = Math.max(msgDragMoved, Math.abs(dy));
+                    msgScroll = MathUtils.clamp(msgDragStartScroll - dy, 0f, msgMaxScroll());
+                    return true;
+                }
+                if (pointer == frPointer && friendOpen) {
+                    Vector3 v = hudViewport.unproject(new Vector3(sx, sy, 0));
+                    float dy = v.y - frDragStartY;
+                    frDragMoved = Math.max(frDragMoved, Math.abs(dy));
+                    frScroll = MathUtils.clamp(frDragStartScroll - dy, 0f, frMaxScroll());
+                    return true;
+                }
                 if (pointer == shopPointer && shopOpen) {
                     // kéo trong lưới shop: cuộn theo tay như sheet biểu cảm
                     Vector3 v = hudViewport.unproject(new Vector3(sx, sy, 0));
@@ -2068,6 +2138,26 @@ public class WorldScreen extends ScreenAdapter {
             public boolean touchUp(int sx, int sy, int pointer, int button) {
                 // đang giữ micro ghi âm: thả tay ra là gửi tin nhắn thoại
                 if (recording) { finishRecording(); return true; }
+                if (pointer == msgPointer) {
+                    msgPointer = -1;
+                    if (msgOpen && msgDragMoved < 10f && msgPendingTap >= 0
+                        && msgPendingTap < convos.size()) {
+                        Convo c = convos.get(msgPendingTap);
+                        if (!c.friendReq) openConvoChat(c);
+                    }
+                    msgPendingTap = -1;
+                    return true;
+                }
+                if (pointer == frPointer) {
+                    frPointer = -1;
+                    if (friendOpen && frDragMoved < 10f && frPendingIdx >= 0
+                        && frPendingIdx < friends.size()) {
+                        friendRowAction(frPendingIdx, frPendingKind);
+                    }
+                    frPendingIdx = -1;
+                    frPendingKind = -1;
+                    return true;
+                }
                 if (pointer == shopPointer) {
                     Vector3 v = hudViewport.unproject(new Vector3(sx, sy, 0));
                     if (shopOpen && shopDragMoved < 10f) {
@@ -2141,6 +2231,14 @@ public class WorldScreen extends ScreenAdapter {
             }
             @Override
             public boolean scrolled(float amountX, float amountY) {
+                if (msgOpen) {
+                    msgScroll = MathUtils.clamp(msgScroll + amountY * 36f, 0f, msgMaxScroll());
+                    return true;
+                }
+                if (friendOpen) {
+                    frScroll = MathUtils.clamp(frScroll + amountY * 36f, 0f, frMaxScroll());
+                    return true;
+                }
                 if (shopOpen) {
                     shopScroll = MathUtils.clamp(shopScroll + amountY * 36f, 0f, shopMaxScroll());
                     return true;
@@ -2206,19 +2304,18 @@ public class WorldScreen extends ScreenAdapter {
             boolean accept = x >= px + 52 && x <= px + 52 + 150 && y >= py + 22 && y <= py + 22 + 46;
             boolean refuse = x >= px + pw - 52 - 150 && x <= px + pw - 52 && y >= py + 22 && y <= py + 22 + 46;
             if (accept || refuse) {
-                if (online()) {
-                    try {
-                        AvatarProtocol.addFriendReply(game.connection, friendInviteId, accept);
-                    } catch (IOException e) {
-                        addChatLog(TAB_SYSTEM, null, "Không gửi được trả lời (mất kết nối?).", true);
-                    }
-                }
-                addChatLog(TAB_SYSTEM, null, accept
-                    ? "Bạn đã đồng ý kết bạn với " + friendInviteName + "."
-                    : "Bạn đã từ chối lời mời của " + friendInviteName + ".", true);
-                friendInviteId = 0;
-                friendInviteName = null;
+                replyFriendInvite(friendInviteId, accept);
             }
+            return;
+        }
+        // panel Tin nhắn đang mở: lớp modal
+        if (msgOpen) {
+            msgTouch(x, y, pointer);
+            return;
+        }
+        // panel Bạn bè đang mở: lớp modal
+        if (friendOpen) {
+            friendTouch(x, y, pointer);
             return;
         }
         // panel nhân vật đang mở: X đóng / trong panel nuốt / ngoài thì đóng
@@ -2363,8 +2460,12 @@ public class WorldScreen extends ScreenAdapter {
                         menuOpen = false;
                         if (i == 0) {
                             openCityMap();
+                        } else if (i == 1) {
+                            openMsgPanel();
                         } else if (i == 2) {
                             openBag();
+                        } else if (i == 3) {
+                            openFriendPanel();
                         } else if (i == 4) {
                             openCharPanel();
                         } else if (i == 5) {
@@ -2537,7 +2638,53 @@ public class WorldScreen extends ScreenAdapter {
     private String privateTargetName;
     private int friendInviteId;
     private String friendInviteName;
-    private final java.util.Set<Integer> friendPending = new java.util.HashSet<>();
+
+    // ===== Thư / Tin nhắn (MessageScr của gốc) + Bạn bè (ListScr) =====
+    // MessageScr của gốc gồm 3 tab: "Chung" (chat công cộng), "Tin den"
+    // (hộp thư đến: các cuộc trò chuyện riêng + lời mời kết bạn) và tab
+    // chat riêng mang tên người đang chat. Danh sách bạn là ListScr với
+    // dữ liệu từ gói −81 "friendlist".
+    private static class ConvoMsg {
+        String text; boolean owner;
+        ConvoMsg(String t, boolean o) { text = t; owner = o; }
+    }
+    private static class Convo {
+        int id; String name;
+        final List<ConvoMsg> msgs = new ArrayList<>();
+        int unread;
+        boolean friendReq;
+        String reqText;
+        String preview = "";
+    }
+    private final List<Convo> convos = new ArrayList<>();
+    /** Nhật ký chat công cộng cho tab "Chung": {tên, nội dung}. */
+    private final List<String[]> publicLog = new ArrayList<>();
+    private boolean msgOpen = false;
+    private int msgTab = 0; // 0 Chung, 1 Tin đến, 2 chat riêng
+    private Convo chatConvo;
+    private final StringBuilder msgInput = new StringBuilder();
+    private float msgScroll = 0f;
+    private int msgPointer = -1;
+    private float msgDragStartY, msgDragStartScroll, msgDragMoved;
+    private int msgPendingTap = -1; // hàng Tin đến chờ nhả tay (không kéo) mới mở
+    private static final float MSG_PW = 920f, MSG_PH = 600f;
+    private static final float MSG_PX = (Ui.W - MSG_PW) / 2f, MSG_PY = (Ui.H - MSG_PH) / 2f;
+
+    private static class FriendEntry {
+        int id; String name; String status;
+        List<Integer> parts = new ArrayList<>();
+        PaperDoll doll;
+    }
+    private final List<FriendEntry> friends = new ArrayList<>();
+    private boolean friendOpen = false;
+    private boolean friendLoading = false;
+    private int friendArmDelete = -1;
+    private float frScroll = 0f;
+    private int frPointer = -1;
+    private float frDragStartY, frDragStartScroll, frDragMoved;
+    private int frPendingIdx = -1, frPendingKind = -1; // nút trên hàng chờ nhả tay
+    private static final float FR_PW = 720f, FR_PH = 600f;
+    private static final float FR_PX = (Ui.W - FR_PW) / 2f, FR_PY = (Ui.H - FR_PH) / 2f;
     private int[] infoStats;   // {cấp, %cấp, thân thiện, phong cách, vui vẻ, độ no} từ gói −22
     private int infoForId;
     private float lastCamX = 640f, lastCamY = 360f;
@@ -2654,18 +2801,15 @@ public class WorldScreen extends ScreenAdapter {
         int id = f.info.id;
         String name = f.info.name;
         switch (i) {
-            case 0: // Nhắn tin riêng (gói −6)
+            case 0: // Nhắn tin riêng: mở panel Tin nhắn ở tab chat riêng
+                // (MessageScr.startChat của gốc)
                 if (!online()) {
                     addChatLog(TAB_SYSTEM, null, "Vào thế giới online mới nhắn tin riêng được.", true);
                     return;
                 }
-                privateTargetId = id;
-                privateTargetName = name;
                 panelPlayer = null;
                 panelSub = false;
-                typing = true;
-                addChatLog(TAB_SYSTEM, null,
-                    "Đang nhắn riêng với " + name + " — gõ tin rồi bấm Gửi; nhấn ESC để thoát nhắn riêng.", true);
+                startChat(id, name);
                 break;
             case 1: // Kết bạn (gói −21)
                 if (!online()) {
@@ -2674,7 +2818,6 @@ public class WorldScreen extends ScreenAdapter {
                 }
                 try {
                     AvatarProtocol.requestAddFriend(game.connection, id);
-                    friendPending.add(id);
                     addChatLog(TAB_SYSTEM, null, "Đã gửi lời mời kết bạn tới " + name + ".", true);
                 } catch (IOException e) {
                     addChatLog(TAB_SYSTEM, null, "Không gửi được lời mời (mất kết nối?).", true);
@@ -2840,6 +2983,7 @@ public class WorldScreen extends ScreenAdapter {
         Rectangle scissors = new Rectangle();
         batch.flush();
         ScissorStack.calculateScissors(hudViewport.getCamera(), batch.getTransformMatrix(), clip, scissors);
+        batch.flush();
         if (ScissorStack.pushScissors(scissors)) {
             game.dollRenderer.draw(batch, f.doll, f.anim.frameIndex(), feetX, feetY, unit, f.anim.facingLeft);
             batch.flush();
@@ -2892,6 +3036,712 @@ public class WorldScreen extends ScreenAdapter {
         batch.draw(Ui.roundedRect(150, 46, 10, new Color(0.32f, 0.09f, 0.09f, 0.88f), GLASS_RIM),
             px + pw - 52 - 150, py + 22);
         Ui.centered(batch, Ui.font, "Từ chối", px + pw - 52 - 75, py + 22 + 31, Color.WHITE);
+    }
+
+    // ================= Thư / Tin nhắn + Bạn bè =================
+    // Port của MessageScr (3 tab: Chung / Tin đến / chat riêng) và
+    // ListScr friendlist của gốc, vẽ theo tông kính của bản port.
+
+    private Convo findConvo(int id) {
+        for (Convo c : convos) if (c.id == id) return c;
+        return null;
+    }
+
+    private Convo convo(int id, String name) {
+        Convo c = findConvo(id);
+        if (c == null) {
+            c = new Convo();
+            c.id = id;
+            c.name = name != null && !name.isEmpty() ? name : ("Người chơi " + id);
+            convos.add(c);
+        } else if (name != null && !name.isEmpty()) {
+            c.name = name;
+        }
+        return c;
+    }
+
+    /** MessageScr.addPlayer của gốc: thêm tin vào cuộc trò chuyện, tăng
+     *  số chưa đọc nếu không đang xem chính cuộc trò chuyện đó. */
+    private void convoAdd(int id, String name, String text, boolean owner) {
+        Convo c = convo(id, name);
+        if (text != null && !text.isEmpty()) {
+            c.msgs.add(new ConvoMsg(text, owner));
+            while (c.msgs.size() > 60) c.msgs.remove(0);
+            c.preview = text;
+        }
+        boolean viewing = msgOpen && msgTab == 2 && chatConvo == c;
+        if (!owner && !viewing) c.unread++;
+        if (viewing) msgScroll = 99999f; // bám đáy, được kẹp lại khi vẽ
+    }
+
+    private int totalUnread() {
+        int n = 0;
+        for (Convo c : convos) n += c.unread;
+        return n;
+    }
+
+    /** Đóng các panel modal khác để panel Thư/Bạn bè không chồng lên
+     *  chúng (kính chồng kính không đọc được chữ). */
+    private void closeOtherPanels() {
+        musicOpen = false;
+        shopOpen = false;
+        bagPanel = false;
+        chestPanel = false;
+        charPanel = false;
+        settingsOpen = false;
+        passFormOpen = false;
+        cityMapOpen = false;
+        boardOpen = false;
+        npcMenuOpen = false;
+        panelPlayer = null;
+        panelSub = false;
+        menuOpen = false;
+    }
+
+    private void openMsgPanel() {
+        closeOtherPanels();
+        friendOpen = false;
+        msgOpen = true;
+        msgTab = totalUnread() > 0 ? 1 : 0;
+        msgScroll = msgTab == 0 ? 99999f : 0f;
+    }
+
+    private void openConvoChat(Convo c) {
+        chatConvo = c;
+        c.unread = 0;
+        msgTab = 2;
+        msgScroll = 99999f;
+    }
+
+    /** MessageScr.startChat của gốc: mở tab chat riêng với một người. */
+    private void startChat(int id, String name) {
+        closeOtherPanels();
+        friendOpen = false;
+        msgOpen = true;
+        openConvoChat(convo(id, name));
+    }
+
+    /** Trả lời lời mời kết bạn (gói −19) — dùng chung cho hộp thoại bật
+     *  ngay và nút Đồng ý/Từ chối trong hộp Tin đến. */
+    private void replyFriendInvite(int id, boolean accept) {
+        if (online()) {
+            try {
+                AvatarProtocol.addFriendReply(game.connection, id, accept);
+            } catch (IOException e) {
+                addChatLog(TAB_SYSTEM, null, "Không gửi được trả lời (mất kết nối?).", true);
+            }
+        }
+        Convo c = findConvo(id);
+        String nm = c != null ? c.name : friendInviteName;
+        if (c != null) {
+            c.friendReq = false;
+            c.unread = 0;
+            c.preview = accept ? "Đã trở thành bạn bè" : "Đã từ chối lời mời";
+            c.msgs.add(new ConvoMsg(accept
+                ? "Hai bạn đã trở thành bạn bè."
+                : "Bạn đã từ chối lời mời kết bạn.", true));
+        }
+        addChatLog(TAB_SYSTEM, null, accept
+            ? "Bạn đã đồng ý kết bạn với " + nm + "."
+            : "Bạn đã từ chối lời mời của " + nm + ".", true);
+        if (friendInviteId == id) {
+            friendInviteId = 0;
+            friendInviteName = null;
+        }
+    }
+
+    /** Gửi tin từ ô nhập của panel: tab Chung = chat công cộng (gói 55),
+     *  tab chat riêng = gói −6 + tự ghi vào cuộc trò chuyện như gốc. */
+    private void msgSend() {
+        String text = msgInput.toString().trim();
+        if (text.isEmpty()) return;
+        msgInput.setLength(0);
+        if (msgTab == 2 && chatConvo != null) {
+            if (!online()) {
+                addChatLog(TAB_SYSTEM, null, "Mất kết nối — không gửi được tin nhắn riêng.", true);
+                return;
+            }
+            try {
+                AvatarProtocol.chatTo(game.connection, chatConvo.id, text);
+            } catch (IOException e) {
+                addChatLog(TAB_SYSTEM, null, "Không gửi được tin nhắn riêng (mất kết nối?).", true);
+                return;
+            }
+            convoAdd(chatConvo.id, chatConvo.name, text, true);
+            msgScroll = 99999f;
+        } else if (msgTab == 0) {
+            if (online()) {
+                try {
+                    AvatarProtocol.chatPark(game.connection, text);
+                } catch (IOException e) {
+                    addChatLog(TAB_SYSTEM, null, "Không gửi được tin nhắn (mất kết nối?).", true);
+                }
+            } else {
+                showBubble(text);
+            }
+        }
+    }
+
+    private void openFriendPanel() {
+        closeOtherPanels();
+        msgOpen = false;
+        friendOpen = true;
+        friendArmDelete = -1;
+        frScroll = 0f;
+        requestFriends();
+    }
+
+    private void requestFriends() {
+        if (!online()) {
+            friendLoading = false;
+            return;
+        }
+        friendLoading = true;
+        try {
+            AvatarProtocol.requestFriendList(game.connection);
+        } catch (IOException e) {
+            friendLoading = false;
+        }
+    }
+
+    /** Đọc dữ liệu "friendlist" trong gói −81 theo đúng ListScr.readList
+     *  của gốc: UTF tiêu đề, int idList, byte loại, byte trang, short số
+     *  bạn; mỗi bạn: byte số part, short part..., int IDDB, short idImg,
+     *  short idWedding, short idStatus, UTF tên, UTF trạng thái; cuối là
+     *  byte số mục menu (bản port tự vẽ nút nên bỏ qua nội dung menu). */
+    private void parseFriendList(java.io.DataInputStream r) {
+        try {
+            r.readUTF();
+            r.readInt();
+            int type = r.readByte();
+            r.readByte();
+            int count = r.readShort();
+            List<FriendEntry> list = new ArrayList<>();
+            if (type == 1) {
+                for (int i = 0; i < count; i++) {
+                    FriendEntry fe = new FriendEntry();
+                    int n = r.readByte();
+                    for (int k = 0; k < n; k++) fe.parts.add((int) r.readShort());
+                    fe.id = r.readInt();
+                    r.readShort();
+                    r.readShort();
+                    r.readShort();
+                    fe.name = r.readUTF();
+                    fe.status = r.readUTF();
+                    fe.doll = new PaperDoll(game.data, fe.parts);
+                    list.add(fe);
+                }
+            }
+            friends.clear();
+            friends.addAll(list);
+            friendLoading = false;
+            frScroll = MathUtils.clamp(frScroll, 0f, frMaxScroll());
+        } catch (Exception e) {
+            friendLoading = false;
+        }
+    }
+
+    /** Nút trên một hàng bạn: 0 = Nhắn tin, 1 = Xoá bạn (chạm 2 lần). */
+    private void friendRowAction(int idx, int kind) {
+        if (idx < 0 || idx >= friends.size()) return;
+        FriendEntry fe = friends.get(idx);
+        if (kind == 0) {
+            friendOpen = false;
+            startChat(fe.id, fe.name);
+        } else if (kind == 1) {
+            if (friendArmDelete != idx) {
+                friendArmDelete = idx;
+                return;
+            }
+            friendArmDelete = -1;
+            if (online()) {
+                try {
+                    AvatarProtocol.removeFriend(game.connection, fe.id);
+                } catch (IOException ignored) {
+                }
+            }
+            friends.remove(idx);
+            addChatLog(TAB_SYSTEM, null, "Đã xoá " + fe.name + " khỏi danh sách bạn.", true);
+        }
+    }
+
+    // ----- hình học panel Tin nhắn -----
+    private float msgContentTop() { return MSG_PY + MSG_PH - 132f; }
+    private float msgContentBottom() { return msgTab == 1 ? MSG_PY + 18f : MSG_PY + 76f; }
+    private float msgViewH() { return msgContentTop() - msgContentBottom(); }
+
+    private float chatBlockH(ConvoMsg m) {
+        return wrapMsg(m.text, 520f).size() * 23f + 14f;
+    }
+
+    private float msgContentH() {
+        if (msgTab == 0) return publicLog.size() * 52f;
+        if (msgTab == 1) return convos.size() * 66f;
+        if (chatConvo == null) return 0f;
+        float h = 6f;
+        for (ConvoMsg m : chatConvo.msgs) h += chatBlockH(m);
+        return h;
+    }
+
+    private float msgMaxScroll() { return Math.max(0f, msgContentH() - msgViewH()); }
+
+    private float chatTabW() {
+        if (chatConvo == null) return 0f;
+        layout.setText(Ui.fontSmall, chatConvo.name);
+        return Math.min(280f, layout.width + 48f);
+    }
+
+    // ----- hình học panel Bạn bè -----
+    private float frContentTop() { return FR_PY + FR_PH - 84f; }
+    private float frContentBottom() { return FR_PY + 18f; }
+    private float frMaxScroll() {
+        return Math.max(0f, friends.size() * 78f - (frContentTop() - frContentBottom()));
+    }
+
+    /** Ngắt dòng theo bề rộng font (như TextMsg của gốc ngắt ở nửa màn). */
+    private List<String> wrapMsg(String text, float maxW) {
+        List<String> out = new ArrayList<>();
+        if (text == null) return out;
+        StringBuilder cur = new StringBuilder();
+        for (String word : text.split(" ")) {
+            String trial = cur.length() == 0 ? word : cur + " " + word;
+            layout.setText(Ui.fontSmall, trial);
+            if (layout.width > maxW && cur.length() > 0) {
+                out.add(cur.toString());
+                cur = new StringBuilder(word);
+            } else {
+                cur = new StringBuilder(trial);
+            }
+            while (cur.length() > 1) {
+                layout.setText(Ui.fontSmall, cur.toString());
+                if (layout.width <= maxW) break;
+                int cut = cur.length() - 1;
+                while (cut > 1) {
+                    layout.setText(Ui.fontSmall, cur.substring(0, cut));
+                    if (layout.width <= maxW) break;
+                    cut--;
+                }
+                out.add(cur.substring(0, cut));
+                cur = new StringBuilder(cur.substring(cut));
+            }
+        }
+        if (cur.length() > 0 || out.isEmpty()) out.add(cur.toString());
+        return out;
+    }
+
+    /** Cắt chuỗi cho vừa bề rộng, thêm "…" nếu phải cắt. */
+    private String fitText(com.badlogic.gdx.graphics.g2d.BitmapFont font, String s, float maxW) {
+        if (s == null) return "";
+        layout.setText(font, s);
+        if (layout.width <= maxW) return s;
+        while (s.length() > 0) {
+            s = s.substring(0, s.length() - 1);
+            layout.setText(font, s + "…");
+            if (layout.width <= maxW) return s + "…";
+        }
+        return "…";
+    }
+
+    private void drawMsgTab(int t, float x, float tabY, float w, String label) {
+        boolean sel = msgTab == t;
+        batch.draw(Ui.roundedRect((int) w, 40, 12,
+            sel ? new Color(0.85f, 0.45f, 0.12f, 0.95f) : GLASS_FILL,
+            sel ? new Color(1f, 0.75f, 0.4f, 0.9f) : GLASS_RIM), x, tabY);
+        Ui.centered(batch, Ui.fontSmall, label, x + w / 2f, tabY + 26, Color.WHITE);
+    }
+
+    private void drawMsgPanel() {
+        msgScroll = MathUtils.clamp(msgScroll, 0f, msgMaxScroll());
+        batch.setColor(0f, 0f, 0f, 0.45f);
+        batch.draw(whiteTex, 0, 0, Ui.W, Ui.H);
+        batch.setColor(Color.WHITE);
+        float px = MSG_PX, py = MSG_PY, top = py + MSG_PH;
+        batch.draw(Ui.roundedRect((int) MSG_PW, (int) MSG_PH, 16, GLASS_FILL_DARK, GLASS_RIM), px, py);
+        Ui.faIcon(batch, Ui.fa26, Ui.FA_ENVELOPE, px + 40, top - 36, new Color(1f, 0.85f, 0.45f, 1f));
+        Ui.fontTitle.setColor(1f, 0.85f, 0.45f, 1f);
+        Ui.fontTitle.draw(batch, "Tin nhắn", px + 64, top - 27);
+        batch.draw(Ui.roundedRect(36, 36, 10, GLASS_FILL, GLASS_RIM), px + MSG_PW - 54, top - 54);
+        Ui.faIcon(batch, Ui.fa20, Ui.FA_XMARK, px + MSG_PW - 36, top - 36, new Color(0.9f, 0.93f, 1f, 1f));
+        batch.draw(Ui.roundedRect((int) (MSG_PW - 44), 2, 1, new Color(1f, 1f, 1f, 0.14f), null), px + 22, top - 66);
+        // hàng tab
+        float tabY = top - 118;
+        drawMsgTab(0, px + 22, tabY, 120, "Chung");
+        drawMsgTab(1, px + 152, tabY, 150, "Tin đến");
+        if (chatConvo != null) {
+            drawMsgTab(2, px + 312, tabY, chatTabW(), fitText(Ui.fontSmall, chatConvo.name, 220));
+        }
+        // nội dung (cắt theo vùng cuộn)
+        float cTop = msgContentTop(), cBot = msgContentBottom();
+        Rectangle clip = new Rectangle(px + 12, cBot, MSG_PW - 24, cTop - cBot);
+        Rectangle scissors = new Rectangle();
+        ScissorStack.calculateScissors(hudViewport.getCamera(), batch.getTransformMatrix(), clip, scissors);
+        batch.flush();
+        if (ScissorStack.pushScissors(scissors)) {
+            if (msgTab == 0) drawMsgPublic(px, cTop);
+            else if (msgTab == 1) drawMsgInbox(px, cTop);
+            else drawMsgChat(px, cTop);
+            batch.flush();
+            ScissorStack.popScissors();
+        }
+        // huy hiệu chưa đọc trên tab Tin đến — vẽ SAU nội dung để số
+        // không bị chữ/số trong vùng cuộn ghi đè mất
+        if (totalUnread() > 0) {
+            batch.setColor(0.92f, 0.25f, 0.2f, 1f);
+            batch.draw(circleTexture(), px + 152 + 150 - 13, tabY + 27, 24, 24);
+            batch.setColor(Color.WHITE);
+            Ui.centered(batch, Ui.fontSmall, String.valueOf(Math.min(totalUnread(), 99)),
+                px + 152 + 150 - 1, tabY + 43, Color.WHITE);
+        }
+        if ((msgTab == 0 && publicLog.isEmpty()) || (msgTab == 1 && convos.isEmpty())
+            || (msgTab == 2 && (chatConvo == null || chatConvo.msgs.isEmpty()))) {
+            Ui.fontSmall.setColor(0.75f, 0.82f, 0.95f, 0.8f);
+            String s = msgTab == 0 ? "Chưa có chat nào."
+                : msgTab == 1 ? "Chưa có tin nhắn nào."
+                : "Chưa có tin nhắn nào — chào bạn ấy một câu đi.";
+            layout.setText(Ui.fontSmall, s);
+            Ui.fontSmall.draw(batch, s, px + MSG_PW / 2f - layout.width / 2f, (cTop + cBot) / 2f);
+        }
+        // ô nhập + nút Gửi (tab Chung và tab chat riêng)
+        if (msgTab != 1) {
+            float inY = py + 18;
+            batch.draw(Ui.roundedRect((int) (MSG_PW - 44 - 128), 46, 10,
+                new Color(1f, 1f, 1f, 0.08f), GLASS_RIM), px + 22, inY);
+            String shown = msgInput.toString();
+            if (shown.isEmpty()) {
+                Ui.fontSmall.setColor(0.7f, 0.76f, 0.88f, 0.75f);
+                Ui.fontSmall.draw(batch, msgTab == 2 && chatConvo != null
+                    ? "Nhắn cho " + chatConvo.name + "…" : "Nhập tin nhắn…", px + 36, inY + 29);
+            } else {
+                while (!shown.isEmpty()) {
+                    layout.setText(Ui.fontSmall, shown);
+                    if (layout.width <= MSG_PW - 44 - 128 - 24) break;
+                    shown = shown.substring(1);
+                }
+                Ui.fontSmall.setColor(1f, 1f, 1f, 0.96f);
+                Ui.fontSmall.draw(batch, shown, px + 36, inY + 29);
+            }
+            batch.draw(Ui.roundedRect(118, 46, 10,
+                new Color(0.85f, 0.45f, 0.12f, 0.95f), new Color(1f, 0.75f, 0.4f, 0.9f)),
+                px + MSG_PW - 22 - 118, inY);
+            Ui.centered(batch, Ui.font, "Gửi", px + MSG_PW - 22 - 59, inY + 30, Color.WHITE);
+        }
+    }
+
+    private void drawMsgPublic(float px, float cTop) {
+        for (int i = 0; i < publicLog.size(); i++) {
+            float rowTop = cTop + msgScroll - i * 52f;
+            if (rowTop < msgContentBottom() - 4 || rowTop - 52 > cTop + 4) continue;
+            String[] e = publicLog.get(i);
+            Ui.fontSmall.setColor(1f, 0.8f, 0.55f, 1f);
+            Ui.fontSmall.draw(batch, fitText(Ui.fontSmall, e[0], 300), px + 22, rowTop - 20);
+            Ui.fontSmall.setColor(1f, 1f, 1f, 0.9f);
+            Ui.fontSmall.draw(batch, fitText(Ui.fontSmall, e[1], MSG_PW - 44), px + 22, rowTop - 43);
+            batch.draw(Ui.roundedRect((int) (MSG_PW - 44), 1, 1, new Color(1f, 1f, 1f, 0.07f), null),
+                px + 22, rowTop - 51);
+        }
+    }
+
+    private void drawMsgInbox(float px, float cTop) {
+        for (int i = 0; i < convos.size(); i++) {
+            float rowTop = cTop + msgScroll - i * 66f;
+            if (rowTop < msgContentBottom() - 4 || rowTop - 66 > cTop + 4) continue;
+            Convo c = convos.get(i);
+            Ui.font.setColor(1f, 1f, 1f, 0.96f);
+            Ui.font.draw(batch, fitText(Ui.font, c.name, 380), px + 22, rowTop - 25);
+            if (c.friendReq) {
+                Ui.fontSmall.setColor(1f, 0.72f, 0.35f, 1f);
+                Ui.fontSmall.draw(batch, "Lời mời kết bạn", px + 22, rowTop - 50);
+                float by = rowTop - 58;
+                batch.draw(Ui.roundedRect(96, 38, 10, new Color(0.07f, 0.24f, 0.12f, 0.88f), GLASS_RIM),
+                    px + MSG_PW - 22 - 200, by);
+                Ui.centered(batch, Ui.fontSmall, "Đồng ý", px + MSG_PW - 22 - 200 + 48, by + 25, Color.WHITE);
+                batch.draw(Ui.roundedRect(96, 38, 10, new Color(0.32f, 0.09f, 0.09f, 0.88f), GLASS_RIM),
+                    px + MSG_PW - 22 - 96, by);
+                Ui.centered(batch, Ui.fontSmall, "Từ chối", px + MSG_PW - 22 - 96 + 48, by + 25, Color.WHITE);
+            } else {
+                Ui.fontSmall.setColor(0.75f, 0.82f, 0.95f, 0.85f);
+                Ui.fontSmall.draw(batch, fitText(Ui.fontSmall, c.preview, 560), px + 22, rowTop - 50);
+                if (c.unread > 0) {
+                    batch.setColor(0.92f, 0.25f, 0.2f, 1f);
+                    batch.draw(circleTexture(), px + MSG_PW - 22 - 62, rowTop - 45, 24, 24);
+                    batch.setColor(Color.WHITE);
+                    Ui.centered(batch, Ui.fontSmall, String.valueOf(Math.min(c.unread, 99)),
+                        px + MSG_PW - 22 - 50, rowTop - 29, Color.WHITE);
+                }
+                Ui.faIcon(batch, Ui.fa20, Ui.FA_XMARK, px + MSG_PW - 22 - 15, rowTop - 33,
+                    new Color(0.7f, 0.76f, 0.88f, 0.8f));
+            }
+            batch.draw(Ui.roundedRect((int) (MSG_PW - 44), 1, 1, new Color(1f, 1f, 1f, 0.07f), null),
+                px + 22, rowTop - 65);
+        }
+    }
+
+    private void drawMsgChat(float px, float cTop) {
+        if (chatConvo == null) return;
+        float yCursor = cTop + msgScroll;
+        for (ConvoMsg m : chatConvo.msgs) {
+            float blockH = chatBlockH(m);
+            float blockTop = yCursor;
+            yCursor -= blockH;
+            if (blockTop < msgContentBottom() - 4 || blockTop - blockH > cTop + 4) continue;
+            List<String> lines = wrapMsg(m.text, 520f);
+            float textW = 0f;
+            for (String ln : lines) {
+                layout.setText(Ui.fontSmall, ln);
+                textW = Math.max(textW, layout.width);
+            }
+            float bw = textW + 26;
+            float bx = m.owner ? px + MSG_PW - 22 - bw : px + 22;
+            batch.draw(Ui.roundedRect((int) bw, (int) (blockH - 4), 10,
+                m.owner ? new Color(0.85f, 0.45f, 0.12f, 0.75f) : GLASS_FILL,
+                m.owner ? new Color(1f, 0.75f, 0.4f, 0.7f) : GLASS_RIM), bx, blockTop - blockH + 2);
+            for (int j = 0; j < lines.size(); j++) {
+                layout.setText(Ui.fontSmall, lines.get(j));
+                float lx = m.owner ? bx + bw - 13 - layout.width : bx + 13;
+                Ui.fontSmall.setColor(1f, 1f, 1f, 0.97f);
+                Ui.fontSmall.draw(batch, lines.get(j), lx, blockTop - 20 - j * 23f);
+            }
+        }
+    }
+
+    private void msgTouch(float x, float y, int pointer) {
+        float px = MSG_PX, top = MSG_PY + MSG_PH;
+        if (x >= px + MSG_PW - 54 && x <= px + MSG_PW - 18 && y >= top - 54 && y <= top - 18) {
+            msgOpen = false;
+            msgPointer = -1;
+            return;
+        }
+        float tabY = top - 118;
+        if (y >= tabY && y <= tabY + 40) {
+            if (x >= px + 22 && x <= px + 142) {
+                msgTab = 0;
+                msgScroll = 99999f;
+                return;
+            }
+            if (x >= px + 152 && x <= px + 302) {
+                msgTab = 1;
+                msgScroll = 0f;
+                return;
+            }
+            if (chatConvo != null && x >= px + 312 && x <= px + 312 + chatTabW()) {
+                msgTab = 2;
+                msgScroll = 99999f;
+                return;
+            }
+        }
+        float cTop = msgContentTop(), cBot = msgContentBottom();
+        if (msgTab == 1 && y >= cBot && y <= cTop && x >= px + 12 && x <= px + MSG_PW - 12) {
+            int idx = (int) ((cTop + msgScroll - y) / 66f);
+            if (idx >= 0 && idx < convos.size()) {
+                Convo c = convos.get(idx);
+                float rowTop = cTop + msgScroll - idx * 66f;
+                if (c.friendReq) {
+                    float by = rowTop - 58;
+                    if (y >= by && y <= by + 38) {
+                        if (x >= px + MSG_PW - 22 - 200 && x <= px + MSG_PW - 22 - 104) {
+                            replyFriendInvite(c.id, true);
+                            return;
+                        }
+                        if (x >= px + MSG_PW - 22 - 96 && x <= px + MSG_PW - 22) {
+                            replyFriendInvite(c.id, false);
+                            return;
+                        }
+                    }
+                    return;
+                }
+                if (x >= px + MSG_PW - 54 && x <= px + MSG_PW - 18
+                    && y >= rowTop - 50 && y <= rowTop - 16) {
+                    convos.remove(idx);
+                    if (chatConvo == c) chatConvo = null;
+                    return;
+                }
+                msgPendingTap = idx;
+            }
+        }
+        if (msgTab != 1) {
+            float inY = MSG_PY + 18;
+            if (y >= inY && y <= inY + 46 && x >= px + MSG_PW - 22 - 118 && x <= px + MSG_PW - 22) {
+                msgSend();
+                return;
+            }
+        }
+        if (y >= cBot && y <= cTop && x >= px && x <= px + MSG_PW) {
+            msgPointer = pointer;
+            msgDragStartY = y;
+            msgDragStartScroll = msgScroll;
+            msgDragMoved = 0f;
+        }
+    }
+
+    private void drawFriendPanel() {
+        frScroll = MathUtils.clamp(frScroll, 0f, frMaxScroll());
+        batch.setColor(0f, 0f, 0f, 0.45f);
+        batch.draw(whiteTex, 0, 0, Ui.W, Ui.H);
+        batch.setColor(Color.WHITE);
+        float px = FR_PX, py = FR_PY, top = py + FR_PH;
+        batch.draw(Ui.roundedRect((int) FR_PW, (int) FR_PH, 16, GLASS_FILL_DARK, GLASS_RIM), px, py);
+        Ui.faIcon(batch, Ui.fa26, Ui.FA_USER_GROUP, px + 40, top - 36, new Color(1f, 0.85f, 0.45f, 1f));
+        Ui.fontTitle.setColor(1f, 0.85f, 0.45f, 1f);
+        Ui.fontTitle.draw(batch, "Bạn bè", px + 64, top - 27);
+        Ui.fontSmall.setColor(0.75f, 0.82f, 0.95f, 0.85f);
+        Ui.fontSmall.draw(batch, friends.size() + " bạn bè", px + 200, top - 29);
+        batch.draw(Ui.roundedRect(36, 36, 10, GLASS_FILL, GLASS_RIM), px + FR_PW - 100, top - 54);
+        Ui.faIcon(batch, Ui.fa20, Ui.FA_ROTATE_RIGHT, px + FR_PW - 82, top - 36, new Color(0.9f, 0.93f, 1f, 1f));
+        batch.draw(Ui.roundedRect(36, 36, 10, GLASS_FILL, GLASS_RIM), px + FR_PW - 54, top - 54);
+        Ui.faIcon(batch, Ui.fa20, Ui.FA_XMARK, px + FR_PW - 36, top - 36, new Color(0.9f, 0.93f, 1f, 1f));
+        batch.draw(Ui.roundedRect((int) (FR_PW - 44), 2, 1, new Color(1f, 1f, 1f, 0.14f), null), px + 22, top - 66);
+        float cTop = frContentTop(), cBot = frContentBottom();
+        if (!online() && friends.isEmpty()) {
+            drawFriendNote("Vào thế giới online mới xem được danh sách bạn.", cTop, cBot);
+            return;
+        }
+        if (friendLoading && friends.isEmpty()) {
+            drawFriendNote("Đang tải danh sách bạn…", cTop, cBot);
+            return;
+        }
+        if (friends.isEmpty()) {
+            drawFriendNote("Chưa có bạn bè nào.", cTop, cBot);
+            Ui.fontSmall.setColor(0.7f, 0.76f, 0.88f, 0.75f);
+            String s = "Gặp người chơi khác, mở panel tương tác rồi chọn Kết bạn.";
+            layout.setText(Ui.fontSmall, s);
+            Ui.fontSmall.draw(batch, s, px + FR_PW / 2f - layout.width / 2f, (cTop + cBot) / 2f - 28);
+            return;
+        }
+        Rectangle clip = new Rectangle(px + 12, cBot, FR_PW - 24, cTop - cBot);
+        Rectangle scissors = new Rectangle();
+        ScissorStack.calculateScissors(hudViewport.getCamera(), batch.getTransformMatrix(), clip, scissors);
+        batch.flush();
+        if (ScissorStack.pushScissors(scissors)) {
+            for (int i = 0; i < friends.size(); i++) {
+                float rowTop = cTop + frScroll - i * 78f;
+                if (rowTop < cBot - 4 || rowTop - 78 > cTop + 4) continue;
+                FriendEntry fe = friends.get(i);
+                if (fe.doll != null) {
+                    game.dollRenderer.draw(batch, fe.doll, 0, px + 56, rowTop - 72, 1.35f, false);
+                }
+                Ui.font.setColor(1f, 1f, 1f, 0.96f);
+                Ui.font.draw(batch, fitText(Ui.font, fe.name, 300), px + 104, rowTop - 27);
+                boolean on = fe.status != null && fe.status.startsWith("Đang");
+                Ui.fontSmall.setColor(on ? new Color(0.45f, 0.9f, 0.5f, 1f)
+                    : new Color(0.7f, 0.76f, 0.88f, 0.85f));
+                Ui.fontSmall.draw(batch, fe.status != null ? fe.status : "", px + 104, rowTop - 54);
+                float by = rowTop - 56;
+                batch.draw(Ui.roundedRect(104, 40, 10,
+                    new Color(0.85f, 0.45f, 0.12f, 0.95f), new Color(1f, 0.75f, 0.4f, 0.9f)),
+                    px + FR_PW - 22 - 200, by);
+                Ui.centered(batch, Ui.fontSmall, "Nhắn tin", px + FR_PW - 22 - 200 + 52, by + 26, Color.WHITE);
+                boolean armed = friendArmDelete == i;
+                batch.draw(Ui.roundedRect(88, 40, 10,
+                    armed ? new Color(0.55f, 0.12f, 0.1f, 0.92f) : GLASS_FILL, GLASS_RIM),
+                    px + FR_PW - 22 - 88, by);
+                Ui.centered(batch, Ui.fontSmall, armed ? "Xoá?" : "Xoá bạn",
+                    px + FR_PW - 22 - 88 + 44, by + 26, Color.WHITE);
+                batch.draw(Ui.roundedRect((int) (FR_PW - 44), 1, 1, new Color(1f, 1f, 1f, 0.07f), null),
+                    px + 22, rowTop - 77);
+            }
+            batch.flush();
+            ScissorStack.popScissors();
+        }
+    }
+
+    private void drawFriendNote(String s, float cTop, float cBot) {
+        Ui.fontSmall.setColor(0.75f, 0.82f, 0.95f, 0.85f);
+        layout.setText(Ui.fontSmall, s);
+        Ui.fontSmall.draw(batch, s, FR_PX + FR_PW / 2f - layout.width / 2f, (cTop + cBot) / 2f);
+    }
+
+    private void friendTouch(float x, float y, int pointer) {
+        float px = FR_PX, top = FR_PY + FR_PH;
+        if (x >= px + FR_PW - 54 && x <= px + FR_PW - 18 && y >= top - 54 && y <= top - 18) {
+            friendOpen = false;
+            frPointer = -1;
+            return;
+        }
+        if (x >= px + FR_PW - 100 && x <= px + FR_PW - 64 && y >= top - 54 && y <= top - 18) {
+            requestFriends();
+            return;
+        }
+        float cTop = frContentTop(), cBot = frContentBottom();
+        if (y >= cBot && y <= cTop && x >= px && x <= px + FR_PW) {
+            int idx = (int) ((cTop + frScroll - y) / 78f);
+            if (idx >= 0 && idx < friends.size()) {
+                float rowTop = cTop + frScroll - idx * 78f;
+                float by = rowTop - 56;
+                if (y >= by && y <= by + 40) {
+                    if (x >= px + FR_PW - 22 - 200 && x <= px + FR_PW - 22 - 96) {
+                        frPendingIdx = idx;
+                        frPendingKind = 0;
+                    } else if (x >= px + FR_PW - 22 - 88 && x <= px + FR_PW - 22) {
+                        frPendingIdx = idx;
+                        frPendingKind = 1;
+                    }
+                }
+            }
+            frPointer = pointer;
+            frDragStartY = y;
+            frDragStartScroll = frScroll;
+            frDragMoved = 0f;
+        }
+    }
+
+    // ----- Harness chụp kiểm chứng (chỉ ScreenshotMain dùng) -----
+    public void debugSeedSocial() {
+        Convo a = convo(1001, "betest02");
+        a.msgs.clear();
+        a.msgs.add(new ConvoMsg("Chào bạn, hôm nay trời đẹp quá chừng luôn á!", false));
+        a.msgs.add(new ConvoMsg("Ừ, lát ra công viên chơi không?", true));
+        a.msgs.add(new ConvoMsg("Đi chứ, đợi mình thay đồ đã nha", false));
+        a.preview = "Đi chứ, đợi mình thay đồ đã nha";
+        a.unread = 2;
+        Convo b = convo(1002, "nguoila01");
+        b.friendReq = true;
+        b.reqText = "nguoila01 muốn kết bạn với bạn.";
+        b.preview = "Lời mời kết bạn";
+        b.unread = 1;
+        Convo c = convo(1003, "banxom99");
+        c.msgs.clear();
+        c.msgs.add(new ConvoMsg("Mai qua nhà mình chơi nhé", false));
+        c.preview = "Mai qua nhà mình chơi nhé";
+        friends.clear();
+        FriendEntry f1 = new FriendEntry();
+        f1.id = 1001;
+        f1.name = "betest02";
+        f1.status = "Đang trực tuyến";
+        f1.parts = new ArrayList<>(java.util.Arrays.asList(628, 474, 0, 80, 46));
+        f1.doll = new PaperDoll(game.data, f1.parts);
+        friends.add(f1);
+        FriendEntry f2 = new FriendEntry();
+        f2.id = 1003;
+        f2.name = "banxom99";
+        f2.status = "Ngoại tuyến";
+        f2.parts = new ArrayList<>(java.util.Arrays.asList(494, 0, 302));
+        f2.doll = new PaperDoll(game.data, f2.parts);
+        friends.add(f2);
+        friendLoading = false;
+    }
+
+    public void debugOpenMsgInbox() {
+        debugSeedSocial();
+        closeOtherPanels();
+        friendOpen = false;
+        msgOpen = true;
+        msgTab = 1;
+        msgScroll = 0f;
+    }
+
+    public void debugOpenMsgChat() {
+        debugSeedSocial();
+        closeOtherPanels();
+        friendOpen = false;
+        msgOpen = true;
+        openConvoChat(convo(1001, "betest02"));
+    }
+
+    public void debugOpenFriendPanel() {
+        debugSeedSocial();
+        closeOtherPanels();
+        msgOpen = false;
+        friendOpen = true;
     }
 
     // ================= Panel nhân vật (bấm card góc trái) =================
@@ -3161,6 +4011,7 @@ public class WorldScreen extends ScreenAdapter {
         Rectangle scissors = new Rectangle();
         batch.flush();
         ScissorStack.calculateScissors(hudViewport.getCamera(), batch.getTransformMatrix(), clip, scissors);
+        batch.flush();
         if (ScissorStack.pushScissors(scissors)) {
             game.dollRenderer.draw(batch, playerDoll, playerAnim.frameIndex(), feetX, feetY, unit, false);
             batch.flush();
@@ -4331,6 +5182,8 @@ public class WorldScreen extends ScreenAdapter {
         if (cityMapOpen) drawCityMap();
         if (settingsOpen) drawSettingsPanel();
         if (musicOpen) drawMusicPanel();
+        if (msgOpen) drawMsgPanel();
+        if (friendOpen) drawFriendPanel();
         if (passFormOpen) drawPassFormPanel();
         batch.end();
     }
@@ -5178,6 +6031,7 @@ public class WorldScreen extends ScreenAdapter {
         Rectangle scissors = new Rectangle();
         batch.flush();
         ScissorStack.calculateScissors(hudViewport.getCamera(), batch.getTransformMatrix(), clip, scissors);
+        batch.flush();
         if (ScissorStack.pushScissors(scissors)) {
             game.dollRenderer.draw(batch, playerDoll, playerAnim.frameIndex(), feetX, feetY, unit, false);
             batch.flush();
@@ -5218,6 +6072,12 @@ public class WorldScreen extends ScreenAdapter {
             batch.draw(Ui.roundedRect(28, 5, 2, new Color(1f, 1f, 1f, 0.92f), null),
                 bx, BURGER_Y + BURGER_S - 20 - i * 11);
         }
+        // chấm đỏ trên nút burger khi có tin nhắn chưa đọc
+        if (!menuOpen && totalUnread() > 0) {
+            batch.setColor(0.92f, 0.25f, 0.2f, 1f);
+            batch.draw(circleTexture(), BURGER_X + BURGER_S - 15, BURGER_Y + BURGER_S - 15, 13, 13);
+            batch.setColor(Color.WHITE);
+        }
     }
 
     /** Panel kính mở từ nút burger: danh sách CHỌN MAP (toàn bộ map dựng được
@@ -5240,6 +6100,15 @@ public class WorldScreen extends ScreenAdapter {
             Ui.fontSmall.setColor(1f, 1f, 1f, 0.92f);
             layout.setText(Ui.fontSmall, MENU_ITEMS[i][1]);
             Ui.fontSmall.draw(batch, MENU_ITEMS[i][1], cx + MENU_CELL / 2f - layout.width / 2f, cy + 24);
+            // huy hiệu số tin chưa đọc trên ô Thư (nummsg của gốc)
+            if (i == 1 && totalUnread() > 0) {
+                float bx2 = cx + MENU_CELL - 34, by2 = cy + MENU_CELL_H - 36;
+                batch.setColor(0.92f, 0.25f, 0.2f, 1f);
+                batch.draw(circleTexture(), bx2, by2, 26, 26);
+                batch.setColor(Color.WHITE);
+                Ui.centered(batch, Ui.fontSmall, String.valueOf(Math.min(totalUnread(), 99)),
+                    bx2 + 13, by2 + 18, Color.WHITE);
+            }
         }
     }
 
@@ -5974,6 +6843,7 @@ public class WorldScreen extends ScreenAdapter {
         batch.flush();
         com.badlogic.gdx.scenes.scene2d.utils.ScissorStack.calculateScissors(
             hudViewport.getCamera(), batch.getTransformMatrix(), clip, scissors);
+        batch.flush();
         if (com.badlogic.gdx.scenes.scene2d.utils.ScissorStack.pushScissors(scissors)) {
             for (int idx = 0; idx < list.size(); idx++) {
                 int col = idx % SHOP_COLS, row = idx / SHOP_COLS;
@@ -6258,6 +7128,7 @@ public class WorldScreen extends ScreenAdapter {
         Rectangle scissors = new Rectangle();
         batch.flush();
         ScissorStack.calculateScissors(hudViewport.getCamera(), batch.getTransformMatrix(), clip, scissors);
+        batch.flush();
         if (ScissorStack.pushScissors(scissors)) {
             for (int i = 0; i < feelIds.size(); i++) {
                 float[] cxy = feelCellXY(fg, i);

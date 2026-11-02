@@ -7,7 +7,6 @@ import com.badlogic.gdx.graphics.Texture;
 import com.badlogic.gdx.graphics.g2d.BitmapFont;
 import com.badlogic.gdx.graphics.g2d.GlyphLayout;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
-import com.badlogic.gdx.graphics.g2d.freetype.FreeTypeFontGenerator;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -18,7 +17,7 @@ import java.util.Map;
 public final class Ui {
     public static final float W = 1280f, H = 720f;
 
-    private static final String CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
+    static final String CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
         + "àáâãèéêìíĩòóôõùúũýăđơưạảấầẩẫậắằẳẵặẹẻẽếềểễệỉịọỏốồổỗộớờởỡợụủứừửữựỳỵỷỹ"
         + "ÀÁÂÃÈÉÊÌÍĨÒÓÔÕÙÚŨÝĂĐƠƯẠẢẤẦẨẪẬẮẰẲẴẶẸẺẼẾỀỂỄỆỈỊỌỎỐỒỔỖỘỚỜỞỠỢỤỦỨỪỬỮỰỲỴỶỸ"
         + " .,;:!?()[]{}+-*/=%'\"<>|_@#&•·—–…";
@@ -79,6 +78,9 @@ public final class Ui {
     public static final String FA_MINUS = "\uf068";
     public static final String FA_LOCATION_DOT = "\uf3c5"; // ghim điểm đến trên bản đồ
     public static final String FA_LOCATION_CROSSHAIRS = "\uf601"; // nút về vị trí của bạn
+    public static final String FA_ENVELOPE = "\uf0e0"; // panel Tin nhắn
+    public static final String FA_USER_GROUP = "\uf500"; // panel Bạn bè
+    public static final String FA_ROTATE_RIGHT = "\uf2f1"; // nút làm mới danh sách bạn
     public static final String FA_GEM = "\uf3a5";
     public static final String FA_TROPHY = "\uf091";
     public static final String FA_CAKE = "\uf1fd";
@@ -87,7 +89,7 @@ public final class Ui {
     public static final String FA_CAT = "\uf6be";
     public static final String FA_DOG = "\uf6d3";
     public static final String FA_ROCKET = "\uf135";
-    private static final String FA_SOLID_CHARS = FA_BELL + FA_TRASH + FA_HEADSET + FA_SUN
+    static final String FA_SOLID_CHARS = FA_BELL + FA_TRASH + FA_HEADSET + FA_SUN
         + FA_USER + FA_LOCK + FA_EYE + FA_EYE_SLASH + FA_CHECK + FA_XMARK + FA_SEND
         + FA_EXPAND + FA_COMPRESS + FA_FACE_SMILE + FA_MICROPHONE + FA_PLAY + FA_STOP
         + FA_HEART + FA_STAR + FA_THUMBS_UP + FA_THUMBS_DOWN + FA_FIRE + FA_GIFT
@@ -98,11 +100,12 @@ public final class Ui {
         + FA_PLUS + FA_MINUS + FA_LOCATION_DOT + FA_LOCATION_CROSSHAIRS + FA_STORE
         + FA_GEAR + FA_CHEVRON_LEFT + FA_CHEVRON_RIGHT
         + FA_PAUSE + FA_FORWARD_STEP + FA_BACKWARD_STEP + FA_SHUFFLE + FA_REPEAT
-        + FA_MAGNIFYING_GLASS + FA_VOLUME_HIGH + FA_LIST;
+        + FA_MAGNIFYING_GLASS + FA_VOLUME_HIGH + FA_LIST
+        + FA_ENVELOPE + FA_USER_GROUP + FA_ROTATE_RIGHT;
     // Glyph Font Awesome (brands)
     public static final String FA_GOOGLE = "\uf1a0";
     public static final String FA_APPLE = "\uf179";
-    private static final String FA_BRANDS_CHARS = FA_GOOGLE + FA_APPLE;
+    static final String FA_BRANDS_CHARS = FA_GOOGLE + FA_APPLE;
 
     public static BitmapFont fontTitle, fontBig, font, fontSmall;
     public static BitmapFont fontLogo, fontBaloo36, fontBaloo30, fontTiny;
@@ -127,26 +130,13 @@ public final class Ui {
     }
 
     private static BitmapFont makeFont(String path, int size) {
-        FreeTypeFontGenerator gen = new FreeTypeFontGenerator(com.avatardk.game.GameFiles.data(path));
-        FreeTypeFontGenerator.FreeTypeFontParameter p = new FreeTypeFontGenerator.FreeTypeFontParameter();
-        p.size = size;
-        p.characters = CHARS;
-        p.color = Color.WHITE;
-        BitmapFont f = gen.generateFont(p);
-        gen.dispose();
-        return f;
+        return FontFactory.create(path, size, CHARS);
     }
 
     private static BitmapFont makeFaFont(String path, int size, String glyphs) {
-        FreeTypeFontGenerator gen = new FreeTypeFontGenerator(com.avatardk.game.GameFiles.data(path));
-        FreeTypeFontGenerator.FreeTypeFontParameter p = new FreeTypeFontGenerator.FreeTypeFontParameter();
-        p.size = size;
-        p.characters = glyphs;
-        p.color = Color.WHITE;
-        BitmapFont f = gen.generateFont(p);
-        gen.dispose();
-        return f;
+        return FontFactory.create(path, size, glyphs);
     }
+
 
     /** Vẽ chữ căn giữa theo tâm ngang cx, baseline y cho trước. */
     public static void centered(SpriteBatch batch, BitmapFont f, String text, float cx, float baselineY, Color color) {

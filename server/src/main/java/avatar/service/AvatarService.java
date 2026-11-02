@@ -180,8 +180,13 @@ public class AvatarService extends Service {
             if (receiver == null) {
                 return;
             }
-            // Gửi kèm tên NGƯỜI GỬI (bản Pack5 lấy nhầm tên người nhận — đã sửa)
-            receiver.getAvatarService().chatTo(this.session.user.getUsername(), content, 1);
+            // Gói −6 phía nhận đúng định dạng client gốc đọc:
+            // {int id NGƯỜI GỬI, UTF tên người gửi, UTF nội dung}.
+            // Pack5 ghi sai cả hai (tên lấy nhầm người nhận, int là hằng 1)
+            // khiến phía nhận không biết ai gửi để trả lời — bản port ghi
+            // đúng id + tên người gửi.
+            receiver.getAvatarService().chatTo(this.session.user.getUsername(),
+                    content, this.session.user.getId());
         } catch (IOException ex) {
             logger.error("chatTo ", ex);
         }

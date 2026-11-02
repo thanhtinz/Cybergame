@@ -11,6 +11,7 @@ import com.badlogic.gdx.math.Vector3;
 import com.badlogic.gdx.utils.viewport.FitViewport;
 import com.avatardk.game.net.AvatarProtocol;
 import com.avatardk.game.net.GameConnection;
+import com.avatardk.game.util.BgThread;
 import com.avatardk.game.net.Msg;
 import com.avatardk.game.net.PlayerInfo;
 import java.io.DataInputStream;
@@ -169,7 +170,7 @@ public class LoginScreen extends ScreenAdapter {
             sendAuth(existing, register, user, pass);
             return;
         }
-        new Thread(() -> {
+        new BgThread(() -> {
             try {
                 GameConnection conn = new GameConnection();
                 conn.connect(host, port);
@@ -177,7 +178,7 @@ public class LoginScreen extends ScreenAdapter {
                 long deadline = System.currentTimeMillis() + 8000;
                 while (!conn.isKeyReady() && !conn.isClosed()
                     && System.currentTimeMillis() < deadline) {
-                    Thread.sleep(30);
+                    BgThread.sleep(30);
                 }
                 if (!conn.isKeyReady()) {
                     busy = false;
@@ -340,7 +341,11 @@ public class LoginScreen extends ScreenAdapter {
         Ui.faIcon(batch, Ui.fa20, glyph, PX + 58, fy + 24, ICON_GREY);
         String text = fields[i].toString();
         boolean empty = text.isEmpty();
-        if (i == 1 && !showPass) text = "•".repeat(text.length());
+        if (i == 1 && !showPass) {
+            StringBuilder mask = new StringBuilder();
+            for (int k = 0; k < text.length(); k++) mask.append('•');
+            text = mask.toString();
+        }
         if (empty) text = placeholder;
         if (focus == i && !empty) text += "|";
         Ui.font.setColor(empty ? new Color(0.47f, 0.53f, 0.61f, 1f) : DARK_TEXT);

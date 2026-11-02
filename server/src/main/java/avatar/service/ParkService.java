@@ -66,44 +66,131 @@ public class ParkService extends Service {
             e.printStackTrace();
         }
     }
+    /** Lời mời kết bạn đang chờ, khoá "idNgườiMời:idNgườiNhận" — chỉ lời
+     *  mời có thật mới được trả lời (chống giả mạo gói -19). */
+    private static final java.util.Set<String> pendingFriendReq =
+            java.util.Collections.synchronizedSet(new java.util.HashSet<>());
+
+    static boolean isFriend(int a, int b) {
+        try (Connection c = DbManager.getInstance().getConnection();
+             PreparedStatement ps = c.prepareStatement(
+                     "SELECT 1 FROM `friends` WHERE `user_id` = ? AND `friend_id` = ?")) {
+            ps.setInt(1, a);
+            ps.setInt(2, b);
+            try (java.sql.ResultSet rs = ps.executeQuery()) {
+                return rs.next();
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+            return false;
+        }
+    }
+
+    static void addFriendship(int a, int b) {
+        try (Connection c = DbManager.getInstance().getConnection();
+             PreparedStatement ps = c.prepareStatement(
+                     "INSERT IGNORE INTO `friends` (`user_id`, `friend_id`) VALUES (?, ?), (?, ?)")) {
+            ps.setInt(1, a);
+            ps.setInt(2, b);
+            ps.setInt(3, b);
+            ps.setInt(4, a);
+            ps.executeUpdate();
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+    static void removeFriendship(int a, int b) {
+        try (Connection c = DbManager.getInstance().getConnection();
+             PreparedStatement ps = c.prepareStatement(
+                     "DELETE FROM `friends` WHERE (`user_id` = ? AND `friend_id` = ?)"
+                             + " OR (`user_id` = ? AND `friend_id` = ?)")) {
+            ps.setInt(1, a);
+            ps.setInt(2, b);
+            ps.setInt(3, b);
+            ps.setInt(4, a);
+            ps.executeUpdate();
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+    /** Lời mời kết bạn (gói -21 từ người mời): {int id người nhận}.
+     *  Chuyển tới người nhận bằng đúng gói -21 phía nhận của client gốc:
+     *  {int id người mời, UTF tên người mời, UTF nội dung} —
+     *  GlobalMessageHandler case -21 → MessageScr hiện "Lời mời kết bạn"
+     *  trong hộp Tin đến kèm nút Đồng ý/Từ chối. (Server Pack5 không hề
+     *  gửi gói này; nó gửi -19 sai định dạng — bản port làm đúng phía
+     *  client gốc.) */
     public void handleAddFriendRequest(Message ms) {
         try {
             int userId = ms.reader().readInt(); // id người nhận
+            User me = this.session.user;
+            if (userId == me.getId()) {
+                return;
+            }
             User user = UserManager.getInstance().find(userId);
             if (user == null || user.session == null) {
                 return;
             }
-            // Chuyển lời mời tới người nhận bằng gói -19 mang ID NGƯỜI MỜI
-            // (bản Pack5 ghi nhầm id người nhận — đã sửa ở bản port) kèm
-            // boolean false như client gốc.
-            ms = new Message(-19);
-            DataOutputStream ds = ms.writer();
-            ds.writeInt(this.session.user.getId());
-            ds.writeBoolean(false);
+            if (isFriend(me.getId(), userId)) {
+                me.getAvatarService().serverDialog("Hai bạn đã là bạn bè rồi.");
+                return;
+            }
+            pendingFriendReq.add(me.getId() + ":" + userId);
+            Message out = new Message(Cmd.AVATAR_REQUEST_ADD_FRIEND);
+            DataOutputStream ds = out.writer();
+            ds.writeInt(me.getId());
+            ds.writeUTF(me.getUsername());
+            ds.writeUTF(me.getUsername() + " muốn kết bạn với bạn.");
             ds.flush();
-            user.session.sendMessage(ms);
+            user.session.sendMessage(out);
         } catch (IOException e) {
             e.printStackTrace();
         }
     }
 
     /** Trả lời lời mời kết bạn (gói -19 từ người nhận): {int id người mời,
-     *  boolean đồng ý} — chuyển kết quả về người mời, cũng bằng gói -19
-     *  mang id người trả lời. Lưu danh sách bạn thuộc hệ bạn bè (đợt sau). */
+     *  boolean đồng ý}. Đồng ý thì lưu quan hệ bạn vào bảng `friends`
+     *  (2 chiều). Kết quả trả về người mời bằng gói -19 phía nhận của
+     *  client gốc: {int id người trả lời, UTF tên, boolean, UTF nội dung}
+     *  → client hiện dialog nội dung. */
     public void handleAddFriendReply(Message ms) {
         try {
             int requesterId = ms.reader().readInt();
             boolean accept = ms.reader().readBoolean();
+            User me = this.session.user;
+            if (!pendingFriendReq.remove(requesterId + ":" + me.getId())) {
+                return; // không có lời mời đang chờ — bỏ qua
+            }
+            if (accept) {
+                addFriendship(me.getId(), requesterId);
+            }
             User requester = UserManager.getInstance().find(requesterId);
             if (requester == null || requester.session == null) {
                 return;
             }
-            Message out = new Message(-19);
+            Message out = new Message(Cmd.ADD_FRIEND);
             DataOutputStream ds = out.writer();
-            ds.writeInt(this.session.user.getId());
+            ds.writeInt(me.getId());
+            ds.writeUTF(me.getUsername());
             ds.writeBoolean(accept);
+            ds.writeUTF(accept
+                    ? me.getUsername() + " đã đồng ý kết bạn. Hai bạn đã trở thành bạn bè."
+                    : me.getUsername() + " đã từ chối lời mời kết bạn.");
             ds.flush();
             requester.session.sendMessage(out);
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+
+    /** Xoá bạn (gói -20): {int id bạn} — xoá quan hệ cả 2 chiều trong DB.
+     *  Client gốc có doRemoveFriend nhưng server Pack5 không có handler. */
+    public void handleRemoveFriend(Message ms) {
+        try {
+            int friendId = ms.reader().readInt();
+            removeFriendship(this.session.user.getId(), friendId);
         } catch (IOException e) {
             e.printStackTrace();
         }
