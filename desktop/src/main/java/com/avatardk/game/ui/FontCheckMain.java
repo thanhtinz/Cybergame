@@ -38,8 +38,10 @@ public class FontCheckMain {
                 ScreenUtils.clear(0.08f, 0.1f, 0.16f, 1f);
                 BitmapFont ftBaloo = FontFactory.create("fonts/Baloo2-ExtraBold.ttf", 36, Ui.CHARS);
                 BitmapFont bkBaloo = new BitmapFont(Gdx.files.internal("fonts-baked/baloo-36.fnt"));
+                bkBaloo.getData().ascent = 16f; bkBaloo.getData().descent = -19f; // khop FreeType (FontFactory ban web)
                 BitmapFont ftSmall = FontFactory.create("fonts/Nunito-Bold.ttf", 19, Ui.CHARS);
                 BitmapFont bkSmall = new BitmapFont(Gdx.files.internal("fonts-baked/nunito-bold-19.fnt"));
+                bkSmall.getData().ascent = 6f; bkSmall.getData().descent = -7f; // khop FreeType (FontFactory ban web)
                 shapes.begin(ShapeRenderer.ShapeType.Line);
                 shapes.setColor(Color.RED);
                 for (int y : new int[] {400, 330, 240, 170}) shapes.line(20, y, 880, y);
