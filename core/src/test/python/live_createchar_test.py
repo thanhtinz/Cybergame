@@ -134,10 +134,12 @@ def main():
     a.sock.close()
     time.sleep(3)
 
-    print("[4] đăng nhập lại: -4 chứa tên hiển thị + gender 2 + đúng bộ đồ")
+    print("[4] đăng nhập lại: -4 chứa tên hiển thị + gender 2 + SET CỐ ĐỊNH của gốc")
     a, uid2, wearing2, gender2, body4 = login(u1, "abcd1234")
     print(f"  gender={gender2}, wearing={wearing2}, -4 chứa tên: {has_utf(body4, CHAR_NAME)}")
-    assert gender2 == 2 and wearing2 == chosen and has_utf(body4, CHAR_NAME)
+    # Đúng gốc Pack5 (user chốt 2026-11-02): server bỏ qua bộ đã chọn,
+    # luôn gán set cố định — nữ là [89, 88, 0, 4, 49].
+    assert gender2 == 2 and wearing2 == [89, 88, 0, 4, 49] and has_utf(body4, CHAR_NAME)
     a.sock.close()
     time.sleep(3)
 

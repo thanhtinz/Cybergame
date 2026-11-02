@@ -290,16 +290,18 @@ public class CreateCharScreen extends ScreenAdapter {
                     busy = false;
                     if (ok) {
                         // cập nhật thông tin nhân vật tại chỗ rồi vào luồng
-                        // chọn máy chủ như đăng nhập bình thường
+                        // chọn máy chủ như đăng nhập bình thường. Server
+                        // gán set cố định của gốc (không dùng bộ đã chọn
+                        // trên màn này) nên thông tin tại chỗ cũng theo
+                        // đúng set đó cho khớp nhân vật thật trong game.
                         game.playerName = charName();
                         if (game.player != null) {
-                            List<Integer> parts = currentParts();
+                            int[] fixed = gender == 1
+                                ? new int[]{89, 88, 0, 4, 14}
+                                : new int[]{89, 88, 0, 4, 49};
                             game.player.gender = gender;
                             game.player.username = charName();
-                            game.player.wearing = new int[parts.size()];
-                            for (int i = 0; i < parts.size(); i++) {
-                                game.player.wearing[i] = parts.get(i);
-                            }
+                            game.player.wearing = fixed;
                             game.world.applyPlayerInfo(game.player);
                         }
                         game.setScreen(game.serverSelect);
