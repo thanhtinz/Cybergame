@@ -3130,10 +3130,10 @@ public class WorldScreen extends ScreenAdapter {
         Ui.centered(batch, Ui.font, "LỜI MỜI KẾT BẠN", px + pw / 2f, py + ph - 22, new Color(1f, 0.85f, 0.45f, 1f));
         Ui.centered(batch, Ui.fontSmall, friendInviteName + " muốn kết bạn với bạn.",
             px + pw / 2f, py + ph - 62, new Color(1f, 1f, 1f, 0.92f));
-        batch.draw(Ui.roundedRect(150, 46, 10, new Color(0.07f, 0.24f, 0.12f, 0.88f), GLASS_RIM),
+        batch.draw(Ui.gradientRect(150, 46, 10, EntryUi.ORANGE_TOP, EntryUi.ORANGE_BOT),
             px + 52, py + 22);
         Ui.centered(batch, Ui.font, "Đồng ý", px + 52 + 75, py + 22 + 31, Color.WHITE);
-        batch.draw(Ui.roundedRect(150, 46, 10, new Color(0.32f, 0.09f, 0.09f, 0.88f), GLASS_RIM),
+        batch.draw(Ui.roundedRect(150, 46, 10, Ui.BTN_CANCEL, GLASS_RIM),
             px + pw - 52 - 150, py + 22);
         Ui.centered(batch, Ui.font, "Từ chối", px + pw - 52 - 75, py + 22 + 31, Color.WHITE);
     }
@@ -3450,7 +3450,7 @@ public class WorldScreen extends ScreenAdapter {
         Ui.faIcon(batch, Ui.fa26, Ui.FA_ENVELOPE, px + 40, top - 36, new Color(1f, 0.85f, 0.45f, 1f));
         Ui.fontTitle.setColor(1f, 0.85f, 0.45f, 1f);
         Ui.fontTitle.draw(batch, "Tin nhắn", px + 64, top - 27);
-        batch.draw(Ui.roundedRect(36, 36, 10, GLASS_FILL, GLASS_RIM), px + MSG_PW - 54, top - 54);
+        batch.draw(Ui.roundedRect(36, 36, 10, Ui.BTN_CLOSE, GLASS_RIM), px + MSG_PW - 54, top - 54);
         Ui.faIcon(batch, Ui.fa20, Ui.FA_XMARK, px + MSG_PW - 36, top - 36, new Color(0.9f, 0.93f, 1f, 1f));
         batch.draw(Ui.roundedRect((int) (MSG_PW - 44), 2, 1, new Color(1f, 1f, 1f, 0.14f), null), px + 22, top - 66);
         // hàng tab
@@ -3507,8 +3507,7 @@ public class WorldScreen extends ScreenAdapter {
                 Ui.fontSmall.setColor(1f, 1f, 1f, 0.96f);
                 Ui.fontSmall.draw(batch, shown, px + 36, inY + 29);
             }
-            batch.draw(Ui.roundedRect(118, 46, 10,
-                new Color(0.85f, 0.45f, 0.12f, 0.95f), new Color(1f, 0.75f, 0.4f, 0.9f)),
+            batch.draw(Ui.gradientRect(118, 46, 10, EntryUi.ORANGE_TOP, EntryUi.ORANGE_BOT),
                 px + MSG_PW - 22 - 118, inY);
             Ui.centered(batch, Ui.font, "Gửi", px + MSG_PW - 22 - 59, inY + 30, Color.WHITE);
         }
@@ -3525,10 +3524,10 @@ public class WorldScreen extends ScreenAdapter {
                 Ui.fontSmall.setColor(1f, 0.72f, 0.35f, 1f);
                 Ui.fontSmall.draw(batch, "Lời mời kết bạn", px + 22, rowTop - 50);
                 float by = rowTop - 58;
-                batch.draw(Ui.roundedRect(96, 38, 10, new Color(0.07f, 0.24f, 0.12f, 0.88f), GLASS_RIM),
+                batch.draw(Ui.gradientRect(96, 38, 10, EntryUi.ORANGE_TOP, EntryUi.ORANGE_BOT),
                     px + MSG_PW - 22 - 200, by);
                 Ui.centered(batch, Ui.fontSmall, "Đồng ý", px + MSG_PW - 22 - 200 + 48, by + 25, Color.WHITE);
-                batch.draw(Ui.roundedRect(96, 38, 10, new Color(0.32f, 0.09f, 0.09f, 0.88f), GLASS_RIM),
+                batch.draw(Ui.roundedRect(96, 38, 10, Ui.BTN_CANCEL, GLASS_RIM),
                     px + MSG_PW - 22 - 96, by);
                 Ui.centered(batch, Ui.fontSmall, "Từ chối", px + MSG_PW - 22 - 96 + 48, by + 25, Color.WHITE);
             } else {
@@ -3655,7 +3654,7 @@ public class WorldScreen extends ScreenAdapter {
         Ui.fontSmall.draw(batch, friends.size() + " bạn bè", px + 214, top - 40);
         batch.draw(Ui.roundedRect(36, 36, 10, GLASS_FILL, GLASS_RIM), px + FR_PW - 100, top - 54);
         Ui.faIcon(batch, Ui.fa20, Ui.FA_ROTATE_RIGHT, px + FR_PW - 82, top - 36, new Color(0.9f, 0.93f, 1f, 1f));
-        batch.draw(Ui.roundedRect(36, 36, 10, GLASS_FILL, GLASS_RIM), px + FR_PW - 54, top - 54);
+        batch.draw(Ui.roundedRect(36, 36, 10, Ui.BTN_CLOSE, GLASS_RIM), px + FR_PW - 54, top - 54);
         Ui.faIcon(batch, Ui.fa20, Ui.FA_XMARK, px + FR_PW - 36, top - 36, new Color(0.9f, 0.93f, 1f, 1f));
         batch.draw(Ui.roundedRect((int) (FR_PW - 44), 2, 1, new Color(1f, 1f, 1f, 0.14f), null), px + 22, top - 66);
         float cTop = frContentTop(), cBot = frContentBottom();
@@ -3707,13 +3706,12 @@ public class WorldScreen extends ScreenAdapter {
                     : new Color(0.7f, 0.76f, 0.88f, 0.85f));
                 Ui.fontSmall.draw(batch, fe.status != null ? fe.status : "", px + 126, rowTop - 43);
                 float by = rowTop - 63;
-                batch.draw(Ui.roundedRect(108, 42, 11,
-                    new Color(0.85f, 0.45f, 0.12f, 0.95f), new Color(1f, 0.75f, 0.4f, 0.9f)),
+                batch.draw(Ui.gradientRect(108, 42, 11, EntryUi.ORANGE_TOP, EntryUi.ORANGE_BOT),
                     px + FR_PW - 228, by);
                 Ui.centered(batch, Ui.fontSmall, "Nhắn tin", px + FR_PW - 228 + 54, by + 27, Color.WHITE);
                 boolean armed = friendArmDelete == i;
                 batch.draw(Ui.roundedRect(92, 42, 11,
-                    armed ? new Color(0.55f, 0.12f, 0.1f, 0.92f) : GLASS_FILL, GLASS_RIM),
+                    armed ? new Color(0.55f, 0.12f, 0.1f, 0.92f) : Ui.BTN_CANCEL, GLASS_RIM),
                     px + FR_PW - 110, by);
                 Ui.centered(batch, Ui.fontSmall, armed ? "Xoá?" : "Xoá bạn",
                     px + FR_PW - 110 + 46, by + 27, Color.WHITE);
@@ -3975,7 +3973,7 @@ public class WorldScreen extends ScreenAdapter {
         batch.draw(Ui.roundedRect(36, 36, 10, GLASS_FILL, GLASS_RIM), px + ML_PW - 100, top - 54);
         Ui.faIcon(batch, Ui.fa20, Ui.FA_ROTATE_RIGHT, px + ML_PW - 82, top - 36,
             new Color(0.9f, 0.93f, 1f, 1f));
-        batch.draw(Ui.roundedRect(36, 36, 10, GLASS_FILL, GLASS_RIM), px + ML_PW - 54, top - 54);
+        batch.draw(Ui.roundedRect(36, 36, 10, Ui.BTN_CLOSE, GLASS_RIM), px + ML_PW - 54, top - 54);
         Ui.faIcon(batch, Ui.fa20, Ui.FA_XMARK, px + ML_PW - 36, top - 36,
             new Color(0.9f, 0.93f, 1f, 1f));
         batch.draw(Ui.roundedRect((int) (ML_PW - 44), 2, 1,
@@ -4006,7 +4004,7 @@ public class WorldScreen extends ScreenAdapter {
                 new Color(0.75f, 0.82f, 0.95f, 0.85f));
         }
         // chân cột trái: Xoá đã đọc (kính) + Nhận tất cả (cam)
-        batch.draw(Ui.roundedRect(192, 52, 14, GLASS_FILL, GLASS_RIM), lx, py + 16);
+        batch.draw(Ui.roundedRect(192, 52, 14, Ui.BTN_CANCEL, GLASS_RIM), lx, py + 16);
         Ui.faIcon(batch, Ui.fa20, Ui.FA_TRASH, lx + 30, py + 42,
             new Color(0.9f, 0.93f, 1f, 1f));
         Ui.font.setColor(1f, 1f, 1f, 0.95f);
@@ -4632,7 +4630,7 @@ public class WorldScreen extends ScreenAdapter {
         }
         // nút đóng: vòng tròn nằm trên viền góc phải trên, nhô ra ngoài panel
         float xCx = px + CP_W - 2, xCy = py + CP_H - 2;
-        batch.setColor(0.10f, 0.16f, 0.24f, 1f);
+        batch.setColor(Ui.BTN_CLOSE);
         batch.draw(circleTexture(), xCx - 17, xCy - 17, 34, 34);
         batch.setColor(Color.WHITE);
         batch.draw(ringTexture(), xCx - 17, xCy - 17, 34, 34);
@@ -5008,7 +5006,7 @@ public class WorldScreen extends ScreenAdapter {
         Ui.font.setColor(1f, 0.85f, 0.38f, 1f);
         Ui.font.draw(batch, "Giỏ đồ", px + 28, py + INV_H - 24);
         float xCx = px + INV_W - 2, xCy = py + INV_H - 2;
-        batch.setColor(0.10f, 0.16f, 0.24f, 1f);
+        batch.setColor(Ui.BTN_CLOSE);
         batch.draw(circleTexture(), xCx - 17, xCy - 17, 34, 34);
         batch.setColor(Color.WHITE);
         batch.draw(ringTexture(), xCx - 17, xCy - 17, 34, 34);
@@ -5062,9 +5060,13 @@ public class WorldScreen extends ScreenAdapter {
             String[] acts = invActions(false);
             for (int i = 0; i < acts.length; i++) {
                 float bx = px + INV_W - 28 - (acts.length - i) * 132 + 12;
-                batch.draw(Ui.roundedRect(120, 40, 10,
-                    i == 0 ? new Color(0.95f, 0.55f, 0.20f, 1f) : new Color(0f, 0f, 0f, 0.35f), GLASS_RIM),
-                    bx, by + 13);
+                if (i == 0) {
+                    batch.draw(Ui.gradientRect(120, 40, 10,
+                        EntryUi.ORANGE_TOP, EntryUi.ORANGE_BOT), bx, by + 13);
+                } else {
+                    batch.draw(Ui.roundedRect(120, 40, 10, Ui.BTN_CANCEL, GLASS_RIM),
+                        bx, by + 13);
+                }
                 Ui.centered(batch, Ui.fontSmall, acts[i], bx + 60, by + 39, Color.WHITE);
             }
         }
@@ -5086,7 +5088,7 @@ public class WorldScreen extends ScreenAdapter {
         drawChestSide(CH_X0 + CH_PW + CH_GAP, 1);
         // nút đóng tròn trên viền góc của panel phải
         float xCx = CH_X0 + CH_PW * 2 + CH_GAP - 2, xCy = CH_PY + CH_PH - 2;
-        batch.setColor(0.10f, 0.16f, 0.24f, 1f);
+        batch.setColor(Ui.BTN_CLOSE);
         batch.draw(circleTexture(), xCx - 17, xCy - 17, 34, 34);
         batch.setColor(Color.WHITE);
         batch.draw(ringTexture(), xCx - 17, xCy - 17, 34, 34);
@@ -5152,7 +5154,7 @@ public class WorldScreen extends ScreenAdapter {
         String exp = cur.expire == null || cur.expire.isEmpty() ? "Vĩnh viễn" : cur.expire;
         Ui.fontTiny.draw(batch, "Hạn dùng: " + exp, px + 100, by + 20);
         float bx = px + CH_PW - 28 - 132 + 12;
-        batch.draw(Ui.roundedRect(120, 40, 10, new Color(0.95f, 0.55f, 0.20f, 1f), GLASS_RIM), bx, by + 13);
+        batch.draw(Ui.gradientRect(120, 40, 10, EntryUi.ORANGE_TOP, EntryUi.ORANGE_BOT), bx, by + 13);
         String label = "Di chuyển";
         float lw = Ui.textWidth(Ui.fontSmall, label);
         Ui.fontSmall.setColor(Color.WHITE);
@@ -5171,10 +5173,10 @@ public class WorldScreen extends ScreenAdapter {
             new Color(0.08f, 0.13f, 0.20f, 0.98f), GLASS_RIM), px, py);
         Ui.centered(batch, Ui.font, confirmText, px + pw / 2f, py + ph - 42,
             new Color(1f, 0.85f, 0.38f, 1f));
-        batch.draw(Ui.roundedRect(170, 48, 12, new Color(0.95f, 0.55f, 0.20f, 1f), GLASS_RIM),
+        batch.draw(Ui.gradientRect(170, 48, 12, EntryUi.ORANGE_TOP, EntryUi.ORANGE_BOT),
             px + 40, py + 26);
         Ui.centered(batch, Ui.fontSmall, "Đồng ý", px + 40 + 85, py + 57, Color.WHITE);
-        batch.draw(Ui.roundedRect(170, 48, 12, new Color(0f, 0f, 0f, 0.35f), GLASS_RIM),
+        batch.draw(Ui.roundedRect(170, 48, 12, Ui.BTN_CANCEL, GLASS_RIM),
             px + pw - 40 - 170, py + 26);
         Ui.centered(batch, Ui.fontSmall, "Huỷ", px + pw - 40 - 85, py + 57, Color.WHITE);
     }
@@ -5793,7 +5795,7 @@ public class WorldScreen extends ScreenAdapter {
         batch.draw(mIcon, px + 24, top - 52, 32, 32);
         Ui.fontTitle.setColor(1f, 0.85f, 0.45f, 1f);
         Ui.fontTitle.draw(batch, "Nhạc YouTube", px + 66, top - 27);
-        batch.draw(Ui.roundedRect(36, 36, 10, GLASS_FILL, GLASS_RIM), px + MUS_PW - 54, top - 54);
+        batch.draw(Ui.roundedRect(36, 36, 10, Ui.BTN_CLOSE, GLASS_RIM), px + MUS_PW - 54, top - 54);
         Ui.faIcon(batch, Ui.fa20, Ui.FA_XMARK, px + MUS_PW - 36, top - 36, new Color(0.9f, 0.93f, 1f, 1f));
         batch.draw(Ui.roundedRect((int) (MUS_PW - 44), 2, 1, new Color(1f, 1f, 1f, 0.14f), null), px + 22, top - 66);
 
@@ -5906,7 +5908,7 @@ public class WorldScreen extends ScreenAdapter {
                 Ui.fontSmall.draw(batch, "|", rx + 48 + layout.width, inY + 28);
             }
         }
-        batch.draw(Ui.roundedRect(96, 44, 10, new Color(0.90f, 0.48f, 0.13f, 0.98f), null), rx + rw - 96, inY);
+        batch.draw(Ui.gradientRect(96, 44, 10, EntryUi.ORANGE_TOP, EntryUi.ORANGE_BOT), rx + rw - 96, inY);
         Ui.centered(batch, Ui.fontSmall, musicTab == 0 ? "Tìm" : "Thêm", rx + rw - 48, inY + 28, Color.WHITE);
         List<YtVideo> list = musicTab == 0 ? music.searchResults
             : (curPlaylist() != null ? curPlaylist().tracks : new ArrayList<>());
@@ -6181,7 +6183,7 @@ public class WorldScreen extends ScreenAdapter {
         Ui.font.draw(batch, "Cài đặt", SET_PX + 26, SET_PY + SET_PH - 30);
         float xCx = SET_PX + SET_PW - 27, xCy = SET_PY + SET_PH - 27;
         batch.draw(Ui.roundedRect(36, 36, 18,
-            new Color(0.13f, 0.18f, 0.28f, 0.95f), GLASS_RIM), xCx - 18, xCy - 18);
+            Ui.BTN_CLOSE, GLASS_RIM), xCx - 18, xCy - 18);
         Ui.faIcon(batch, Ui.fa20, Ui.FA_XMARK, xCx, xCy, new Color(1f, 1f, 1f, 0.9f));
         String[] labels = {"Tên", "Chỉ đường", "Âm thanh", "Đổi mật khẩu"};
         for (int i = 0; i < 4; i++) {
@@ -6325,7 +6327,7 @@ public class WorldScreen extends ScreenAdapter {
         Ui.font.draw(batch, "Đổi mật khẩu", PF_PX + 26, PF_PY + PF_PH - 30);
         float xCx = PF_PX + PF_PW - 27, xCy = PF_PY + PF_PH - 27;
         batch.draw(Ui.roundedRect(36, 36, 18,
-            new Color(0.13f, 0.18f, 0.28f, 0.95f), GLASS_RIM), xCx - 18, xCy - 18);
+            Ui.BTN_CLOSE, GLASS_RIM), xCx - 18, xCy - 18);
         Ui.faIcon(batch, Ui.fa20, Ui.FA_XMARK, xCx, xCy, new Color(1f, 1f, 1f, 0.9f));
         for (int i = 0; i < 3; i++) {
             float by = passBoxY(i);
@@ -6354,8 +6356,7 @@ public class WorldScreen extends ScreenAdapter {
             Ui.centered(batch, Ui.fontSmall, passStatus, PF_PX + PF_PW / 2f, PF_PY + 104, sc);
         }
         float bw = 240, bh = 56, bx = PF_PX + (PF_PW - bw) / 2f, by = PF_PY + 26;
-        batch.draw(Ui.roundedRect((int) bw, (int) bh, 14,
-            new Color(0.98f, 0.58f, 0.16f, 1f), new Color(0.98f, 0.58f, 0.16f, 1f)), bx, by);
+        batch.draw(Ui.gradientRect((int) bw, (int) bh, 14, EntryUi.ORANGE_TOP, EntryUi.ORANGE_BOT), bx, by);
         Ui.centered(batch, Ui.font, "Đổi mật khẩu", PF_PX + PF_PW / 2f, by + 37,
             new Color(1f, 1f, 1f, 1f));
     }
@@ -6935,7 +6936,7 @@ public class WorldScreen extends ScreenAdapter {
                     cx + cw - 214, cy + 27);
                 Ui.centered(batch, Ui.fontSmall, "Bạn đang ở đây", cx + cw - 119, cy + 61, Color.WHITE);
             } else {
-                batch.draw(Ui.roundedRect(190, 52, 12, new Color(0.95f, 0.55f, 0.20f, 1f), GLASS_RIM),
+                batch.draw(Ui.gradientRect(190, 52, 12, EntryUi.ORANGE_TOP, EntryUi.ORANGE_BOT),
                     cx + cw - 214, cy + 27);
                 Ui.centered(batch, Ui.fontSmall, "Di chuyển đến", cx + cw - 119, cy + 61, Color.WHITE);
             }
@@ -7022,7 +7023,7 @@ public class WorldScreen extends ScreenAdapter {
         Ui.font.setColor(1f, 0.85f, 0.38f, 1f);
         Ui.font.draw(batch, npcMenuTitle, px + 24, py + h - 22);
         float xCx = px + w - 2, xCy = py + h - 2;
-        batch.setColor(0.10f, 0.16f, 0.24f, 1f);
+        batch.setColor(Ui.BTN_CLOSE);
         batch.draw(circleTexture(), xCx - 15, xCy - 15, 30, 30);
         batch.setColor(Color.WHITE);
         batch.draw(ringTexture(), xCx - 15, xCy - 15, 30, 30);
@@ -7326,7 +7327,7 @@ public class WorldScreen extends ScreenAdapter {
             Ui.centered(batch, Ui.fontSmall, "Chỉ bán bằng " + ("Xu".equals(unit) ? "Lượng" : "Xu"),
                 x + w / 2f, y + 30, new Color(1f, 1f, 1f, 0.45f));
         } else if (balance >= price) {
-            batch.draw(Ui.roundedRect((int) w, (int) h, 12, new Color(0.95f, 0.55f, 0.20f, 1f), GLASS_RIM), x, y);
+            batch.draw(Ui.gradientRect((int) w, (int) h, 12, EntryUi.ORANGE_TOP, EntryUi.ORANGE_BOT), x, y);
             Ui.centered(batch, Ui.fontSmall, "Mua — " + fmtMoney(price) + " " + unit, x + w / 2f, y + 30, Color.WHITE);
         } else {
             batch.draw(Ui.roundedRect((int) w, (int) h, 12, new Color(0f, 0f, 0f, 0.35f), GLASS_RIM), x, y);
@@ -7353,7 +7354,7 @@ public class WorldScreen extends ScreenAdapter {
                 i == 0 ? new Color(1f, 1f, 1f, 0.95f) : new Color(1f, 0.85f, 0.38f, 1f));
         }
         float xCx = px + pw - 2, xCy = py + ph - 2;
-        batch.setColor(0.10f, 0.16f, 0.24f, 1f);
+        batch.setColor(Ui.BTN_CLOSE);
         batch.draw(circleTexture(), xCx - 17, xCy - 17, 34, 34);
         batch.setColor(Color.WHITE);
         batch.draw(ringTexture(), xCx - 17, xCy - 17, 34, 34);
@@ -7399,8 +7400,8 @@ public class WorldScreen extends ScreenAdapter {
             if (shopNewFlow) {
                 // luồng mới (mockup): chỉ MỘT nút Mua — bấm vào mới mở
                 // hoá đơn chọn tiền + thời hạn (xem drawShopBill)
-                batch.draw(Ui.roundedRect((int) bW, 56, 12,
-                    new Color(0.95f, 0.55f, 0.20f, 1f), GLASS_RIM), stX, py + 34);
+                batch.draw(Ui.gradientRect((int) bW, 56, 12,
+                    EntryUi.ORANGE_TOP, EntryUi.ORANGE_BOT), stX, py + 34);
                 Ui.centered(batch, Ui.font, "Mua", stX + bW / 2f, py + 34 + 37, Color.WHITE);
             } else {
                 drawShopBuyButton(stX, py + 66, bW, bH, sel.gold, "Lượng", myLuong);
@@ -7532,7 +7533,7 @@ public class WorldScreen extends ScreenAdapter {
         // nút X nằm GỌN TRONG góc panel (không chồm ra viền như panel
         // shop) để không đè lên chữ của panel phía sau
         float xCx = cx + cw - 26, xCy = cy + ch - 26;
-        batch.setColor(0.10f, 0.16f, 0.24f, 1f);
+        batch.setColor(Ui.BTN_CLOSE);
         batch.draw(circleTexture(), xCx - 17, xCy - 17, 34, 34);
         batch.setColor(Color.WHITE);
         batch.draw(ringTexture(), xCx - 17, xCy - 17, 34, 34);
@@ -7588,9 +7589,13 @@ public class WorldScreen extends ScreenAdapter {
             }
         }
         boolean afford = total > 0 && bal >= total;
-        batch.draw(Ui.roundedRect((int) (cw - 48), 54, 12,
-            afford ? new Color(0.95f, 0.55f, 0.20f, 1f) : new Color(0f, 0f, 0f, 0.35f),
-            GLASS_RIM), cx + 24, cy + 24);
+        if (afford) {
+            batch.draw(Ui.gradientRect((int) (cw - 48), 54, 12,
+                EntryUi.ORANGE_TOP, EntryUi.ORANGE_BOT), cx + 24, cy + 24);
+        } else {
+            batch.draw(Ui.roundedRect((int) (cw - 48), 54, 12,
+                new Color(0f, 0f, 0f, 0.35f), GLASS_RIM), cx + 24, cy + 24);
+        }
         Ui.centered(batch, Ui.font, afford ? "Mua ngay" : "Không đủ tiền",
             cx + cw / 2f, cy + 24 + 36,
             afford ? Color.WHITE : new Color(1f, 1f, 1f, 0.45f));

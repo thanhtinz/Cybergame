@@ -146,6 +146,8 @@ public final class EntryUi {
         String[] body = infoPanel == 1 ? NOTICE_BODY[0] : SUPPORT_BODY[0];
         Ui.fontBaloo36.setColor(GOLD);
         Ui.fontBaloo36.draw(batch, title, INFO_X + 28, INFO_Y + INFO_H - 28);
+        batch.draw(Ui.roundedRect(36, 36, 18, Ui.BTN_CLOSE, null),
+            INFO_X + INFO_W - 54, INFO_Y + INFO_H - 60);
         Ui.faIcon(batch, Ui.fa26, Ui.FA_XMARK, INFO_X + INFO_W - 36, INFO_Y + INFO_H - 42, Color.WHITE);
         Ui.fontSmall.setColor(0.85f, 0.9f, 0.97f, 1f);
         for (int i = 0; i < body.length; i++) {

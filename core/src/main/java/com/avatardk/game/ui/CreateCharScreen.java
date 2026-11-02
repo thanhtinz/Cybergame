@@ -345,7 +345,7 @@ public class CreateCharScreen extends ScreenAdapter {
     }
 
     private void drawBackButton() {
-        batch.draw(Ui.roundedRect(150, 48, 14, BAR_FILL, EntryUi.PANEL_RIM), 40, 646);
+        batch.draw(Ui.roundedRect(150, 48, 14, Ui.BTN_CANCEL, EntryUi.PANEL_RIM), 40, 646);
         Ui.faIcon(batch, Ui.fa20, Ui.FA_CHEVRON_LEFT, 66, 670, CELL_NAME);
         Ui.font.setColor(CELL_NAME);
         Ui.font.draw(batch, "Quay lại", 84, 678);

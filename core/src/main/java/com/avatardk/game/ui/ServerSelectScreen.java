@@ -176,6 +176,7 @@ public class ServerSelectScreen extends ScreenAdapter {
         float top = P_Y + P_H;
         Ui.fontBaloo36.setColor(EntryUi.GOLD);
         Ui.fontBaloo36.draw(batch, "CHỌN MÁY CHỦ", P_X + 28, top - 28);
+        batch.draw(Ui.roundedRect(36, 36, 18, Ui.BTN_CLOSE, null), P_X + P_W - 58, top - 60);
         Ui.faIcon(batch, Ui.fa26, Ui.FA_XMARK, P_X + P_W - 40, top - 42, Color.WHITE);
         float lx = P_X + 24, rx = P_X + 272, rw = P_W - 272 - 24;
         Ui.fontSmall.setColor(SUB_TEXT);
@@ -219,7 +220,7 @@ public class ServerSelectScreen extends ScreenAdapter {
         }
         // hàng nút cuối
         float by = P_Y + 24;
-        batch.draw(Ui.roundedRect(124, 50, 12, new Color(0.12f, 0.18f, 0.26f, 1f),
+        batch.draw(Ui.roundedRect(124, 50, 12, Ui.BTN_CANCEL,
             EntryUi.PANEL_RIM), P_X + P_W - 300, by);
         Ui.centered(batch, Ui.font, "HUỶ", P_X + P_W - 238, by + 32, Color.WHITE);
         batch.draw(Ui.gradientRect(140, 50, 12, EntryUi.ORANGE_TOP, EntryUi.ORANGE_BOT),

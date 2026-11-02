@@ -17,6 +17,12 @@ import java.util.Map;
 public final class Ui {
     public static final float W = 1280f, H = 720f;
 
+    /** Hệ màu nút thống nhất mọi panel (user chốt 2026-11-02):
+     *  nút TẮT = đỏ, nút HUỶ / QUAY LẠI = đen, nút XÁC NHẬN = cam
+     *  (gradient EntryUi.ORANGE_TOP → ORANGE_BOT). */
+    public static final Color BTN_CLOSE = new Color(0.85f, 0.17f, 0.17f, 1f);
+    public static final Color BTN_CANCEL = new Color(0.03f, 0.03f, 0.04f, 0.95f);
+
     static final String CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
         + "àáâãèéêìíĩòóôõùúũýăđơưạảấầẩẫậắằẳẵặẹẻẽếềểễệỉịọỏốồổỗộớờởỡợụủứừửữựỳỵỷỹ"
         + "ÀÁÂÃÈÉÊÌÍĨÒÓÔÕÙÚŨÝĂĐƠƯẠẢẤẦẨẪẬẮẰẲẴẶẸẺẼẾỀỂỄỆỈỊỌỎỐỒỔỖỘỚỜỞỠỢỤỦỨỪỬỮỰỲỴỶỸ"
