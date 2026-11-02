@@ -636,6 +636,20 @@ public class ScreenshotMain {
                     case 52:
                         if (frame == 15) {
                             shot("shot-friends.png");
+                            world.debugFriendTapMessage();
+                            stage = 53; frame = 0;
+                        }
+                        break;
+                    case 53:
+                        if (frame == 15) {
+                            shot("shot-friend-tap-chat.png");
+                            world.debugOpenMailPanel();
+                            stage = 54; frame = 0;
+                        }
+                        break;
+                    case 54:
+                        if (frame == 15) {
+                            shot("shot-mail.png");
                             System.out.println("SCREENSHOT DONE");
                             Gdx.app.exit();
                         }

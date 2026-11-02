@@ -106,7 +106,12 @@ public class BakeFontsMain {
             for (BitmapFont.Glyph g : glyphs) {
                 w.println("char id=" + g.id + " x=" + g.srcX + " y=" + g.srcY
                     + " width=" + g.width + " height=" + g.height
-                    + " xoffset=" + g.xoffset + " yoffset=" + g.yoffset
+                    + " xoffset=" + g.xoffset
+                    // generateData cho glyph với yoffset theo quy ước nội
+                    // bộ (flipped, vd -40); loader .fnt (flip=false) tính
+                    // yoffset nội bộ = -(height + yoffset file) nên file
+                    // phải ghi -(yoffset + height) mới khớp font FreeType.
+                    + " yoffset=" + (-(g.yoffset + g.height))
                     + " xadvance=" + g.xadvance + " page=" + g.page + " chnl=15");
             }
             // kerning giữa các glyph có mặt

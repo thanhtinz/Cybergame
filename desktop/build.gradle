@@ -14,6 +14,20 @@ tasks.register('run', JavaExec) {
     workingDir = rootProject.projectDir
     standardInput = System.in
 }
+tasks.register('checkFonts', JavaExec) {
+    dependsOn classes
+    mainClass = 'com.avatardk.game.ui.FontCheckMain'
+    classpath = sourceSets.main.runtimeClasspath
+    workingDir = rootProject.projectDir
+    jvmArgs '-Dfile.encoding=UTF-8'
+}
+tasks.register('bakeFonts', JavaExec) {
+    dependsOn classes
+    mainClass = 'com.avatardk.game.ui.BakeFontsMain'
+    classpath = sourceSets.main.runtimeClasspath
+    workingDir = rootProject.projectDir
+    jvmArgs '-Dfile.encoding=UTF-8'
+}
 tasks.register('smoke', JavaExec) {
     dependsOn classes
     mainClass = 'com.avatardk.game.DataSmokeMain'

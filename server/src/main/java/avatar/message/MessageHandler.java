@@ -288,6 +288,41 @@ public class MessageHandler implements IMessageHandler {
                         }
                         break;
                     }
+                    case Cmd.MAIL_LIST: {
+                        if (this.client.user != null) {
+                            new avatar.service.MailService(this.client).sendList();
+                            break;
+                        }
+                        break;
+                    }
+                    case Cmd.MAIL_READ: {
+                        if (this.client.user != null) {
+                            new avatar.service.MailService(this.client).markRead(mss);
+                            break;
+                        }
+                        break;
+                    }
+                    case Cmd.MAIL_CLAIM: {
+                        if (this.client.user != null) {
+                            new avatar.service.MailService(this.client).claim(mss);
+                            break;
+                        }
+                        break;
+                    }
+                    case Cmd.MAIL_CLAIM_ALL: {
+                        if (this.client.user != null) {
+                            new avatar.service.MailService(this.client).claimAll();
+                            break;
+                        }
+                        break;
+                    }
+                    case Cmd.MAIL_DELETE_READ: {
+                        if (this.client.user != null) {
+                            new avatar.service.MailService(this.client).deleteRead();
+                            break;
+                        }
+                        break;
+                    }
                     case -27: {
                         this.client.handshakeMessage();
                         break;

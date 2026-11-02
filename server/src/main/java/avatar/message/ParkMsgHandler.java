@@ -69,6 +69,26 @@ public class ParkMsgHandler extends MessageHandler {
                     this.client.getParkService().handleAddFriendReply(mss);
                     break;
 
+                case Cmd.MAIL_LIST:
+                    new avatar.service.MailService(this.client).sendList();
+                    break;
+
+                case Cmd.MAIL_READ:
+                    new avatar.service.MailService(this.client).markRead(mss);
+                    break;
+
+                case Cmd.MAIL_CLAIM:
+                    new avatar.service.MailService(this.client).claim(mss);
+                    break;
+
+                case Cmd.MAIL_CLAIM_ALL:
+                    new avatar.service.MailService(this.client).claimAll();
+                    break;
+
+                case Cmd.MAIL_DELETE_READ:
+                    new avatar.service.MailService(this.client).deleteRead();
+                    break;
+
                 case Cmd.REQUEST_DYNAMIC_PART:
                     this.client.getAvatarService().requestPartDynaMic(mss);
                     break;

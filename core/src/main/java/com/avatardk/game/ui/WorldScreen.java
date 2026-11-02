@@ -688,9 +688,10 @@ public class WorldScreen extends ScreenAdapter {
         this.game = game;
         this.playerDoll = game.newDoll(AvatarDkGame.SON_PARTS);
         // nạp danh sách map từ maps.json — chỉ giữ map dựng được bằng dải imagemap
-        MapDef[] all = new com.badlogic.gdx.utils.Json().fromJson(MapDef[].class,
-            com.avatardk.game.GameFiles.data("data/maps.json").readString("UTF-8"));
-        for (MapDef d : all) if (d.strips > 0) maps.add(d);
+        for (MapDef d : parseMapDefs(
+                com.avatardk.game.GameFiles.data("data/maps.json").readString("UTF-8"))) {
+            if (d.strips > 0) maps.add(d);
+        }
         maps.sort((a, b) -> Integer.compare(a.id, b.id));
         // trạm xe buýt từ lưới ô gốc (ô 139) — docs/mapgrid-spec.md
         com.avatardk.game.data.MapGrids grids = new com.avatardk.game.data.MapGrids(
@@ -748,6 +749,37 @@ public class WorldScreen extends ScreenAdapter {
         }
         loadMap(findMap(10));
         beginBusArrival();
+    }
+
+    /** Đọc maps.json bằng JsonReader (không dùng Json.fromJson phản
+     *  chiếu — GWT không có bảng kiểu cho MapDef, đã kiểm chứng chết
+     *  "Couldn't find Type" trên bản web 2026-11-02). */
+    private static java.util.List<MapDef> parseMapDefs(String json) {
+        java.util.List<MapDef> out = new java.util.ArrayList<>();
+        JsonValue root = new JsonReader().parse(json);
+        for (JsonValue r = root.child; r != null; r = r.next) {
+            MapDef d = new MapDef();
+            d.id = r.getInt("id", 0);
+            d.name = r.getString("name", null);
+            JsonValue bgv = r.get("bg");
+            d.bg = bgv == null || bgv.isNull() ? null : bgv.asInt();
+            d.strips = r.getInt("strips", 0);
+            d.hmap = r.getInt("hmap", 0);
+            d.daydien = r.getBoolean("daydien", false);
+            JsonValue npcs = r.get("npcs");
+            if (npcs != null) {
+                for (JsonValue nv = npcs.child; nv != null; nv = nv.next) {
+                    MapNpc mn = new MapNpc();
+                    mn.id = nv.getInt("id", 0);
+                    mn.name = nv.getString("name", null);
+                    mn.x = nv.getInt("x", 0);
+                    mn.y = nv.getInt("y", 0);
+                    d.npcs.add(mn);
+                }
+            }
+            out.add(d);
+        }
+        return out;
     }
 
     public MapDef findMap(int id) {
@@ -1501,6 +1533,61 @@ public class WorldScreen extends ScreenAdapter {
                     if (friendOpen) requestFriends();
                     break;
                 }
+                case AvatarProtocol.MAIL_LIST: {
+                    // gói −108: {byte số thư; mỗi thư: int id, UTF loại,
+                    // UTF tiêu đề, UTF người gửi, UTF nội dung, UTF đính
+                    // kèm JSON, byte đã đọc, byte đã nhận quà, long millis}
+                    java.io.DataInputStream r = m.reader();
+                    int n = r.readUnsignedByte();
+                    mailLetters.clear();
+                    for (int i = 0; i < n; i++) {
+                        MailLetter l = new MailLetter();
+                        l.id = r.readInt();
+                        l.kind = r.readUTF();
+                        l.title = r.readUTF();
+                        l.sender = r.readUTF();
+                        l.body = r.readUTF();
+                        String atts = r.readUTF();
+                        l.read = r.readByte() != 0;
+                        l.claimed = r.readByte() != 0;
+                        l.created = r.readLong();
+                        parseMailAtts(atts, l.atts);
+                        mailLetters.add(l);
+                    }
+                    mailLoaded = true;
+                    if (mailSelId < 0 && !mailLetters.isEmpty()) {
+                        mailSelId = mailLetters.get(0).id;
+                    }
+                    mailScroll = MathUtils.clamp(mailScroll, 0f, mailMaxScroll());
+                    break;
+                }
+                case AvatarProtocol.MAIL_CLAIM: {
+                    // gói −110 trả: {int id thư, byte thành công}
+                    java.io.DataInputStream r = m.reader();
+                    int id = r.readInt();
+                    boolean ok = r.readByte() != 0;
+                    if (ok) {
+                        for (MailLetter l : mailLetters) {
+                            if (l.id == id) {
+                                l.claimed = true;
+                                l.read = true;
+                            }
+                        }
+                    }
+                    addChatLog(TAB_SYSTEM, null, ok
+                        ? "Đã nhận quà từ thư."
+                        : "Thư này không còn quà để nhận.", true);
+                    break;
+                }
+                case AvatarProtocol.MAIL_CLAIM_ALL: {
+                    // gói −111 trả: {byte số thư đã nhận} (+ −108 ngay sau)
+                    int cnt = m.reader().readUnsignedByte();
+                    if (cnt > 0) {
+                        addChatLog(TAB_SYSTEM, null,
+                            "Đã nhận quà từ " + cnt + " thư.", true);
+                    }
+                    break;
+                }
                 case AvatarProtocol.CUSTOM_LIST: {
                     // gói −81: {UTF id danh sách, bytes dữ liệu} — chỉ xử
                     // "friendlist" (ListScr của gốc), các danh sách khác
@@ -2088,6 +2175,13 @@ public class WorldScreen extends ScreenAdapter {
                     frScroll = MathUtils.clamp(frDragStartScroll - dy, 0f, frMaxScroll());
                     return true;
                 }
+                if (pointer == mailPointer && mailOpen) {
+                    Vector3 v = hudViewport.unproject(new Vector3(sx, sy, 0));
+                    float dy = v.y - mailDragStartY;
+                    mailDragMoved = Math.max(mailDragMoved, Math.abs(dy));
+                    mailScroll = MathUtils.clamp(mailDragStartScroll - dy, 0f, mailMaxScroll());
+                    return true;
+                }
                 if (pointer == shopPointer && shopOpen) {
                     // kéo trong lưới shop: cuộn theo tay như sheet biểu cảm
                     Vector3 v = hudViewport.unproject(new Vector3(sx, sy, 0));
@@ -2150,6 +2244,14 @@ public class WorldScreen extends ScreenAdapter {
                     }
                     frPendingIdx = -1;
                     frPendingKind = -1;
+                    return true;
+                }
+                if (pointer == mailPointer) {
+                    mailPointer = -1;
+                    if (mailOpen && mailDragMoved < 10f && mailPendingIdx >= 0) {
+                        mailSelect(mailPendingIdx);
+                    }
+                    mailPendingIdx = -1;
                     return true;
                 }
                 if (pointer == shopPointer) {
@@ -2300,6 +2402,11 @@ public class WorldScreen extends ScreenAdapter {
             if (accept || refuse) {
                 replyFriendInvite(friendInviteId, accept);
             }
+            return;
+        }
+        // panel Hòm Thư đang mở: lớp modal
+        if (mailOpen) {
+            mailTouch(x, y, pointer);
             return;
         }
         // panel Tin nhắn đang mở: lớp modal
@@ -2455,7 +2562,7 @@ public class WorldScreen extends ScreenAdapter {
                         if (i == 0) {
                             openCityMap();
                         } else if (i == 1) {
-                            openMsgPanel();
+                            openMailPanel();
                         } else if (i == 2) {
                             openBag();
                         } else if (i == 3) {
@@ -3070,13 +3177,14 @@ public class WorldScreen extends ScreenAdapter {
     private int totalUnread() {
         int n = 0;
         for (Convo c : convos) n += c.unread;
-        return n;
+        return n + mailUnread();
     }
 
     /** Đóng các panel modal khác để panel Thư/Bạn bè không chồng lên
      *  chúng (kính chồng kính không đọc được chữ). */
     private void closeOtherPanels() {
         musicOpen = false;
+        mailOpen = false;
         shopOpen = false;
         bagPanel = false;
         chestPanel = false;
@@ -3655,6 +3763,491 @@ public class WorldScreen extends ScreenAdapter {
         }
     }
 
+
+    // ================= Hòm Thư (theo mẫu user chốt 2026-11-02) =================
+    // Panel thư 2 cột pastel theo đúng ảnh mẫu: trái = danh sách thư,
+    // phải = chi tiết + vật phẩm đính kèm + nút Nhận thưởng. Dữ liệu thật
+    // từ server (gói −108..−112, bảng letters).
+    private static final float ML_PW = 1160f, ML_PH = 620f;
+    private boolean mailOpen = false;
+    private boolean mailLoaded = false;
+    private int mailSelId = -1;
+    private float mailScroll = 0f;
+    private int mailPointer = -1;
+    private float mailDragStartY, mailDragStartScroll, mailDragMoved;
+    private int mailPendingIdx = -1;
+
+    private static class MailAtt {
+        String t;
+        long n;
+        int partId;
+    }
+
+    private static class MailLetter {
+        int id;
+        String kind = "system", title = "", sender = "", body = "";
+        boolean read, claimed;
+        long created;
+        final java.util.ArrayList<MailAtt> atts = new java.util.ArrayList<>();
+    }
+
+    private final java.util.ArrayList<MailLetter> mailLetters = new java.util.ArrayList<>();
+
+    private static final Color ML_DARK = new Color(0.180f, 0.165f, 0.373f, 1f);
+    private static final Color ML_PILL = new Color(0.200f, 0.176f, 0.400f, 1f);
+    private static final Color ML_GRAY = new Color(0.545f, 0.529f, 0.659f, 1f);
+    private static final Color ML_RIM = new Color(0.812f, 0.788f, 0.933f, 1f);
+    private static final Color ML_BODY = new Color(0.227f, 0.212f, 0.388f, 1f);
+
+    /** Quét JSON đính kèm viết tay (không regex — GWT không chạy được
+     *  vòng find() của Matcher): [{"t":"xu","n":50000},...]. */
+    private static void parseMailAtts(String json, java.util.ArrayList<MailAtt> out) {
+        out.clear();
+        if (json == null) return;
+        int i = 0;
+        while (true) {
+            int open = json.indexOf('{', i);
+            if (open < 0) break;
+            int close = json.indexOf('}', open);
+            if (close < 0) break;
+            String obj = json.substring(open, close + 1);
+            MailAtt a = new MailAtt();
+            int ti = obj.indexOf("\"t\"");
+            if (ti >= 0) {
+                int q1 = obj.indexOf('"', ti + 3);
+                int q2 = q1 >= 0 ? obj.indexOf('"', q1 + 1) : -1;
+                if (q1 >= 0 && q2 > q1) a.t = obj.substring(q1 + 1, q2);
+            }
+            a.n = scanJsonLong(obj, "\"n\"");
+            a.partId = (int) scanJsonLong(obj, "\"id\"");
+            if (a.t != null) out.add(a);
+            i = close + 1;
+        }
+    }
+
+    private static long scanJsonLong(String obj, String key) {
+        int ki = obj.indexOf(key);
+        if (ki < 0) return 0;
+        int colon = obj.indexOf(':', ki + key.length());
+        if (colon < 0) return 0;
+        long v = 0;
+        boolean any = false, neg = false;
+        for (int j = colon + 1; j < obj.length(); j++) {
+            char c = obj.charAt(j);
+            if (c == '-' && !any) {
+                neg = true;
+                continue;
+            }
+            if (c < '0' || c > '9') {
+                if (any) break;
+                continue;
+            }
+            v = v * 10 + (c - '0');
+            any = true;
+        }
+        return neg ? -v : v;
+    }
+
+    private int mailUnread() {
+        int c = 0;
+        for (MailLetter l : mailLetters) if (!l.read) c++;
+        return c;
+    }
+
+    private MailLetter mailSelected() {
+        for (MailLetter l : mailLetters) if (l.id == mailSelId) return l;
+        return mailLetters.isEmpty() ? null : mailLetters.get(0);
+    }
+
+    private float mailMaxScroll() {
+        return Math.max(0f, mailLetters.size() * 100f - 8f - (ML_PH - 214f));
+    }
+
+    private void openMailPanel() {
+        closeOtherPanels();
+        msgOpen = false;
+        friendOpen = false;
+        mailOpen = true;
+        mailScroll = 0f;
+        if (online()) {
+            try {
+                AvatarProtocol.requestMailList(game.connection);
+            } catch (IOException ignored) {
+            }
+        }
+    }
+
+    private void mailSelect(int idx) {
+        if (idx < 0 || idx >= mailLetters.size()) return;
+        MailLetter l = mailLetters.get(idx);
+        mailSelId = l.id;
+        if (!l.read) {
+            l.read = true;
+            if (online()) {
+                try {
+                    AvatarProtocol.mailRead(game.connection, l.id);
+                } catch (IOException ignored) {
+                }
+            }
+        }
+    }
+
+    private static long mailDayIndex(long ms) {
+        long off = new java.util.Date(ms).getTimezoneOffset() * 60000L;
+        return (ms - off) / 86400000L;
+    }
+
+    private static String mailDayLabel(long ms) {
+        long diff = mailDayIndex(System.currentTimeMillis()) - mailDayIndex(ms);
+        if (diff <= 0) return "Hôm nay";
+        if (diff == 1) return "Hôm qua";
+        if (diff < 30) return diff + " ngày trước";
+        java.util.Date d = new java.util.Date(ms);
+        return d.getDate() + "/" + (d.getMonth() + 1);
+    }
+
+    private static String mailTimeLabel(long ms) {
+        java.util.Date d = new java.util.Date(ms);
+        int h = d.getHours(), m = d.getMinutes();
+        return mailDayLabel(ms) + ", " + (h < 10 ? "0" : "") + h
+            + ":" + (m < 10 ? "0" : "") + m;
+    }
+
+    private static String mailKindIcon(String kind) {
+        if ("daily".equals(kind) || "gift".equals(kind)) return Ui.FA_GIFT;
+        if ("event".equals(kind)) return Ui.FA_BULLHORN;
+        if ("friend".equals(kind)) return Ui.FA_HEART;
+        if ("update".equals(kind)) return Ui.FA_ROCKET;
+        return Ui.FA_ENVELOPE;
+    }
+
+    private static Color mailKindBg(String kind) {
+        if ("daily".equals(kind) || "gift".equals(kind)) return new Color(1f, 0.882f, 0.933f, 1f);
+        if ("event".equals(kind)) return new Color(1f, 0.941f, 0.839f, 1f);
+        if ("friend".equals(kind)) return new Color(1f, 0.882f, 0.914f, 1f);
+        if ("update".equals(kind)) return new Color(0.882f, 0.953f, 1f, 1f);
+        return new Color(0.902f, 0.886f, 1f, 1f);
+    }
+
+    private static Color mailKindFg(String kind) {
+        if ("daily".equals(kind) || "gift".equals(kind)) return new Color(0.941f, 0.337f, 0.478f, 1f);
+        if ("event".equals(kind)) return new Color(0.910f, 0.576f, 0.047f, 1f);
+        if ("friend".equals(kind)) return new Color(0.941f, 0.337f, 0.478f, 1f);
+        if ("update".equals(kind)) return new Color(0.231f, 0.561f, 0.831f, 1f);
+        return new Color(0.486f, 0.424f, 0.941f, 1f);
+    }
+
+    private static String trimToWidth(com.badlogic.gdx.graphics.g2d.BitmapFont f,
+            String text, float maxW) {
+        if (Ui.textWidth(f, text) <= maxW) return text;
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < text.length(); i++) {
+            sb.append(text.charAt(i));
+            if (Ui.textWidth(f, sb.toString() + "...") > maxW) {
+                sb.setLength(sb.length() - 1);
+                break;
+            }
+        }
+        return sb.toString() + "...";
+    }
+
+    private static String fmtNum(long v) {
+        String t = String.valueOf(v);
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < t.length(); i++) {
+            if (i > 0 && (t.length() - i) % 3 == 0) sb.append('.');
+            sb.append(t.charAt(i));
+        }
+        return sb.toString();
+    }
+
+    private void drawMailPanel() {
+        float px = (Ui.W - ML_PW) / 2f, py = (Ui.H - ML_PH) / 2f, top = py + ML_PH;
+        batch.draw(Ui.roundedRect((int) Ui.W, (int) Ui.H, 0,
+            new Color(0.05f, 0.05f, 0.12f, 0.45f), null), 0, 0);
+        batch.draw(Ui.roundedRect((int) ML_PW, (int) ML_PH, 28,
+            new Color(0.965f, 0.957f, 0.992f, 1f), ML_RIM), px, py);
+        // header: pill tiêu đề + ô phong bì + nút đóng
+        batch.draw(Ui.roundedRect(308, 60, 30, ML_PILL, null), px + 14, top - 72);
+        batch.draw(Ui.roundedRect(64, 50, 10,
+            new Color(1f, 0.937f, 0.769f, 1f),
+            new Color(0.941f, 0.714f, 0.298f, 1f)), px + 26, top - 67);
+        Ui.faIcon(batch, Ui.fa26, Ui.FA_ENVELOPE, px + 58, top - 42,
+            new Color(0.910f, 0.529f, 0.227f, 1f));
+        Ui.fontBaloo36.setColor(Color.WHITE);
+        Ui.fontBaloo36.draw(batch, "Hòm Thư", px + 106, top - 29);
+        batch.draw(Ui.roundedRect(54, 54, 27, ML_PILL, null), px + ML_PW - 68, top - 68);
+        Ui.faIcon(batch, Ui.fa20, Ui.FA_XMARK, px + ML_PW - 41, top - 41, Color.WHITE);
+        // vạch phân cột
+        batch.draw(Ui.roundedRect(2, (int) (ML_PH - 170), 1,
+            new Color(0.867f, 0.851f, 0.949f, 1f), null), px + 452, py + 108);
+
+        float lx = px + 24, lw = 404;
+        float listTop = top - 96, listBot = py + 118;
+        Rectangle clip = new Rectangle(lx, listBot, lw, listTop - listBot);
+        Rectangle scissors = new Rectangle();
+        batch.flush();
+        ScissorStack.calculateScissors(hudViewport.getCamera(),
+            batch.getTransformMatrix(), clip, scissors);
+        batch.flush();
+        if (ScissorStack.pushScissors(scissors)) {
+            for (int i = 0; i < mailLetters.size(); i++) {
+                drawMailCard(mailLetters.get(i), i, lx, listTop);
+            }
+            batch.flush();
+            ScissorStack.popScissors();
+        }
+        if (mailLetters.isEmpty()) {
+            Ui.centered(batch, Ui.fontSmall,
+                mailLoaded ? "Chưa có thư nào" : "Đang tải thư...",
+                lx + lw / 2f, (listTop + listBot) / 2f + 8, ML_GRAY);
+        }
+        // chân cột trái: số thư + 2 nút
+        Ui.fontSmall.setColor(ML_BODY);
+        Ui.fontSmall.draw(batch, "Số thư: " + mailLetters.size() + "/100", lx + 2, py + 96);
+        batch.draw(Ui.roundedRect(192, 52, 14, Color.WHITE, ML_RIM), lx, py + 16);
+        Ui.faIcon(batch, Ui.fa20, Ui.FA_TRASH, lx + 30, py + 42, ML_GRAY);
+        Ui.font.setColor(ML_DARK);
+        Ui.font.draw(batch, "Xoá đã đọc", lx + 54, py + 50);
+        batch.draw(Ui.roundedRect(200, 52, 14,
+            new Color(0.290f, 0.565f, 0.973f, 1f), null), lx + 204, py + 16);
+        Ui.faIcon(batch, Ui.fa20, Ui.FA_DOWNLOAD, lx + 234, py + 42, Color.WHITE);
+        Ui.font.setColor(Color.WHITE);
+        Ui.font.draw(batch, "Nhận tất cả", lx + 258, py + 50);
+
+        drawMailDetail(px, py, top);
+    }
+
+    private void drawMailCard(MailLetter l, int i, float lx, float listTop) {
+        float cardTop = listTop - mailScroll - i * 100f;
+        float cy = cardTop - 92f;
+        boolean sel = mailSelected() == l;
+        batch.draw(Ui.roundedRect(404, 92, 18,
+            sel ? new Color(1f, 0.945f, 0.722f, 1f) : Color.WHITE,
+            sel ? new Color(0.941f, 0.780f, 0.369f, 1f)
+                : new Color(0.867f, 0.851f, 0.949f, 1f)), lx, cy);
+        batch.draw(Ui.roundedRect(58, 58, 14, mailKindBg(l.kind), null), lx + 14, cy + 17);
+        Ui.faIcon(batch, Ui.fa26, mailKindIcon(l.kind), lx + 43, cy + 46, mailKindFg(l.kind));
+        Ui.fontBaloo30.setColor(ML_DARK);
+        Ui.fontBaloo30.draw(batch, trimToWidth(Ui.fontBaloo30, l.title, 270), lx + 88, cy + 68);
+        Ui.fontSmall.setColor(ML_GRAY);
+        Ui.fontSmall.draw(batch, l.sender, lx + 88, cy + 30);
+        String day = mailDayLabel(l.created);
+        Ui.fontSmall.draw(batch, day, lx + 390 - Ui.textWidth(Ui.fontSmall, day), cy + 30);
+        if (!l.read) {
+            batch.draw(Ui.roundedRect(13, 13, 7,
+                new Color(0.941f, 0.267f, 0.220f, 1f), null), lx + 380, cardTop - 20);
+        }
+    }
+
+    private void drawMailDetail(float px, float py, float top) {
+        float dx = px + 476, dw = ML_PW - 476 - 24;
+        float dTop = top - 90;
+        MailLetter l = mailSelected();
+        if (l == null) {
+            Ui.centered(batch, Ui.fontSmall, "Chọn một thư để xem nội dung",
+                dx + dw / 2f, (dTop + py) / 2f, ML_GRAY);
+            return;
+        }
+        batch.draw(Ui.roundedRect(64, 64, 16, mailKindBg(l.kind), null), dx, dTop - 64);
+        Ui.faIcon(batch, Ui.fa30, mailKindIcon(l.kind), dx + 32, dTop - 32, mailKindFg(l.kind));
+        Ui.fontBaloo36.setColor(ML_DARK);
+        Ui.fontBaloo36.draw(batch, trimToWidth(Ui.fontBaloo36, l.title, dw - 200), dx + 80, dTop - 20);
+        // tem mèo trang trí góc phải như ảnh mẫu
+        com.badlogic.gdx.graphics.Texture stamp = Ui.roundedRect(74, 88, 8,
+            Color.WHITE, new Color(0.949f, 0.655f, 0.765f, 1f));
+        batch.draw(stamp, dx + dw - 84, dTop - 92, 37, 44, 74, 88, 1f, 1f, -8f,
+            0, 0, 74, 88, false, false);
+        Ui.faIcon(batch, Ui.fa30, Ui.FA_CAT, dx + dw - 47, dTop - 48,
+            new Color(0.949f, 0.545f, 0.706f, 1f));
+        // chip người gửi + giờ gửi
+        float chipY = dTop - 108;
+        float chipW = Ui.textWidth(Ui.fontSmall, l.sender) + 36;
+        batch.draw(Ui.roundedRect((int) chipW, 36, 18,
+            new Color(0.863f, 0.914f, 1f, 1f), null), dx, chipY);
+        Ui.centered(batch, Ui.fontSmall, l.sender, dx + chipW / 2f, chipY + 24,
+            new Color(0.231f, 0.435f, 0.831f, 1f));
+        Ui.faIcon(batch, Ui.fa20, Ui.FA_CLOCK, dx + chipW + 24, chipY + 18, ML_GRAY);
+        Ui.fontSmall.setColor(ML_GRAY);
+        Ui.fontSmall.draw(batch, mailTimeLabel(l.created), dx + chipW + 42, chipY + 24);
+        // dải tem thư chéo đỏ/xanh
+        for (int i = 0; i < 13; i++) {
+            Color c = i % 2 == 0
+                ? new Color(0.949f, 0.471f, 0.624f, 1f)
+                : new Color(0.478f, 0.647f, 0.973f, 1f);
+            com.badlogic.gdx.graphics.Texture seg = Ui.roundedRect(36, 10, 5, c, null);
+            batch.draw(seg, dx + i * 52, chipY - 32, 18, 5, 36, 10, 1f, 1f, -18f,
+                0, 0, 36, 10, false, false);
+        }
+        // nội dung thư
+        float by = chipY - 54;
+        Ui.fontSmall.setColor(ML_BODY);
+        for (String para : l.body.split("\n")) {
+            if (para.isEmpty()) {
+                by -= 12;
+                continue;
+            }
+            for (String line : wrapMsg(para, dw - 8)) {
+                if (by < py + 313) break;
+                Ui.fontSmall.draw(batch, line, dx + 2, by);
+                by -= 26;
+            }
+            if (by < py + 313) break;
+        }
+        // hộp vật phẩm đính kèm
+        float boxY = py + 126;
+        batch.draw(Ui.roundedRect((int) dw, 168, 18,
+            new Color(0.925f, 0.918f, 0.973f, 1f), null), dx, boxY);
+        Ui.faIcon(batch, Ui.fa20, Ui.FA_GIFT, dx + 34, boxY + 140,
+            new Color(0.486f, 0.424f, 0.941f, 1f));
+        Ui.font.setColor(ML_DARK);
+        Ui.font.draw(batch, "Vật phẩm đính kèm", dx + 54, boxY + 148);
+        if (l.atts.isEmpty()) {
+            Ui.centered(batch, Ui.fontSmall, "Không có vật phẩm đính kèm",
+                dx + dw / 2f, boxY + 74, ML_GRAY);
+        } else {
+            for (int i = 0; i < Math.min(l.atts.size(), 5); i++) {
+                MailAtt a = l.atts.get(i);
+                float tx = dx + 18 + i * 118, ty = boxY + 14;
+                batch.draw(Ui.roundedRect(104, 104, 16,
+                    new Color(0.863f, 0.839f, 0.965f, 1f), null), tx, ty);
+                if ("xu".equals(a.t)) {
+                    batch.draw(game.texture("myinfo/icon0.png"), tx + 25, ty + 34, 54, 54);
+                } else if ("luong".equals(a.t)) {
+                    batch.draw(game.texture("myinfo/icon1.png"), tx + 25, ty + 34, 54, 54);
+                } else if ("item".equals(a.t)) {
+                    drawPartIcon(a.partId, tx + 52, ty + 62, 60);
+                }
+                Ui.centered(batch, Ui.fontBaloo30, "x" + fmtNum(a.n), tx + 52, ty + 26, ML_DARK);
+            }
+        }
+        // nút nhận thưởng
+        if (!l.atts.isEmpty()) {
+            float bw = 360, bh = 62, bx = dx + (dw - bw) / 2f, byy = py + 22;
+            if (l.claimed) {
+                batch.draw(Ui.roundedRect((int) bw, (int) bh, 16,
+                    new Color(0.788f, 0.773f, 0.871f, 1f), null), bx, byy);
+                Ui.faIcon(batch, Ui.fa20, Ui.FA_CHECK, bx + 84, byy + 31, Color.WHITE);
+                Ui.centered(batch, Ui.fontBaloo30, "Đã nhận thưởng", bx + bw / 2f + 14, byy + 40, Color.WHITE);
+            } else {
+                batch.draw(Ui.roundedRect((int) bw, (int) bh, 16,
+                    new Color(0.325f, 0.745f, 0.290f, 1f),
+                    new Color(0.243f, 0.612f, 0.216f, 1f)), bx, byy);
+                Ui.faIcon(batch, Ui.fa20, Ui.FA_DOWNLOAD, bx + 74, byy + 31, Color.WHITE);
+                Ui.centered(batch, Ui.fontBaloo30, "Nhận thưởng", bx + bw / 2f + 14, byy + 40, Color.WHITE);
+            }
+        }
+    }
+
+    private void mailTouch(float x, float y, int pointer) {
+        float px = (Ui.W - ML_PW) / 2f, py = (Ui.H - ML_PH) / 2f, top = py + ML_PH;
+        if (x >= px + ML_PW - 74 && x <= px + ML_PW - 14 && y >= top - 74 && y <= top - 14) {
+            mailOpen = false;
+            mailPointer = -1;
+            return;
+        }
+        float lx = px + 24;
+        // nút Xoá đã đọc
+        if (x >= lx && x <= lx + 192 && y >= py + 16 && y <= py + 68) {
+            if (online()) {
+                try {
+                    AvatarProtocol.mailDeleteRead(game.connection);
+                } catch (IOException ignored) {
+                }
+            } else {
+                for (int i = mailLetters.size() - 1; i >= 0; i--) {
+                    MailLetter l = mailLetters.get(i);
+                    if (l.read && (l.claimed || l.atts.isEmpty())) mailLetters.remove(i);
+                }
+            }
+            return;
+        }
+        // nút Nhận tất cả
+        if (x >= lx + 204 && x <= lx + 404 && y >= py + 16 && y <= py + 68) {
+            if (online()) {
+                try {
+                    AvatarProtocol.mailClaimAll(game.connection);
+                } catch (IOException ignored) {
+                }
+            }
+            return;
+        }
+        // nút Nhận thưởng của thư đang xem
+        MailLetter sel = mailSelected();
+        if (sel != null && !sel.atts.isEmpty() && !sel.claimed) {
+            float dx = px + 476, dw = ML_PW - 476 - 24;
+            float bx = dx + (dw - 360) / 2f;
+            if (x >= bx && x <= bx + 360 && y >= py + 22 && y <= py + 84) {
+                if (online()) {
+                    try {
+                        AvatarProtocol.mailClaim(game.connection, sel.id);
+                    } catch (IOException ignored) {
+                    }
+                }
+                return;
+            }
+        }
+        // vùng danh sách: chờ chọn hàng + kéo cuộn
+        float listTop = top - 96, listBot = py + 118;
+        if (x >= lx && x <= lx + 404 && y >= listBot && y <= listTop) {
+            int idx = (int) ((listTop + mailScroll - y) / 100f);
+            mailPendingIdx = idx >= 0 && idx < mailLetters.size() ? idx : -1;
+            mailPointer = pointer;
+            mailDragStartY = y;
+            mailDragStartScroll = mailScroll;
+            mailDragMoved = 0f;
+        }
+    }
+
+    /** Mở panel Hòm Thư với dữ liệu mẫu giống ảnh user chốt (harness). */
+    public void debugOpenMailPanel() {
+        debugSeedMail();
+        closeOtherPanels();
+        msgOpen = false;
+        friendOpen = false;
+        mailOpen = true;
+    }
+
+    public void debugSeedMail() {
+        mailLetters.clear();
+        long now = System.currentTimeMillis();
+        long day = 86400000L;
+        mailLetters.add(debugLetter(9001, "daily", "Quà đăng nhập hằng ngày", "Hệ Thống",
+            "Xin chào!\nĐây là phần quà đăng nhập hằng ngày của bạn.\nCảm ơn bạn đã đồng hành cùng game!",
+            "[{\"t\":\"luong\",\"n\":100},{\"t\":\"xu\",\"n\":50000},{\"t\":\"item\",\"id\":593,\"n\":5},{\"t\":\"item\",\"id\":683,\"n\":10}]",
+            false, false, now));
+        mailLetters.add(debugLetter(9002, "event", "Sự kiện cuối tuần", "Hệ Thống",
+            "Sự kiện cuối tuần đã bắt đầu!\nTham gia các hoạt động trong thị trấn để nhận thêm nhiều phần quà hấp dẫn.",
+            "", true, true, now - day));
+        mailLetters.add(debugLetter(9003, "friend", "Quà từ bạn bè", "Nguyễn An",
+            "Tặng bạn ít xu tiêu vặt nè, cuối tuần ra công viên chơi nhé!",
+            "[{\"t\":\"xu\",\"n\":5000}]", true, false, now - 2 * day));
+        mailLetters.add(debugLetter(9004, "system", "Bồi thường bảo trì", "Hệ Thống",
+            "Thị trấn vừa bảo trì xong. Gửi bạn phần bồi thường nhỏ, cảm ơn bạn đã kiên nhẫn chờ đợi!",
+            "[{\"t\":\"luong\",\"n\":20}]", true, false, now - 3 * day));
+        mailLetters.add(debugLetter(9005, "update", "Thông báo cập nhật v1.4.0", "Hệ Thống",
+            "Phiên bản 1.4.0 đã sẵn sàng với nhiều nội dung mới. Chúc bạn chơi game vui vẻ!",
+            "", true, true, now - 4 * day));
+        mailSelId = 9001;
+        mailLoaded = true;
+        mailScroll = 0f;
+    }
+
+    private MailLetter debugLetter(int id, String kind, String title, String sender,
+            String body, String atts, boolean read, boolean claimed, long created) {
+        MailLetter l = new MailLetter();
+        l.id = id;
+        l.kind = kind;
+        l.title = title;
+        l.sender = sender;
+        l.body = body;
+        l.read = read;
+        l.claimed = claimed;
+        l.created = created;
+        parseMailAtts(atts, l.atts);
+        return l;
+    }
+
     // ----- Harness chụp kiểm chứng (chỉ ScreenshotMain dùng) -----
     public void debugSeedSocial() {
         Convo a = convo(1001, "betest02");
@@ -3706,6 +4299,17 @@ public class WorldScreen extends ScreenAdapter {
         friendOpen = false;
         msgOpen = true;
         openConvoChat(convo(1001, "betest02"));
+    }
+
+    /** Mô phỏng đúng cú chạm nút "Nhắn tin" của bạn đầu tiên trong panel
+     *  Bạn bè (đi qua friendRowAction như chạm thật) — để kiểm chứng bấm
+     *  Nhắn tin là mở thẳng chat với người đó. */
+    public void debugFriendTapMessage() {
+        debugSeedSocial();
+        closeOtherPanels();
+        msgOpen = false;
+        friendOpen = true;
+        friendRowAction(0, 0);
     }
 
     public void debugOpenFriendPanel() {
@@ -5154,6 +5758,7 @@ public class WorldScreen extends ScreenAdapter {
         if (settingsOpen) drawSettingsPanel();
         if (musicOpen) drawMusicPanel();
         if (msgOpen) drawMsgPanel();
+        if (mailOpen) drawMailPanel();
         if (friendOpen) drawFriendPanel();
         if (passFormOpen) drawPassFormPanel();
         batch.end();

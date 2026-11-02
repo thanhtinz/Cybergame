@@ -6,8 +6,6 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 /** Bộ dữ liệu gốc của AvatarDK đã trích từ Pack5: items.json (5.496 part),
  *  imgdata.json (1.139 ImageInfo), npcs.json (28 NPC).
@@ -32,8 +30,6 @@ public class AvatarDataSet {
     public final Map<Integer, ImgInfo> dynImgById = new HashMap<>();
     public final List<NpcData> npcs = new ArrayList<>();
 
-    private static final Pattern INT = Pattern.compile("-?\\d+");
-    private static final Pattern QUOTED = Pattern.compile("\"([^\"]*)\"");
 
     public static AvatarDataSet fromJson(String itemsJson, String imgDataJson, String npcsJson) {
         AvatarDataSet ds = new AvatarDataSet();
@@ -62,7 +58,24 @@ public class AvatarDataSet {
                 r.getInt("sell", -1),
                 r.getInt("expired_day", 0),
                 r.getInt("type", -1));
-            parseAnimation(r.getString("animation", ""), p);
+            // animation: bản cài là chuỗi "[{img:0,dx:-12,...}]"; bản WEB
+            // được tools/build_web.py chuyển thành mảng số nguyên phẳng
+            // [img,dx,dy,...] vì JsonReader của GWT chết RangeError khi
+            // chuỗi chứa '{' kèm số (đã kiểm chứng bisect 2026-11-02).
+            JsonValue animV = r.get("animation");
+            if (animV != null && animV.isArray()) {
+                int[] tri = new int[3];
+                int ti = 0;
+                for (JsonValue v = animV.child; v != null; v = v.next) {
+                    tri[ti++] = v.asInt();
+                    if (ti == 3) {
+                        p.frames.add(new PartData.Frame(tri[0], tri[1], tri[2]));
+                        ti = 0;
+                    }
+                }
+            } else {
+                parseAnimation(r.getString("animation", ""), p);
+            }
             ds.parts.put(p.id, p);
         }
 
@@ -71,17 +84,27 @@ public class AvatarDataSet {
             NpcData n = new NpcData(
                 r.getInt("id"), r.getString("name", ""),
                 r.getInt("map"), r.getInt("x"), r.getInt("y"));
-            Matcher mi = INT.matcher(r.getString("items", "[]"));
-            while (mi.find()) n.items.add(Integer.parseInt(mi.group(0)));
+            // items của NPC: bản cài là chuỗi "[628, 474]"; bản WEB có thể
+            // là mảng số nguyên (cùng lý do với animation ở trên).
+            JsonValue npcItemsV = r.get("items");
+            if (npcItemsV != null && npcItemsV.isArray()) {
+                for (JsonValue v = npcItemsV.child; v != null; v = v.next) {
+                    n.items.add(v.asInt());
+                }
+            } else {
+                scanInts(r.getString("items", "[]"), n.items);
+            }
             // chat: chuỗi JSON lồng, bị escape hai lớp giống animation
             String chatRaw = r.getString("chat", "[]").replace("\\", "");
-            Matcher mc = QUOTED.matcher(chatRaw);
-            boolean first = true;
-            while (mc.find()) {
-                // phần tử đầu tiên sau khi bóc escape là chính chuỗi rỗng của vỏ ngoài — bỏ qua mẫu "[]"
-                String s = mc.group(1).trim();
-                if (!s.isEmpty()) n.chat.add(s);
-                first = false;
+            int ci = 0;
+            while (true) {
+                int q1 = chatRaw.indexOf('"', ci);
+                if (q1 < 0) break;
+                int q2 = chatRaw.indexOf('"', q1 + 1);
+                if (q2 < 0) break;
+                String seg = chatRaw.substring(q1 + 1, q2).trim();
+                if (!seg.isEmpty()) n.chat.add(seg);
+                ci = q2 + 1;
             }
             // Dự phòng cho bản WEB: dữ liệu web ghi chat dạng "câu 1 | câu 2"
             // (không có ngoặc kép vì bộ parse JSON của GWT không nuốt được
@@ -116,6 +139,31 @@ public class AvatarDataSet {
         }
     }
 
+    /** Quét mọi số nguyên (dạng -?\\d+) trong chuỗi theo thứ tự, viết
+     *  tay thay cho Matcher.find(): bản mô phỏng regex của GWT không
+     *  tiến vị trí sau lần khớp cuối nên vòng while (find()) treo vô
+     *  hạn trên chuỗi có số (kiểm chứng 2026-11-02: treo ở items NPC). */
+    static void scanInts(String s, List<Integer> out) {
+        int i = 0, len = s.length();
+        while (i < len) {
+            char c = s.charAt(i);
+            if (c == '-' || (c >= '0' && c <= '9')) {
+                int j = i + 1;
+                boolean digit = c >= '0' && c <= '9';
+                while (j < len && s.charAt(j) >= '0' && s.charAt(j) <= '9') {
+                    j++;
+                    digit = true;
+                }
+                if (digit) {
+                    out.add(Integer.parseInt(s.substring(i, j)));
+                    i = j;
+                    continue;
+                }
+            }
+            i++;
+        }
+    }
+
     static void parseAnimation(String animation, PartData p) {
         if (animation == null) return;
         String clean = animation.replace("\\", "").replace("\"", "");
@@ -125,9 +173,8 @@ public class AvatarDataSet {
             if (open < 0) break;
             int close = clean.indexOf('}', open);
             if (close < 0) break;
-            Matcher m = INT.matcher(clean.substring(open, close));
             List<Integer> nums = new ArrayList<>();
-            while (m.find()) nums.add(Integer.parseInt(m.group(0)));
+            scanInts(clean.substring(open, close), nums);
             if (nums.size() >= 3) p.frames.add(new PartData.Frame(nums.get(0), nums.get(1), nums.get(2)));
             start = close + 1;
         }

@@ -2,6 +2,11 @@ package avatar.constants;
 
 public class Cmd {
 
+    public static final byte MAIL_LIST = -108;
+    public static final byte MAIL_READ = -109;
+    public static final byte MAIL_CLAIM = -110;
+    public static final byte MAIL_CLAIM_ALL = -111;
+    public static final byte MAIL_DELETE_READ = -112;
     public static final byte TRANS_ICON_WEDDING = -103;
     public static final byte CHANS_MONEY_XENG = -102;
     public static final byte ADD_MENU = -101;

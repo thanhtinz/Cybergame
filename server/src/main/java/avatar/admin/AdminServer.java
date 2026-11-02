@@ -78,6 +78,23 @@ public class AdminServer {
             st.execute("CREATE TABLE IF NOT EXISTS `friends` ("
                     + "`user_id` INT NOT NULL, `friend_id` INT NOT NULL,"
                     + " PRIMARY KEY (`user_id`, `friend_id`))");
+            // Bảng thư (Hòm Thư của bản port): thư hệ thống/bạn bè kèm
+            // vật phẩm đính kèm dạng JSON [{t:'xu'|'luong'|'item', n, id}]
+            st.execute("CREATE TABLE IF NOT EXISTS `daily_claims` ("
+                    + "`user_id` INT NOT NULL, `day` DATE NOT NULL,"
+                    + " PRIMARY KEY (`user_id`, `day`))");
+            st.execute("CREATE TABLE IF NOT EXISTS `letters` ("
+                    + "`id` INT NOT NULL AUTO_INCREMENT,"
+                    + "`user_id` INT NOT NULL,"
+                    + "`kind` VARCHAR(16) NOT NULL DEFAULT 'system',"
+                    + "`title` VARCHAR(255) NOT NULL,"
+                    + "`sender` VARCHAR(64) NOT NULL DEFAULT 'Hệ Thống',"
+                    + "`body` TEXT,"
+                    + "`attachments` TEXT,"
+                    + "`is_read` TINYINT NOT NULL DEFAULT 0,"
+                    + "`claimed` TINYINT NOT NULL DEFAULT 0,"
+                    + "`created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,"
+                    + " PRIMARY KEY (`id`), KEY `idx_user` (`user_id`))");
         } catch (Exception e) {
             System.out.println("[Admin] ensureSchema loi: " + e.getMessage());
         }

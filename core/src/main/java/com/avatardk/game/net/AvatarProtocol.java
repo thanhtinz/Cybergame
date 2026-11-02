@@ -41,6 +41,11 @@ public final class AvatarProtocol {
     public static final byte REMOVE_FRIEND = -20;
     public static final byte REQUEST_FRIENDLIST = -18;
     public static final byte CUSTOM_LIST = -81;
+    public static final byte MAIL_LIST = -108;
+    public static final byte MAIL_READ = -109;
+    public static final byte MAIL_CLAIM = -110;
+    public static final byte MAIL_CLAIM_ALL = -111;
+    public static final byte MAIL_DELETE_READ = -112;
     /** Gửi lời mời kết bạn: {int id người nhận} (Cmd.AVATAR_REQUEST_ADD_FRIEND). */
     public static final byte REQUEST_ADD_FRIEND = -21;
     /** Xin/xem thông tin nhân vật: C→S {int id}; S→C {int id, byte cấp,
@@ -264,6 +269,36 @@ public final class AvatarProtocol {
      *  CUSTOM_LIST với id "friendlist" (định dạng ListScr của gốc). */
     public static void requestFriendList(GameConnection conn) throws IOException {
         conn.send(new Msg(REQUEST_FRIENDLIST));
+    }
+
+    /** Xin danh sách thư (gói −108, không payload) — server trả −108
+     *  với toàn bộ thư của người chơi. */
+    public static void requestMailList(GameConnection conn) throws IOException {
+        conn.send(new Msg(MAIL_LIST));
+    }
+
+    /** Đánh dấu thư đã đọc (gói −109): int id thư. */
+    public static void mailRead(GameConnection conn, int letterId) throws IOException {
+        Msg m = new Msg(MAIL_READ);
+        m.writer().writeInt(letterId);
+        conn.send(m);
+    }
+
+    /** Nhận quà đính kèm của một thư (gói −110): int id thư. */
+    public static void mailClaim(GameConnection conn, int letterId) throws IOException {
+        Msg m = new Msg(MAIL_CLAIM);
+        m.writer().writeInt(letterId);
+        conn.send(m);
+    }
+
+    /** Nhận quà mọi thư chưa nhận (gói −111, không payload). */
+    public static void mailClaimAll(GameConnection conn) throws IOException {
+        conn.send(new Msg(MAIL_CLAIM_ALL));
+    }
+
+    /** Xoá các thư đã đọc không còn quà (gói −112, không payload). */
+    public static void mailDeleteRead(GameConnection conn) throws IOException {
+        conn.send(new Msg(MAIL_DELETE_READ));
     }
 
     /** Xoá bạn (gói −20): int id của bạn cần xoá. */

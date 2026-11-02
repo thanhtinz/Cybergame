@@ -48,6 +48,10 @@ public final class Ui {
     public static final String FA_THUMBS_DOWN = "\uf165";
     public static final String FA_FIRE = "\uf06d";
     public static final String FA_GIFT = "\uf06b";
+    public static final String FA_BULLHORN = "\uf0a1";
+    public static final String FA_DOWNLOAD = "\uf019";
+    public static final String FA_CLOCK = "\uf017";
+    public static final String FA_COINS = "\uf51e";
     public static final String FA_MUSIC = "\uf001";
     public static final String FA_BOLT = "\uf0e7";
     public static final String FA_COMMENT_DOTS = "\uf4ad";
@@ -101,7 +105,8 @@ public final class Ui {
         + FA_GEAR + FA_CHEVRON_LEFT + FA_CHEVRON_RIGHT
         + FA_PAUSE + FA_FORWARD_STEP + FA_BACKWARD_STEP + FA_SHUFFLE + FA_REPEAT
         + FA_MAGNIFYING_GLASS + FA_VOLUME_HIGH + FA_LIST
-        + FA_ENVELOPE + FA_USER_GROUP + FA_ROTATE_RIGHT;
+        + FA_ENVELOPE + FA_USER_GROUP + FA_ROTATE_RIGHT
+        + FA_BULLHORN + FA_DOWNLOAD + FA_CLOCK + FA_COINS;
     // Glyph Font Awesome (brands)
     public static final String FA_GOOGLE = "\uf1a0";
     public static final String FA_APPLE = "\uf179";

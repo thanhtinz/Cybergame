@@ -85152,3 +85152,24 @@ CREATE TABLE IF NOT EXISTS `friends` (
   `friend_id` int(11) NOT NULL,
   PRIMARY KEY (`user_id`, `friend_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS `letters` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `user_id` int NOT NULL,
+  `kind` varchar(16) NOT NULL DEFAULT 'system',
+  `title` varchar(255) NOT NULL,
+  `sender` varchar(64) NOT NULL DEFAULT 'Hệ Thống',
+  `body` text,
+  `attachments` text,
+  `is_read` tinyint NOT NULL DEFAULT 0,
+  `claimed` tinyint NOT NULL DEFAULT 0,
+  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idx_user` (`user_id`)
+);
+
+CREATE TABLE IF NOT EXISTS `daily_claims` (
+  `user_id` int NOT NULL,
+  `day` date NOT NULL,
+  PRIMARY KEY (`user_id`, `day`)
+);

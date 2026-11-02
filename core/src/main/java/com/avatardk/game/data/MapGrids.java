@@ -1,7 +1,8 @@
 package com.avatardk.game.data;
 
 import com.badlogic.gdx.utils.Base64Coder;
-import com.badlogic.gdx.utils.Json;
+import com.badlogic.gdx.utils.JsonReader;
+import com.badlogic.gdx.utils.JsonValue;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -79,9 +80,37 @@ public class MapGrids {
 
     private final Map<String, Grid> byId;
 
-    @SuppressWarnings("unchecked")
     public MapGrids(String json) {
-        byId = new Json().fromJson(HashMap.class, Grid.class, json);
+        // Đọc bằng JsonReader (không dùng Json.fromJson phản chiếu —
+        // GWT không có bảng kiểu, cùng lý do với parseMapDefs).
+        byId = new HashMap<>();
+        JsonValue root = new JsonReader().parse(json);
+        for (JsonValue r = root.child; r != null; r = r.next) {
+            Grid g = new Grid();
+            g.w = r.getInt("w", 0);
+            g.g = r.getString("g", null);
+            g.t = r.getString("t", null);
+            JsonValue sv = r.get("s");
+            if (sv != null && sv.isArray()) {
+                java.util.List<Integer> tmp = new java.util.ArrayList<>();
+                for (JsonValue v = sv.child; v != null; v = v.next) tmp.add(v.asInt());
+                g.s = new int[tmp.size()];
+                for (int i = 0; i < tmp.size(); i++) g.s[i] = tmp.get(i);
+            }
+            JsonValue ov = r.get("o");
+            if (ov != null && ov.isArray()) {
+                java.util.List<int[]> rows = new java.util.ArrayList<>();
+                for (JsonValue row = ov.child; row != null; row = row.next) {
+                    java.util.List<Integer> tmp = new java.util.ArrayList<>();
+                    for (JsonValue v = row.child; v != null; v = v.next) tmp.add(v.asInt());
+                    int[] arr = new int[tmp.size()];
+                    for (int i = 0; i < tmp.size(); i++) arr[i] = tmp.get(i);
+                    rows.add(arr);
+                }
+                g.o = rows.toArray(new int[0][]);
+            }
+            byId.put(r.name, g);
+        }
     }
 
     public Grid grid(int mapId) { return byId.get(String.valueOf(mapId)); }
