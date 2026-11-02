@@ -466,12 +466,6 @@ public class WorldScreen extends ScreenAdapter {
         l.time = hhmmNow();
         chatLogs[tab].add(l);
         while (chatLogs[tab].size() > 40) chatLogs[tab].remove(0);
-        // tab "Chung" của panel Tin nhắn (MessageScr) soi cùng dòng chat
-        // công cộng này (chat map + chat thế giới), giữ tối đa 100 dòng
-        if (tab != TAB_SYSTEM && name != null) {
-            publicLog.add(new String[]{name, text});
-            while (publicLog.size() > 100) publicLog.remove(0);
-        }
     }
 
     /** Thêm một tin nhắn THOẠI vào nhật ký (chip nghe lại vẽ ở drawChatFrame). */
@@ -2031,7 +2025,7 @@ public class WorldScreen extends ScreenAdapter {
         Gdx.input.setInputProcessor(new InputAdapter() {
             @Override
             public boolean keyTyped(char c) {
-                if (msgOpen && msgTab != 1) {
+                if (msgOpen && msgTab == 2) {
                     if (c == '\b') {
                         if (msgInput.length() > 0) msgInput.deleteCharAt(msgInput.length() - 1);
                     } else if (c == '\r' || c == '\n') {
@@ -2657,10 +2651,9 @@ public class WorldScreen extends ScreenAdapter {
         String preview = "";
     }
     private final List<Convo> convos = new ArrayList<>();
-    /** Nhật ký chat công cộng cho tab "Chung": {tên, nội dung}. */
-    private final List<String[]> publicLog = new ArrayList<>();
     private boolean msgOpen = false;
-    private int msgTab = 0; // 0 Chung, 1 Tin đến, 2 chat riêng
+    private int msgTab = 1; // 1 Tin đến, 2 chat riêng — panel Thư chỉ còn chat riêng
+    // (chat chung đã có khung chat dưới HUD, user chốt 2026-11-02)
     private Convo chatConvo;
     private final StringBuilder msgInput = new StringBuilder();
     private float msgScroll = 0f;
@@ -3102,8 +3095,8 @@ public class WorldScreen extends ScreenAdapter {
         closeOtherPanels();
         friendOpen = false;
         msgOpen = true;
-        msgTab = totalUnread() > 0 ? 1 : 0;
-        msgScroll = msgTab == 0 ? 99999f : 0f;
+        msgTab = 1;
+        msgScroll = 0f;
     }
 
     private void openConvoChat(Convo c) {
@@ -3169,16 +3162,6 @@ public class WorldScreen extends ScreenAdapter {
             }
             convoAdd(chatConvo.id, chatConvo.name, text, true);
             msgScroll = 99999f;
-        } else if (msgTab == 0) {
-            if (online()) {
-                try {
-                    AvatarProtocol.chatPark(game.connection, text);
-                } catch (IOException e) {
-                    addChatLog(TAB_SYSTEM, null, "Không gửi được tin nhắn (mất kết nối?).", true);
-                }
-            } else {
-                showBubble(text);
-            }
         }
     }
 
@@ -3275,7 +3258,6 @@ public class WorldScreen extends ScreenAdapter {
     }
 
     private float msgContentH() {
-        if (msgTab == 0) return publicLog.size() * 52f;
         if (msgTab == 1) return convos.size() * 66f;
         if (chatConvo == null) return 0f;
         float h = 6f;
@@ -3295,7 +3277,7 @@ public class WorldScreen extends ScreenAdapter {
     private float frContentTop() { return FR_PY + FR_PH - 84f; }
     private float frContentBottom() { return FR_PY + 18f; }
     private float frMaxScroll() {
-        return Math.max(0f, friends.size() * 78f - (frContentTop() - frContentBottom()));
+        return Math.max(0f, friends.size() * 92f - 8f - (frContentTop() - frContentBottom()));
     }
 
     /** Ngắt dòng theo bề rộng font (như TextMsg của gốc ngắt ở nửa màn). */
@@ -3365,10 +3347,9 @@ public class WorldScreen extends ScreenAdapter {
         batch.draw(Ui.roundedRect((int) (MSG_PW - 44), 2, 1, new Color(1f, 1f, 1f, 0.14f), null), px + 22, top - 66);
         // hàng tab
         float tabY = top - 118;
-        drawMsgTab(0, px + 22, tabY, 120, "Chung");
-        drawMsgTab(1, px + 152, tabY, 150, "Tin đến");
+        drawMsgTab(1, px + 22, tabY, 150, "Tin đến");
         if (chatConvo != null) {
-            drawMsgTab(2, px + 312, tabY, chatTabW(), fitText(Ui.fontSmall, chatConvo.name, 220));
+            drawMsgTab(2, px + 182, tabY, chatTabW(), fitText(Ui.fontSmall, chatConvo.name, 220));
         }
         // nội dung (cắt theo vùng cuộn)
         float cTop = msgContentTop(), cBot = msgContentBottom();
@@ -3377,8 +3358,7 @@ public class WorldScreen extends ScreenAdapter {
         ScissorStack.calculateScissors(hudViewport.getCamera(), batch.getTransformMatrix(), clip, scissors);
         batch.flush();
         if (ScissorStack.pushScissors(scissors)) {
-            if (msgTab == 0) drawMsgPublic(px, cTop);
-            else if (msgTab == 1) drawMsgInbox(px, cTop);
+            if (msgTab == 1) drawMsgInbox(px, cTop);
             else drawMsgChat(px, cTop);
             batch.flush();
             ScissorStack.popScissors();
@@ -3387,29 +3367,28 @@ public class WorldScreen extends ScreenAdapter {
         // không bị chữ/số trong vùng cuộn ghi đè mất
         if (totalUnread() > 0) {
             batch.setColor(0.92f, 0.25f, 0.2f, 1f);
-            batch.draw(circleTexture(), px + 152 + 150 - 13, tabY + 27, 24, 24);
+            batch.draw(circleTexture(), px + 22 + 150 - 13, tabY + 27, 24, 24);
             batch.setColor(Color.WHITE);
             Ui.centered(batch, Ui.fontSmall, String.valueOf(Math.min(totalUnread(), 99)),
-                px + 152 + 150 - 1, tabY + 43, Color.WHITE);
+                px + 22 + 150 - 1, tabY + 43, Color.WHITE);
         }
-        if ((msgTab == 0 && publicLog.isEmpty()) || (msgTab == 1 && convos.isEmpty())
+        if ((msgTab == 1 && convos.isEmpty())
             || (msgTab == 2 && (chatConvo == null || chatConvo.msgs.isEmpty()))) {
             Ui.fontSmall.setColor(0.75f, 0.82f, 0.95f, 0.8f);
-            String s = msgTab == 0 ? "Chưa có chat nào."
-                : msgTab == 1 ? "Chưa có tin nhắn nào."
+            String s = msgTab == 1 ? "Chưa có tin nhắn nào."
                 : "Chưa có tin nhắn nào — chào bạn ấy một câu đi.";
             layout.setText(Ui.fontSmall, s);
             Ui.fontSmall.draw(batch, s, px + MSG_PW / 2f - layout.width / 2f, (cTop + cBot) / 2f);
         }
-        // ô nhập + nút Gửi (tab Chung và tab chat riêng)
-        if (msgTab != 1) {
+        // ô nhập + nút Gửi (chỉ ở tab chat riêng)
+        if (msgTab == 2) {
             float inY = py + 18;
             batch.draw(Ui.roundedRect((int) (MSG_PW - 44 - 128), 46, 10,
                 new Color(1f, 1f, 1f, 0.08f), GLASS_RIM), px + 22, inY);
             String shown = msgInput.toString();
             if (shown.isEmpty()) {
                 Ui.fontSmall.setColor(0.7f, 0.76f, 0.88f, 0.75f);
-                Ui.fontSmall.draw(batch, msgTab == 2 && chatConvo != null
+                Ui.fontSmall.draw(batch, chatConvo != null
                     ? "Nhắn cho " + chatConvo.name + "…" : "Nhập tin nhắn…", px + 36, inY + 29);
             } else {
                 while (!shown.isEmpty()) {
@@ -3424,20 +3403,6 @@ public class WorldScreen extends ScreenAdapter {
                 new Color(0.85f, 0.45f, 0.12f, 0.95f), new Color(1f, 0.75f, 0.4f, 0.9f)),
                 px + MSG_PW - 22 - 118, inY);
             Ui.centered(batch, Ui.font, "Gửi", px + MSG_PW - 22 - 59, inY + 30, Color.WHITE);
-        }
-    }
-
-    private void drawMsgPublic(float px, float cTop) {
-        for (int i = 0; i < publicLog.size(); i++) {
-            float rowTop = cTop + msgScroll - i * 52f;
-            if (rowTop < msgContentBottom() - 4 || rowTop - 52 > cTop + 4) continue;
-            String[] e = publicLog.get(i);
-            Ui.fontSmall.setColor(1f, 0.8f, 0.55f, 1f);
-            Ui.fontSmall.draw(batch, fitText(Ui.fontSmall, e[0], 300), px + 22, rowTop - 20);
-            Ui.fontSmall.setColor(1f, 1f, 1f, 0.9f);
-            Ui.fontSmall.draw(batch, fitText(Ui.fontSmall, e[1], MSG_PW - 44), px + 22, rowTop - 43);
-            batch.draw(Ui.roundedRect((int) (MSG_PW - 44), 1, 1, new Color(1f, 1f, 1f, 0.07f), null),
-                px + 22, rowTop - 51);
         }
     }
 
@@ -3513,17 +3478,12 @@ public class WorldScreen extends ScreenAdapter {
         }
         float tabY = top - 118;
         if (y >= tabY && y <= tabY + 40) {
-            if (x >= px + 22 && x <= px + 142) {
-                msgTab = 0;
-                msgScroll = 99999f;
-                return;
-            }
-            if (x >= px + 152 && x <= px + 302) {
+            if (x >= px + 22 && x <= px + 172) {
                 msgTab = 1;
                 msgScroll = 0f;
                 return;
             }
-            if (chatConvo != null && x >= px + 312 && x <= px + 312 + chatTabW()) {
+            if (chatConvo != null && x >= px + 182 && x <= px + 182 + chatTabW()) {
                 msgTab = 2;
                 msgScroll = 99999f;
                 return;
@@ -3558,7 +3518,7 @@ public class WorldScreen extends ScreenAdapter {
                 msgPendingTap = idx;
             }
         }
-        if (msgTab != 1) {
+        if (msgTab == 2) {
             float inY = MSG_PY + 18;
             if (y >= inY && y <= inY + 46 && x >= px + MSG_PW - 22 - 118 && x <= px + MSG_PW - 22) {
                 msgSend();
@@ -3584,7 +3544,7 @@ public class WorldScreen extends ScreenAdapter {
         Ui.fontTitle.setColor(1f, 0.85f, 0.45f, 1f);
         Ui.fontTitle.draw(batch, "Bạn bè", px + 64, top - 27);
         Ui.fontSmall.setColor(0.75f, 0.82f, 0.95f, 0.85f);
-        Ui.fontSmall.draw(batch, friends.size() + " bạn bè", px + 200, top - 29);
+        Ui.fontSmall.draw(batch, friends.size() + " bạn bè", px + 214, top - 29);
         batch.draw(Ui.roundedRect(36, 36, 10, GLASS_FILL, GLASS_RIM), px + FR_PW - 100, top - 54);
         Ui.faIcon(batch, Ui.fa20, Ui.FA_ROTATE_RIGHT, px + FR_PW - 82, top - 36, new Color(0.9f, 0.93f, 1f, 1f));
         batch.draw(Ui.roundedRect(36, 36, 10, GLASS_FILL, GLASS_RIM), px + FR_PW - 54, top - 54);
@@ -3613,31 +3573,42 @@ public class WorldScreen extends ScreenAdapter {
         batch.flush();
         if (ScissorStack.pushScissors(scissors)) {
             for (int i = 0; i < friends.size(); i++) {
-                float rowTop = cTop + frScroll - i * 78f;
-                if (rowTop < cBot - 4 || rowTop - 78 > cTop + 4) continue;
+                float rowTop = cTop + frScroll - i * 92f;
+                if (rowTop < cBot - 4 || rowTop - 84 > cTop + 4) continue;
                 FriendEntry fe = friends.get(i);
-                if (fe.doll != null) {
-                    game.dollRenderer.draw(batch, fe.doll, 0, px + 56, rowTop - 72, 1.35f, false);
-                }
-                Ui.font.setColor(1f, 1f, 1f, 0.96f);
-                Ui.font.draw(batch, fitText(Ui.font, fe.name, 300), px + 104, rowTop - 27);
                 boolean on = fe.status != null && fe.status.startsWith("Đang");
-                Ui.fontSmall.setColor(on ? new Color(0.45f, 0.9f, 0.5f, 1f)
+                // thẻ hàng: nền kính sáng nhẹ, bo góc
+                batch.draw(Ui.roundedRect((int) (FR_PW - 36), 84, 12,
+                    new Color(1f, 1f, 1f, on ? 0.09f : 0.05f),
+                    new Color(1f, 1f, 1f, on ? 0.22f : 0.13f)), px + 18, rowTop - 84);
+                // khung avatar riêng cho doll
+                batch.draw(Ui.roundedRect(62, 62, 10,
+                    new Color(0f, 0f, 0f, 0.28f), new Color(1f, 1f, 1f, 0.16f)),
+                    px + 30, rowTop - 73);
+                if (fe.doll != null) {
+                    game.dollRenderer.draw(batch, fe.doll, 0, px + 61, rowTop - 69, 1.15f, false);
+                }
+                Ui.font.setColor(1f, 1f, 1f, 0.97f);
+                Ui.font.draw(batch, fitText(Ui.font, fe.name, 280), px + 108, rowTop - 33);
+                // chấm trạng thái + chữ
+                batch.setColor(on ? new Color(0.35f, 0.88f, 0.45f, 1f)
+                    : new Color(0.5f, 0.56f, 0.68f, 1f));
+                batch.draw(circleTexture(), px + 108, rowTop - 60, 10, 10);
+                batch.setColor(Color.WHITE);
+                Ui.fontSmall.setColor(on ? new Color(0.55f, 0.93f, 0.6f, 1f)
                     : new Color(0.7f, 0.76f, 0.88f, 0.85f));
-                Ui.fontSmall.draw(batch, fe.status != null ? fe.status : "", px + 104, rowTop - 54);
-                float by = rowTop - 56;
-                batch.draw(Ui.roundedRect(104, 40, 10,
+                Ui.fontSmall.draw(batch, fe.status != null ? fe.status : "", px + 124, rowTop - 51);
+                float by = rowTop - 63;
+                batch.draw(Ui.roundedRect(108, 42, 11,
                     new Color(0.85f, 0.45f, 0.12f, 0.95f), new Color(1f, 0.75f, 0.4f, 0.9f)),
-                    px + FR_PW - 22 - 200, by);
-                Ui.centered(batch, Ui.fontSmall, "Nhắn tin", px + FR_PW - 22 - 200 + 52, by + 26, Color.WHITE);
+                    px + FR_PW - 228, by);
+                Ui.centered(batch, Ui.fontSmall, "Nhắn tin", px + FR_PW - 228 + 54, by + 27, Color.WHITE);
                 boolean armed = friendArmDelete == i;
-                batch.draw(Ui.roundedRect(88, 40, 10,
+                batch.draw(Ui.roundedRect(92, 42, 11,
                     armed ? new Color(0.55f, 0.12f, 0.1f, 0.92f) : GLASS_FILL, GLASS_RIM),
-                    px + FR_PW - 22 - 88, by);
+                    px + FR_PW - 110, by);
                 Ui.centered(batch, Ui.fontSmall, armed ? "Xoá?" : "Xoá bạn",
-                    px + FR_PW - 22 - 88 + 44, by + 26, Color.WHITE);
-                batch.draw(Ui.roundedRect((int) (FR_PW - 44), 1, 1, new Color(1f, 1f, 1f, 0.07f), null),
-                    px + 22, rowTop - 77);
+                    px + FR_PW - 110 + 46, by + 27, Color.WHITE);
             }
             batch.flush();
             ScissorStack.popScissors();
@@ -3663,15 +3634,15 @@ public class WorldScreen extends ScreenAdapter {
         }
         float cTop = frContentTop(), cBot = frContentBottom();
         if (y >= cBot && y <= cTop && x >= px && x <= px + FR_PW) {
-            int idx = (int) ((cTop + frScroll - y) / 78f);
+            int idx = (int) ((cTop + frScroll - y) / 92f);
             if (idx >= 0 && idx < friends.size()) {
-                float rowTop = cTop + frScroll - idx * 78f;
-                float by = rowTop - 56;
-                if (y >= by && y <= by + 40) {
-                    if (x >= px + FR_PW - 22 - 200 && x <= px + FR_PW - 22 - 96) {
+                float rowTop = cTop + frScroll - idx * 92f;
+                float by = rowTop - 63;
+                if (y >= by && y <= by + 42) {
+                    if (x >= px + FR_PW - 228 && x <= px + FR_PW - 120) {
                         frPendingIdx = idx;
                         frPendingKind = 0;
-                    } else if (x >= px + FR_PW - 22 - 88 && x <= px + FR_PW - 22) {
+                    } else if (x >= px + FR_PW - 110 && x <= px + FR_PW - 18) {
                         frPendingIdx = idx;
                         frPendingKind = 1;
                     }
