@@ -26,22 +26,26 @@ import java.util.List;
  * gốc (level 0, gender khớp hoặc 0). Doll xem trước mặc đúng bộ đang
  * chọn. Hoàn thành gửi gói CRE_CHARACTER (-35) với seriPart theo đúng
  * thứ tự server gốc kiểm tra: [quần, áo, thân (0), mặt (4), tóc].
+ * Bố cục TOÀN MÀN HÌNH (user chốt 2026-11-02): không nền banner, không
+ * panel nổi — nền gradient navy kín màn, doll lớn bên trái, điều khiển
+ * bên phải.
  */
 public class CreateCharScreen extends ScreenAdapter {
     private final AvatarDkGame game;
     private final SpriteBatch batch = new SpriteBatch();
     private final FitViewport viewport = new FitViewport(Ui.W, Ui.H);
 
-    private static final float PW = 680f, PH = 600f;
-    private static final float PX = Ui.W / 2f - PW / 2f, PY = Ui.H / 2f - PH / 2f;
-    private static final float TOP = PY + PH;
     private static final Color SUB_TEXT = new Color(0.67f, 0.75f, 0.84f, 1f);
     private static final Color BAR_FILL = new Color(0.06f, 0.11f, 0.18f, 1f);
     private static final Color CHIP_FILL = new Color(0.10f, 0.17f, 0.26f, 1f);
     private static final Color ERR_RED = new Color(1f, 0.45f, 0.40f, 1f);
 
+    /** Ô xem trước bên trái. */
+    private static final float IX = 64, IY = 84, IW = 440, IH = 538;
     /** Vùng điều khiển bên phải. */
-    private static final float RX = PX + 292, RW = 364;
+    private static final float RX = 560, RW = 656;
+    /** Y (mép dưới) của 3 thanh chọn đồ: Tóc / Áo / Quần. */
+    private static final int[] BAR_Y = {444, 344, 244};
 
     private int gender = 1;
     private final List<PartData> hairList = new ArrayList<>();
@@ -155,7 +159,7 @@ public class CreateCharScreen extends ScreenAdapter {
             return;
         }
         busy = true;
-        status = "Đang tạo nhân vật…";
+        status = "";
         statusError = false;
         try {
             AvatarProtocol.createCharacter(conn, gender, currentParts());
@@ -206,92 +210,82 @@ public class CreateCharScreen extends ScreenAdapter {
     public void render(float delta) {
         elapsed += delta;
         pollReplies();
-        Gdx.gl.glClearColor(0.1f, 0.2f, 0.35f, 1f);
+        Gdx.gl.glClearColor(0.03f, 0.06f, 0.12f, 1f);
         Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT);
         viewport.apply();
         batch.setProjectionMatrix(viewport.getCamera().combined);
         batch.begin();
-        EntryUi.drawBanner(batch);
-        batch.draw(Ui.roundedRect((int) Ui.W, (int) Ui.H, 0,
-            new Color(0.01f, 0.03f, 0.06f, 0.45f), null), 0, 0);
-        drawPanel();
+        // nền navy kín toàn màn (không banner, không panel nổi)
+        batch.draw(Ui.gradientRect((int) Ui.W, (int) Ui.H, 0,
+            new Color(0.10f, 0.18f, 0.30f, 1f), new Color(0.03f, 0.06f, 0.12f, 1f)), 0, 0);
+        drawHeader();
+        drawPreview();
+        drawControls();
+        drawButton();
         batch.end();
     }
 
-    private void drawPanel() {
-        batch.draw(Ui.gradientRect((int) PW, (int) PH, 24,
-            new Color(0.07f, 0.13f, 0.23f, 0.98f), new Color(0.03f, 0.06f, 0.12f, 0.98f)), PX, PY);
-        batch.draw(Ui.outlineRect((int) PW, (int) PH, 24, EntryUi.PANEL_RIM), PX, PY);
-        Ui.faIcon(batch, Ui.fa30, Ui.FA_USER_PLUS, PX + 52, TOP - 40, EntryUi.GOLD);
+    private void drawHeader() {
+        Ui.faIcon(batch, Ui.fa30, Ui.FA_USER_PLUS, 88, 681, EntryUi.GOLD);
         Ui.fontBaloo36.setColor(EntryUi.GOLD);
-        Ui.fontBaloo36.draw(batch, "Tạo nhân vật", PX + 78, TOP - 28);
+        Ui.fontBaloo36.draw(batch, "Tạo nhân vật", 116, 692);
         Ui.fontSmall.setColor(SUB_TEXT);
-        Ui.fontSmall.draw(batch, "Chọn giới tính và trang phục khởi đầu", PX + 79, TOP - 56);
-
-        drawPreview();
-        drawControls();
-
-        // trạng thái + nút hoàn thành
-        if (!status.isEmpty()) {
-            Ui.centered(batch, Ui.fontSmall, status, Ui.W / 2f, 168,
-                statusError ? ERR_RED : SUB_TEXT);
-        }
-        batch.draw(Ui.gradientRect(608, 64, 16, EntryUi.ORANGE_TOP, EntryUi.ORANGE_BOT), PX + 36, 84);
-        float tw = Ui.textWidth(Ui.fontBaloo30, "Hoàn thành");
-        Ui.faIcon(batch, Ui.fa20, Ui.FA_CHECK, Ui.W / 2f - tw / 2f - 22, 116, Color.WHITE);
-        Ui.centered(batch, Ui.fontBaloo30, "Hoàn thành", Ui.W / 2f, 125, Color.WHITE);
+        Ui.fontSmall.draw(batch, "Chọn giới tính và trang phục khởi đầu", 117, 662);
     }
 
     private void drawPreview() {
-        float ix = PX + 36, iy = 176, iw = 232, ih = 396;
-        batch.draw(Ui.roundedRect((int) iw, (int) ih, 16, BAR_FILL, EntryUi.PANEL_RIM), ix, iy);
+        batch.draw(Ui.roundedRect((int) IW, (int) IH, 20, BAR_FILL, EntryUi.PANEL_RIM), IX, IY);
         if (!game.playerName.isEmpty()) {
-            Ui.centered(batch, Ui.font, game.playerName, ix + iw / 2f, iy + ih - 24,
+            Ui.centered(batch, Ui.font, game.playerName, IX + IW / 2f, IY + IH - 28,
                 new Color(1f, 0.85f, 0.45f, 1f));
         }
-        // bóng dưới chân + doll xem trước (nhấp nhô nhẹ như gốc đổi động tác)
-        float feetX = ix + iw / 2f, feetY = 240 + (float) Math.sin(elapsed * 2.2f) * 2.5f;
-        batch.draw(Ui.roundedRect(150, 14, 7, new Color(0f, 0f, 0f, 0.25f), null),
-            feetX - 75, 226);
+        // sàn sáng nhẹ dưới chân + bóng + doll xem trước (nhấp nhô nhẹ)
+        batch.draw(Ui.roundedRect((int) IW - 48, 10, 5,
+            new Color(1f, 1f, 1f, 0.06f), null), IX + 24, 148);
+        float feetX = IX + IW / 2f, feetY = 172 + (float) Math.sin(elapsed * 2.2f) * 2.5f;
+        batch.draw(Ui.roundedRect(170, 16, 8, new Color(0f, 0f, 0f, 0.25f), null),
+            feetX - 85, 156);
         if (doll != null) {
-            game.dollRenderer.draw(batch, doll, 0, feetX, feetY, 4.4f, false);
+            game.dollRenderer.draw(batch, doll, 0, feetX, feetY, 7.2f, false);
         }
     }
 
     private void drawControls() {
-        // giới tính
         Ui.fontSmall.setColor(SUB_TEXT);
-        Ui.fontSmall.draw(batch, "Giới tính", RX, 574);
+        Ui.fontSmall.draw(batch, "Giới tính", RX, 622);
         drawGenderPill(RX, 1, "Nam", Ui.FA_MARS);
-        drawGenderPill(RX + 188, 2, "Nữ", Ui.FA_VENUS);
-        // ba hàng chọn đồ
-        drawRow(0, "Tóc", hairList, hairIdx, 486, 412);
-        drawRow(1, "Áo", clothList, clothIdx, 402, 328);
-        drawRow(2, "Quần", pantList, pantIdx, 318, 244);
+        drawGenderPill(RX + 336, 2, "Nữ", Ui.FA_VENUS);
+        drawRow(0, "Tóc", hairList, hairIdx, 528);
+        drawRow(1, "Áo", clothList, clothIdx, 428);
+        drawRow(2, "Quần", pantList, pantIdx, 328);
         Ui.fontSmall.setColor(SUB_TEXT);
-        Ui.fontSmall.draw(batch, "Trang phục khởi đầu có thể thay đổi", RX, 218);
-        Ui.fontSmall.draw(batch, "bất cứ lúc nào trong game.", RX, 194);
+        Ui.fontSmall.draw(batch,
+            "Trang phục khởi đầu có thể thay đổi bất cứ lúc nào trong game.", RX, 208);
+        if (!status.isEmpty()) {
+            Ui.fontSmall.setColor(statusError ? ERR_RED : SUB_TEXT);
+            Ui.fontSmall.draw(batch, status, RX, 176);
+        }
     }
 
     private void drawGenderPill(float x, int g, String label, String icon) {
-        float w = 176, y = 508, h = 44;
+        float w = 320, y = 540, h = 56;
         boolean sel = gender == g;
         if (sel) {
-            batch.draw(Ui.gradientRect((int) w, (int) h, 12,
+            batch.draw(Ui.gradientRect((int) w, (int) h, 14,
                 EntryUi.ORANGE_TOP, EntryUi.ORANGE_BOT), x, y);
         } else {
-            batch.draw(Ui.roundedRect((int) w, (int) h, 12, BAR_FILL, EntryUi.PANEL_RIM), x, y);
+            batch.draw(Ui.roundedRect((int) w, (int) h, 14, BAR_FILL, EntryUi.PANEL_RIM), x, y);
         }
         float tw = Ui.textWidth(Ui.font, label);
         float gx = x + w / 2f - (26 + tw) / 2f;
-        Ui.faIcon(batch, Ui.fa20, icon, gx + 13, y + 22,
+        Ui.faIcon(batch, Ui.fa20, icon, gx + 13, y + 28,
             sel ? Color.WHITE : SUB_TEXT);
         Ui.font.setColor(sel ? Color.WHITE : SUB_TEXT);
-        Ui.font.draw(batch, label, gx + 28, y + 30);
+        Ui.font.draw(batch, label, gx + 28, y + 36);
     }
 
-    private void drawRow(int row, String label, List<PartData> list, int idx,
-                         float labelY, float barY) {
+    private void drawRow(int row, String label, List<PartData> list, int idx, float labelY) {
+        float barY = BAR_Y[row];
         Ui.fontSmall.setColor(SUB_TEXT);
         Ui.fontSmall.draw(batch, label, RX, labelY);
         if (!list.isEmpty()) {
@@ -299,16 +293,29 @@ public class CreateCharScreen extends ScreenAdapter {
             Ui.fontTiny.setColor(SUB_TEXT);
             Ui.fontTiny.draw(batch, cnt, RX + RW - Ui.textWidth(Ui.fontTiny, cnt), labelY - 2);
         }
-        batch.draw(Ui.roundedRect((int) RW, 52, 12, BAR_FILL, EntryUi.PANEL_RIM), RX, barY);
-        batch.draw(Ui.roundedRect(44, 44, 10, CHIP_FILL, EntryUi.PANEL_RIM), RX + 4, barY + 4);
-        batch.draw(Ui.roundedRect(44, 44, 10, CHIP_FILL, EntryUi.PANEL_RIM), RX + RW - 48, barY + 4);
-        Ui.faIcon(batch, Ui.fa20, Ui.FA_CHEVRON_LEFT, RX + 26, barY + 26,
+        batch.draw(Ui.roundedRect((int) RW, 64, 14, BAR_FILL, EntryUi.PANEL_RIM), RX, barY);
+        batch.draw(Ui.roundedRect(54, 54, 11, CHIP_FILL, EntryUi.PANEL_RIM), RX + 5, barY + 5);
+        batch.draw(Ui.roundedRect(54, 54, 11, CHIP_FILL, EntryUi.PANEL_RIM), RX + RW - 59, barY + 5);
+        Ui.faIcon(batch, Ui.fa20, Ui.FA_CHEVRON_LEFT, RX + 32, barY + 32,
             new Color(0.9f, 0.93f, 1f, 1f));
-        Ui.faIcon(batch, Ui.fa20, Ui.FA_CHEVRON_RIGHT, RX + RW - 26, barY + 26,
+        Ui.faIcon(batch, Ui.fa20, Ui.FA_CHEVRON_RIGHT, RX + RW - 32, barY + 32,
             new Color(0.9f, 0.93f, 1f, 1f));
         if (!list.isEmpty()) {
-            String name = trimToWidth(Ui.font, list.get(idx).name, RW - 120);
-            Ui.centered(batch, Ui.font, name, RX + RW / 2f, barY + 34, Color.WHITE);
+            String name = trimToWidth(Ui.font, list.get(idx).name, RW - 140);
+            Ui.centered(batch, Ui.font, name, RX + RW / 2f, barY + 41, Color.WHITE);
+        }
+    }
+
+    private void drawButton() {
+        batch.draw(Ui.gradientRect((int) RW, 72, 18,
+            EntryUi.ORANGE_TOP, EntryUi.ORANGE_BOT), RX, 84);
+        if (busy) {
+            Ui.centered(batch, Ui.fontBaloo30, "Đang tạo nhân vật…", RX + RW / 2f, 129,
+                Color.WHITE);
+        } else {
+            float tw = Ui.textWidth(Ui.fontBaloo30, "Hoàn thành");
+            Ui.faIcon(batch, Ui.fa20, Ui.FA_CHECK, RX + RW / 2f - tw / 2f - 22, 120, Color.WHITE);
+            Ui.centered(batch, Ui.fontBaloo30, "Hoàn thành", RX + RW / 2f, 129, Color.WHITE);
         }
     }
 
@@ -325,21 +332,20 @@ public class CreateCharScreen extends ScreenAdapter {
 
     private void onTouch(float x, float y) {
         // nút Hoàn thành
-        if (x >= PX + 36 && x <= PX + 644 && y >= 84 && y <= 148) {
+        if (x >= RX && x <= RX + RW && y >= 84 && y <= 156) {
             submit();
             return;
         }
         // hai ô giới tính
-        if (y >= 508 && y <= 552) {
-            if (x >= RX && x <= RX + 176) { setGender(1); return; }
-            if (x >= RX + 188 && x <= RX + 364) { setGender(2); return; }
+        if (y >= 540 && y <= 596) {
+            if (x >= RX && x <= RX + 320) { setGender(1); return; }
+            if (x >= RX + 336 && x <= RX + RW) { setGender(2); return; }
         }
         // nút qua lại của 3 hàng đồ
-        int[] rows = {412, 328, 244};
         for (int r = 0; r < 3; r++) {
-            if (y >= rows[r] + 4 && y <= rows[r] + 48) {
-                if (x >= RX + 4 && x <= RX + 48) { cycle(r, -1); return; }
-                if (x >= RX + RW - 48 && x <= RX + RW - 4) { cycle(r, 1); return; }
+            if (y >= BAR_Y[r] + 5 && y <= BAR_Y[r] + 59) {
+                if (x >= RX + 5 && x <= RX + 59) { cycle(r, -1); return; }
+                if (x >= RX + RW - 59 && x <= RX + RW - 5) { cycle(r, 1); return; }
             }
         }
     }
