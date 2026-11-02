@@ -98,7 +98,7 @@ def main():
     cw.frame(-86, bytes([2, 1]) + write_utf("desktop-java"))
     cw.frame(-2, write_utf("tester") + write_utf("secret") + write_utf("2.5.8"))
     cw.frame(-30, write_utf("newbie") + write_utf("abcd"))
-    cw.frame(-35, bytes([1, 5]) + b"".join(int(x).to_bytes(2, "big", signed=True) for x in [89, 88, 0, 4, 14]))
+    cw.frame(-35, bytes([1, 5]) + b"".join(int(x).to_bytes(2, "big", signed=True) for x in [89, 88, 0, 4, 14]) + write_utf("Tester"))
     client += cw.buf
     with open(os.path.join(OUT, "client_expected.bin"), "wb") as f:
         f.write(client)

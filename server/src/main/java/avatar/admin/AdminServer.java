@@ -74,6 +74,12 @@ public class AdminServer {
             } catch (Exception ignore) {
                 // cột đã tồn tại
             }
+            try {
+                // Tên nhân vật (màn Tạo nhân vật của bản port)
+                st.execute("ALTER TABLE `players` ADD COLUMN `name` VARCHAR(32) NOT NULL DEFAULT ''");
+            } catch (Exception ignore) {
+                // cột đã tồn tại
+            }
             // Bảng bạn bè (hệ bạn bè của bản port): mỗi quan hệ lưu 2 chiều
             st.execute("CREATE TABLE IF NOT EXISTS `friends` ("
                     + "`user_id` INT NOT NULL, `friend_id` INT NOT NULL,"

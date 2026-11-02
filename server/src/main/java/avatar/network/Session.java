@@ -1063,6 +1063,20 @@ public void NhanThuongEventXuBoss() throws IOException {
         for (int i = 0; i < numItem; i++) {
             clientItems.add(new Item(ms.reader().readShort(), -1, 1));
         }
+        // [BẢN PORT] Tên nhân vật: client gửi thêm UTF ở cuối gói (tuỳ
+        // chọn — client cũ không gửi thì bỏ qua). Hợp lệ: 3–16 ký tự,
+        // không ký tự điều khiển.
+        String charName = null;
+        try {
+            if (ms.reader().available() > 0) {
+                String raw = ms.reader().readUTF().trim();
+                if (raw.length() >= 3 && raw.length() <= 16
+                        && raw.chars().allMatch(ch -> ch >= 32)) {
+                    charName = raw;
+                }
+            }
+        } catch (Exception ignored) {
+        }
         boolean genderOk = (gender == 1 || gender == 2);
         ArrayList<Item> items = null;
         // [BẢN PORT] ưu tiên bộ đồ client chọn (màn Tạo nhân vật) nếu qua
@@ -1097,6 +1111,12 @@ public void NhanThuongEventXuBoss() throws IOException {
         }
         user.setGender(gender);
         user.setWearing(items);
+        if (charName != null) {
+            user.setDisplayName(charName);
+            DbManager.getInstance().executeUpdate(
+                    "UPDATE `players` SET `name` = ? WHERE `user_id` = ? LIMIT 1;",
+                    charName, user.getId());
+        }
         ms = new Message(-35);
         DataOutputStream ds = ms.writer();
         ds.writeBoolean(true);
@@ -2061,8 +2081,9 @@ public void NhanThuongEventXuBoss() throws IOException {
         java.util.Map<Integer, String> names = new java.util.HashMap<>();
         try (Connection connection = DbManager.getInstance().getConnection();
              PreparedStatement ps = connection.prepareStatement(
-                     "SELECT u.`id`, u.`username` FROM `friends` f"
+                     "SELECT u.`id`, COALESCE(NULLIF(p.`name`, ''), u.`username`) FROM `friends` f"
                              + " JOIN `users` u ON u.`id` = f.`friend_id`"
+                             + " LEFT JOIN `players` p ON p.`user_id` = u.`id`"
                              + " WHERE f.`user_id` = ? ORDER BY u.`username`")) {
             ps.setInt(1, this.user.getId());
             try (ResultSet res = ps.executeQuery()) {

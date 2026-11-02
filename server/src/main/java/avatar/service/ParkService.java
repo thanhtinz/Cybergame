@@ -141,8 +141,8 @@ public class ParkService extends Service {
             Message out = new Message(Cmd.AVATAR_REQUEST_ADD_FRIEND);
             DataOutputStream ds = out.writer();
             ds.writeInt(me.getId());
-            ds.writeUTF(me.getUsername());
-            ds.writeUTF(me.getUsername() + " muốn kết bạn với bạn.");
+            ds.writeUTF(me.getDisplayName());
+            ds.writeUTF(me.getDisplayName() + " muốn kết bạn với bạn.");
             ds.flush();
             user.session.sendMessage(out);
         } catch (IOException e) {
@@ -173,11 +173,11 @@ public class ParkService extends Service {
             Message out = new Message(Cmd.ADD_FRIEND);
             DataOutputStream ds = out.writer();
             ds.writeInt(me.getId());
-            ds.writeUTF(me.getUsername());
+            ds.writeUTF(me.getDisplayName());
             ds.writeBoolean(accept);
             ds.writeUTF(accept
-                    ? me.getUsername() + " đã đồng ý kết bạn. Hai bạn đã trở thành bạn bè."
-                    : me.getUsername() + " đã từ chối lời mời kết bạn.");
+                    ? me.getDisplayName() + " đã đồng ý kết bạn. Hai bạn đã trở thành bạn bè."
+                    : me.getDisplayName() + " đã từ chối lời mời kết bạn.");
             ds.flush();
             requester.session.sendMessage(out);
         } catch (IOException e) {

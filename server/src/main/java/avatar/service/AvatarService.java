@@ -185,7 +185,7 @@ public class AvatarService extends Service {
             // Pack5 ghi sai cả hai (tên lấy nhầm người nhận, int là hằng 1)
             // khiến phía nhận không biết ai gửi để trả lời — bản port ghi
             // đúng id + tên người gửi.
-            receiver.getAvatarService().chatTo(this.session.user.getUsername(),
+            receiver.getAvatarService().chatTo(this.session.user.getDisplayName(),
                     content, this.session.user.getId());
         } catch (IOException ex) {
             logger.error("chatTo ", ex);
@@ -311,7 +311,7 @@ public class AvatarService extends Service {
             ds.writeInt(us.getLuong());
             ds.writeInt(us.getLuongKhoa());
             ds.writeByte(1);
-            ds.writeUTF(us.getUsername());
+            ds.writeUTF(us.getDisplayName());
             ds.flush();
             sendMessage(ms5);
 
@@ -534,7 +534,7 @@ public class AvatarService extends Service {
             ds.writeByte((byte) numUser);
             for (User pl : players) {
                 ds.writeInt(pl.getId());
-                ds.writeUTF(pl.getUsername());
+                ds.writeUTF(pl.getDisplayName());
                 ds.writeByte(pl.getWearing().size());
                 for (Item item : pl.getWearing()) {
                     ds.writeShort(item.getId());

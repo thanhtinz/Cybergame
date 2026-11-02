@@ -162,7 +162,7 @@ public class MapService extends Service {
             Message ms = new Message(51);
             DataOutputStream ds = ms.writer();
             ds.writeInt(us.getId());
-            ds.writeUTF(us.getUsername());
+            ds.writeUTF(us.getDisplayName());
             ds.writeByte((byte) us.getWearing().size());
             for (Item item : us.getWearing()) {
                 ds.writeShort(item.getId());

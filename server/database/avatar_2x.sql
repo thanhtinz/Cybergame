@@ -84215,6 +84215,7 @@ INSERT INTO `npc` (`id`, `name`, `items`, `map`, `x`, `y`, `star`, `chat`) VALUE
 CREATE TABLE `players` (
   `id` int(11) NOT NULL,
   `user_id` int(11) NOT NULL,
+  `name` varchar(32) NOT NULL DEFAULT '',
   `last_online` datetime NOT NULL DEFAULT '2000-01-01 00:00:00',
   `is_online` tinyint(1) NOT NULL DEFAULT 0,
   `client_id` int(11) NOT NULL DEFAULT 0,

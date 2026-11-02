@@ -215,7 +215,10 @@ public class LoginScreen extends ScreenAdapter {
                 if (m.command == AvatarProtocol.LOGIN_SUCESS) {
                     PlayerInfo p = PlayerInfo.parse(m);
                     game.player = p;
-                    game.playerName = fields[0].toString().trim();
+                    // server gửi tên hiển thị (tên nhân vật nếu đã đặt,
+                    // không thì tên tài khoản) trong gói đăng nhập
+                    game.playerName = (p.username != null && !p.username.isEmpty())
+                        ? p.username : fields[0].toString().trim();
                     busy = false;
                     game.world.applyPlayerInfo(p);
                     if (p.gender == 0 && game.createChar != null) {

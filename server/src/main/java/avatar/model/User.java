@@ -78,6 +78,9 @@ public class User {
     public Session session;
     private int id;
     private String username;
+    /** Tên nhân vật hiển thị trong game (players.name) — đặt ở bước
+     *  tạo nhân vật; rỗng thì hiển thị bằng tên tài khoản. */
+    private String displayName;
     private String password;
     private short idFish;
     private byte gender;
@@ -1012,6 +1015,14 @@ public class User {
         }
     }
 
+    /** Tên hiển thị trong game: tên nhân vật nếu đã đặt, không thì
+     *  tên tài khoản. Mọi gói gửi tên người chơi cho client dùng hàm này. */
+    public String getDisplayName() {
+        return (displayName != null && !displayName.isEmpty()) ? displayName : username;
+    }
+
+    public void setDisplayName(String displayName) { this.displayName = displayName; }
+
     public boolean loadData() {
         String GET_PLAYER_DATA = "SELECT * FROM `players` WHERE `user_id` = ? LIMIT 1;";
         try (Connection connection = DbManager.getInstance().getConnection();
@@ -1025,6 +1036,7 @@ public class User {
                     this.leverMain = res.getInt("level_main");
                     this.expMain = res.getInt("exp_main");
                     this.gender = res.getByte("gender");
+                    try { this.displayName = res.getString("name"); } catch (Exception ignore) { this.displayName = null; }
                     this.chestSlot = res.getByte("chest_slot");
                     this.chestHomeSlot = res.getByte("chest_home_slot");
                     this.xu = res.getLong("xu");

@@ -164,14 +164,18 @@ public final class AvatarProtocol {
      *  byte số part + short id từng part của seriPart đang mặc, theo thứ
      *  tự [quần, áo, thân, mặt, tóc] mà server gốc kiểm tra. Server bản
      *  port dùng đúng bộ đồ này nếu hợp lệ (đồ cấp 0 đúng giới tính),
-     *  không hợp lệ thì quay về set khởi đầu cố định của gốc. */
+     *  không hợp lệ thì quay về set khởi đầu cố định của gốc. Cuối gói
+     *  thêm UTF tên nhân vật (bổ sung của bản port — server gốc không có
+     *  khái niệm tên nhân vật riêng; server cũ bỏ qua phần dư này). */
     public static void createCharacter(GameConnection conn, int gender,
-                                       java.util.List<Integer> partIds) throws IOException {
+                                       java.util.List<Integer> partIds,
+                                       String charName) throws IOException {
         Msg m = new Msg(CRE_CHARACTER);
         DataOutputStream w = m.writer();
         w.writeByte(gender);
         w.writeByte(partIds.size());
         for (int id : partIds) w.writeShort(id);
+        w.writeUTF(charName == null ? "" : charName);
         conn.send(m);
     }
 
