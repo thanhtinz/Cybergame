@@ -28,9 +28,10 @@ import java.util.List;
  * gói LOGIN_SUCESS), người chơi vào đây TOÀN MÀN HÌNH trên nền trời
  * sáng: đặt TÊN NHÂN VẬT (ô nhập riêng, lưu vào players.name — bản port
  * bổ sung, gốc không có), chọn giới tính (1 = nam, 2 = nữ), và chọn
- * trang phục khởi đầu bằng các Ô ICON có sẵn — mỗi mục Tóc (zOrder 50),
- * Áo (20), Quần (10) đúng 3 kiểu cấp 0 (kiểu mặc định của gốc + 2 kiểu
- * kế tiếp). Doll xem trước mặc đúng bộ đang chọn và hiện tên đang gõ.
+ * trang phục khởi đầu bằng các Ô ICON có sẵn — danh sách ĐẦY ĐỦ
+ * như RegisterScr gốc (mọi part cấp 0 đúng giới tính), hiện 3 ô một
+ * lượt và lật bằng mũi tên; mở màn bốc NGẪU NHIÊN một bộ như gốc.
+ * Doll xem trước mặc đúng bộ đang chọn và hiện tên đang gõ.
  * Hoàn thành gửi gói CRE_CHARACTER (-35): seriPart theo thứ tự server
  * gốc kiểm tra [quần, áo, thân (0), mặt (4), tóc] + UTF tên ở cuối.
  * Tinh chỉnh theo lệnh user: title ở giữa không icon/dòng phụ, doll
@@ -61,13 +62,14 @@ public class CreateCharScreen extends ScreenAdapter {
     private static final float RX = 560, RW = 656;
     /** Y (mép dưới) của 3 hàng ô đồ: Tóc / Áo / Quần. */
     private static final int[] ROW_Y = {362, 258, 148};
-    private static final float CELL_W = 210;
+    private static final float CELL_W = 181;
 
     private int gender = 1;
-    private final List<PartData> hairOpts = new ArrayList<>();
-    private final List<PartData> clothOpts = new ArrayList<>();
-    private final List<PartData> pantOpts = new ArrayList<>();
+    private final List<PartData> hairList = new ArrayList<>();
+    private final List<PartData> clothList = new ArrayList<>();
+    private final List<PartData> pantList = new ArrayList<>();
     private int hairSel, clothSel, pantSel;
+    private int hairWin, clothWin, pantWin;
     private final StringBuilder nameField = new StringBuilder();
     private PaperDoll doll;
     private String status = "";
@@ -85,10 +87,39 @@ public class CreateCharScreen extends ScreenAdapter {
         setGender(2);
         nameField.setLength(0);
         nameField.append("Linh Chi");
-        hairSel = 1;
-        clothSel = 2;
-        pantSel = 1;
+        selectById(0, 64);
+        selectById(1, 117);
+        selectById(2, 116);
         refreshDoll();
+    }
+
+    private List<PartData> listOf(int row) {
+        return row == 0 ? hairList : row == 1 ? clothList : pantList;
+    }
+
+    private int winOf(int row) {
+        return row == 0 ? hairWin : row == 1 ? clothWin : pantWin;
+    }
+
+    private void setWin(int row, int w) {
+        if (row == 0) hairWin = w;
+        else if (row == 1) clothWin = w;
+        else pantWin = w;
+    }
+
+    private static int clampWin(int sel, int size) {
+        return Math.max(0, Math.min(sel, Math.max(0, size - 3)));
+    }
+
+    private void selectById(int row, int partId) {
+        List<PartData> list = listOf(row);
+        for (int i = 0; i < list.size(); i++) {
+            if (list.get(i).id == partId) {
+                select(row, i);
+                setWin(row, clampWin(i, list.size()));
+                return;
+            }
+        }
     }
 
     /** Chuẩn bị lại từ đầu (LoginScreen gọi trước khi chuyển màn). */
@@ -101,12 +132,12 @@ public class CreateCharScreen extends ScreenAdapter {
         String pre = game.playerName == null ? "" : game.playerName.trim();
         if (pre.length() > 16) pre = pre.substring(0, 16);
         nameField.append(pre);
-        buildOptions();
+        buildLists();
     }
 
     @Override
     public void show() {
-        if (hairOpts.isEmpty()) prepare();
+        if (hairList.isEmpty()) prepare();
         Gdx.input.setInputProcessor(new InputAdapter() {
             @Override
             public boolean touchDown(int sx, int sy, int pointer, int button) {
@@ -139,42 +170,57 @@ public class CreateCharScreen extends ScreenAdapter {
 
     // ---------- dữ liệu ----------
 
-    /** Đúng 3 kiểu cho một mục: kiểu mặc định của gốc + 2 kiểu kế tiếp
-     *  trong danh sách cấp 0 đúng giới tính (chỉ part vẽ được). */
-    private List<PartData> threeOptions(int zorder, int defaultId) {
+    /** Danh sách ĐẦY ĐỦ như RegisterScr gốc: mọi part cấp 0 đúng giới
+     *  tính (hoặc unisex) của mục theo thứ tự id — chỉ loại part mà dữ
+     *  liệu Pack5 thiếu hình thật nên không vẽ được (gốc có đủ hình). */
+    private List<PartData> fullList(int zorder) {
         List<PartData> all = new ArrayList<>();
         for (PartData p : game.data.parts.values()) {
-            if (p.level != 0 || p.isDynamic() || p.name == null || p.name.isEmpty()) continue;
-            if (game.data.brokenParts.contains(p.id)) continue; // dữ liệu Pack5 hỏng: icon/frame rác
+            if (p.level != 0 || p.name == null || p.name.isEmpty()) continue;
             if (p.gender != gender && p.gender != 0) continue;
-            if (p.zorder == zorder) all.add(p);
+            if (p.zorder != zorder) continue;
+            if (!renderable(p)) continue;
+            all.add(p);
         }
         all.sort(Comparator.comparingInt(p -> p.id));
-        List<PartData> out = new ArrayList<>(3);
-        if (all.isEmpty()) return out;
-        int di = 0;
-        for (int i = 0; i < all.size(); i++) if (all.get(i).id == defaultId) { di = i; break; }
-        for (int k = 0; k < Math.min(3, all.size()); k++) out.add(all.get((di + k) % all.size()));
-        return out;
+        return all;
     }
 
-    private void buildOptions() {
-        hairOpts.clear();
-        clothOpts.clear();
-        pantOpts.clear();
-        hairOpts.addAll(threeOptions(50, gender == 1 ? 14 : 49));
-        clothOpts.addAll(threeOptions(20, 88));
-        pantOpts.addAll(threeOptions(10, 89));
-        hairSel = 0;
-        clothSel = 0;
-        pantSel = 0;
+    /** Part vẽ được thật: tĩnh = không nằm trong danh sách hỏng của
+     *  Pack5; động = icon + mọi frame đều có ảnh trong atlas động. */
+    private boolean renderable(PartData p) {
+        if (p.frames.isEmpty()) return false;
+        if (p.isDynamic()) {
+            if (!game.data.dynImgById.containsKey(p.icon)) return false;
+            for (PartData.Frame f : p.frames) {
+                if (!game.data.dynImgById.containsKey(f.img)) return false;
+            }
+            return true;
+        }
+        return !game.data.brokenParts.contains(p.id);
+    }
+
+    private void buildLists() {
+        hairList.clear();
+        clothList.clear();
+        pantList.clear();
+        hairList.addAll(fullList(50));
+        clothList.addAll(fullList(20));
+        pantList.addAll(fullList(10));
+        // gốc bốc NGẪU NHIÊN một bộ lúc mở màn (RegisterScr.switchToMe)
+        hairSel = hairList.isEmpty() ? 0 : rng.nextInt(hairList.size());
+        clothSel = clothList.isEmpty() ? 0 : rng.nextInt(clothList.size());
+        pantSel = pantList.isEmpty() ? 0 : rng.nextInt(pantList.size());
+        hairWin = clampWin(hairSel, hairList.size());
+        clothWin = clampWin(clothSel, clothList.size());
+        pantWin = clampWin(pantSel, pantList.size());
         refreshDoll();
     }
 
     private void setGender(int g) {
         if (gender == g || busy) return;
         gender = g;
-        buildOptions();
+        buildLists();
     }
 
     private void select(int row, int idx) {
@@ -188,11 +234,11 @@ public class CreateCharScreen extends ScreenAdapter {
     /** seriPart theo đúng thứ tự server gốc: [quần, áo, thân 0, mặt 4, tóc]. */
     private List<Integer> currentParts() {
         List<Integer> parts = new ArrayList<>(5);
-        parts.add(pantOpts.isEmpty() ? 89 : pantOpts.get(pantSel).id);
-        parts.add(clothOpts.isEmpty() ? 88 : clothOpts.get(clothSel).id);
+        parts.add(pantList.isEmpty() ? 89 : pantList.get(pantSel).id);
+        parts.add(clothList.isEmpty() ? 88 : clothList.get(clothSel).id);
         parts.add(0);
         parts.add(4);
-        parts.add(hairOpts.isEmpty() ? (gender == 1 ? 14 : 49) : hairOpts.get(hairSel).id);
+        parts.add(hairList.isEmpty() ? (gender == 1 ? 14 : 49) : hairList.get(hairSel).id);
         return parts;
     }
 
@@ -363,9 +409,9 @@ public class CreateCharScreen extends ScreenAdapter {
         drawGenderPill(RX, 1, "Nam", Ui.FA_MARS);
         drawGenderPill(RX + 336, 2, "Nữ", Ui.FA_VENUS);
         // ba hàng ô đồ
-        drawRow(0, "Tóc", hairOpts, hairSel);
-        drawRow(1, "Áo", clothOpts, clothSel);
-        drawRow(2, "Quần", pantOpts, pantSel);
+        drawRow(0, "Tóc", hairList, hairSel, hairWin);
+        drawRow(1, "Áo", clothList, clothSel, clothWin);
+        drawRow(2, "Quần", pantList, pantSel, pantWin);
         // chỉ hiện dòng báo lỗi khi có (dòng gợi ý đã bỏ theo lệnh user)
         if (!status.isEmpty()) {
             Ui.fontSmall.setColor(statusError ? ERR_RED : LABEL_DARK);
@@ -414,31 +460,57 @@ public class CreateCharScreen extends ScreenAdapter {
         Ui.font.draw(batch, label, gx + 28, y + 30);
     }
 
-    private void drawRow(int row, String label, List<PartData> opts, int sel) {
+    private void drawRow(int row, String label, List<PartData> list, int sel, int win) {
         float labelY = row == 0 ? 458 : row == 1 ? 344 : 240;
         Ui.fontSmall.setColor(LABEL_DARK);
         Ui.fontSmall.draw(batch, label, RX, labelY);
+        if (!list.isEmpty()) {
+            String cnt = (sel + 1) + "/" + list.size();
+            Ui.fontTiny.setColor(LABEL_DARK);
+            Ui.fontTiny.draw(batch, cnt, RX + RW - Ui.textWidth(Ui.fontTiny, cnt), labelY - 2);
+        }
         float y = ROW_Y[row];
-        for (int i = 0; i < opts.size(); i++) {
-            float x = RX + i * (CELL_W + 13);
-            boolean isSel = i == sel;
+        drawPageChip(RX, y, Ui.FA_CHEVRON_LEFT, win > 0);
+        drawPageChip(RX + RW - 42, y, Ui.FA_CHEVRON_RIGHT, win + 3 < list.size());
+        for (int k = 0; k < 3; k++) {
+            int idx = win + k;
+            if (idx >= list.size()) break;
+            float x = RX + 48 + k * (CELL_W + 8);
+            boolean isSel = idx == sel;
             if (isSel) {
                 batch.draw(Ui.roundedRect((int) CELL_W, 64, 12, SEL_RIM, null), x, y);
                 batch.draw(Ui.roundedRect((int) CELL_W - 8, 56, 9, BAR_FILL, null), x + 4, y + 4);
             } else {
                 batch.draw(Ui.roundedRect((int) CELL_W, 64, 12, BAR_FILL, EntryUi.PANEL_RIM), x, y);
             }
-            drawPartIcon(opts.get(i).id, x + CELL_W / 2f, y + 41, 34);
-            String nm = trimToWidth(Ui.fontTiny, opts.get(i).name, CELL_W - 16);
+            drawPartIcon(list.get(idx).id, x + CELL_W / 2f, y + 41, 34);
+            String nm = trimToWidth(Ui.fontTiny, list.get(idx).name, CELL_W - 16);
             Ui.centered(batch, Ui.fontTiny, nm, x + CELL_W / 2f, y + 17,
                 isSel ? Color.WHITE : CELL_NAME);
         }
     }
 
-    /** Icon của part tĩnh (đúng Part.cs gốc: lấy từ imgdata theo icon). */
+    private void drawPageChip(float x, float y, String icon, boolean enabled) {
+        batch.draw(Ui.roundedRect(42, 64, 12, BAR_FILL, EntryUi.PANEL_RIM), x, y);
+        Ui.faIcon(batch, Ui.fa20, icon, x + 21, y + 32,
+            enabled ? new Color(0.9f, 0.93f, 1f, 1f) : new Color(0.45f, 0.52f, 0.62f, 1f));
+    }
+
+    /** Icon của part (đúng Part.cs gốc): part động lấy ảnh riêng trong
+     *  atlas động theo icon, part tĩnh lấy từ imgdata theo icon. */
     private void drawPartIcon(int partId, float cx, float cy, float maxBox) {
         PartData pd = game.data.part(partId);
         if (pd == null) return;
+        if (pd.isDynamic()) {
+            ImgInfo di = game.data.dynImgById.get(pd.icon);
+            if (di == null) return;
+            Texture tex = game.texture("iconatlas/" + di.bigId + ".png");
+            TextureRegion reg = new TextureRegion(tex, di.x, di.y, di.w, di.h);
+            float sc = Math.min(maxBox / Math.max(1, di.w), maxBox / Math.max(1, di.h));
+            float dw = di.w * sc, dh = di.h * sc;
+            batch.draw(reg, cx - dw / 2f, cy - dh / 2f, dw, dh);
+            return;
+        }
         ImgInfo ii = game.data.imgByItemId.get(pd.icon);
         if (ii == null) return;
         Texture tex = game.texture("big/" + ii.bigId + ".png");
@@ -492,13 +564,22 @@ public class CreateCharScreen extends ScreenAdapter {
             if (x >= RX && x <= RX + 320) { setGender(1); return; }
             if (x >= RX + 336 && x <= RX + RW) { setGender(2); return; }
         }
-        // các ô đồ: chạm ô nào chọn ô đó
+        // các hàng đồ: mũi tên lật cửa sổ 3 ô, chạm ô nào chọn ô đó
         for (int r = 0; r < 3; r++) {
             if (y >= ROW_Y[r] && y <= ROW_Y[r] + 64) {
-                int n = r == 0 ? hairOpts.size() : r == 1 ? clothOpts.size() : pantOpts.size();
-                for (int i = 0; i < n; i++) {
-                    float cx = RX + i * (CELL_W + 13);
-                    if (x >= cx && x <= cx + CELL_W) { select(r, i); return; }
+                List<PartData> list = listOf(r);
+                int win = winOf(r);
+                if (x >= RX && x <= RX + 42) { setWin(r, Math.max(0, win - 3)); return; }
+                if (x >= RX + RW - 42 && x <= RX + RW) {
+                    setWin(r, Math.min(Math.max(0, list.size() - 3), win + 3));
+                    return;
+                }
+                for (int k = 0; k < 3; k++) {
+                    float cx = RX + 48 + k * (CELL_W + 8);
+                    if (x >= cx && x <= cx + CELL_W && win + k < list.size()) {
+                        select(r, win + k);
+                        return;
+                    }
                 }
             }
         }
