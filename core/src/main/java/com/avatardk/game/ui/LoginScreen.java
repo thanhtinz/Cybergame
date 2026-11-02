@@ -218,7 +218,14 @@ public class LoginScreen extends ScreenAdapter {
                     game.playerName = fields[0].toString().trim();
                     busy = false;
                     game.world.applyPlayerInfo(p);
-                    game.setScreen(game.serverSelect);
+                    if (p.gender == 0 && game.createChar != null) {
+                        // nhân vật chưa được tạo -> màn Tạo nhân vật (gốc:
+                        // RegisterScr) trước khi chọn máy chủ
+                        game.createChar.prepare();
+                        game.setScreen(game.createChar);
+                    } else {
+                        game.setScreen(game.serverSelect);
+                    }
                     return;
                 } else if (m.command == AvatarProtocol.SERVER_MESSAGE) {
                     DataInputStream r = m.reader();

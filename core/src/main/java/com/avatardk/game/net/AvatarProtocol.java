@@ -160,13 +160,18 @@ public final class AvatarProtocol {
         conn.send(m);
     }
 
-    /** Tạo nhân vật: byte gender (1 = nam, 2 = nữ) + byte số đồ chọn.
-     *  Server bỏ qua đồ client chọn, tự gán set khởi đầu theo giới tính. */
-    public static void createCharacter(GameConnection conn, int gender) throws IOException {
+    /** Tạo nhân vật (RegisterScr gốc): byte gender (1 = nam, 2 = nữ) +
+     *  byte số part + short id từng part của seriPart đang mặc, theo thứ
+     *  tự [quần, áo, thân, mặt, tóc] mà server gốc kiểm tra. Server bản
+     *  port dùng đúng bộ đồ này nếu hợp lệ (đồ cấp 0 đúng giới tính),
+     *  không hợp lệ thì quay về set khởi đầu cố định của gốc. */
+    public static void createCharacter(GameConnection conn, int gender,
+                                       java.util.List<Integer> partIds) throws IOException {
         Msg m = new Msg(CRE_CHARACTER);
         DataOutputStream w = m.writer();
         w.writeByte(gender);
-        w.writeByte(0);
+        w.writeByte(partIds.size());
+        for (int id : partIds) w.writeShort(id);
         conn.send(m);
     }
 

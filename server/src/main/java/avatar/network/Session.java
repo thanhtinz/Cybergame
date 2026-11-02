@@ -1059,20 +1059,35 @@ public void NhanThuongEventXuBoss() throws IOException {
     public void createCharacter(Message ms) throws IOException {
         byte gender = ms.reader().readByte();//1 nam 2 nu
         byte numItem = ms.reader().readByte();
-        ArrayList<Item> items = new ArrayList<>();
-        short[] boyItems = { 89, 88, 0, 4, 14};
-        short[] girlItems = { 89, 88, 0, 4, 49 };
-        short[] selectedItems = (gender == 1) ? boyItems : girlItems;
-
-        for (short itemID : selectedItems) {
-            items.add(new Item(itemID, -1, 1));
+        ArrayList<Item> clientItems = new ArrayList<>();
+        for (int i = 0; i < numItem; i++) {
+            clientItems.add(new Item(ms.reader().readShort(), -1, 1));
         }
-        boolean isError = false;
-        if (gender != 1 && gender != 2) {
-            isError = true;
+        boolean genderOk = (gender == 1 || gender == 2);
+        ArrayList<Item> items = null;
+        // [BẢN PORT] ưu tiên bộ đồ client chọn (màn Tạo nhân vật) nếu qua
+        // được đúng kiểm tra của gốc — CreateChar.check với thứ tự
+        // [quần, áo, 0, 4, tóc] thuộc danh sách cấp 0 — và từng món biến
+        // thiên đúng giới tính. Server gốc đọc xong bỏ qua lựa chọn này
+        // và luôn gán set cố định dưới đây; giữ set cố định làm phương án
+        // dự phòng cho client cũ / gói không hợp lệ.
+        if (genderOk && clientItems.size() == 5
+                && CreateChar.getInstance().check(gender, clientItems)
+                && starterGenderMatch(gender, clientItems)) {
+            items = clientItems;
+        } else if (genderOk) {
+            short[] boyItems = { 89, 88, 0, 4, 14};
+            short[] girlItems = { 89, 88, 0, 4, 49 };
+            short[] selectedItems = (gender == 1) ? boyItems : girlItems;
+            items = new ArrayList<>();
+            for (short itemID : selectedItems) {
+                items.add(new Item(itemID, -1, 1));
+            }
+            if (!CreateChar.getInstance().check(gender, items)) {
+                items = null;
+            }
         }
-        isError = !CreateChar.getInstance().check(gender, items);
-        if (isError) {
+        if (items == null) {
             ms = new Message(-35);
             DataOutputStream ds = ms.writer();
             ds.writeBoolean(false);
@@ -1087,6 +1102,19 @@ public void NhanThuongEventXuBoss() throws IOException {
         ds.writeBoolean(true);
         ds.flush();
         this.sendMessage(ms);
+    }
+
+    /** Ba vị trí biến thiên trong seriPart tạo nhân vật (0 = quần z10,
+     *  1 = áo z20, 4 = tóc z50): gender của part phải khớp giới tính
+     *  nhân vật hoặc 0 (unisex). */
+    private boolean starterGenderMatch(byte gender, ArrayList<Item> items) {
+        int[] slots = {0, 1, 4};
+        for (int idx : slots) {
+            Part p = PartManager.getInstance().findPartById(items.get(idx).getId());
+            if (p == null) return false;
+            if (p.getGender() != gender && p.getGender() != 0) return false;
+        }
+        return true;
     }
 
     public void doiKhuVuc(Message ms) throws IOException {

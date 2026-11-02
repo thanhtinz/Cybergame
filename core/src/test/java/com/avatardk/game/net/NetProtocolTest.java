@@ -84,7 +84,7 @@ class NetProtocolTest {
         DataInputStream r = reg.reader();
         assertTrue(r.readUTF().contains("Đăng ký thành công"));
 
-        AvatarProtocol.createCharacter(conn, 1);
+        AvatarProtocol.createCharacter(conn, 1, List.of(89, 88, 0, 4, 14));
         Msg cre = waitFor(conn, AvatarProtocol.CRE_CHARACTER, 5000);
         assertNotNull(cre, "tạo nhân vật phải nhận gói -35");
         assertTrue(cre.reader().readBoolean());

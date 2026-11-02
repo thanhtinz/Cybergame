@@ -22,6 +22,8 @@ public class AvatarDkGame extends Game {
     public BannerScreen banner;
     public LoginScreen login;
     public ServerSelectScreen serverSelect;
+    /** Màn tạo nhân vật (vào khi đăng nhập mà nhân vật chưa được tạo). */
+    public CreateCharScreen createChar;
     /** Tên hiển thị của người chơi (tài khoản vừa đăng nhập, hoặc nhân vật mẫu). */
     public String playerName = "";
     /** Kết nối tới server khi chơi online (null khi offline). */
@@ -80,6 +82,7 @@ public class AvatarDkGame extends Game {
         dollRenderer = new PaperDollRenderer(this);
         world = new WorldScreen(this);
         login = new LoginScreen(this);
+        createChar = new CreateCharScreen(this);
         serverSelect = new ServerSelectScreen(this);
         banner = new BannerScreen(this);
         setScreen(banner);
