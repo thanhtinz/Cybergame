@@ -93,6 +93,7 @@ public final class Ui {
     public static final String FA_CAT = "\uf6be";
     public static final String FA_DOG = "\uf6d3";
     public static final String FA_ROCKET = "\uf135";
+    public static final String FA_DICE = "\uf522"; // xúc xắc random tên (màn Tạo nhân vật)
     static final String FA_SOLID_CHARS = FA_BELL + FA_TRASH + FA_HEADSET + FA_SUN
         + FA_USER + FA_LOCK + FA_EYE + FA_EYE_SLASH + FA_CHECK + FA_XMARK + FA_SEND
         + FA_EXPAND + FA_COMPRESS + FA_FACE_SMILE + FA_MICROPHONE + FA_PLAY + FA_STOP
@@ -106,7 +107,7 @@ public final class Ui {
         + FA_PAUSE + FA_FORWARD_STEP + FA_BACKWARD_STEP + FA_SHUFFLE + FA_REPEAT
         + FA_MAGNIFYING_GLASS + FA_VOLUME_HIGH + FA_LIST
         + FA_ENVELOPE + FA_USER_GROUP + FA_ROTATE_RIGHT
-        + FA_BULLHORN + FA_DOWNLOAD + FA_CLOCK + FA_COINS;
+        + FA_BULLHORN + FA_DOWNLOAD + FA_CLOCK + FA_COINS + FA_DICE;
     // Glyph Font Awesome (brands)
     public static final String FA_GOOGLE = "\uf1a0";
     public static final String FA_APPLE = "\uf179";

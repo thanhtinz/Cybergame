@@ -33,6 +33,9 @@ import java.util.List;
  * kế tiếp). Doll xem trước mặc đúng bộ đang chọn và hiện tên đang gõ.
  * Hoàn thành gửi gói CRE_CHARACTER (-35): seriPart theo thứ tự server
  * gốc kiểm tra [quần, áo, thân (0), mặt (4), tóc] + UTF tên ở cuối.
+ * Tinh chỉnh theo lệnh user: title ở giữa không icon/dòng phụ, doll
+ * không khung, ô tên có xúc xắc random, nút "Vào game" nhỏ ở góc
+ * phải dưới, nút "Quay lại" ở góc trái trên (về màn đăng nhập).
  */
 public class CreateCharScreen extends ScreenAdapter {
     private final AvatarDkGame game;
@@ -49,9 +52,12 @@ public class CreateCharScreen extends ScreenAdapter {
     private static final Color ICON_GREY = new Color(0.43f, 0.49f, 0.57f, 1f);
     private static final Color ERR_RED = new Color(0.85f, 0.20f, 0.15f, 1f);
     private static final Color CELL_NAME = new Color(0.85f, 0.90f, 0.97f, 1f);
+    /** Màu viền đậm cho trạng thái ĐÃ CHỌN (user chốt: chỉ tô đậm
+     *  viền, không tô đầy nền cam). */
+    private static final Color SEL_RIM = new Color(1f, 0.60f, 0.16f, 1f);
 
-    /** Ô xem trước bên trái. */
-    private static final float IX = 64, IY = 96, IW = 440, IH = 526;
+    /** Tâm ngang của doll xem trước bên trái (không khung). */
+    private static final float PREVIEW_CX = 284;
     /** Vùng điều khiển bên phải. */
     private static final float RX = 560, RW = 656;
     /** Y (mép dưới) của 3 hàng ô đồ: Tóc / Áo / Quần. */
@@ -274,6 +280,7 @@ public class CreateCharScreen extends ScreenAdapter {
         batch.setProjectionMatrix(viewport.getCamera().combined);
         batch.begin();
         drawSky();
+        drawBackButton();
         drawHeader();
         drawPreview();
         drawControls();
@@ -289,33 +296,60 @@ public class CreateCharScreen extends ScreenAdapter {
             new Color(0.55f, 0.78f, 0.94f, 1f), new Color(0.85f, 0.94f, 0.99f, 1f)), 0, 0);
     }
 
+    private void drawBackButton() {
+        batch.draw(Ui.roundedRect(150, 48, 14, BAR_FILL, EntryUi.PANEL_RIM), 40, 646);
+        Ui.faIcon(batch, Ui.fa20, Ui.FA_CHEVRON_LEFT, 66, 670, CELL_NAME);
+        Ui.font.setColor(CELL_NAME);
+        Ui.font.draw(batch, "Quay lại", 84, 678);
+    }
+
     private void drawHeader() {
-        Ui.faIcon(batch, Ui.fa30, Ui.FA_USER_PLUS, 88, 681,
-            new Color(0.90f, 0.45f, 0.05f, 1f));
-        Ui.fontBaloo36.setColor(TITLE_DARK);
-        Ui.fontBaloo36.draw(batch, "Tạo nhân vật", 116, 692);
-        Ui.fontSmall.setColor(LABEL_DARK);
-        Ui.fontSmall.draw(batch, "Chọn giới tính, đặt tên và trang phục khởi đầu", 117, 662);
+        Ui.centered(batch, Ui.fontBaloo36, "Tạo nhân vật", Ui.W / 2f, 692, TITLE_DARK);
+    }
+
+    /** Quay lại màn đăng nhập: ngắt kết nối phiên đang chờ tạo nhân vật. */
+    private void goBack() {
+        if (busy) return;
+        if (game.connection != null) {
+            game.connection.close();
+            game.connection = null;
+        }
+        game.player = null;
+        game.setScreen(game.login);
+    }
+
+    /** Tên ngẫu nhiên dễ thương cho nút xúc xắc (tối đa 16 ký tự). */
+    private static final String[] NAME_A = {"Bé", "Tiểu", "Chíp", "Mít", "Xoài", "Cam",
+        "Dâu", "Bơ", "Sữa", "Mochi", "Pudding", "Bánh", "Kẹo", "Mây", "Nắng", "Sao",
+        "Bống", "Tí", "Ốc", "Tôm", "Cua", "Mèo", "Gà", "Vịt", "Heo", "Thỏ"};
+    private static final String[] NAME_B = {"Con", "Nhí", "Xinh", "Ngố", "Bự", "Cưng",
+        "Bi", "Bông", "Hớn", "Tèo", "Đáng Yêu", "Xíu", "Mập", "Lém", "Hiền", "Ngoan"};
+    private final java.util.Random rng = new java.util.Random();
+
+    private void randomName() {
+        if (busy) return;
+        String n;
+        do {
+            n = NAME_A[rng.nextInt(NAME_A.length)] + " " + NAME_B[rng.nextInt(NAME_B.length)];
+        } while (n.length() > 16 || n.equals(charName()));
+        nameField.setLength(0);
+        nameField.append(n);
     }
 
     private void drawPreview() {
-        batch.draw(Ui.roundedRect((int) IW, (int) IH, 20, BAR_FILL, EntryUi.PANEL_RIM), IX, IY);
+        // doll đứng trực tiếp trên nền trời (không khung) + bóng mềm
         String name = charName();
         if (name.isEmpty()) {
-            Ui.centered(batch, Ui.font, "Tên nhân vật", IX + IW / 2f, IY + IH - 28,
-                new Color(0.6f, 0.68f, 0.78f, 1f));
+            Ui.centered(batch, Ui.font, "Tên nhân vật", PREVIEW_CX, 600,
+                new Color(0.35f, 0.48f, 0.60f, 1f));
         } else {
-            Ui.centered(batch, Ui.font, name, IX + IW / 2f, IY + IH - 28,
-                new Color(1f, 0.85f, 0.45f, 1f));
+            Ui.centered(batch, Ui.font, name, PREVIEW_CX, 600, TITLE_DARK);
         }
-        // sàn sáng nhẹ dưới chân + bóng + doll xem trước (nhấp nhô nhẹ)
-        batch.draw(Ui.roundedRect((int) IW - 48, 10, 5,
-            new Color(1f, 1f, 1f, 0.06f), null), IX + 24, 134);
-        float feetX = IX + IW / 2f, feetY = 158 + (float) Math.sin(elapsed * 2.2f) * 2.5f;
-        batch.draw(Ui.roundedRect(170, 16, 8, new Color(0f, 0f, 0f, 0.25f), null),
-            feetX - 85, 142);
+        float feetY = 176 + (float) Math.sin(elapsed * 2.2f) * 2.5f;
+        batch.draw(Ui.roundedRect(180, 17, 8, new Color(0f, 0f, 0f, 0.18f), null),
+            PREVIEW_CX - 90, 160);
         if (doll != null) {
-            game.dollRenderer.draw(batch, doll, 0, feetX, feetY, 7.2f, false);
+            game.dollRenderer.draw(batch, doll, 0, PREVIEW_CX, feetY, 7.6f, false);
         }
     }
 
@@ -361,14 +395,19 @@ public class CreateCharScreen extends ScreenAdapter {
                 batch.draw(Ui.roundedRect(3, 24, 1, FIELD_TEXT, null), cx, 566);
             }
         }
+        // cục xúc xắc random tên ở góc phải trong ô
+        batch.draw(Ui.roundedRect(40, 40, 10, new Color(1f, 0.85f, 0.30f, 1f), null),
+            RX + RW - 48, 558);
+        Ui.faIcon(batch, Ui.fa26, Ui.FA_DICE, RX + RW - 28, 578,
+            new Color(0.25f, 0.18f, 0.05f, 1f));
     }
 
     private void drawGenderPill(float x, int g, String label, String icon) {
         float w = 320, y = 470, h = 44;
         boolean sel = gender == g;
         if (sel) {
-            batch.draw(Ui.gradientRect((int) w, (int) h, 12,
-                EntryUi.ORANGE_TOP, EntryUi.ORANGE_BOT), x, y);
+            batch.draw(Ui.roundedRect((int) w, (int) h, 12, SEL_RIM, null), x, y);
+            batch.draw(Ui.roundedRect((int) w - 8, (int) h - 8, 9, BAR_FILL, null), x + 4, y + 4);
         } else {
             batch.draw(Ui.roundedRect((int) w, (int) h, 12, BAR_FILL, EntryUi.PANEL_RIM), x, y);
         }
@@ -389,8 +428,8 @@ public class CreateCharScreen extends ScreenAdapter {
             float x = RX + i * (CELL_W + 13);
             boolean isSel = i == sel;
             if (isSel) {
-                batch.draw(Ui.gradientRect((int) CELL_W, 64, 12,
-                    EntryUi.ORANGE_TOP, EntryUi.ORANGE_BOT), x, y);
+                batch.draw(Ui.roundedRect((int) CELL_W, 64, 12, SEL_RIM, null), x, y);
+                batch.draw(Ui.roundedRect((int) CELL_W - 8, 56, 9, BAR_FILL, null), x + 4, y + 4);
             } else {
                 batch.draw(Ui.roundedRect((int) CELL_W, 64, 12, BAR_FILL, EntryUi.PANEL_RIM), x, y);
             }
@@ -415,14 +454,14 @@ public class CreateCharScreen extends ScreenAdapter {
     }
 
     private void drawButton() {
-        batch.draw(Ui.gradientRect(1152, 56, 16,
-            EntryUi.ORANGE_TOP, EntryUi.ORANGE_BOT), 64, 24);
+        batch.draw(Ui.gradientRect(300, 56, 16,
+            EntryUi.ORANGE_TOP, EntryUi.ORANGE_BOT), 916, 24);
         if (busy) {
-            Ui.centered(batch, Ui.fontBaloo30, "Đang tạo nhân vật…", Ui.W / 2f, 61, Color.WHITE);
+            Ui.centered(batch, Ui.fontBaloo30, "Đang tạo…", 1066, 61, Color.WHITE);
         } else {
-            float tw = Ui.textWidth(Ui.fontBaloo30, "Hoàn thành");
-            Ui.faIcon(batch, Ui.fa20, Ui.FA_CHECK, Ui.W / 2f - tw / 2f - 22, 52, Color.WHITE);
-            Ui.centered(batch, Ui.fontBaloo30, "Hoàn thành", Ui.W / 2f, 61, Color.WHITE);
+            float tw = Ui.textWidth(Ui.fontBaloo30, "Vào game");
+            Ui.faIcon(batch, Ui.fa20, Ui.FA_PLAY, 1066 - tw / 2f - 22, 52, Color.WHITE);
+            Ui.centered(batch, Ui.fontBaloo30, "Vào game", 1066, 61, Color.WHITE);
         }
     }
 
@@ -438,8 +477,18 @@ public class CreateCharScreen extends ScreenAdapter {
     // ---------- chạm ----------
 
     private void onTouch(float x, float y) {
-        // nút Hoàn thành (trải cả chiều ngang ở đáy)
-        if (x >= 64 && x <= 1216 && y >= 24 && y <= 80) {
+        // nút Quay lại ở góc trái trên
+        if (x >= 40 && x <= 190 && y >= 646 && y <= 694) {
+            goBack();
+            return;
+        }
+        // cục xúc xắc trong ô tên
+        if (x >= RX + RW - 52 && x <= RX + RW - 4 && y >= 554 && y <= 602) {
+            randomName();
+            return;
+        }
+        // nút Vào game nhỏ ở góc phải dưới
+        if (x >= 916 && x <= 1216 && y >= 24 && y <= 80) {
             submit();
             return;
         }
