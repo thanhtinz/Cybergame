@@ -7090,9 +7090,9 @@ public class WorldScreen extends ScreenAdapter {
      *  true = cột chi tiết KHÔNG hiện dòng "Hạn dùng" và chỉ còn MỘT nút
      *  "Mua"; bấm vào mở panel kiểu HOÁ ĐƠN: chọn loại tiền (Xu/Lượng),
      *  chọn thời hạn (Theo ngày / Vĩnh viễn), panel hiện tổng tiền và
-     *  nút Mua xác nhận riêng ở đáy. Bản đang chạy giữ false cho tới
-     *  khi user chốt mockup + luật giá; khi đó mới bật thật + nối server. */
-    private boolean shopNewFlow = false;
+     *  nút Mua xác nhận riêng ở đáy. User chốt bật thật 2026-11-02
+     *  kèm luật giá theo mốc trong billTotal; server đã nối theo. */
+    private boolean shopNewFlow = true;
     /** Panel hoá đơn đang mở hay không. */
     private boolean billOpen = false;
     /** Loại tiền đang chọn trong hoá đơn: 1 = Xu, 2 = Lượng. */
@@ -7479,7 +7479,7 @@ public class WorldScreen extends ScreenAdapter {
     private static final int[] BILL_DAY_TIERS = {1, 3, 7, 15, 30};
 
     /** Tổng tiền hiện tại của hoá đơn theo món + loại tiền + mốc đang
-     *  chọn. Luật giá (ĐỀ XUẤT, chờ user chốt): giá niêm yết là giá của
+     *  chọn. Luật giá (user chốt 2026-11-02): giá niêm yết là giá của
      *  hạn gốc ghi trong dữ liệu món; quy về giá 30 ngày rồi nhân tỉ lệ
      *  theo mốc; Vĩnh viễn = giá 30 ngày x SHOP_PERM_MULT. Mua bằng
      *  Lượng: luôn Vĩnh viễn với đúng giá Lượng niêm yết. */
@@ -7599,10 +7599,10 @@ public class WorldScreen extends ScreenAdapter {
         }
     }
 
-    /** Chạm khi hoá đơn đang mở (mockup): X / ra ngoài là đóng; chạm
-     *  pill tiền (nếu món bán bằng loại đó), chip mốc ngày, hoặc nút
-     *  Mua ngay thì cập nhật lựa chọn / đóng panel. Mua thật theo mốc
-     *  sẽ nối server khi user chốt mockup + luật giá. */
+    /** Chạm khi hoá đơn đang mở: X / ra ngoài là đóng; chạm pill tiền
+     *  (nếu món bán bằng loại đó) hoặc chip mốc ngày thì đổi lựa chọn;
+     *  nút Mua ngay gửi gói −24 kèm số ngày đã chọn (server tính tiền
+     *  + hạn dùng theo đúng luật giá của billTotal rồi trừ tiền). */
     private void billTouch(float x, float y) {
         com.avatardk.game.data.PartData sel = shopSelPart();
         float cw = 640, ch = 520, cx = (Ui.W - cw) / 2f, cy = (Ui.H - ch) / 2f;
@@ -7613,6 +7613,16 @@ public class WorldScreen extends ScreenAdapter {
         }
         if (sel == null) { billOpen = false; return; }
         if (y >= cy + 24 && y <= cy + 78 && x >= cx + 24 && x <= cx + cw - 24) {
+            int total = billTotal(sel);
+            int bal = billCur == 2 ? myLuong : myXu;
+            if (total > 0 && bal >= total && game.connection != null) {
+                int days = billCur == 2 || billTier >= BILL_DAY_TIERS.length
+                    ? 0 : BILL_DAY_TIERS[billTier];
+                try {
+                    AvatarProtocol.buyItem(game.connection, sel.id, billCur, days);
+                } catch (Exception ignored) {
+                }
+            }
             billOpen = false;
             return;
         }

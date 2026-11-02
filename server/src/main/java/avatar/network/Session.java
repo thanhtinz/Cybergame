@@ -1165,6 +1165,17 @@ public void NhanThuongEventXuBoss() throws IOException {
                 this.user.getService().serverDialog("Có lỗi xảy ra, vui lòng liên hệ admin. Mã lỗi: buyItemShopWrongType");
                 return;
             }
+            // [HOÁ ĐƠN — user chốt 2026-11-02] Client luồng mua mới gửi
+            // thêm 1 byte số ngày hạn dùng đã chọn (0 = Vĩnh viễn);
+            // không có byte này (client cũ) thì reqDays = -1 và mua
+            // theo hạn gốc của món như Pack5.
+            int reqDays = -1;
+            try {
+                if (ms.reader().available() > 0) {
+                    reqDays = ms.reader().readByte();
+                }
+            } catch (Exception ignored) {
+            }
             Part part = PartManager.getInstance().findPartByID(partID);
 
             Item itembyacc = user.findItemInChests(partID);
@@ -1194,15 +1205,44 @@ public void NhanThuongEventXuBoss() throws IOException {
                 // code goc Pack5 luon uu tien tru Xu khi coin > 0 bat ke type,
                 // khien nut "Mua bang Luong" tru nham Xu. Gia cua loai tien da
                 // chon da duoc kiem tra ton tai o nhanh return phia tren.
+                // Giá + hạn dùng: mặc định đúng gốc (giá niêm yết, hạn
+                // theo dữ liệu món). Khi client gửi số ngày (luồng hoá
+                // đơn): Lượng luôn Vĩnh viễn với giá niêm yết; Xu quy
+                // về giá 30 ngày (món có hạn: giá gốc x 30 / số ngày
+                // gốc; món vĩnh viễn: giá gốc / 5) rồi nhân tỉ lệ mốc
+                // 1/3/7/15/30 ngày, Vĩnh viễn = giá 30 ngày x 5 — khớp
+                // hệt billTotal phía client.
+                long expired;
+                if (reqDays < 0) {
+                    price = type == 1 ? priceXu : priceLuong;
+                    expired = part.getExpiredDay() == 0 ? -1
+                        : System.currentTimeMillis() + (long) part.getExpiredDay() * 86400000L;
+                } else if (type == 2) {
+                    price = priceLuong;
+                    expired = -1;
+                } else if (reqDays == 0) {
+                    int price30 = part.getExpiredDay() > 0
+                        ? Math.max(1, Math.round(priceXu * 30f / part.getExpiredDay()))
+                        : Math.max(1, priceXu / 5);
+                    price = price30 * 5;
+                    expired = -1;
+                } else if (reqDays == 1 || reqDays == 3 || reqDays == 7
+                        || reqDays == 15 || reqDays == 30) {
+                    int price30 = part.getExpiredDay() > 0
+                        ? Math.max(1, Math.round(priceXu * 30f / part.getExpiredDay()))
+                        : Math.max(1, priceXu / 5);
+                    price = Math.max(1, Math.round(price30 * reqDays / 30f));
+                    expired = System.currentTimeMillis() + (long) reqDays * 86400000L;
+                } else {
+                    return;
+                }
                 if (type == 1) {
-                    price = priceXu;
                     if (user.getXu() < price) {
                         this.user.getService().serverMessage("Bạn không đủ xu!");
                         return;
                     }
                     this.user.updateXu(-price);
                 } else {
-                    price = priceLuong;
                     if (user.getLuong() < price) {
                         this.user.getService().serverMessage("Bạn không đủ lượng!");
                         return;
@@ -1210,10 +1250,6 @@ public void NhanThuongEventXuBoss() throws IOException {
                     this.user.updateLuong(-price);
                 }
                 this.getAvatarService().updateMoney(0);
-                long expired = System.currentTimeMillis() + ((long) part.getExpiredDay() * 86400000L);
-                if (part.getExpiredDay() == 0) {
-                    expired = -1;
-                }
                 Item item = Item.builder()
                         .id(part.getId())
                         .expired(expired)

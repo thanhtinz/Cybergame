@@ -386,6 +386,19 @@ public final class AvatarProtocol {
         conn.send(m);
     }
 
+    /** Mua theo hoá đơn (gói −24 + 1 byte): days = số ngày hạn dùng
+     *  theo mốc đã chọn (0 = Vĩnh viễn, luôn dùng cho Lượng). Server
+     *  tính giá theo mốc; client không gửi byte này thì server mua
+     *  theo hạn gốc của món như Pack5. */
+    public static void buyItem(GameConnection conn, int partId, int type, int days) throws IOException {
+        Msg m = new Msg(BUY_ITEM);
+        DataOutputStream w = m.writer();
+        w.writeShort(partId);
+        w.writeByte(type);
+        w.writeByte(days);
+        conn.send(m);
+    }
+
     /** Nói chuyện với NPC (gói −61): id truyền = 2.000.000.000 + mã NPC. */
     public static void communicate(GameConnection conn, int npcWireId) throws IOException {
         Msg m = new Msg(COMMUNICATE);
