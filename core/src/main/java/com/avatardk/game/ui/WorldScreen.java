@@ -2423,13 +2423,9 @@ public class WorldScreen extends ScreenAdapter {
         if (charPanel) {
             float[] g = charPanelGeom();
             float px = g[0], py = g[1];
-            // nút đóng tròn nằm trên viền góc (tâm ở góc panel, bán kính bấm 28)
-            float xCx = px + CP_W - 2, xCy = py + CP_H - 2;
-            if ((x - xCx) * (x - xCx) + (y - xCy) * (y - xCy) <= 28 * 28) {
-                charPanel = false;
-                return;
-            }
-            if (x >= px + CP_W - 46 && x <= px + CP_W && y >= py + CP_H - 46 && y <= py + CP_H) {
+            // nút đóng: ô vuông trong góc phải trên (như panel Bạn bè)
+            if (x >= px + CP_W - 54 && x <= px + CP_W - 18
+                    && y >= py + CP_H - 54 && y <= py + CP_H - 18) {
                 charPanel = false;
                 return;
             }
@@ -4618,7 +4614,7 @@ public class WorldScreen extends ScreenAdapter {
             String jd = "Vào game: " + selfJoinDate;
             layout.setText(Ui.fontSmall, jd);
             Ui.fontSmall.setColor(1f, 1f, 1f, 0.78f);
-            Ui.fontSmall.draw(batch, jd, px + CP_W - 24 - layout.width, avCy + 14);
+            Ui.fontSmall.draw(batch, jd, px + CP_W - 70 - layout.width, avCy + 14);
         }
         // bên phải hàng cấp: "Người yêu: <tên>" — chưa có thì để trống
         if (partnerName != null) {
@@ -4626,15 +4622,12 @@ public class WorldScreen extends ScreenAdapter {
                 + ": " + partnerName;
             layout.setText(Ui.fontSmall, rel);
             Ui.fontSmall.setColor(1f, 0.75f, 0.85f, 1f);
-            Ui.fontSmall.draw(batch, rel, px + CP_W - 24 - layout.width, avCy - 18);
+            Ui.fontSmall.draw(batch, rel, px + CP_W - 70 - layout.width, avCy - 18);
         }
-        // nút đóng: vòng tròn nằm trên viền góc phải trên, nhô ra ngoài panel
-        float xCx = px + CP_W - 2, xCy = py + CP_H - 2;
-        batch.setColor(Ui.BTN_CLOSE);
-        batch.draw(circleTexture(), xCx - 17, xCy - 17, 34, 34);
-        batch.setColor(Color.WHITE);
-        batch.draw(ringTexture(), xCx - 17, xCy - 17, 34, 34);
-        Ui.centered(batch, Ui.font, "X", xCx, xCy + 7, Color.WHITE);
+        // nút đóng: ô vuông đỏ nằm TRONG góc phải trên như panel Bạn bè
+        batch.draw(Ui.roundedRect(36, 36, 10, Ui.BTN_CLOSE, GLASS_RIM), px + CP_W - 54, py + CP_H - 54);
+        Ui.faIcon(batch, Ui.fa20, Ui.FA_XMARK, px + CP_W - 36, py + CP_H - 36,
+            new Color(0.9f, 0.93f, 1f, 1f));
         // hàng chip tiền (4 chip ngang dưới header)
         int[] icons = {0, 1, 4, 2};
         String[] vals = {fmtMoney(p.xu), fmtMoney(p.luong), fmtMoney(p.luongKhoa), fmtMoney(p.xeng)};
@@ -5005,12 +4998,9 @@ public class WorldScreen extends ScreenAdapter {
         // tiêu đề + nút đóng tròn trên viền góc (như panel nhân vật)
         Ui.font.setColor(1f, 0.85f, 0.38f, 1f);
         Ui.font.draw(batch, "Giỏ đồ", px + 28, py + INV_H - 24);
-        float xCx = px + INV_W - 2, xCy = py + INV_H - 2;
-        batch.setColor(Ui.BTN_CLOSE);
-        batch.draw(circleTexture(), xCx - 17, xCy - 17, 34, 34);
-        batch.setColor(Color.WHITE);
-        batch.draw(ringTexture(), xCx - 17, xCy - 17, 34, 34);
-        Ui.centered(batch, Ui.font, "X", xCx, xCy + 7, Color.WHITE);
+        batch.draw(Ui.roundedRect(36, 36, 10, Ui.BTN_CLOSE, GLASS_RIM), px + INV_W - 54, py + INV_H - 54);
+        Ui.faIcon(batch, Ui.fa20, Ui.FA_XMARK, px + INV_W - 36, py + INV_H - 36,
+            new Color(0.9f, 0.93f, 1f, 1f));
         // tabs; cuối hàng tab là sức chứa của phía đang xem
         String[] tabs = {"Giỏ đồ", "Đang mặc"};
         float tabY = py + INV_H - 108;
@@ -5087,12 +5077,9 @@ public class WorldScreen extends ScreenAdapter {
         drawChestSide(CH_X0, 0);
         drawChestSide(CH_X0 + CH_PW + CH_GAP, 1);
         // nút đóng tròn trên viền góc của panel phải
-        float xCx = CH_X0 + CH_PW * 2 + CH_GAP - 2, xCy = CH_PY + CH_PH - 2;
-        batch.setColor(Ui.BTN_CLOSE);
-        batch.draw(circleTexture(), xCx - 17, xCy - 17, 34, 34);
-        batch.setColor(Color.WHITE);
-        batch.draw(ringTexture(), xCx - 17, xCy - 17, 34, 34);
-        Ui.centered(batch, Ui.font, "X", xCx, xCy + 7, Color.WHITE);
+        batch.draw(Ui.roundedRect(36, 36, 10, Ui.BTN_CLOSE, GLASS_RIM), CH_X0 + CH_PW * 2 + CH_GAP - 54, CH_PY + CH_PH - 54);
+        Ui.faIcon(batch, Ui.fa20, Ui.FA_XMARK, CH_X0 + CH_PW * 2 + CH_GAP - 36, CH_PY + CH_PH - 36,
+            new Color(0.9f, 0.93f, 1f, 1f));
         if (confirmText != null) drawInvConfirm();
     }
 
@@ -5121,7 +5108,7 @@ public class WorldScreen extends ScreenAdapter {
             + (side == 0 ? bagCapacity : chestCapacity) + " ô";
         layout.setText(Ui.fontSmall, cap);
         Ui.fontSmall.setColor(1f, 1f, 1f, 0.85f);
-        Ui.fontSmall.draw(batch, cap, px + CH_PW - 28 - layout.width, py + CH_PH - 24);
+        Ui.fontSmall.draw(batch, cap, px + CH_PW - 70 - layout.width, py + CH_PH - 24);
         // lưới ô đồ 6 × 3
         float gridTop = py + CH_PH - 128;
         int cols = 6, cell = 84, gap = 8;
@@ -5197,9 +5184,9 @@ public class WorldScreen extends ScreenAdapter {
     private void invTouch(float x, float y) {
         float px = (Ui.W - INV_W) / 2f, py = (Ui.H - INV_H) / 2f;
         if (invConfirmTouch(x, y)) return;
-        // nút đóng tròn trên viền góc
-        float xCx = px + INV_W - 2, xCy = py + INV_H - 2;
-        if ((x - xCx) * (x - xCx) + (y - xCy) * (y - xCy) <= 28 * 28) {
+        // nút đóng: ô vuông trong góc phải trên
+        if (x >= px + INV_W - 54 && x <= px + INV_W - 18
+                && y >= py + INV_H - 54 && y <= py + INV_H - 18) {
             bagPanel = false;
             return;
         }
@@ -5248,9 +5235,9 @@ public class WorldScreen extends ScreenAdapter {
     private void chestTouch(float x, float y) {
         if (invConfirmTouch(x, y)) return;
         float py = CH_PY;
-        // nút đóng tròn trên viền góc panel phải
-        float xCx = CH_X0 + CH_PW * 2 + CH_GAP - 2, xCy = py + CH_PH - 2;
-        if ((x - xCx) * (x - xCx) + (y - xCy) * (y - xCy) <= 28 * 28) {
+        // nút đóng: ô vuông trong góc phải trên của panel phải
+        if (x >= CH_X0 + CH_PW * 2 + CH_GAP - 54 && x <= CH_X0 + CH_PW * 2 + CH_GAP - 18
+                && y >= py + CH_PH - 54 && y <= py + CH_PH - 18) {
             chestPanel = false;
             return;
         }
@@ -7022,12 +7009,9 @@ public class WorldScreen extends ScreenAdapter {
             new Color(0.07f, 0.11f, 0.17f, 0.97f), GLASS_RIM), px, py);
         Ui.font.setColor(1f, 0.85f, 0.38f, 1f);
         Ui.font.draw(batch, npcMenuTitle, px + 24, py + h - 22);
-        float xCx = px + w - 2, xCy = py + h - 2;
-        batch.setColor(Ui.BTN_CLOSE);
-        batch.draw(circleTexture(), xCx - 15, xCy - 15, 30, 30);
-        batch.setColor(Color.WHITE);
-        batch.draw(ringTexture(), xCx - 15, xCy - 15, 30, 30);
-        Ui.centered(batch, Ui.fontSmall, "X", xCx, xCy + 6, Color.WHITE);
+        batch.draw(Ui.roundedRect(36, 36, 10, Ui.BTN_CLOSE, GLASS_RIM), px + w - 54, py + h - 54);
+        Ui.faIcon(batch, Ui.fa20, Ui.FA_XMARK, px + w - 36, py + h - 36,
+            new Color(0.9f, 0.93f, 1f, 1f));
         for (int i = 0; i < npcMenuItems.size(); i++) {
             float ry = py + h - NM_HEAD - (i + 1) * NM_ROW + 6;
             batch.draw(Ui.roundedRect((int) w - 32, (int) NM_ROW - 10, 12,
@@ -7052,8 +7036,7 @@ public class WorldScreen extends ScreenAdapter {
     private void npcMenuTouch(float x, float y) {
         float w = NM_W, h = npcMenuH();
         float px = (Ui.W - w) / 2f, py = (Ui.H - h) / 2f;
-        float xCx = px + w - 2, xCy = py + h - 2;
-        if ((x - xCx) * (x - xCx) + (y - xCy) * (y - xCy) <= 28 * 28) {
+        if (x >= px + w - 54 && x <= px + w - 18 && y >= py + h - 54 && y <= py + h - 18) {
             npcMenuOpen = false;
             return;
         }
@@ -7260,8 +7243,8 @@ public class WorldScreen extends ScreenAdapter {
             return;
         }
         float px = shopPx(), py = shopPy();
-        float xCx = px + SHOP_PW - 2, xCy = py + SHOP_PH - 2;
-        if ((x - xCx) * (x - xCx) + (y - xCy) * (y - xCy) <= 28 * 28) {
+        if (x >= px + SHOP_PW - 54 && x <= px + SHOP_PW - 18
+                && y >= py + SHOP_PH - 54 && y <= py + SHOP_PH - 18) {
             shopOpen = false;
             shopPointer = -1;
             return;
@@ -7348,17 +7331,14 @@ public class WorldScreen extends ScreenAdapter {
         Ui.font.draw(batch, shopTitle, px + 28, py + ph - 26);
         String[] chips = {"Xu: " + fmtMoney(myXu), "Lượng: " + fmtMoney(myLuong)};
         for (int i = 0; i < chips.length; i++) {
-            float cx = px + pw - 368 + i * 166;
+            float cx = px + pw - 424 + i * 166;
             batch.draw(Ui.roundedRect(150, 38, 12, new Color(0f, 0f, 0f, 0.30f), GLASS_RIM), cx, py + ph - 64);
             Ui.centered(batch, Ui.fontSmall, chips[i], cx + 75, py + ph - 39,
                 i == 0 ? new Color(1f, 1f, 1f, 0.95f) : new Color(1f, 0.85f, 0.38f, 1f));
         }
-        float xCx = px + pw - 2, xCy = py + ph - 2;
-        batch.setColor(Ui.BTN_CLOSE);
-        batch.draw(circleTexture(), xCx - 17, xCy - 17, 34, 34);
-        batch.setColor(Color.WHITE);
-        batch.draw(ringTexture(), xCx - 17, xCy - 17, 34, 34);
-        Ui.centered(batch, Ui.font, "X", xCx, xCy + 7, Color.WHITE);
+        batch.draw(Ui.roundedRect(36, 36, 10, Ui.BTN_CLOSE, GLASS_RIM), px + pw - 54, py + ph - 54);
+        Ui.faIcon(batch, Ui.fa20, Ui.FA_XMARK, px + pw - 36, py + ph - 36,
+            new Color(0.9f, 0.93f, 1f, 1f));
         // ===== cột trái: sân khấu mặc thử =====
         float stX = px + 24, stW = 296, stY = py + 196, stH = ph - 84 - 196;
         batch.draw(Ui.roundedRect((int) stW, (int) stH, 14, new Color(0.10f, 0.16f, 0.23f, 0.9f), GLASS_RIM), stX, stY);
@@ -7532,12 +7512,9 @@ public class WorldScreen extends ScreenAdapter {
         Ui.font.draw(batch, "Hoá đơn mua", cx + 28, cy + ch - 30);
         // nút X nằm GỌN TRONG góc panel (không chồm ra viền như panel
         // shop) để không đè lên chữ của panel phía sau
-        float xCx = cx + cw - 26, xCy = cy + ch - 26;
-        batch.setColor(Ui.BTN_CLOSE);
-        batch.draw(circleTexture(), xCx - 17, xCy - 17, 34, 34);
-        batch.setColor(Color.WHITE);
-        batch.draw(ringTexture(), xCx - 17, xCy - 17, 34, 34);
-        Ui.centered(batch, Ui.font, "X", xCx, xCy + 7, Color.WHITE);
+        batch.draw(Ui.roundedRect(36, 36, 10, Ui.BTN_CLOSE, GLASS_RIM), cx + cw - 44, cy + ch - 44);
+        Ui.faIcon(batch, Ui.fa20, Ui.FA_XMARK, cx + cw - 26, cy + ch - 26,
+            new Color(0.9f, 0.93f, 1f, 1f));
         // món đang mua: icon + tên + giới tính/cấp
         drawPartIcon(sel.id, cx + 62, cy + ch - 100, 76);
         drawFittedName(sel.name, cx + 116, cy + ch - 82, cw - 116 - 24);
@@ -7629,8 +7606,7 @@ public class WorldScreen extends ScreenAdapter {
     private void billTouch(float x, float y) {
         com.avatardk.game.data.PartData sel = shopSelPart();
         float cw = 640, ch = 520, cx = (Ui.W - cw) / 2f, cy = (Ui.H - ch) / 2f;
-        float xCx = cx + cw - 26, xCy = cy + ch - 26;
-        if ((x - xCx) * (x - xCx) + (y - xCy) * (y - xCy) <= 28 * 28
+        if ((x >= cx + cw - 44 && x <= cx + cw - 8 && y >= cy + ch - 44 && y <= cy + ch - 8)
             || x < cx || x > cx + cw || y < cy || y > cy + ch) {
             billOpen = false;
             return;
