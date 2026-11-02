@@ -17,6 +17,13 @@ import java.util.Map;
 public class AvatarDataSet {
     public final Map<Integer, PartData> parts = new HashMap<>();
     public final Map<Integer, ImgInfo> imgByItemId = new HashMap<>();
+    /** Part tĩnh HỎNG trong dữ liệu Pack5 (pool tạo nhân vật Lv0):
+     *  icon/frame trỏ ra ngoài atlas hoặc trong suốt hoàn toàn, vẽ
+     *  lên sẽ thành hình rác/trống. Sinh bằng tools/check_broken_parts.py
+     *  (kiểm tra pixel thật, 2026-11-02); màn tạo nhân vật bỏ qua. */
+    public final java.util.Set<Integer> brokenParts = new java.util.HashSet<>(
+        java.util.Arrays.asList(319, 320, 321, 433, 434, 435, 436, 437, 438, 439, 440,
+            554, 555, 556, 558, 561, 562, 565, 566, 567, 568, 584, 586, 594, 607, 637, 642, 643));
     /** Tra theo ID ảnh của gốc (ImageInfo.ID) — dữ liệu trích có id dòng
      *  = item_id + 1 trên toàn bộ bảng nên ánh xạ được (xem ImgInfo). */
     public final Map<Integer, ImgInfo> imgById = new HashMap<>();

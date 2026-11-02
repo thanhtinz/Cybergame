@@ -44,7 +44,6 @@ public class CreateCharScreen extends ScreenAdapter {
 
     private static final Color LABEL_DARK = new Color(0.13f, 0.26f, 0.40f, 1f);
     private static final Color TITLE_DARK = new Color(0.05f, 0.16f, 0.30f, 1f);
-    private static final Color HINT = new Color(0.25f, 0.38f, 0.50f, 1f);
     private static final Color BAR_FILL = new Color(0.06f, 0.11f, 0.18f, 1f);
     private static final Color FIELD_FILL = new Color(0.95f, 0.97f, 0.985f, 1f);
     private static final Color FIELD_TEXT = new Color(0.16f, 0.18f, 0.22f, 1f);
@@ -146,6 +145,7 @@ public class CreateCharScreen extends ScreenAdapter {
         List<PartData> all = new ArrayList<>();
         for (PartData p : game.data.parts.values()) {
             if (p.level != 0 || p.isDynamic() || p.name == null || p.name.isEmpty()) continue;
+            if (game.data.brokenParts.contains(p.id)) continue; // dữ liệu Pack5 hỏng: icon/frame rác
             if (p.gender != gender && p.gender != 0) continue;
             if (p.zorder == zorder) all.add(p);
         }
@@ -337,17 +337,16 @@ public class CreateCharScreen extends ScreenAdapter {
     }
 
     private void drawPreview() {
-        // doll đứng trực tiếp trên nền trời (không khung) + bóng mềm
+        // doll đứng trực tiếp trên nền trời: không khung, không bóng
+        // dưới chân; tên nằm sát ngay trên đầu doll (user chốt)
         String name = charName();
         if (name.isEmpty()) {
-            Ui.centered(batch, Ui.font, "Tên nhân vật", PREVIEW_CX, 600,
+            Ui.centered(batch, Ui.font, "Tên nhân vật", PREVIEW_CX, 470,
                 new Color(0.35f, 0.48f, 0.60f, 1f));
         } else {
-            Ui.centered(batch, Ui.font, name, PREVIEW_CX, 600, TITLE_DARK);
+            Ui.centered(batch, Ui.font, name, PREVIEW_CX, 470, TITLE_DARK);
         }
         float feetY = 176 + (float) Math.sin(elapsed * 2.2f) * 2.5f;
-        batch.draw(Ui.roundedRect(180, 17, 8, new Color(0f, 0f, 0f, 0.18f), null),
-            PREVIEW_CX - 90, 160);
         if (doll != null) {
             game.dollRenderer.draw(batch, doll, 0, PREVIEW_CX, feetY, 7.6f, false);
         }
@@ -367,14 +366,10 @@ public class CreateCharScreen extends ScreenAdapter {
         drawRow(0, "Tóc", hairOpts, hairSel);
         drawRow(1, "Áo", clothOpts, clothSel);
         drawRow(2, "Quần", pantOpts, pantSel);
-        // trạng thái / gợi ý
+        // chỉ hiện dòng báo lỗi khi có (dòng gợi ý đã bỏ theo lệnh user)
         if (!status.isEmpty()) {
             Ui.fontSmall.setColor(statusError ? ERR_RED : LABEL_DARK);
             Ui.fontSmall.draw(batch, status, RX, 126);
-        } else {
-            Ui.fontSmall.setColor(HINT);
-            Ui.fontSmall.draw(batch,
-                "Trang phục khởi đầu có thể thay đổi bất cứ lúc nào trong game.", RX, 126);
         }
     }
 
