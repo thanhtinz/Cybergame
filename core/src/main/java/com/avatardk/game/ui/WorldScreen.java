@@ -3860,7 +3860,7 @@ public class WorldScreen extends ScreenAdapter {
     }
 
     private float mailMaxScroll() {
-        return Math.max(0f, mailLetters.size() * 100f - 8f - (ML_PH - 214f));
+        return Math.max(0f, mailLetters.size() * 100f - 8f - (ML_PH - 208f));
     }
 
     private void openMailPanel() {
@@ -3922,19 +3922,16 @@ public class WorldScreen extends ScreenAdapter {
     }
 
     private static Color mailKindBg(String kind) {
-        if ("daily".equals(kind) || "gift".equals(kind)) return new Color(1f, 0.882f, 0.933f, 1f);
-        if ("event".equals(kind)) return new Color(1f, 0.941f, 0.839f, 1f);
-        if ("friend".equals(kind)) return new Color(1f, 0.882f, 0.914f, 1f);
-        if ("update".equals(kind)) return new Color(0.882f, 0.953f, 1f, 1f);
-        return new Color(0.902f, 0.886f, 1f, 1f);
+        // ô icon kính kiểu ô đồ trong giỏ
+        return new Color(0.16f, 0.24f, 0.34f, 0.9f);
     }
 
     private static Color mailKindFg(String kind) {
-        if ("daily".equals(kind) || "gift".equals(kind)) return new Color(0.941f, 0.337f, 0.478f, 1f);
-        if ("event".equals(kind)) return new Color(0.910f, 0.576f, 0.047f, 1f);
-        if ("friend".equals(kind)) return new Color(0.941f, 0.337f, 0.478f, 1f);
-        if ("update".equals(kind)) return new Color(0.231f, 0.561f, 0.831f, 1f);
-        return new Color(0.486f, 0.424f, 0.941f, 1f);
+        if ("daily".equals(kind) || "gift".equals(kind)) return new Color(1f, 0.478f, 0.659f, 1f);
+        if ("event".equals(kind)) return new Color(1f, 0.718f, 0.302f, 1f);
+        if ("friend".equals(kind)) return new Color(1f, 0.478f, 0.659f, 1f);
+        if ("update".equals(kind)) return new Color(0.486f, 0.769f, 1f, 1f);
+        return new Color(0.706f, 0.616f, 0.867f, 1f);
     }
 
     private static String trimToWidth(com.badlogic.gdx.graphics.g2d.BitmapFont f,
@@ -3963,27 +3960,35 @@ public class WorldScreen extends ScreenAdapter {
 
     private void drawMailPanel() {
         float px = (Ui.W - ML_PW) / 2f, py = (Ui.H - ML_PH) / 2f, top = py + ML_PH;
-        batch.draw(Ui.roundedRect((int) Ui.W, (int) Ui.H, 0,
-            new Color(0.05f, 0.05f, 0.12f, 0.45f), null), 0, 0);
-        batch.draw(Ui.roundedRect((int) ML_PW, (int) ML_PH, 28,
-            new Color(0.965f, 0.957f, 0.992f, 1f), ML_RIM), px, py);
-        // header: pill tiêu đề + ô phong bì + nút đóng
-        batch.draw(Ui.roundedRect(308, 60, 30, ML_PILL, null), px + 14, top - 72);
-        batch.draw(Ui.roundedRect(64, 50, 10,
-            new Color(1f, 0.937f, 0.769f, 1f),
-            new Color(0.941f, 0.714f, 0.298f, 1f)), px + 26, top - 67);
-        Ui.faIcon(batch, Ui.fa26, Ui.FA_ENVELOPE, px + 58, top - 42,
-            new Color(0.910f, 0.529f, 0.227f, 1f));
-        Ui.fontBaloo36.setColor(Color.WHITE);
-        Ui.fontBaloo36.draw(batch, "Hòm Thư", px + 106, top - 29);
-        batch.draw(Ui.roundedRect(54, 54, 27, ML_PILL, null), px + ML_PW - 68, top - 68);
-        Ui.faIcon(batch, Ui.fa20, Ui.FA_XMARK, px + ML_PW - 41, top - 41, Color.WHITE);
-        // vạch phân cột
-        batch.draw(Ui.roundedRect(2, (int) (ML_PH - 170), 1,
-            new Color(0.867f, 0.851f, 0.949f, 1f), null), px + 452, py + 108);
+        batch.setColor(0f, 0f, 0f, 0.45f);
+        batch.draw(whiteTex, 0, 0, Ui.W, Ui.H);
+        batch.setColor(Color.WHITE);
+        batch.draw(Ui.roundedRect((int) ML_PW, (int) ML_PH, 16, GLASS_FILL_DARK, GLASS_RIM), px, py);
+        // header kiểu panel Bạn bè: icon vàng + tiêu đề vàng + số thư
+        Ui.faIcon(batch, Ui.fa26, Ui.FA_ENVELOPE, px + 40, top - 36,
+            new Color(1f, 0.85f, 0.45f, 1f));
+        Ui.fontTitle.setColor(1f, 0.85f, 0.45f, 1f);
+        Ui.fontTitle.draw(batch, "Hòm Thư", px + 64, top - 27);
+        String cnt = mailLetters.size() + " thư"
+            + (mailUnread() > 0 ? " · " + mailUnread() + " chưa đọc" : "");
+        Ui.fontSmall.setColor(0.75f, 0.82f, 0.95f, 0.85f);
+        Ui.fontSmall.draw(batch, cnt,
+            px + 64 + Ui.textWidth(Ui.fontTitle, "Hòm Thư") + 18, top - 40);
+        // nút làm mới + đóng (ô kính 36x36 như panel Bạn bè)
+        batch.draw(Ui.roundedRect(36, 36, 10, GLASS_FILL, GLASS_RIM), px + ML_PW - 100, top - 54);
+        Ui.faIcon(batch, Ui.fa20, Ui.FA_ROTATE_RIGHT, px + ML_PW - 82, top - 36,
+            new Color(0.9f, 0.93f, 1f, 1f));
+        batch.draw(Ui.roundedRect(36, 36, 10, GLASS_FILL, GLASS_RIM), px + ML_PW - 54, top - 54);
+        Ui.faIcon(batch, Ui.fa20, Ui.FA_XMARK, px + ML_PW - 36, top - 36,
+            new Color(0.9f, 0.93f, 1f, 1f));
+        batch.draw(Ui.roundedRect((int) (ML_PW - 44), 2, 1,
+            new Color(1f, 1f, 1f, 0.14f), null), px + 22, top - 66);
+        // vạch phân cột mờ
+        batch.draw(Ui.roundedRect(2, (int) (ML_PH - 190), 1,
+            new Color(1f, 1f, 1f, 0.10f), null), px + 452, py + 108);
 
         float lx = px + 24, lw = 404;
-        float listTop = top - 96, listBot = py + 118;
+        float listTop = top - 80, listBot = py + 128;
         Rectangle clip = new Rectangle(lx, listBot, lw, listTop - listBot);
         Rectangle scissors = new Rectangle();
         batch.flush();
@@ -4000,17 +4005,17 @@ public class WorldScreen extends ScreenAdapter {
         if (mailLetters.isEmpty()) {
             Ui.centered(batch, Ui.fontSmall,
                 mailLoaded ? "Chưa có thư nào" : "Đang tải thư...",
-                lx + lw / 2f, (listTop + listBot) / 2f + 8, ML_GRAY);
+                lx + lw / 2f, (listTop + listBot) / 2f + 8,
+                new Color(0.75f, 0.82f, 0.95f, 0.85f));
         }
-        // chân cột trái: số thư + 2 nút
-        Ui.fontSmall.setColor(ML_BODY);
-        Ui.fontSmall.draw(batch, "Số thư: " + mailLetters.size() + "/100", lx + 2, py + 96);
-        batch.draw(Ui.roundedRect(192, 52, 14, Color.WHITE, ML_RIM), lx, py + 16);
-        Ui.faIcon(batch, Ui.fa20, Ui.FA_TRASH, lx + 30, py + 42, ML_GRAY);
-        Ui.font.setColor(ML_DARK);
+        // chân cột trái: Xoá đã đọc (kính) + Nhận tất cả (cam)
+        batch.draw(Ui.roundedRect(192, 52, 14, GLASS_FILL, GLASS_RIM), lx, py + 16);
+        Ui.faIcon(batch, Ui.fa20, Ui.FA_TRASH, lx + 30, py + 42,
+            new Color(0.9f, 0.93f, 1f, 1f));
+        Ui.font.setColor(1f, 1f, 1f, 0.95f);
         Ui.font.draw(batch, "Xoá đã đọc", lx + 54, py + 50);
-        batch.draw(Ui.roundedRect(200, 52, 14,
-            new Color(0.290f, 0.565f, 0.973f, 1f), null), lx + 204, py + 16);
+        batch.draw(Ui.gradientRect(200, 52, 14, EntryUi.ORANGE_TOP, EntryUi.ORANGE_BOT),
+            lx + 204, py + 16);
         Ui.faIcon(batch, Ui.fa20, Ui.FA_DOWNLOAD, lx + 234, py + 42, Color.WHITE);
         Ui.font.setColor(Color.WHITE);
         Ui.font.draw(batch, "Nhận tất cả", lx + 258, py + 50);
@@ -4022,15 +4027,18 @@ public class WorldScreen extends ScreenAdapter {
         float cardTop = listTop - mailScroll - i * 100f;
         float cy = cardTop - 92f;
         boolean sel = mailSelected() == l;
-        batch.draw(Ui.roundedRect(404, 92, 18,
-            sel ? new Color(1f, 0.945f, 0.722f, 1f) : Color.WHITE,
-            sel ? new Color(0.941f, 0.780f, 0.369f, 1f)
-                : new Color(0.867f, 0.851f, 0.949f, 1f)), lx, cy);
-        batch.draw(Ui.roundedRect(58, 58, 14, mailKindBg(l.kind), null), lx + 14, cy + 17);
+        batch.draw(Ui.roundedRect(404, 92, 12,
+            sel ? new Color(0.16f, 0.30f, 0.44f, 0.92f) : GLASS_FILL,
+            sel ? new Color(1f, 0.78f, 0.30f, 1f) : GLASS_RIM), lx, cy);
+        batch.draw(Ui.roundedRect(58, 58, 12, mailKindBg(l.kind), null), lx + 14, cy + 17);
         Ui.faIcon(batch, Ui.fa26, mailKindIcon(l.kind), lx + 43, cy + 46, mailKindFg(l.kind));
-        Ui.fontBaloo30.setColor(ML_DARK);
+        if (l.read) {
+            Ui.fontBaloo30.setColor(0.82f, 0.88f, 0.98f, 0.9f);
+        } else {
+            Ui.fontBaloo30.setColor(Color.WHITE);
+        }
         Ui.fontBaloo30.draw(batch, trimToWidth(Ui.fontBaloo30, l.title, 270), lx + 88, cy + 68);
-        Ui.fontSmall.setColor(ML_GRAY);
+        Ui.fontSmall.setColor(0.75f, 0.82f, 0.95f, 0.85f);
         Ui.fontSmall.draw(batch, l.sender, lx + 88, cy + 30);
         String day = mailDayLabel(l.created);
         Ui.fontSmall.draw(batch, day, lx + 390 - Ui.textWidth(Ui.fontSmall, day), cy + 30);
@@ -4042,46 +4050,41 @@ public class WorldScreen extends ScreenAdapter {
 
     private void drawMailDetail(float px, float py, float top) {
         float dx = px + 476, dw = ML_PW - 476 - 24;
-        float dTop = top - 90;
+        float dTop = top - 80;
         MailLetter l = mailSelected();
         if (l == null) {
             Ui.centered(batch, Ui.fontSmall, "Chọn một thư để xem nội dung",
-                dx + dw / 2f, (dTop + py) / 2f, ML_GRAY);
+                dx + dw / 2f, (dTop + py) / 2f,
+                new Color(0.75f, 0.82f, 0.95f, 0.85f));
             return;
         }
-        batch.draw(Ui.roundedRect(64, 64, 16, mailKindBg(l.kind), null), dx, dTop - 64);
+        batch.draw(Ui.roundedRect(64, 64, 14, mailKindBg(l.kind), null), dx, dTop - 64);
         Ui.faIcon(batch, Ui.fa30, mailKindIcon(l.kind), dx + 32, dTop - 32, mailKindFg(l.kind));
-        Ui.fontBaloo36.setColor(ML_DARK);
+        Ui.fontBaloo36.setColor(Color.WHITE);
         Ui.fontBaloo36.draw(batch, trimToWidth(Ui.fontBaloo36, l.title, dw - 200), dx + 80, dTop - 20);
-        // tem mèo trang trí góc phải như ảnh mẫu
+        // tem mèo trang trí góc phải (theo mẫu) — bản kính mờ
         com.badlogic.gdx.graphics.Texture stamp = Ui.roundedRect(74, 88, 8,
-            Color.WHITE, new Color(0.949f, 0.655f, 0.765f, 1f));
+            GLASS_FILL, new Color(0.949f, 0.655f, 0.765f, 0.55f));
         batch.draw(stamp, dx + dw - 84, dTop - 92, 37, 44, 74, 88, 1f, 1f, -8f,
             0, 0, 74, 88, false, false);
         Ui.faIcon(batch, Ui.fa30, Ui.FA_CAT, dx + dw - 47, dTop - 48,
-            new Color(0.949f, 0.545f, 0.706f, 1f));
+            new Color(0.949f, 0.545f, 0.706f, 0.9f));
         // chip người gửi + giờ gửi
         float chipY = dTop - 108;
         float chipW = Ui.textWidth(Ui.fontSmall, l.sender) + 36;
-        batch.draw(Ui.roundedRect((int) chipW, 36, 18,
-            new Color(0.863f, 0.914f, 1f, 1f), null), dx, chipY);
+        batch.draw(Ui.roundedRect((int) chipW, 36, 18, GLASS_FILL, GLASS_RIM), dx, chipY);
         Ui.centered(batch, Ui.fontSmall, l.sender, dx + chipW / 2f, chipY + 24,
-            new Color(0.231f, 0.435f, 0.831f, 1f));
-        Ui.faIcon(batch, Ui.fa20, Ui.FA_CLOCK, dx + chipW + 24, chipY + 18, ML_GRAY);
-        Ui.fontSmall.setColor(ML_GRAY);
+            new Color(0.85f, 0.92f, 1f, 1f));
+        Ui.faIcon(batch, Ui.fa20, Ui.FA_CLOCK, dx + chipW + 24, chipY + 18,
+            new Color(0.75f, 0.82f, 0.95f, 0.85f));
+        Ui.fontSmall.setColor(0.75f, 0.82f, 0.95f, 0.85f);
         Ui.fontSmall.draw(batch, mailTimeLabel(l.created), dx + chipW + 42, chipY + 24);
-        // dải tem thư chéo đỏ/xanh
-        for (int i = 0; i < 13; i++) {
-            Color c = i % 2 == 0
-                ? new Color(0.949f, 0.471f, 0.624f, 1f)
-                : new Color(0.478f, 0.647f, 0.973f, 1f);
-            com.badlogic.gdx.graphics.Texture seg = Ui.roundedRect(36, 10, 5, c, null);
-            batch.draw(seg, dx + i * 52, chipY - 32, 18, 5, 36, 10, 1f, 1f, -18f,
-                0, 0, 36, 10, false, false);
-        }
+        // vạch ngăn mờ thay dải tem thư của mẫu
+        batch.draw(Ui.roundedRect((int) dw, 2, 1,
+            new Color(1f, 1f, 1f, 0.14f), null), dx, chipY - 22);
         // nội dung thư
-        float by = chipY - 54;
-        Ui.fontSmall.setColor(ML_BODY);
+        float by = chipY - 52;
+        Ui.fontSmall.setColor(0.92f, 0.95f, 1f, 0.95f);
         for (String para : l.body.split("\n")) {
             if (para.isEmpty()) {
                 by -= 12;
@@ -4094,23 +4097,23 @@ public class WorldScreen extends ScreenAdapter {
             }
             if (by < py + 313) break;
         }
-        // hộp vật phẩm đính kèm
+        // hộp vật phẩm đính kèm (ô inset kiểu thanh dưới của Giỏ đồ)
         float boxY = py + 126;
-        batch.draw(Ui.roundedRect((int) dw, 168, 18,
-            new Color(0.925f, 0.918f, 0.973f, 1f), null), dx, boxY);
+        batch.draw(Ui.roundedRect((int) dw, 168, 14,
+            new Color(0f, 0f, 0f, 0.30f), GLASS_RIM), dx, boxY);
         Ui.faIcon(batch, Ui.fa20, Ui.FA_GIFT, dx + 34, boxY + 140,
-            new Color(0.486f, 0.424f, 0.941f, 1f));
-        Ui.font.setColor(ML_DARK);
+            new Color(1f, 0.85f, 0.45f, 1f));
+        Ui.font.setColor(Color.WHITE);
         Ui.font.draw(batch, "Vật phẩm đính kèm", dx + 54, boxY + 148);
         if (l.atts.isEmpty()) {
             Ui.centered(batch, Ui.fontSmall, "Không có vật phẩm đính kèm",
-                dx + dw / 2f, boxY + 74, ML_GRAY);
+                dx + dw / 2f, boxY + 74, new Color(0.75f, 0.82f, 0.95f, 0.85f));
         } else {
             for (int i = 0; i < Math.min(l.atts.size(), 5); i++) {
                 MailAtt a = l.atts.get(i);
                 float tx = dx + 18 + i * 118, ty = boxY + 14;
-                batch.draw(Ui.roundedRect(104, 104, 16,
-                    new Color(0.863f, 0.839f, 0.965f, 1f), null), tx, ty);
+                batch.draw(Ui.roundedRect(104, 104, 12,
+                    new Color(0.16f, 0.24f, 0.34f, 0.9f), GLASS_RIM), tx, ty);
                 if ("xu".equals(a.t)) {
                     batch.draw(game.texture("myinfo/icon0.png"), tx + 25, ty + 34, 54, 54);
                 } else if ("luong".equals(a.t)) {
@@ -4118,21 +4121,21 @@ public class WorldScreen extends ScreenAdapter {
                 } else if ("item".equals(a.t)) {
                     drawPartIcon(a.partId, tx + 52, ty + 62, 60);
                 }
-                Ui.centered(batch, Ui.fontBaloo30, "x" + fmtNum(a.n), tx + 52, ty + 26, ML_DARK);
+                Ui.centered(batch, Ui.fontBaloo30, "x" + fmtNum(a.n), tx + 52, ty + 26, Color.WHITE);
             }
         }
-        // nút nhận thưởng
+        // nút nhận thưởng: cam (nút chính của game) / kính khi đã nhận
         if (!l.atts.isEmpty()) {
             float bw = 360, bh = 62, bx = dx + (dw - bw) / 2f, byy = py + 22;
             if (l.claimed) {
-                batch.draw(Ui.roundedRect((int) bw, (int) bh, 16,
-                    new Color(0.788f, 0.773f, 0.871f, 1f), null), bx, byy);
-                Ui.faIcon(batch, Ui.fa20, Ui.FA_CHECK, bx + 84, byy + 31, Color.WHITE);
-                Ui.centered(batch, Ui.fontBaloo30, "Đã nhận thưởng", bx + bw / 2f + 14, byy + 40, Color.WHITE);
+                batch.draw(Ui.roundedRect((int) bw, (int) bh, 16, GLASS_FILL, GLASS_RIM), bx, byy);
+                Ui.faIcon(batch, Ui.fa20, Ui.FA_CHECK, bx + 84, byy + 31,
+                    new Color(0.75f, 0.82f, 0.95f, 0.85f));
+                Ui.centered(batch, Ui.fontBaloo30, "Đã nhận thưởng", bx + bw / 2f + 14, byy + 40,
+                    new Color(0.75f, 0.82f, 0.95f, 0.85f));
             } else {
-                batch.draw(Ui.roundedRect((int) bw, (int) bh, 16,
-                    new Color(0.325f, 0.745f, 0.290f, 1f),
-                    new Color(0.243f, 0.612f, 0.216f, 1f)), bx, byy);
+                batch.draw(Ui.gradientRect((int) bw, (int) bh, 16,
+                    EntryUi.ORANGE_TOP, EntryUi.ORANGE_BOT), bx, byy);
                 Ui.faIcon(batch, Ui.fa20, Ui.FA_DOWNLOAD, bx + 74, byy + 31, Color.WHITE);
                 Ui.centered(batch, Ui.fontBaloo30, "Nhận thưởng", bx + bw / 2f + 14, byy + 40, Color.WHITE);
             }
@@ -4141,9 +4144,20 @@ public class WorldScreen extends ScreenAdapter {
 
     private void mailTouch(float x, float y, int pointer) {
         float px = (Ui.W - ML_PW) / 2f, py = (Ui.H - ML_PH) / 2f, top = py + ML_PH;
-        if (x >= px + ML_PW - 74 && x <= px + ML_PW - 14 && y >= top - 74 && y <= top - 14) {
+        // nút đóng 36x36 góc phải header
+        if (x >= px + ML_PW - 54 && x <= px + ML_PW - 18 && y >= top - 54 && y <= top - 18) {
             mailOpen = false;
             mailPointer = -1;
+            return;
+        }
+        // nút làm mới: xin lại danh sách thư
+        if (x >= px + ML_PW - 100 && x <= px + ML_PW - 64 && y >= top - 54 && y <= top - 18) {
+            if (online()) {
+                try {
+                    AvatarProtocol.requestMailList(game.connection);
+                } catch (IOException ignored) {
+                }
+            }
             return;
         }
         float lx = px + 24;
@@ -4188,9 +4202,9 @@ public class WorldScreen extends ScreenAdapter {
             }
         }
         // vùng danh sách: chờ chọn hàng + kéo cuộn
-        float listTop = top - 96, listBot = py + 118;
+        float listTop = top - 80, listBot = py + 128;
         if (x >= lx && x <= lx + 404 && y >= listBot && y <= listTop) {
-            int idx = (int) ((listTop + mailScroll - y) / 100f);
+            int idx = (int) ((listTop - mailScroll - y) / 100f);
             mailPendingIdx = idx >= 0 && idx < mailLetters.size() ? idx : -1;
             mailPointer = pointer;
             mailDragStartY = y;

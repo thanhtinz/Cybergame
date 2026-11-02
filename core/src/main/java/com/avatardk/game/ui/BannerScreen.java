@@ -60,7 +60,7 @@ public class BannerScreen extends ScreenAdapter {
         EntryUi.drawHeader(batch);
         batch.draw(Ui.gradientRect((int) BTN_W, (int) BTN_H, 26,
             EntryUi.ORANGE_TOP, EntryUi.ORANGE_BOT), BTN_X, BTN_Y);
-        Ui.centered(batch, Ui.font, "CHẠM ĐỂ BẮT ĐẦU", Ui.W / 2f, BTN_Y + 34, Color.WHITE);
+        Ui.centered(batch, Ui.font, "CHẠM ĐỂ BẮT ĐẦU", Ui.W / 2f, BTN_Y + 29, Color.WHITE);
         Ui.fontSmall.setColor(1f, 1f, 1f, 0.85f);
         Ui.fontSmall.draw(batch, EntryUi.VERSION, 18, 26);
         EntryUi.drawInfoPanel(batch);
