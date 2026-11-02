@@ -3544,7 +3544,7 @@ public class WorldScreen extends ScreenAdapter {
         Ui.fontTitle.setColor(1f, 0.85f, 0.45f, 1f);
         Ui.fontTitle.draw(batch, "Bạn bè", px + 64, top - 27);
         Ui.fontSmall.setColor(0.75f, 0.82f, 0.95f, 0.85f);
-        Ui.fontSmall.draw(batch, friends.size() + " bạn bè", px + 214, top - 29);
+        Ui.fontSmall.draw(batch, friends.size() + " bạn bè", px + 214, top - 40);
         batch.draw(Ui.roundedRect(36, 36, 10, GLASS_FILL, GLASS_RIM), px + FR_PW - 100, top - 54);
         Ui.faIcon(batch, Ui.fa20, Ui.FA_ROTATE_RIGHT, px + FR_PW - 82, top - 36, new Color(0.9f, 0.93f, 1f, 1f));
         batch.draw(Ui.roundedRect(36, 36, 10, GLASS_FILL, GLASS_RIM), px + FR_PW - 54, top - 54);
@@ -3586,18 +3586,18 @@ public class WorldScreen extends ScreenAdapter {
                     new Color(0f, 0f, 0f, 0.28f), new Color(1f, 1f, 1f, 0.16f)),
                     px + 30, rowTop - 73);
                 if (fe.doll != null) {
-                    game.dollRenderer.draw(batch, fe.doll, 0, px + 61, rowTop - 69, 1.15f, false);
+                    game.dollRenderer.draw(batch, fe.doll, 0, px + 61, rowTop - 67, 1.15f, false);
                 }
                 Ui.font.setColor(1f, 1f, 1f, 0.97f);
-                Ui.font.draw(batch, fitText(Ui.font, fe.name, 280), px + 108, rowTop - 33);
+                Ui.font.draw(batch, fitText(Ui.font, fe.name, 280), px + 108, rowTop - 20);
                 // chấm trạng thái + chữ
                 batch.setColor(on ? new Color(0.35f, 0.88f, 0.45f, 1f)
                     : new Color(0.5f, 0.56f, 0.68f, 1f));
-                batch.draw(circleTexture(), px + 108, rowTop - 60, 10, 10);
+                batch.draw(circleTexture(), px + 109, rowTop - 54, 10, 10);
                 batch.setColor(Color.WHITE);
                 Ui.fontSmall.setColor(on ? new Color(0.55f, 0.93f, 0.6f, 1f)
                     : new Color(0.7f, 0.76f, 0.88f, 0.85f));
-                Ui.fontSmall.draw(batch, fe.status != null ? fe.status : "", px + 124, rowTop - 51);
+                Ui.fontSmall.draw(batch, fe.status != null ? fe.status : "", px + 126, rowTop - 43);
                 float by = rowTop - 63;
                 batch.draw(Ui.roundedRect(108, 42, 11,
                     new Color(0.85f, 0.45f, 0.12f, 0.95f), new Color(1f, 0.75f, 0.4f, 0.9f)),
