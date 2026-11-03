@@ -47,7 +47,7 @@ public class PaperDollTest {
 
     @Test
     void dataCountsMatchPack5Inventory() {
-        assertEquals(5496, ds.parts.size(), "items.json phải có 5.496 part");
+        assertEquals(5498, ds.parts.size(), "items.json phải có 5.498 part (5.496 Pack5 + 2 món shop lấy từ bản chính 2026-11-03)");
         assertEquals(1139, ds.imgByItemId.size(), "imgdata.json phải có 1.139 ImageInfo");
         assertEquals(28, ds.npcs.size(), "npcs.json phải có 28 NPC");
     }
@@ -143,7 +143,7 @@ public class PaperDollTest {
                     assertNotNull(ds.imgByItemId.get(f.img), "Part " + p.id + " trỏ img " + f.img + " không có ImageInfo");
             }
         }
-        assertEquals(4740, full);
+        assertEquals(4742, full);
         assertEquals(404, staticFull);
         assertEquals(756, empty);
     }

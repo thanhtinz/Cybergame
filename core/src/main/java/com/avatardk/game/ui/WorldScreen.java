@@ -6832,9 +6832,6 @@ public class WorldScreen extends ScreenAdapter {
             layout.setText(Ui.fontSmall, s);
             Ui.fontSmall.draw(batch, s, cx + BOARD_CELL_W / 2f - layout.width / 2f, cy + 26);
         }
-        Ui.fontSmall.setColor(1f, 1f, 1f, 0.7f);
-        Ui.fontSmall.draw(batch, "Khu đông thì chọn khu khác — vẫn là map này, chỉ khác người.",
-            BOARD_PX + 22, BOARD_PY + 30);
     }
 
     // ===== BẢN ĐỒ THÀNH PHỐ ZOOM/KÉO (chủ dự án chốt 2026-11-01, thay
