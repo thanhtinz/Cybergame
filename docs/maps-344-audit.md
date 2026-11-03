@@ -322,3 +322,8 @@ nhóm này.
   (`{w, h, bg, cells}`), sẵn sàng cho pipeline suy `o/t/d` của port.
 - Trích thô byte-chính-xác dùng trong phân tích: `/tmp/maps344/*.bin`
   (DataMap*, Map*, BGMap*, LinkMap*, Map, DataMoveCityMap).
+
+## TIẾN ĐỘ DỰNG LẠI (ghi bổ sung 2026-11-03)
+- Đợt 1 (push 5a3cf1859db3): map 16/17/24 đã thay lưới 3.4.4 + mô phỏng lại o/t/d; chỉ 3 map đổi; chụp kiểm chứng PASS.
+- Đợt 2 (push c32ee6014767): map 5/10/12/26 đã thay lưới 3.4.4 + o/t/d; map 26 giữ đủ cổng -1/24/52/53 (ô type 93 IceDream không còn trên lưới mới); chụp map 5 + 26 PASS.
+- FARM 25 — phân tích hình học (chưa thay): khối đất 142 đổi BỐ CỤC: cũ 4 khối hàng ngang y=1 (x 22/25/28/31, mỗi khối 3 cột x 4 hàng = 12 ô); mới 4 khối 2x2 tại (22,1),(29,1),(22,4),(29,4) (mỗi khối 6 cột x 2 hàng = 12 ô). Khế 189 giữ nguyên (19,1). Khi làm: đổi hình học khối trong FarmWorld (ô i: cũ (i%3, i/3) -> mới (i%6, i/6)), nhập strips Map250-255, rà lại neo hồ/bếp/kho, chạy regression farm đầy đủ. Chỉ số ô phía server không đổi (theo index) nên dữ liệu farm của người chơi an toàn.

@@ -404,13 +404,16 @@ public class FarmWorld {
     }
 
     /** Vị trí ô thứ idx (đơn vị medium): {trung tâm x, chân y tính từ ĐÁY map}.
-     *  Gốc: x = xCell*24 + 12, y (từ trên) = yCell*24 + 18; khối 12 ô, 4 ô/cột. */
+     *  Gốc: x = xCell*24 + 12, y (từ trên) = yCell*24 + 18; khối 12 ô xếp
+     *  theo cột (j/numH, j%numH) như FarmScr.setCellAll của gốc.
+     *  numH = 2 theo bố cục farm của bản chính 3.4.4 (khối 6 cột x 2 hàng;
+     *  Pack5 cũ là 4 -> khối 3x4 — đã thay cả lưới + ảnh nền theo 3.4.4). */
     public static float[] cellPos(List<int[]> blocks, int idx, int gridH) {
         int block = idx / 12;
         int j = idx % 12;
         if (block >= blocks.size()) return null;
-        int cx = blocks.get(block)[0] + j / 4;
-        int cy = blocks.get(block)[1] + j % 4;
+        int cx = blocks.get(block)[0] + j / 2;
+        int cy = blocks.get(block)[1] + j % 2;
         return new float[]{cx * 24f + 12f, gridH * 24f - (cy * 24f + 18f)};
     }
 
