@@ -1271,6 +1271,8 @@ public class WorldScreen extends ScreenAdapter {
     // --- Panel chọn hạt (gieo từ kho giống) ---
     private static final float FS_PW = 640f, FS_PH = 470f;
     private static final float FS_PX = (Ui.W - FS_PW) / 2f, FS_PY = (Ui.H - FS_PH) / 2f;
+    private int farmSeedPage;
+    private final java.util.List<float[]> farmSeedBtns = new java.util.ArrayList<>();
 
     private void drawFarmSeedPanel() {
         batch.setColor(0f, 0f, 0f, 0.45f);
@@ -1289,28 +1291,37 @@ public class WorldScreen extends ScreenAdapter {
                 FS_PX + FS_PW / 2f, FS_PY + FS_PH / 2f - 8, new Color(1f, 1f, 1f, 0.55f));
             return;
         }
-        float cw = 112f, ch = 118f, gx = 14f, gy = 12f;
-        float x0 = FS_PX + (FS_PW - (5 * cw + 4 * gx)) / 2f, yTop = FS_PY + FS_PH - 76f;
-        for (int i = 0; i < farm.seeds.size() && i < 15; i++) {
+        // Phân trang 15 hạt/trang (kho có thể đủ 25 loại hạt) — bản cũ
+        // cắt cứng 15, hạt thứ 16 trở đi không trồng được.
+        farmSeedBtns.clear();
+        int seedPages = Math.max(1, (farm.seeds.size() + 14) / 15);
+        if (farmSeedPage >= seedPages) farmSeedPage = seedPages - 1;
+        if (farmSeedPage < 0) farmSeedPage = 0;
+        int seedStart = farmSeedPage * 15;
+        float cw = 112f, ch = 112f, gx = 14f, gy = 10f;
+        float x0 = FS_PX + (FS_PW - (5 * cw + 4 * gx)) / 2f, yTop = FS_PY + FS_PH - 70f;
+        for (int i = seedStart; i < farm.seeds.size() && i < seedStart + 15; i++) {
+            int k = i - seedStart;
             int[] s = farm.seeds.get(i);
             FarmWorld.TreeDef def = farm.trees.get(s[0]);
             if (def == null) continue;
-            float cx = x0 + (i % 5) * (cw + gx);
-            float cy = yTop - (i / 5) * (ch + gy) - ch;
+            float cx = x0 + (k % 5) * (cw + gx);
+            float cy = yTop - (k / 5) * (ch + gy) - ch;
             batch.draw(Ui.roundedRect((int) cw, (int) ch, 12,
                 new Color(0.10f, 0.16f, 0.24f, 0.9f), GLASS_RIM), cx, cy);
             int iconId = def.img.length > 7 ? def.img[7] : (def.img.length > 0 ? def.img[0] : 0);
             if (s[0] < 30) {
                 com.badlogic.gdx.graphics.g2d.TextureRegion rg = farm.staticRegion(iconId);
-                if (rg != null) batch.draw(rg, cx + cw / 2f - 24, cy + ch - 62, 48, 48);
+                if (rg != null) batch.draw(rg, cx + cw / 2f - 22, cy + ch - 58, 44, 44);
             } else {
                 Texture tx = farm.dynTexture(iconId);
-                if (tx != null) batch.draw(tx, cx + cw / 2f - 24, cy + ch - 62,
-                    Math.min(48, tx.getWidth()), Math.min(48, tx.getHeight()));
+                if (tx != null) batch.draw(tx, cx + cw / 2f - 22, cy + ch - 58,
+                    Math.min(44, tx.getWidth()), Math.min(44, tx.getHeight()));
             }
-            Ui.centered(batch, Ui.fontSmall, def.name, cx + cw / 2f, cy + 42, new Color(1f, 1f, 1f, 0.92f));
-            Ui.centered(batch, Ui.fontSmall, "x" + s[1], cx + cw / 2f, cy + 20, new Color(1f, 0.85f, 0.38f, 1f));
+            Ui.centered(batch, Ui.fontSmall, truncTo(Ui.fontSmall, def.name, cw - 8), cx + cw / 2f, cy + 40, new Color(1f, 1f, 1f, 0.92f));
+            Ui.centered(batch, Ui.fontSmall, "x" + s[1], cx + cw / 2f, cy + 19, new Color(1f, 0.85f, 0.38f, 1f));
         }
+        drawFarmPager(farmSeedBtns, FS_PX + FS_PW / 2f, FS_PY + 6, farmSeedPage, seedPages);
     }
 
     private void farmSeedTouch(float x, float y) {
@@ -1319,11 +1330,20 @@ public class WorldScreen extends ScreenAdapter {
             farmSeedOpen = false;
             return;
         }
-        float cw = 112f, ch = 118f, gx = 14f, gy = 12f;
-        float x0 = FS_PX + (FS_PW - (5 * cw + 4 * gx)) / 2f, yTop = FS_PY + FS_PH - 76f;
-        for (int i = 0; i < farm.seeds.size() && i < 15; i++) {
-            float cx = x0 + (i % 5) * (cw + gx);
-            float cy = yTop - (i / 5) * (ch + gy) - ch;
+        for (float[] b : farmSeedBtns) {
+            if (x >= b[0] && x <= b[0] + b[2] && y >= b[1] && y <= b[1] + b[3]) {
+                if ((int) b[4] == -200) farmSeedPage = Math.max(0, farmSeedPage - 1);
+                else if ((int) b[4] == -201) farmSeedPage++;
+                return;
+            }
+        }
+        float cw = 112f, ch = 112f, gx = 14f, gy = 10f;
+        float x0 = FS_PX + (FS_PW - (5 * cw + 4 * gx)) / 2f, yTop = FS_PY + FS_PH - 70f;
+        int seedStart = farmSeedPage * 15;
+        for (int i = seedStart; i < farm.seeds.size() && i < seedStart + 15; i++) {
+            int k = i - seedStart;
+            float cx = x0 + (k % 5) * (cw + gx);
+            float cy = yTop - (k / 5) * (ch + gy) - ch;
             if (x >= cx && x <= cx + cw && y >= cy && y <= cy + ch) {
                 farmPlant(farm.seeds.get(i)[0]);
                 return;
@@ -1444,6 +1464,7 @@ public class WorldScreen extends ScreenAdapter {
     // Tương tác tại nhà kho (xem farmInteract), không còn nút nổi. ----
     private boolean farmStoreOpen, farmShopOpen;
     private int farmShopTab; // 0 = hạt giống, 1 = phân bón/vật phẩm
+    private int farmShopPage; // trang hiện tại trong tab cửa hàng farm
 
     private void farmBuy(int id, int type) {
         Msg m = new Msg(AvatarProtocol.FARM_BUY_ITEM);
@@ -1507,9 +1528,74 @@ public class WorldScreen extends ScreenAdapter {
     }
 
     // --- Panel KHO nông trại ---
-    private static final float FK_PW = 780f, FK_PH = 540f;
+    private static final float FK_PW = 800f, FK_PH = 560f;
     private static final float FK_PX = (Ui.W - FK_PW) / 2f, FK_PY = (Ui.H - FK_PH) / 2f;
     private final java.util.List<float[]> farmSellBtns = new java.util.ArrayList<>();
+
+    /** Hàng phân trang dùng chung cho các panel farm: nút < > + nhãn
+     *  "Trang a/b", ghi nút vào btns với mã -200 (trước) / -201 (sau).
+     *  Chỉ vẽ khi có từ 2 trang trở lên. */
+    private void drawFarmPager(java.util.List<float[]> btns, float cx, float y, int page, int pages) {
+        if (pages <= 1) return;
+        float bw = 52f, bh = 34f;
+        float bx1 = cx - 132f;
+        batch.draw(Ui.roundedRect((int) bw, (int) bh, 10,
+            page > 0 ? GLASS_FILL : new Color(0.22f, 0.22f, 0.25f, 0.9f), GLASS_RIM), bx1, y);
+        Ui.centered(batch, Ui.font, "<", bx1 + bw / 2f, y + 25,
+            new Color(1f, 1f, 1f, page > 0 ? 0.95f : 0.35f));
+        if (page > 0) btns.add(new float[]{bx1, y, bw, bh, -200});
+        float bx2 = cx + 132f - bw;
+        batch.draw(Ui.roundedRect((int) bw, (int) bh, 10,
+            page < pages - 1 ? GLASS_FILL : new Color(0.22f, 0.22f, 0.25f, 0.9f), GLASS_RIM), bx2, y);
+        Ui.centered(batch, Ui.font, ">", bx2 + bw / 2f, y + 25,
+            new Color(1f, 1f, 1f, page < pages - 1 ? 0.95f : 0.35f));
+        if (page < pages - 1) btns.add(new float[]{bx2, y, bw, bh, -201});
+        Ui.centered(batch, Ui.fontSmall, "Trang " + (page + 1) + "/" + pages, cx, y + 23,
+            new Color(1f, 1f, 1f, 0.75f));
+    }
+
+    /** Kẹp vùng vẽ trong khung panel: bảo hiểm chống tràn tuyệt đối trên
+     *  mọi bản build (kể cả khi metrics font lệch nhau giữa các nền). */
+    private boolean pushPanelClip(float x, float y, float w, float h) {
+        Rectangle clip = new Rectangle(x, y, w, h);
+        Rectangle scissors = new Rectangle();
+        batch.flush();
+        ScissorStack.calculateScissors(hudViewport.getCamera(), batch.getTransformMatrix(), clip, scissors);
+        batch.flush();
+        return ScissorStack.pushScissors(scissors);
+    }
+
+    private void popPanelClip() {
+        batch.flush();
+        ScissorStack.popScissors();
+    }
+
+    /** Cắt ngắn chuỗi theo bề rộng ĐO THẬT của font (thêm "…" khi cắt). */
+    private String truncTo(com.badlogic.gdx.graphics.g2d.BitmapFont font, String s, float maxW) {
+        layout.setText(font, s);
+        if (layout.width <= maxW) return s;
+        while (s.length() > 3) {
+            s = s.substring(0, s.length() - 1);
+            layout.setText(font, s + "…");
+            if (layout.width <= maxW) return s + "…";
+        }
+        return s;
+    }
+
+    // --- Panel KHO nông trại: 3 tab dạng lưới thẻ như Cửa hàng, có phân
+    // trang — bố cục cũ 2 cột (thẻ hạt cao không giới hạn) tràn khung khi
+    // người chơi có nhiều loại hạt/nông sản nên đã thay hẳn. ---
+    private int farmStoreTab = 0;   // 0 hạt, 1 vật phẩm, 2 nông sản
+    private int farmStorePage = 0;
+
+    private java.util.List<int[]> farmStoreList() {
+        if (farmStoreTab == 0) return farm.seeds;
+        if (farmStoreTab == 1) return farm.usableItems;
+        java.util.List<int[]> all = new java.util.ArrayList<>();
+        all.addAll(farm.products);
+        all.addAll(farm.specials);
+        return all;
+    }
 
     private void drawFarmStorePanel() {
         farmSellBtns.clear();
@@ -1519,98 +1605,119 @@ public class WorldScreen extends ScreenAdapter {
         batch.draw(Ui.roundedRect((int) FK_PW, (int) FK_PH, 16, GLASS_FILL_DARK, GLASS_RIM), FK_PX, FK_PY);
         drawFarmPanelHeader(FK_PX, FK_PY, FK_PW, FK_PH, Ui.FA_BOX_ARCHIVE,
             new Color(0.10f, 0.45f, 0.55f, 0.95f), "Kho nông trại",
-            "Cấp " + farm.lvFarm + " · Sức chứa " + fmtMoney(farm.capacity) + " · Bán nông sản ngay trong kho");
-
-        float contentTop = FK_PY + FK_PH - 92f;
-        float contentBot = FK_PY + 20f;
-        float colW = (FK_PW - 44 - 14) / 2f;
-        float lx = FK_PX + 22, rx = lx + colW + 14;
-
-        // ----- cột trái: hai thẻ Hạt giống / Vật phẩm -----
-        float seedsH = 46f + Math.max(1, farm.seeds.size()) * 38f;
-        float seedsY = contentTop - seedsH;
-        drawFarmCardBg(lx, seedsY, colW, seedsH);
-        Ui.fontSmall.setColor(1f, 0.95f, 0.55f, 1f);
-        Ui.fontSmall.draw(batch, "HẠT GIỐNG", lx + 14, seedsY + seedsH - 16);
-        drawFarmQtyPill(lx + colW - 12, seedsY + seedsH - 22, farm.seeds.size() + " loại");
-        float y = seedsY + seedsH - 46f;
-        if (farm.seeds.isEmpty()) {
-            Ui.fontSmall.setColor(1f, 1f, 1f, 0.55f);
-            Ui.centered(batch, Ui.fontSmall, "Chưa có hạt giống nào", lx + colW / 2f, y + 8,
-                new Color(1f, 1f, 1f, 0.55f));
-        }
-        for (int[] s : farm.seeds) {
-            FarmWorld.TreeDef def = farm.trees.get(s[0]);
-            if (def == null) continue;
-            drawFarmMedallion(lx + 10, y - 26, 30);
-            drawFarmIcon(def, s[0], lx + 13, y - 23, 24);
-            Ui.fontSmall.setColor(1f, 1f, 1f, 0.95f);
-            Ui.fontSmall.draw(batch, def.name, lx + 50, y + 2);
-            drawFarmQtyPill(lx + colW - 12, y - 11, "x" + s[1]);
-            y -= 38f;
-        }
-        float itemsH = 46f + Math.max(1, farm.usableItems.size()) * 38f;
-        float itemsY = seedsY - 12f - itemsH;
-        if (itemsY >= contentBot) {
-            drawFarmCardBg(lx, itemsY, colW, itemsH);
-            Ui.fontSmall.setColor(1f, 0.95f, 0.55f, 1f);
-            Ui.fontSmall.draw(batch, "VẬT PHẨM", lx + 14, itemsY + itemsH - 16);
-            drawFarmQtyPill(lx + colW - 12, itemsY + itemsH - 22, farm.usableItems.size() + " loại");
-            float y2 = itemsY + itemsH - 46f;
-            if (farm.usableItems.isEmpty()) {
-                Ui.centered(batch, Ui.fontSmall, "Chưa có vật phẩm nào", lx + colW / 2f, y2 + 8,
-                    new Color(1f, 1f, 1f, 0.55f));
+            "Cấp " + farm.lvFarm + " · Sức chứa " + fmtMoney(farm.capacity)
+                + (farmStoreTab == 2 ? " · Bấm Bán để bán cả chồng" : ""));
+        // 3 tab (mã nút -100-tab)
+        String[] tabs = {"Hạt giống", "Vật phẩm", "Nông sản"};
+        float tw = 168f, th = 42f, tx0 = FK_PX + 26, ty = FK_PY + FK_PH - 122f;
+        for (int i = 0; i < 3; i++) {
+            float tx = tx0 + i * (tw + 10);
+            if (farmStoreTab == i) {
+                batch.draw(Ui.gradientRect((int) tw, (int) th, 12, EntryUi.ORANGE_TOP, EntryUi.ORANGE_BOT), tx, ty);
+            } else {
+                batch.draw(Ui.roundedRect((int) tw, (int) th, 12, GLASS_FILL, GLASS_RIM), tx, ty);
             }
-            for (int[] u : farm.usableItems) {
-                FarmWorld.FarmItemDef fd = farm.farmItemDefs.get(u[0]);
-                drawFarmMedallion(lx + 10, y2 - 26, 30);
+            Ui.centered(batch, Ui.fontSmall, tabs[i], tx + tw / 2f, ty + 28, new Color(1f, 1f, 1f, 0.95f));
+            farmSellBtns.add(new float[]{tx, ty, tw, th, -100 - i});
+        }
+        float gridTop = ty - 12f;
+        java.util.List<int[]> list = farmStoreList();
+        int perPage = 15;
+        int pages = Math.max(1, (list.size() + perPage - 1) / perPage);
+        if (farmStorePage >= pages) farmStorePage = pages - 1;
+        if (farmStorePage < 0) farmStorePage = 0;
+        // lưới thẻ 5 x 3, kẹp trong khung panel
+        float cw = 140f, ch = 126f, gx = 12f, gy = 10f;
+        float x0 = FK_PX + (FK_PW - (5 * cw + 4 * gx)) / 2f;
+        boolean clipped = pushPanelClip(FK_PX + 6, FK_PY + 52, FK_PW - 12, gridTop - FK_PY - 52);
+        if (list.isEmpty()) {
+            Ui.centered(batch, Ui.fontSmall,
+                farmStoreTab == 2 ? "Chưa thu hoạch gì" : "Chưa có gì trong mục này",
+                FK_PX + FK_PW / 2f, gridTop - 120, new Color(1f, 1f, 1f, 0.55f));
+        }
+        int start = farmStorePage * perPage;
+        for (int k = 0; k < perPage && start + k < list.size(); k++) {
+            int[] e = list.get(start + k);
+            float cx = x0 + (k % 5) * (cw + gx);
+            float cy = gridTop - (k / 5 + 1) * (ch + gy) + gy;
+            batch.draw(Ui.roundedRect((int) cw, (int) ch, 12,
+                new Color(0.09f, 0.14f, 0.22f, 0.92f), GLASS_RIM), cx, cy);
+            if (farmStoreTab == 2) {
+                drawFarmStoreProductCard(cx, cy, cw, ch, e);
+            } else if (farmStoreTab == 0) {
+                FarmWorld.TreeDef def = farm.trees.get(e[0]);
+                if (def == null) continue;
+                drawFarmMedallion(cx + cw / 2f - 26, cy + ch - 64, 52);
+                drawFarmIcon(def, e[0], cx + cw / 2f - 20, cy + ch - 58, 40);
+                drawFarmCardName(cx, cw, cy, def.name);
+                drawFarmQtyPillCentered(cx + cw / 2f, cy + 18, "x" + e[1]);
+            } else {
+                FarmWorld.FarmItemDef fd = farm.farmItemDefs.get(e[0]);
+                drawFarmMedallion(cx + cw / 2f - 26, cy + ch - 64, 52);
                 Texture tx = fd != null ? farm.dynTexture(fd.img) : null;
-                if (tx != null) batch.draw(tx, lx + 13, y2 - 23, 24, 24);
-                Ui.fontSmall.setColor(1f, 1f, 1f, 0.95f);
-                Ui.fontSmall.draw(batch, fd != null ? fd.name : FarmWorld.fertName(u[0]), lx + 50, y2 + 2);
-                drawFarmQtyPill(lx + colW - 12, y2 - 11, "x" + u[1]);
-                y2 -= 38f;
+                if (tx != null) batch.draw(tx, cx + cw / 2f - 20, cy + ch - 58, 40, 40);
+                drawFarmCardName(cx, cw, cy, fd != null ? fd.name : FarmWorld.fertName(e[0]));
+                drawFarmQtyPillCentered(cx + cw / 2f, cy + 18, "x" + e[1]);
             }
         }
+        if (clipped) popPanelClip();
+        drawFarmPager(farmSellBtns, FK_PX + FK_PW / 2f, FK_PY + 13, farmStorePage, pages);
+    }
 
-        // ----- cột phải: thẻ Nông sản (bán) -----
-        drawFarmCardBg(rx, contentBot, colW, contentTop - contentBot);
-        Ui.fontSmall.setColor(1f, 0.95f, 0.55f, 1f);
-        Ui.fontSmall.draw(batch, "NÔNG SẢN", rx + 14, contentTop - 16);
-        java.util.List<int[]> sellables = new java.util.ArrayList<>();
-        sellables.addAll(farm.products);
-        sellables.addAll(farm.specials);
-        drawFarmQtyPill(rx + colW - 12, contentTop - 22, sellables.size() + " loại");
-        float ry = contentTop - 46f;
-        if (sellables.isEmpty()) {
-            Ui.centered(batch, Ui.fontSmall, "Chưa thu hoạch gì", rx + colW / 2f, ry - 30,
-                new Color(1f, 1f, 1f, 0.55f));
+    /** Nhãn số lượng canh giữa theo tâm x cho trước. */
+    private void drawFarmQtyPillCentered(float centerX, float centerY, String text) {
+        layout.setText(Ui.fontSmall, text);
+        drawFarmQtyPill(centerX + (layout.width + 18f) / 2f, centerY, text);
+    }
+
+    /** Tên trong thẻ lưới: 1 dòng canh giữa, dài thì xuống 2 dòng (đo thật). */
+    private void drawFarmCardName(float cx, float cw, float cy, String name) {
+        layout.setText(Ui.fontSmall, name);
+        if (layout.width > cw - 10 && name.contains(" ")) {
+            int sp = name.lastIndexOf(' ');
+            Ui.centered(batch, Ui.fontSmall, name.substring(0, sp), cx + cw / 2f, cy + 58,
+                new Color(1f, 1f, 1f, 0.92f));
+            Ui.centered(batch, Ui.fontSmall, name.substring(sp + 1), cx + cw / 2f, cy + 41,
+                new Color(1f, 1f, 1f, 0.92f));
+        } else {
+            Ui.centered(batch, Ui.fontSmall, truncTo(Ui.fontSmall, name, cw - 10),
+                cx + cw / 2f, cy + 50, new Color(1f, 1f, 1f, 0.92f));
         }
-        for (int[] p : sellables) {
-            if (ry - 56f < contentBot + 6) break;
-            FarmWorld.ProductDef pd = farm.productDefs.get(p[0]);
-            String name = pd != null ? pd.name : ("Sản phẩm " + p[0]);
-            int price = pd != null ? pd.priceXu : 0;
-            float rowY = ry - 56f;
-            batch.draw(Ui.roundedRect((int) colW - 20, 56, 10,
-                new Color(0.11f, 0.18f, 0.27f, 0.95f), GLASS_RIM), rx + 10, rowY);
-            drawFarmMedallion(rx + 18, rowY + 8, 40);
-            drawProductIcon(p[0], pd, rx + 23, rowY + 13, 30);
-            Ui.fontSmall.setColor(1f, 1f, 1f, 0.97f);
-            Ui.fontSmall.draw(batch, name + "  x" + p[1], rx + 68, rowY + 38);
-            Ui.fontSmall.setColor(1f, 1f, 1f, 0.62f);
-            Ui.fontSmall.draw(batch, price > 0
-                ? (fmtMoney(price) + " xu/cái · tổng " + fmtMoney(price * p[1]) + " xu")
-                : "Chưa bán được", rx + 68, rowY + 19);
-            if (price > 0) {
-                float bw = 66f, bh = 38f, bx = rx + colW - 18 - bw, byy = rowY + 9;
-                batch.draw(Ui.gradientRect((int) bw, (int) bh, 10, EntryUi.ORANGE_TOP, EntryUi.ORANGE_BOT), bx, byy);
-                Ui.centered(batch, Ui.fontSmall, "Bán", bx + bw / 2f, byy + 25, new Color(1f, 1f, 1f, 1f));
-                farmSellBtns.add(new float[]{bx, byy, bw, bh, p[0]});
-            }
-            ry -= 64f;
+    }
+
+    /** Thẻ nông sản trong Kho: icon + tên + giá/tổng + nút Bán + số lượng. */
+    private void drawFarmStoreProductCard(float cx, float cy, float cw, float ch, int[] e) {
+        FarmWorld.ProductDef pd = farm.productDefs.get(e[0]);
+        String name = pd != null ? pd.name : ("Sản phẩm " + e[0]);
+        int price = pd != null ? pd.priceXu : 0;
+        // Bố cục đo lại sau khi chụp thấy dòng giá đè lên nút Bán: mỗi
+        // dòng chữ cách nhau >= 20px baseline, nút thấp xuống đáy thẻ.
+        drawFarmMedallion(cx + cw / 2f - 19, cy + 78, 38);
+        drawProductIcon(e[0], pd, cx + cw / 2f - 14, cy + 83, 28);
+        Ui.centered(batch, Ui.fontSmall, truncTo(Ui.fontSmall, name, cw - 10),
+            cx + cw / 2f, cy + 70, new Color(1f, 1f, 1f, 0.97f));
+        if (price > 0) {
+            // Dòng giá: đủ chỗ thì kèm tổng tiền, chật thì chỉ giá/cái —
+            // không cắt giữa chữ (bản chụp trước ra chữ "tổn..." rất xấu).
+            String priceLine = fmtMoney(price) + " xu/cái · tổng " + fmtMoney(price * e[1]) + " xu";
+            layout.setText(Ui.fontSmall, priceLine);
+            if (layout.width > cw - 10) priceLine = fmtMoney(price) + " xu/cái";
+            Ui.centered(batch, Ui.fontSmall, priceLine,
+                cx + cw / 2f, cy + 50, new Color(1f, 1f, 1f, 0.62f));
+            float bw = 76f, bh = 24f, bx = cx + 8, byy = cy + 4;
+            batch.draw(Ui.gradientRect((int) bw, (int) bh, 9, EntryUi.ORANGE_TOP, EntryUi.ORANGE_BOT), bx, byy);
+            Ui.centered(batch, Ui.fontSmall, "Bán", bx + bw / 2f, byy + 17, new Color(1f, 1f, 1f, 1f));
+            farmSellBtns.add(new float[]{bx, byy, bw, bh, e[0]});
+            Ui.fontSmall.setColor(1f, 0.85f, 0.38f, 1f);
+            layout.setText(Ui.fontSmall, "x" + e[1]);
+            Ui.fontSmall.draw(batch, "x" + e[1], cx + cw - 10 - layout.width, cy + 21);
+            Ui.fontSmall.setColor(Color.WHITE);
+        } else {
+            Ui.centered(batch, Ui.fontSmall, "Chưa bán được", cx + cw / 2f, cy + 43,
+                new Color(1f, 1f, 1f, 0.5f));
+            Ui.centered(batch, Ui.fontSmall, "x" + e[1], cx + cw / 2f, cy + 20,
+                new Color(1f, 0.85f, 0.38f, 1f));
         }
-        Ui.fontSmall.setColor(Color.WHITE);
     }
 
     /** Icon cây (giai đoạn icon img[7]) tại (x, y) cỡ size. */
@@ -1653,7 +1760,17 @@ public class WorldScreen extends ScreenAdapter {
         }
         for (float[] b : farmSellBtns) {
             if (x >= b[0] && x <= b[0] + b[2] && y >= b[1] && y <= b[1] + b[3]) {
-                farmSell((int) b[4]);
+                int code = (int) b[4];
+                if (code <= -100 && code > -200) { // tab
+                    farmStoreTab = -100 - code;
+                    farmStorePage = 0;
+                } else if (code == -200) {
+                    farmStorePage = Math.max(0, farmStorePage - 1);
+                } else if (code == -201) {
+                    farmStorePage++;
+                } else if (code >= 0) {
+                    farmSell(code);
+                }
                 return;
             }
         }
@@ -1685,7 +1802,7 @@ public class WorldScreen extends ScreenAdapter {
             "Bạn có " + fmtMoney(myXu) + " xu · " + fmtMoney(myLuong) + " lượng — bấm vào món để mua");
         // 3 tab
         String[] tabs = {"Hạt giống", "Vật phẩm", "Vật nuôi"};
-        float tw = 168f, th = 42f, tx0 = FH_PX + 26, ty = FH_PY + FH_PH - 122f;
+        float tw = 168f, th = 42f, tx0 = FH_PX + 26, ty = FH_PY + FH_PH - 120f;
         for (int i = 0; i < 3; i++) {
             float tx = tx0 + i * (tw + 10);
             if (farmShopTab == i) {
@@ -1696,71 +1813,85 @@ public class WorldScreen extends ScreenAdapter {
             Ui.centered(batch, Ui.fontSmall, tabs[i], tx + tw / 2f, ty + 28, new Color(1f, 1f, 1f, 0.95f));
             farmShopBtns.add(new float[]{tx, ty, tw, th, 100 + i});
         }
-        float gridTop = ty - 14f;
+        float gridTop = ty - 12f;
+        // Phân trang: hạt có 25 loại (2 trang), vật phẩm 14 (3 trang x 5),
+        // vật nuôi 9 (1 trang). Bản cũ cắt cứng 15 hạt / 6 vật phẩm mà
+        // không có cách xem tiếp, và hàng thẻ thứ 3 tràn đáy panel 14px —
+        // hình học đã đo lại toàn bộ (đáy hàng 3 = FH_PY + 16).
+        int total = farmShopTab == 0 ? farm.trees.size()
+            : farmShopTab == 1 ? farm.farmItemDefs.size() : farm.animalDefs.size();
+        int perPage = farmShopTab == 1 ? 5 : 15;
+        int pages = Math.max(1, (total + perPage - 1) / perPage);
+        if (farmShopPage >= pages) farmShopPage = pages - 1;
+        if (farmShopPage < 0) farmShopPage = 0;
+        int start = farmShopPage * perPage;
+        boolean clipped = pushPanelClip(FH_PX + 6, FH_PY + 50, FH_PW - 12, gridTop - FH_PY - 50);
         if (farmShopTab == 0) {
             // lưới hạt: thẻ có medallion icon + tên + nhãn giá
-            float cw = 122f, ch = 138f, gx = 12f, gy = 12f;
+            float cw = 122f, ch = 132f, gx = 12f, gy = 8f;
             float x0 = FH_PX + (FH_PW - (5 * cw + 4 * gx)) / 2f;
             int i = 0;
             for (FarmWorld.TreeDef def : farm.trees.values()) {
-                if (i >= 15) break;
-                float cx = x0 + (i % 5) * (cw + gx);
-                float cy = gridTop - (i / 5 + 1) * (ch + gy) + gy;
+                if (i < start) { i++; continue; }
+                if (i >= start + perPage) break;
+                int k = i - start;
+                float cx = x0 + (k % 5) * (cw + gx);
+                float cy = gridTop - (k / 5 + 1) * (ch + gy) + gy;
                 batch.draw(Ui.roundedRect((int) cw, (int) ch, 12,
                     new Color(0.09f, 0.14f, 0.22f, 0.92f), GLASS_RIM), cx, cy);
-                drawFarmMedallion(cx + cw / 2f - 28, cy + ch - 66, 56);
-                drawFarmIcon(def, def.id, cx + cw / 2f - 22, cy + ch - 60, 44);
-                // tên dài (vd "Hoa hướng dương") xuống 2 dòng cho vừa ô;
-                // dòng 2 phải kết thúc TRÊN nhãn giá (đã đo khi chụp:
-                // dòng 2 ở cy+44 thì mực chạm vào nhãn giá ở cy+34).
+                drawFarmMedallion(cx + cw / 2f - 25, cy + ch - 59, 50);
+                drawFarmIcon(def, def.id, cx + cw / 2f - 19, cy + ch - 53, 38);
+                // tên dài (vd "Hoa hướng dương") xuống 2 dòng; mực dòng 2
+                // kết thúc ở cy+33, nhãn giá bắt đầu cy+32 — không chạm.
                 layout.setText(Ui.fontSmall, def.name);
                 if (layout.width > cw - 8 && def.name.contains(" ")) {
                     int sp = def.name.lastIndexOf(' ');
-                    Ui.centered(batch, Ui.fontSmall, def.name.substring(0, sp), cx + cw / 2f, cy + 68, new Color(1f, 1f, 1f, 0.92f));
-                    Ui.centered(batch, Ui.fontSmall, def.name.substring(sp + 1), cx + cw / 2f, cy + 51, new Color(1f, 1f, 1f, 0.92f));
+                    Ui.centered(batch, Ui.fontSmall, def.name.substring(0, sp), cx + cw / 2f, cy + 67, new Color(1f, 1f, 1f, 0.92f));
+                    Ui.centered(batch, Ui.fontSmall, def.name.substring(sp + 1), cx + cw / 2f, cy + 50, new Color(1f, 1f, 1f, 0.92f));
                 } else {
-                    Ui.centered(batch, Ui.fontSmall, def.name, cx + cw / 2f, cy + 53, new Color(1f, 1f, 1f, 0.92f));
+                    Ui.centered(batch, Ui.fontSmall, truncTo(Ui.fontSmall, def.name, cw - 8), cx + cw / 2f, cy + 57, new Color(1f, 1f, 1f, 0.92f));
                 }
                 String price = def.seedXu > 0 ? fmtMoney(def.seedXu) + " xu" : def.seedLuong + " lượng";
-                drawFarmPricePill(cx + cw / 2f, cy + 8, price);
+                drawFarmPricePill(cx + cw / 2f, cy + 6, price);
                 farmShopBtns.add(new float[]{cx, cy, cw, ch, def.id});
                 i++;
             }
         } else if (farmShopTab == 2) {
             // lưới vật nuôi: medallion + tên + giá — bấm là mua 1 con.
             // Icon loài chưa có trong Pack5 thì vẽ chữ cái đầu trong medallion.
-            float cw = 122f, ch = 138f, gx = 12f, gy = 12f;
+            float cw = 122f, ch = 132f, gx = 12f, gy = 8f;
             float x0 = FH_PX + (FH_PW - (5 * cw + 4 * gx)) / 2f;
             int i = 0;
             for (FarmWorld.AnimalDef def : farm.animalDefs.values()) {
-                if (i >= 10) break;
-                float cx = x0 + (i % 5) * (cw + gx);
-                float cy = gridTop - (i / 5 + 1) * (ch + gy) + gy;
+                if (i < start) { i++; continue; }
+                if (i >= start + perPage) break;
+                int k = i - start;
+                float cx = x0 + (k % 5) * (cw + gx);
+                float cy = gridTop - (k / 5 + 1) * (ch + gy) + gy;
                 batch.draw(Ui.roundedRect((int) cw, (int) ch, 12,
                     new Color(0.09f, 0.14f, 0.22f, 0.92f), GLASS_RIM), cx, cy);
-                drawFarmMedallion(cx + cw / 2f - 28, cy + ch - 66, 56);
+                drawFarmMedallion(cx + cw / 2f - 25, cy + ch - 59, 50);
                 Texture tx = farm.dynTexture(def.iconID);
                 if (tx != null) {
-                    batch.draw(tx, cx + cw / 2f - 22, cy + ch - 60, 44, 44);
+                    batch.draw(tx, cx + cw / 2f - 19, cy + ch - 53, 38, 38);
                 } else {
                     Ui.centered(batch, Ui.font, def.name.substring(0, 1),
                         cx + cw / 2f, cy + ch - 26, new Color(1f, 0.95f, 0.55f, 1f));
                 }
-                Ui.centered(batch, Ui.fontSmall, def.name, cx + cw / 2f, cy + 53, new Color(1f, 1f, 1f, 0.92f));
+                Ui.centered(batch, Ui.fontSmall, truncTo(Ui.fontSmall, def.name, cw - 8), cx + cw / 2f, cy + 57, new Color(1f, 1f, 1f, 0.92f));
                 String price = def.priceXu > 0 ? fmtMoney(def.priceXu) + " xu" : def.priceLuong + " lượng";
-                drawFarmPricePill(cx + cw / 2f, cy + 8, price);
+                drawFarmPricePill(cx + cw / 2f, cy + 6, price);
                 farmShopBtns.add(new float[]{cx, cy, cw, ch, def.species});
                 i++;
             }
         } else {
             // danh sách vật phẩm (phân bón/thức ăn/thuốc) — bấm cả hàng là mua 1
             float y = gridTop - 6f;
-            for (FarmWorld.FarmItemDef fd : farm.farmItemDefs.values()) {
-                if (y - 56f < FH_PY + 16) break;
-                int itemId = -1;
-                for (java.util.Map.Entry<Integer, FarmWorld.FarmItemDef> e : farm.farmItemDefs.entrySet()) {
-                    if (e.getValue() == fd) { itemId = e.getKey(); break; }
-                }
+            int i = 0;
+            for (java.util.Map.Entry<Integer, FarmWorld.FarmItemDef> e : farm.farmItemDefs.entrySet()) {
+                if (i < start) { i++; continue; }
+                if (i >= start + perPage) break;
+                FarmWorld.FarmItemDef fd = e.getValue();
                 float ry = y - 56f;
                 batch.draw(Ui.roundedRect((int) FH_PW - 52, 56, 12,
                     new Color(0.09f, 0.14f, 0.22f, 0.92f), GLASS_RIM), FH_PX + 26, ry);
@@ -1768,7 +1899,7 @@ public class WorldScreen extends ScreenAdapter {
                 Texture tx = farm.dynTexture(fd.img);
                 if (tx != null) batch.draw(tx, FH_PX + 41, ry + 13, 30, 30);
                 Ui.fontSmall.setColor(1f, 1f, 1f, 0.97f);
-                Ui.fontSmall.draw(batch, fd.name, FH_PX + 90, ry + 36);
+                Ui.fontSmall.draw(batch, truncTo(Ui.fontSmall, fd.name, FH_PW - 240), FH_PX + 90, ry + 36);
                 String price = fd.priceXu > 0 ? fmtMoney(fd.priceXu) + " xu" : fd.priceLuong + " lượng";
                 layout.setText(Ui.fontSmall, price);
                 float pw2 = layout.width + 20f;
@@ -1777,10 +1908,13 @@ public class WorldScreen extends ScreenAdapter {
                 Ui.fontSmall.setColor(1f, 0.85f, 0.38f, 1f);
                 Ui.fontSmall.draw(batch, price, FH_PX + FH_PW - 36 - pw2 + 10, ry + 34);
                 Ui.fontSmall.setColor(Color.WHITE);
-                farmShopBtns.add(new float[]{FH_PX + 26, ry, FH_PW - 52, 56, itemId});
+                farmShopBtns.add(new float[]{FH_PX + 26, ry, FH_PW - 52, 56, e.getKey()});
                 y -= 64f;
+                i++;
             }
         }
+        if (clipped) popPanelClip();
+        drawFarmPager(farmShopBtns, FH_PX + FH_PW / 2f, FH_PY + 10, farmShopPage, pages);
     }
 
     private void farmShopTouch(float x, float y) {
@@ -1792,8 +1926,11 @@ public class WorldScreen extends ScreenAdapter {
         for (float[] b : farmShopBtns) {
             if (x >= b[0] && x <= b[0] + b[2] && y >= b[1] && y <= b[1] + b[3]) {
                 int id = (int) b[4];
+                if (id == -200) { farmShopPage = Math.max(0, farmShopPage - 1); return; }
+                if (id == -201) { farmShopPage++; return; }
                 if (id == 100 || id == 101 || id == 102) { // 3 tab
                     farmShopTab = id - 100;
+                    farmShopPage = 0;
                     return;
                 }
                 if (farmShopTab == 0) {
@@ -2055,7 +2192,7 @@ public class WorldScreen extends ScreenAdapter {
             FarmWorld.ProductDef pd = farm.productDefs.get(sel.productId);
             drawProductIcon(sel.productId, pd, dx + 24, cy - 40, 48);
             Ui.font.setColor(1f, 0.95f, 0.55f, 1f);
-            Ui.font.draw(batch, sel.name, dx + 92, cy - 8);
+            Ui.font.draw(batch, truncTo(Ui.font, sel.name, dw - 100), dx + 92, cy - 8);
             Ui.font.setColor(Color.WHITE);
             // Thẻ chi tiết hẹp (244px): thời gian và giá bán XẾP DỌC,
             // để cạnh nhau sẽ đè chữ (đã dính khi chụp kiểm chứng).
@@ -2084,9 +2221,13 @@ public class WorldScreen extends ScreenAdapter {
                 batch.setColor(ok ? new Color(0.35f, 0.95f, 0.45f, 1f) : new Color(1f, 0.4f, 0.35f, 1f));
                 batch.draw(whiteTex, dx + 26, my + 2, 8, 8);
                 batch.setColor(Color.WHITE);
+                String hv = have + "/" + mat[1];
+                layout.setText(Ui.fontSmall, hv);
+                float pillW = layout.width + 18f;
                 Ui.fontSmall.setColor(1f, 1f, 1f, 0.95f);
-                Ui.fontSmall.draw(batch, mn, dx + 44, my + 8);
-                drawFarmQtyPill(dx + dw - 24, my + 7, have + "/" + mat[1]);
+                Ui.fontSmall.draw(batch,
+                    truncTo(Ui.fontSmall, mn, dw - 24 - pillW - 52), dx + 44, my + 8);
+                drawFarmQtyPill(dx + dw - 24, my + 7, hv);
             }
             Ui.fontSmall.setColor(Color.WHITE);
             float bw = dw - 32f, bh = 52f, bx = dx + 16, byy = cardBot + 16f;
@@ -2231,6 +2372,43 @@ public class WorldScreen extends ScreenAdapter {
         farmShopOpen = true;
         farmShopTab = 2;
     }
+
+    /** Đổ đầy kho bằng MỌI loại hạt/vật phẩm + 20 loại nông sản để kiểm
+     *  chứng panel không tràn khung khi dữ liệu nhiều (chỉ harness). */
+    public void debugFillFarmStore() {
+        farm.seeds.clear();
+        for (Integer id : farm.trees.keySet()) farm.seeds.add(new int[]{id, 3});
+        farm.usableItems.clear();
+        for (Integer id : farm.farmItemDefs.keySet()) farm.usableItems.add(new int[]{id, 2});
+        farm.products.clear();
+        int n = 0;
+        for (Integer id : farm.productDefs.keySet()) {
+            if (n++ >= 20) break;
+            farm.products.add(new int[]{id, 7});
+        }
+        farm.specials.clear();
+        farm.specials.add(new int[]{215, 180});
+    }
+
+    public void debugOpenFarmStoreTab(int tab) {
+        farmSeedOpen = farmFertOpen = farmLandOpen = farmShopOpen = farmCookOpen = false;
+        farmAnimalSellOpen = false;
+        farmStoreOpen = true;
+        farmStoreTab = tab;
+        farmStorePage = 0;
+    }
+
+    public void debugStoreNextPage() { farmStorePage++; }
+
+    public void debugOpenFarmShopTab(int tab) {
+        farmSeedOpen = farmFertOpen = farmLandOpen = farmStoreOpen = farmCookOpen = false;
+        farmAnimalSellOpen = false;
+        farmShopOpen = true;
+        farmShopTab = tab;
+        farmShopPage = 0;
+    }
+
+    public void debugShopNextPage() { farmShopPage++; }
 
     /** Chip kính giữa-trên khi ở farm: tên + cấp nông trại (HUD farm của gốc). */
     private void drawFarmChip() {

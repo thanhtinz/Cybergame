@@ -730,6 +730,46 @@ public class ScreenshotMain {
                     case 65:
                         if (frame == 15) {
                             shot("shot-farm-star.png");
+                            // kiểm chứng chống tràn: đổ đầy kho (25 hạt,
+                            // 14 vật phẩm, 21 nông sản) rồi mở từng tab
+                            world.debugFillFarmStore();
+                            world.debugOpenFarmStoreTab(0);
+                            stage = 66; frame = 0;
+                        }
+                        break;
+                    case 66:
+                        if (frame == 15) {
+                            shot("shot-farm-store-full.png");
+                            world.debugOpenFarmStoreTab(2);
+                            stage = 67; frame = 0;
+                        }
+                        break;
+                    case 67:
+                        if (frame == 15) {
+                            shot("shot-farm-store-products.png");
+                            world.debugOpenFarmShopTab(1);
+                            stage = 68; frame = 0;
+                        }
+                        break;
+                    case 68:
+                        if (frame == 15) {
+                            shot("shot-farm-shop-items.png");
+                            world.debugShopNextPage();
+                            world.debugShopNextPage();
+                            stage = 69; frame = 0;
+                        }
+                        break;
+                    case 69:
+                        if (frame == 15) {
+                            shot("shot-farm-shop-items-p3.png");
+                            world.debugOpenFarmShopTab(0);
+                            world.debugShopNextPage();
+                            stage = 70; frame = 0;
+                        }
+                        break;
+                    case 70:
+                        if (frame == 15) {
+                            shot("shot-farm-shop-seeds-p2.png");
                             System.out.println("SCREENSHOT DONE");
                             Gdx.app.exit();
                         }
