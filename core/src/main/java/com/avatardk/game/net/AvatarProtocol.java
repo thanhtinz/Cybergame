@@ -110,6 +110,27 @@ public final class AvatarProtocol {
     public static final byte HANDLER_AVATAR = 8;
     /** Handler Farm trong GET_HANDLER (HANDLER_FARM = 10 của gốc). */
     public static final byte HANDLER_FARM = 10;
+    /** Handler Nhà trong GET_HANDLER (HANDLER_HOME = 11 của gốc). */
+    public static final byte HANDLER_HOME = 11;
+
+    // ----- Hệ nhà (đợt 4, docs/house-spec.md) -----
+    /** Vào nhà (gói −65): int id chủ nhà đích; server trả −65 cùng cmd
+     *  chứa lưới nhà + nội thất đã bày. */
+    public static final byte JOIN_HOUSE = -65;
+    /** Hỏi cấp nhà (gói −67): byte 0 = nhà mình; server trả
+     *  {byte 0, short verTile, byte houseType}. */
+    public static final byte GET_TYPE_HOUSE = -67;
+    /** Mua + bày nội thất (gói −74): short typeID, byte xCell, byte yCell,
+     *  byte type (1 = Xu, 2 = Lượng). */
+    public static final byte BUY_ITEM_HOUSE = -74;
+    /** Di chuyển / xoay nội thất (gói −71): short anchor (= typeID),
+     *  byte x, byte y (ô cũ), byte x2, byte y2 (ô mới), byte dir. */
+    public static final byte SORT_ITEM_HOUSE = -71;
+    /** Thu hồi nội thất (gói −66): short typeID, byte xCell, byte yCell,
+     *  byte dir. Server xoá hẳn, không hoàn tiền. */
+    public static final byte DEL_ITEM_HOUSE = -66;
+    /** Nâng cấp rương nhà (gói −90): byte 0 = hỏi giá, 1 = xác nhận. */
+    public static final byte UPGRADE_CHEST = -90;
 
     // ---- Farm (Cmd của gốc, handler FarmMsgHandler) ----
     public static final byte FARM_SET_BIG = 51;
@@ -419,6 +440,72 @@ public final class AvatarProtocol {
     /** Xin dữ liệu rương nhà (gói −87): gói rỗng. */
     public static void requestChest(GameConnection conn) throws IOException {
         conn.send(new Msg(CUSTOM_CHEST));
+    }
+
+    /** Đổi handler phiên (gói −1): 8 Avatar / 9 Park / 10 Farm / 11 Home. */
+    public static void setHandler(GameConnection conn, int handler) throws IOException {
+        Msg m = new Msg(GET_HANDLER);
+        m.writer().writeByte(handler);
+        conn.send(m);
+    }
+
+    /** Hỏi cấp nhà của mình (gói −67 {byte 0}). */
+    public static void getTypeHouse(GameConnection conn) throws IOException {
+        Msg m = new Msg(GET_TYPE_HOUSE);
+        m.writer().writeByte(0);
+        conn.send(m);
+    }
+
+    /** Vào nhà của chủ nhà id (gói −65 {int idUser}). */
+    public static void joinHouse(GameConnection conn, int ownerId) throws IOException {
+        Msg m = new Msg(JOIN_HOUSE);
+        m.writer().writeInt(ownerId);
+        conn.send(m);
+    }
+
+    /** Mua + bày một món nội thất (gói −74). */
+    public static void buyItemHouse(GameConnection conn, int typeId, int x, int y, int moneyType)
+            throws IOException {
+        Msg m = new Msg(BUY_ITEM_HOUSE);
+        DataOutputStream w = m.writer();
+        w.writeShort(typeId);
+        w.writeByte(x);
+        w.writeByte(y);
+        w.writeByte(moneyType);
+        conn.send(m);
+    }
+
+    /** Di chuyển / xoay một món nội thất (gói −71). */
+    public static void sortItemHouse(GameConnection conn, int typeId,
+            int x, int y, int x2, int y2, int dir) throws IOException {
+        Msg m = new Msg(SORT_ITEM_HOUSE);
+        DataOutputStream w = m.writer();
+        w.writeShort(typeId);
+        w.writeByte(x);
+        w.writeByte(y);
+        w.writeByte(x2);
+        w.writeByte(y2);
+        w.writeByte(dir);
+        conn.send(m);
+    }
+
+    /** Thu hồi một món nội thất (gói −66). */
+    public static void delItemHouse(GameConnection conn, int typeId, int x, int y, int dir)
+            throws IOException {
+        Msg m = new Msg(DEL_ITEM_HOUSE);
+        DataOutputStream w = m.writer();
+        w.writeShort(typeId);
+        w.writeByte(x);
+        w.writeByte(y);
+        w.writeByte(dir);
+        conn.send(m);
+    }
+
+    /** Nâng cấp rương nhà (gói −90): 0 = hỏi giá, 1 = xác nhận nâng. */
+    public static void upgradeChest(GameConnection conn, int step) throws IOException {
+        Msg m = new Msg(UPGRADE_CHEST);
+        m.writer().writeByte(step);
+        conn.send(m);
     }
 
     /** Mua một món ở shop (gói −24): type 1 = trả bằng Xu, 2 = bằng Lượng. */

@@ -294,8 +294,13 @@ public class Session implements ISession {
         System.out.println("getHandler: " + index);
 
         if (index == 8) {
+            // [PORT] null-guard: người chơi đang ở trong nhà (đã rời zone
+            // khi vào nhà) thì getZone() null — gốc fan văng NPE làm rớt
+            // phiên ngay khi client báo thoát nhà bằng gói đổi handler 8.
             Zone zone = user.getZone();
-            zone.leave(user);
+            if (zone != null) {
+                zone.leave(user);
+            }
         }
         ms = new Message(Cmd.GET_HANDLER);
         DataOutputStream ds2 = ms.writer();
@@ -2218,7 +2223,12 @@ public void NhanThuongEventXuBoss() throws IOException {
                 res.close();
 
 
-                this.user.getZone().leave(user);
+                // [PORT] null-guard: người chơi chưa vào zone nào (luồng
+                // vào nhà thẳng) thì getZone() null — gốc fan văng NPE làm
+                // rớt phiên; bản port bỏ qua leave khi chưa có zone.
+                if (this.user.getZone() != null) {
+                    this.user.getZone().leave(user);
+                }
                 ms = new Message(-65);
                 DataOutputStream ds = ms.writer();
                 ds.writeByte(3);

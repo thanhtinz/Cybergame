@@ -965,6 +965,34 @@ public class ScreenshotMain {
                     case 96:
                         if (frame == 15) {
                             shot("shot-map344-29.png");
+                            world.debugEnterHouse();
+                            stage = 97; frame = 0;
+                        }
+                        break;
+                    case 97:
+                        if (frame == 15) {
+                            shot("shot-house.png");
+                            world.debugHouseCamUp();
+                            stage = 100; frame = 0;
+                        }
+                        break;
+                    case 100:
+                        if (frame == 15) {
+                            shot("shot-house-room.png");
+                            world.debugHouseMenu();
+                            stage = 98; frame = 0;
+                        }
+                        break;
+                    case 98:
+                        if (frame == 15) {
+                            shot("shot-house-menu.png");
+                            world.debugHouseBuy();
+                            stage = 99; frame = 0;
+                        }
+                        break;
+                    case 99:
+                        if (frame == 15) {
+                            shot("shot-house-buy.png");
                             System.out.println("SCREENSHOT DONE");
                             Gdx.app.exit();
                         }

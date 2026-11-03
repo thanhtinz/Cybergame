@@ -184,10 +184,11 @@ public class WorldScreen extends ScreenAdapter {
      *  chính mình): sắp theo y đáy trong thế giới, y lớn (cao hơn trên màn
      *  hình) vẽ trước — đúng thứ tự merge của paintObject gốc. */
     private static class DrawItem {
-        static final int OBJ = 0, NPC = 1, REMOTE = 2, PLAYER = 3, FARM = 4, FARM_INFO = 5, FARM_ANIMAL_INFO = 6, FARM_STAR = 7;
+        static final int OBJ = 0, NPC = 1, REMOTE = 2, PLAYER = 3, FARM = 4, FARM_INFO = 5, FARM_ANIMAL_INFO = 6, FARM_STAR = 7, HOUSE_ITEM = 8;
         int kind;
         float y;
         float x;
+        float drawY; // riêng HOUSE_ITEM: điểm vẽ dọc (neo trên–trái theo dy), y là khoá sắp xếp
         Texture tex;
         com.badlogic.gdx.graphics.g2d.TextureRegion region;
         float dw, dh;
@@ -199,6 +200,27 @@ public class WorldScreen extends ScreenAdapter {
     // ---- Farm (đợt 3): trạng thái nông trại + cờ đang ở map farm ----
     private final FarmWorld farm = new FarmWorld();
     private boolean farmIn;
+
+    // ---- Nhà (đợt 4, docs/house-spec.md): cảnh nhà động không thuộc
+    // maps.json; mapDef vẫn giữ map phố nhà (22) trong lúc houseIn để các
+    // hệ HUD/chat dùng chung, mọi lớp vẽ/di chuyển rẽ theo cờ houseIn ----
+    private final HouseWorld house = new HouseWorld();
+    private boolean houseIn;
+    private boolean houseEntering;   // đã gửi −67, đang chờ trả lời để vào nhà
+    private boolean houseMenuOpen;   // menu nhà: Rương đồ / Mua đồ nội thất / Thoát nhà
+    private boolean houseBuyOpen;    // panel mua nội thất theo nhóm
+    private int houseBuyGroup;       // index nhóm đang xem trong panel mua
+    private int houseBuyPage;
+    private HouseWorld.Placed houseSelItem; // món đã bày được chạm chọn (sheet hành động)
+    private boolean houseSheetOpen;  // sheet: Di chuyển / Xoay / Thu hồi
+    // chế độ đặt: cầm một món (mua mới hoặc di chuyển món cũ) chờ chọn ô
+    private int housePlaceTypeId = -1;
+    private HouseWorld.Placed housePlaceMove; // != null: đang di chuyển món này
+    private int houseGhostCx = -1, houseGhostCy = -1;
+    private boolean housePayOpen;    // sheet chọn Xu/Lượng khi mua món có cả 2 giá
+    private int housePayTypeId = -1, housePayCx, housePayCy;
+    private boolean chestUpConfirmOpen; // hộp xác nhận nâng cấp rương (−90)
+    private String chestUpText = "";
     private java.util.List<int[]> farmBlocks;
     private float[] farmStarPos;
     private final List<DrawItem> drawItems = new ArrayList<>();
@@ -3580,6 +3602,75 @@ public class WorldScreen extends ScreenAdapter {
                     }
                     break;
                 }
+                case AvatarProtocol.GET_TYPE_HOUSE: {
+                    // gói −67: {byte type} — type 0: {short verTile,
+                    // byte houseType}; có cấp nhà thì xin vào nhà luôn
+                    // (atlas gạch đã đóng gói sẵn, bỏ qua −73 của gốc).
+                    // Chưa mua nhà: server fan đã sửa để joinHouse trả
+                    // dialog ở bước −65 nên cứ gửi tiếp −65.
+                    java.io.DataInputStream r = m.reader();
+                    int type = r.readByte();
+                    if (type == 0 && houseEntering) {
+                        r.readShort(); // verTile
+                        r.readByte();  // houseType
+                        AvatarProtocol.joinHouse(game.connection, ownId());
+                    }
+                    break;
+                }
+                case AvatarProtocol.JOIN_HOUSE: {
+                    // gói −65: lưới nhà + nội thất -> dựng cảnh nhà
+                    house.load(game);
+                    house.parseJoin(m);
+                    enterHouseScene();
+                    break;
+                }
+                case AvatarProtocol.BUY_ITEM_HOUSE: {
+                    // gói −74: server chỉ trả khi mua + lưu DB thành công
+                    // {short id, byte x, byte y} -> cộng món vào cảnh
+                    java.io.DataInputStream r = m.reader();
+                    int id = r.readShort();
+                    int x = r.readByte(), y = r.readByte();
+                    if (houseIn) {
+                        house.items.add(new HouseWorld.Placed(id, x, y, 0));
+                        house.recomputeTypes();
+                    }
+                    break;
+                }
+                case AvatarProtocol.DEL_ITEM_HOUSE: {
+                    // gói −66: server xác nhận đã thu hồi {short id,
+                    // byte x, byte y} -> gỡ món khỏi cảnh (HouseScr.
+                    // onRemoveItem của gốc khớp theo ô, không theo dir)
+                    java.io.DataInputStream r = m.reader();
+                    int id = r.readShort();
+                    int x = r.readByte(), y = r.readByte();
+                    if (houseIn) {
+                        for (int i = 0; i < house.items.size(); i++) {
+                            HouseWorld.Placed p = house.items.get(i);
+                            if (p.typeId == id && p.x == x && p.y == y) {
+                                house.items.remove(i);
+                                if (houseSelItem == p) { houseSelItem = null; houseSheetOpen = false; }
+                                break;
+                            }
+                        }
+                        house.recomputeTypes();
+                    }
+                    break;
+                }
+                case AvatarProtocol.UPGRADE_CHEST: {
+                    // gói −90: {byte index, UTF nội dung} — index 0 là câu
+                    // hỏi kèm giá -> mở hộp xác nhận; index khác là báo
+                    // kết quả -> đưa vào tab Hệ thống
+                    java.io.DataInputStream r = m.reader();
+                    int idx = r.readByte();
+                    String text = r.readUTF();
+                    if (idx == 0) {
+                        chestUpText = text;
+                        chestUpConfirmOpen = true;
+                    } else if (!text.isEmpty()) {
+                        addChatLog(TAB_SYSTEM, null, text, true);
+                    }
+                    break;
+                }
                 case AvatarProtocol.CUSTOM_CHEST: {
                     // gói −87: giỏ + rương nhà -> mở panel rương (gốc:
                     // HouseScr.onCustomChest)
@@ -3815,6 +3906,7 @@ public class WorldScreen extends ScreenAdapter {
 
     /** Type ô tại điểm (medium); −999 nếu map không có dữ liệu type. */
     private int cellTypeAt(float mx, float my) {
+        if (houseIn) return house.typeAt(mx, my);
         if (mapDef == null || mapDef.types == null || mapDef.gridW <= 0) return -999;
         int cx = (int) (mx / 24), cy = (int) (my / 24);
         if (cx < 0 || cy < 0 || cx >= mapDef.gridW || cy >= mapDef.gridH) return -999;
@@ -3846,7 +3938,10 @@ public class WorldScreen extends ScreenAdapter {
             case 7: case 8: case 9: case 10: case 11: case 12: case 13:
             case 14: case 15: case 16: case 17: case 18: case 19: case 23:
             case 24: case 25: case 28: case 52: case 84: case 85: case 97:
+            case 68: case 69: case 70: // ô nhà cấp 1/2/3 trên phố nhà (map 22)
                 return true;
+            case 21: // cửa ra — chỉ có nghĩa khi đang ở trong nhà
+                return houseIn;
             default: return false;
         }
     }
@@ -3887,6 +3982,12 @@ public class WorldScreen extends ScreenAdapter {
             case 85: farmFeedArea(3); break; // máng chó (khu 3)
             case 97: // STAR_FRUIT: cây khế — thu ngay như nút Tương tác
                 if (farmIn && farm != null) farmHarvestStar();
+                break;
+            case 68: case 69: case 70: // T_HOUSE_1/2/3: vào nhà mình
+                startEnterHouse();
+                break;
+            case 21: // T_ROAD_HOUSE: ô cửa trong nhà -> ra phố nhà
+                if (houseIn) exitHouse();
                 break;
             default: break;
         }
@@ -3955,6 +4056,700 @@ public class WorldScreen extends ScreenAdapter {
     /** Kích hoạt thẳng một ô cổng (harness kiểm chứng bảng doJoin). */
     public void debugDoJoin(int type) { doJoinCell(type); }
 
+    // ---------- Nhà (đợt 4): vào / ra / dựng cảnh ----------
+
+    /** Bước vào ô nhà trên phố nhà: bắt đầu luồng vào nhà mình.
+     *  Online đúng chuỗi gốc: −1 {11} đổi handler → −67 {0} hỏi cấp nhà →
+     *  (nhận −67) → −65 {ownId} → (nhận −65) dựng cảnh. Atlas gạch đóng
+     *  gói sẵn nên bỏ qua bước −73/RMS của gốc. Offline: dựng nhà mặc
+     *  định (đúng map_data của BuyHouse phía server) để chơi thử. */
+    private void startEnterHouse() {
+        if (houseIn || houseEntering) return;
+        house.load(game);
+        GameConnection conn = game.connection;
+        if (conn != null && game.player != null && !conn.isClosed()) {
+            houseEntering = true;
+            try {
+                AvatarProtocol.setHandler(conn, AvatarProtocol.HANDLER_HOME);
+                AvatarProtocol.getTypeHouse(conn);
+            } catch (IOException e) {
+                houseEntering = false;
+            }
+        } else {
+            house.loadDefault();
+            enterHouseScene();
+        }
+    }
+
+    /** Nhận xong gói −65 (hoặc nhà offline đã sẵn): chuyển hẳn sang cảnh
+     *  nhà — dọn lớp vẽ của map phố, đặt lại kích thước thế giới theo lưới
+     *  nhà và spawn ngay trên ô cửa như posJoin của HouseScr gốc. */
+    private void enterHouseScene() {
+        houseIn = true;
+        houseEntering = false;
+        remotes.clear();
+        npcFigures.clear();
+        strips.clear();
+        stripLefts.clear();
+        daydien.clear();
+        tileTex = null;
+        tileRegions = null;
+        worldW = house.w * 24f * AvatarDkGame.HD;
+        worldH = house.h * 24f * AvatarDkGame.HD;
+        mapBottomPx = worldH;
+        playerX = house.doorCenterCell() * 24f;
+        playerY = house.h * 24f - 30f;
+        playerPose = 0;
+        playerJumpT = -1f;
+    }
+
+    /** Ra khỏi nhà: gốc doOut = join lại server map 21 (client 22 phố
+     *  nhà). Online: trả handler Avatar (8) rồi ép updateNet join lại khu
+     *  phố; offline: nạp lại map 22 tại chỗ. */
+    private void exitHouse() {
+        if (!houseIn) return;
+        houseIn = false;
+        houseEntering = false;
+        houseMenuOpen = false;
+        houseBuyOpen = false;
+        houseSheetOpen = false;
+        houseSelItem = null;
+        housePlaceTypeId = -1;
+        housePlaceMove = null;
+        housePayOpen = false;
+        house.clear();
+        GameConnection conn = game.connection;
+        if (conn != null && game.player != null && !conn.isClosed()) {
+            try {
+                AvatarProtocol.setHandler(conn, AvatarProtocol.HANDLER_AVATAR);
+            } catch (IOException ignored) {
+            }
+            joinedClientMap = -1; // ép join lại phố nhà ở updateNet
+        }
+        loadMap(findMap(22));
+        spawnPlayer();
+    }
+
+    /** Vẽ lưới gạch nhà bằng atlas riêng (paintMap của HouseScr): ô ở
+     *  (cột*48, hàng*48) từ góc trên–trái; ô cửa vẽ bằng tile ô trên nó. */
+    private void drawHouseTiles() {
+        if (house.tiles == null) return;
+        int cell = 24 * AvatarDkGame.HD;
+        for (int cy = 0; cy < house.h; cy++) {
+            for (int cx = 0; cx < house.w; cx++) {
+                com.badlogic.gdx.graphics.g2d.TextureRegion r =
+                    house.tileRegion(house.drawTile(cx, cy));
+                if (r == null) continue;
+                batch.draw(r, cx * cell, mapBottomPx - (cy + 1) * cell);
+            }
+        }
+    }
+
+    /** Dựng các mục vẽ nội thất vào cùng lượt sắp xếp độ sâu với nhân vật:
+     *  ảnh vẽ tại (xCell*24 + dx, yCell*24 + dy) medium như MapItem.paint
+     *  (neo trên–trái, lưu vào drawY riêng), khoá sắp xếp (trường y) là
+     *  đáy footprint để nhân vật đứng sau món thì bị món che đúng như gốc.
+     *  Món đang được cầm di chuyển thì không vẽ ở vị trí cũ (hiện ghost). */
+    private void buildHouseDrawItems() {
+        int hd = AvatarDkGame.HD;
+        for (HouseWorld.Placed p : house.items) {
+            if (p == housePlaceMove) continue;
+            HouseWorld.ItemDef def = house.defs.get(p.typeId);
+            if (def == null) continue;
+            com.badlogic.gdx.graphics.g2d.TextureRegion r =
+                house.imgRegion(def.img, p.dir == 2);
+            if (r == null) continue;
+            DrawItem it = new DrawItem();
+            it.kind = DrawItem.HOUSE_ITEM;
+            it.region = r;
+            it.dw = r.getRegionWidth();
+            it.dh = r.getRegionHeight();
+            it.x = (p.x * 24 + def.dx) * hd;
+            it.drawY = mapBottomPx - (p.y * 24 + def.dy) * hd - it.dh;
+            int maxRow = 0;
+            for (int[] o : def.pos) maxRow = Math.max(maxRow, o[1]);
+            it.y = mapBottomPx - (p.y + maxRow + 1) * 24f * hd;
+            drawItems.add(it);
+        }
+    }
+
+    /** Ghost của món đang cầm đặt (mua mới / di chuyển) + khung ô đích:
+     *  xanh lá nếu đặt được, đỏ nếu không; kèm khung chọn món đã bày. */
+    private void drawHouseGhost() {
+        int hd0 = AvatarDkGame.HD;
+        int cell0 = 24 * hd0;
+        if (houseSelItem != null && housePlaceTypeId < 0) {
+            HouseWorld.ItemDef sd = house.defs.get(houseSelItem.typeId);
+            if (sd != null) {
+                batch.setColor(0.45f, 0.95f, 1f, 0.4f);
+                for (int[] o : sd.pos) {
+                    batch.draw(whiteTex, (houseSelItem.x + o[0]) * cell0,
+                        mapBottomPx - (houseSelItem.y + o[1] + 1) * cell0, cell0, cell0);
+                }
+                batch.setColor(Color.WHITE);
+            }
+        }
+        if (housePlaceTypeId < 0 || houseGhostCx < 0) return;
+        HouseWorld.ItemDef def = house.defs.get(housePlaceTypeId);
+        if (def == null) return;
+        int hd = AvatarDkGame.HD;
+        int cell = 24 * hd;
+        boolean ok = house.canPlace(def, houseGhostCx, houseGhostCy, housePlaceMove);
+        // khung các ô footprint
+        batch.setColor(ok ? 0.3f : 0.9f, ok ? 0.95f : 0.25f, ok ? 0.35f : 0.2f, 0.35f);
+        for (int[] o : def.pos) {
+            batch.draw(whiteTex, (houseGhostCx + o[0]) * cell,
+                mapBottomPx - (houseGhostCy + o[1] + 1) * cell, cell, cell);
+        }
+        batch.setColor(1f, 1f, 1f, 0.65f);
+        com.badlogic.gdx.graphics.g2d.TextureRegion r =
+            house.imgRegion(def.img, housePlaceMove != null && housePlaceMove.dir == 2);
+        if (r != null) {
+            float dx = (houseGhostCx * 24 + def.dx) * hd;
+            float dy = mapBottomPx - (houseGhostCy * 24 + def.dy) * hd - r.getRegionHeight();
+            batch.draw(r, dx, dy);
+        }
+        batch.setColor(Color.WHITE);
+    }
+
+    // ---------- Nhà: chip + menu + panel mua + sheet món ----------
+
+    private static String houseTypeName(int t) {
+        switch (t) {
+            case 1: return "Nhà Thuê";
+            case 2: return "Nhà Phố";
+            case 3: return "Biệt Thự";
+            default: return "Nhà của bạn";
+        }
+    }
+
+    /** Chip kính giữa–trên khi ở trong nhà + gợi ý trên nút Tương tác
+     *  (cùng mẫu chip farm). */
+    private void drawHouseChip() {
+        if (!houseIn) return;
+        String label = "Nhà · " + houseTypeName(house.houseType);
+        float w = 240f, h = 46f, x = Ui.W / 2f - w / 2f, y = Ui.H - h - 12f;
+        batch.draw(Ui.roundedRect((int) w, (int) h, 14, GLASS_FILL, GLASS_RIM), x, y);
+        Ui.font.setColor(1f, 0.87f, 0.35f, 1f);
+        layout.setText(Ui.font, label);
+        Ui.font.draw(batch, label, x + w / 2f - layout.width / 2f, y + h - 13f);
+        Ui.font.setColor(Color.WHITE);
+        if (!anyModalOpen()) {
+            String hint = null;
+            if (housePlaceTypeId >= 0) {
+                HouseWorld.ItemDef d = house.defs.get(housePlaceTypeId);
+                hint = "Đang đặt: " + (d != null ? d.name : "") + " — chạm vào ô trong nhà";
+            } else if (houseSelItem != null) {
+                HouseWorld.ItemDef d = house.defs.get(houseSelItem.typeId);
+                hint = d != null ? d.name : null;
+            }
+            if (hint != null) {
+                layout.setText(Ui.fontSmall, hint);
+                float pw = layout.width + 32f, ph = 34f;
+                float px = ACT_CX + ACT_R - pw, py = ACT_CY + ACT_R + 14f;
+                batch.draw(Ui.roundedRect((int) pw, (int) ph, 12, GLASS_FILL, GLASS_RIM), px, py);
+                Ui.fontSmall.setColor(1f, 1f, 1f, 0.95f);
+                Ui.fontSmall.draw(batch, hint, px + 16, py + ph - 11f);
+                Ui.fontSmall.setColor(Color.WHITE);
+            }
+        }
+    }
+
+    private static final float HM_W = 440, HM_H = 336;
+    private static final String[] HM_LABELS = {"Rương đồ", "Mua đồ nội thất", "Thoát nhà"};
+    private static final String[] HM_ICONS = {Ui.FA_BOX_ARCHIVE, Ui.FA_STORE, Ui.FA_HOUSE};
+
+    /** Menu nhà (nút Tương tác trong nhà): Rương / Mua đồ / Thoát. */
+    private void drawHouseMenu() {
+        float px = (Ui.W - HM_W) / 2f, py = (Ui.H - HM_H) / 2f, top = py + HM_H;
+        batch.setColor(0f, 0f, 0f, 0.45f);
+        batch.draw(whiteTex, 0, 0, Ui.W, Ui.H);
+        batch.setColor(Color.WHITE);
+        batch.draw(Ui.roundedRect((int) HM_W, (int) HM_H, 16,
+            new Color(0.07f, 0.11f, 0.17f, 0.97f), GLASS_RIM), px, py);
+        Ui.font.setColor(1f, 0.85f, 0.38f, 1f);
+        Ui.font.draw(batch, "Nhà của bạn", px + 28, top - 26);
+        Ui.font.setColor(Color.WHITE);
+        batch.draw(Ui.roundedRect(36, 36, 10, Ui.BTN_CLOSE, GLASS_RIM), px + HM_W - 54, top - 54);
+        Ui.faIcon(batch, Ui.fa20, Ui.FA_XMARK, px + HM_W - 36, top - 36,
+            new Color(0.9f, 0.93f, 1f, 1f));
+        for (int i = 0; i < HM_LABELS.length; i++) {
+            float ry = top - 84 - i * 76;
+            batch.draw(Ui.roundedRect((int) HM_W - 56, 62, 12,
+                new Color(0.16f, 0.24f, 0.34f, 0.9f), GLASS_RIM), px + 28, ry - 40);
+            Ui.faIcon(batch, Ui.fa20, HM_ICONS[i], px + 62, ry + 4,
+                new Color(0.55f, 0.85f, 1f, 1f));
+            Ui.font.draw(batch, HM_LABELS[i], px + 92, ry + 2);
+        }
+    }
+
+    private boolean houseMenuTouch(float x, float y) {
+        if (!houseMenuOpen) return false;
+        float px = (Ui.W - HM_W) / 2f, py = (Ui.H - HM_H) / 2f, top = py + HM_H;
+        houseMenuOpen = false;
+        if (x >= px + HM_W - 54 && x <= px + HM_W - 18 && y >= top - 54 && y <= top - 18) {
+            return true;
+        }
+        for (int i = 0; i < HM_LABELS.length; i++) {
+            float ry = top - 84 - i * 76;
+            if (x >= px + 28 && x <= px + HM_W - 28 && y >= ry - 40 && y <= ry + 22) {
+                if (i == 0) {
+                    openChest();
+                } else if (i == 1) {
+                    houseBuyOpen = true;
+                    houseBuyGroup = 0;
+                    houseBuyPage = 0;
+                } else {
+                    exitHouse();
+                }
+                return true;
+            }
+        }
+        return true; // modal: nuốt mọi chạm
+    }
+
+    /** Các nhóm có món mua được (buy != 0), giữ thứ tự catalog. */
+    private java.util.List<String> houseBuyGroups() {
+        java.util.List<String> out = new ArrayList<>();
+        for (Map.Entry<String, java.util.List<HouseWorld.ItemDef>> e : house.groups.entrySet()) {
+            for (HouseWorld.ItemDef d : e.getValue()) {
+                if (d.buy != 0) { out.add(e.getKey()); break; }
+            }
+        }
+        return out;
+    }
+
+    private java.util.List<HouseWorld.ItemDef> houseBuyList(String group) {
+        java.util.List<HouseWorld.ItemDef> out = new ArrayList<>();
+        java.util.List<HouseWorld.ItemDef> all = house.groups.get(group);
+        if (all != null) {
+            for (HouseWorld.ItemDef d : all) if (d.buy != 0) out.add(d);
+        }
+        return out;
+    }
+
+    private static final float HB_W = 940, HB_H = 580;
+    private static final int HB_COLS = 4, HB_ROWS = 2, HB_PAGE = HB_COLS * HB_ROWS;
+    private static final float HB_CELL_W = 158, HB_CELL_H = 176, HB_GAP = 10;
+
+    private float hbGridX() { return (Ui.W - HB_W) / 2f + 232; }
+    private float hbGridTop() { return (Ui.H - HB_H) / 2f + HB_H - 132; }
+
+    /** Panel mua nội thất: cột trái chọn nhóm, lưới phải chọn món; chạm
+     *  một món là cầm món đó đi đặt (đóng panel, vào chế độ đặt). */
+    private void drawHouseBuyPanel() {
+        float px = (Ui.W - HB_W) / 2f, py = (Ui.H - HB_H) / 2f, top = py + HB_H;
+        batch.setColor(0f, 0f, 0f, 0.45f);
+        batch.draw(whiteTex, 0, 0, Ui.W, Ui.H);
+        batch.setColor(Color.WHITE);
+        batch.draw(Ui.roundedRect((int) HB_W, (int) HB_H, 16,
+            new Color(0.07f, 0.11f, 0.17f, 0.97f), GLASS_RIM), px, py);
+        drawFarmPanelHeader(px, py, HB_W, HB_H, Ui.FA_STORE,
+            new Color(0.13f, 0.42f, 0.60f, 1f), "Mua đồ nội thất", null);
+        // cột nhóm
+        java.util.List<String> grps = houseBuyGroups();
+        if (houseBuyGroup >= grps.size()) houseBuyGroup = Math.max(0, grps.size() - 1);
+        for (int i = 0; i < grps.size(); i++) {
+            float by = top - 132 - i * 54;
+            boolean act = i == houseBuyGroup;
+            batch.draw(Ui.roundedRect(184, 44, 12,
+                act ? new Color(0.25f, 0.45f, 0.65f, 0.95f) : new Color(0f, 0f, 0f, 0.30f),
+                GLASS_RIM), px + 24, by);
+            Ui.centered(batch, Ui.fontSmall, grps.get(i), px + 24 + 92, by + 29,
+                act ? Color.WHITE : new Color(1f, 1f, 1f, 0.7f));
+        }
+        // lưới món của nhóm đang chọn
+        java.util.List<HouseWorld.ItemDef> list =
+            grps.isEmpty() ? new ArrayList<>() : houseBuyList(grps.get(houseBuyGroup));
+        int pages = Math.max(1, (list.size() + HB_PAGE - 1) / HB_PAGE);
+        if (houseBuyPage >= pages) houseBuyPage = pages - 1;
+        float gx = hbGridX(), gt = hbGridTop();
+        for (int s = 0; s < HB_PAGE; s++) {
+            int idx = houseBuyPage * HB_PAGE + s;
+            int col = s % HB_COLS, row = s / HB_COLS;
+            float cx = gx + col * (HB_CELL_W + HB_GAP);
+            float cy = gt - (row + 1) * HB_CELL_H - row * HB_GAP;
+            batch.draw(Ui.roundedRect((int) HB_CELL_W, (int) HB_CELL_H, 12,
+                new Color(0f, 0f, 0f, 0.18f), GLASS_RIM), cx, cy);
+            if (idx >= list.size()) continue;
+            HouseWorld.ItemDef d = list.get(idx);
+            batch.draw(Ui.roundedRect((int) HB_CELL_W, (int) HB_CELL_H, 12,
+                new Color(0.16f, 0.24f, 0.34f, 0.9f), GLASS_RIM), cx, cy);
+            Texture t = house.imgTexture(d.img);
+            if (t != null) {
+                float sc = Math.min(1f, Math.min(96f / t.getWidth(), 92f / t.getHeight()));
+                float dw = t.getWidth() * sc, dh = t.getHeight() * sc;
+                batch.draw(t, cx + (HB_CELL_W - dw) / 2f, cy + HB_CELL_H - 104 + (92 - dh) / 2f, dw, dh);
+            }
+            Ui.centered(batch, Ui.fontSmall, truncTo(Ui.fontSmall, d.name, HB_CELL_W - 16),
+                cx + HB_CELL_W / 2f, cy + 52, Color.WHITE);
+            String price;
+            if (d.priceXu > 0 && d.priceLuong > 0) {
+                price = fmtMoney(d.priceXu) + " xu · " + d.priceLuong + " lượng";
+            } else if (d.priceXu > 0) {
+                price = fmtMoney(d.priceXu) + " xu";
+            } else {
+                price = d.priceLuong + " lượng";
+            }
+            Ui.centered(batch, Ui.fontTiny, truncTo(Ui.fontTiny, price, HB_CELL_W - 12),
+                cx + HB_CELL_W / 2f, cy + 26, new Color(1f, 0.9f, 0.55f, 1f));
+        }
+        // phân trang + tiền của mình ở đáy panel
+        if (pages > 1) {
+            float by = py + 26;
+            batch.draw(Ui.roundedRect(44, 44, 10, Ui.BTN_CANCEL, GLASS_RIM), gx, by);
+            Ui.faIcon(batch, Ui.fa20, Ui.FA_CHEVRON_LEFT, gx + 22, by + 22, Color.WHITE);
+            batch.draw(Ui.roundedRect(44, 44, 10, Ui.BTN_CANCEL, GLASS_RIM), gx + 56, by);
+            Ui.faIcon(batch, Ui.fa20, Ui.FA_CHEVRON_RIGHT, gx + 78, by + 22, Color.WHITE);
+            Ui.fontSmall.setColor(1f, 1f, 1f, 0.85f);
+            Ui.fontSmall.draw(batch, "Trang " + (houseBuyPage + 1) + "/" + pages, gx + 116, by + 29);
+        }
+        Ui.fontSmall.setColor(1f, 1f, 1f, 0.9f);
+        String mine = "Xu: " + fmtMoney(myXu) + "   ·   Lượng: " + fmtMoney(myLuong);
+        layout.setText(Ui.fontSmall, mine);
+        Ui.fontSmall.draw(batch, mine, px + HB_W - 28 - layout.width, py + 40);
+        Ui.fontSmall.setColor(Color.WHITE);
+    }
+
+    private boolean houseBuyTouch(float x, float y) {
+        if (!houseBuyOpen) return false;
+        float px = (Ui.W - HB_W) / 2f, py = (Ui.H - HB_H) / 2f, top = py + HB_H;
+        if (x >= px + HB_W - 54 && x <= px + HB_W - 18 && y >= top - 54 && y <= top - 18) {
+            houseBuyOpen = false;
+            return true;
+        }
+        java.util.List<String> grps = houseBuyGroups();
+        for (int i = 0; i < grps.size(); i++) {
+            float by = top - 132 - i * 54;
+            if (x >= px + 24 && x <= px + 208 && y >= by && y <= by + 44) {
+                houseBuyGroup = i;
+                houseBuyPage = 0;
+                return true;
+            }
+        }
+        if (!grps.isEmpty()) {
+            java.util.List<HouseWorld.ItemDef> list = houseBuyList(grps.get(houseBuyGroup));
+            int pages = Math.max(1, (list.size() + HB_PAGE - 1) / HB_PAGE);
+            float gx = hbGridX(), gt = hbGridTop();
+            for (int s = 0; s < HB_PAGE; s++) {
+                int idx = houseBuyPage * HB_PAGE + s;
+                if (idx >= list.size()) break;
+                int col = s % HB_COLS, row = s / HB_COLS;
+                float cx = gx + col * (HB_CELL_W + HB_GAP);
+                float cy = gt - (row + 1) * HB_CELL_H - row * HB_GAP;
+                if (x >= cx && x <= cx + HB_CELL_W && y >= cy && y <= cy + HB_CELL_H) {
+                    houseBuyOpen = false;
+                    houseBeginPlace(list.get(idx).id, null);
+                    return true;
+                }
+            }
+            float by = py + 26;
+            if (pages > 1 && y >= by && y <= by + 44) {
+                if (x >= gx && x <= gx + 44) {
+                    houseBuyPage = (houseBuyPage + pages - 1) % pages;
+                    return true;
+                }
+                if (x >= gx + 56 && x <= gx + 100) {
+                    houseBuyPage = (houseBuyPage + 1) % pages;
+                    return true;
+                }
+            }
+        }
+        return true; // modal
+    }
+
+    // ----- Chế độ đặt đồ -----
+
+    private void houseBeginPlace(int typeId, HouseWorld.Placed move) {
+        housePlaceTypeId = typeId;
+        housePlaceMove = move;
+        houseSelItem = null;
+        houseSheetOpen = false;
+        houseGhostCx = Math.max(0, Math.min(house.w - 1, (int) (playerX / 24)));
+        houseGhostCy = Math.max(0, Math.min(house.h - 1, (int) (playerY / 24) + 1));
+    }
+
+    private void houseCancelPlace() {
+        housePlaceTypeId = -1;
+        housePlaceMove = null;
+        housePayOpen = false;
+    }
+
+    private boolean houseGhostValid() {
+        if (housePlaceTypeId < 0 || houseGhostCx < 0) return false;
+        HouseWorld.ItemDef d = house.defs.get(housePlaceTypeId);
+        return d != null && house.canPlace(d, houseGhostCx, houseGhostCy, housePlaceMove);
+    }
+
+    /** Nút Đặt / nút Tương tác khi đang cầm đồ: chốt vị trí. Di chuyển thì
+     *  gửi −71; mua mới thì chọn tiền (sheet riêng nếu có cả 2 giá) rồi
+     *  gửi −74 — món chỉ hiện khi server trả −74 xác nhận (đúng gốc fan:
+     *  không lưu được thì không có gói trả). Offline áp dụng tại chỗ. */
+    private void houseConfirmPlace() {
+        if (housePlaceTypeId < 0 || !houseGhostValid()) return;
+        if (housePlaceMove != null) {
+            HouseWorld.Placed p = housePlaceMove;
+            int ox = p.x, oy = p.y;
+            int nx = houseGhostCx, ny = houseGhostCy;
+            houseCancelPlace();
+            if (nx == ox && ny == oy) return;
+            if (online()) {
+                try {
+                    AvatarProtocol.sortItemHouse(game.connection, p.typeId, ox, oy, nx, ny, p.dir);
+                } catch (IOException ignored) {
+                }
+            }
+            p.x = nx;
+            p.y = ny;
+            house.recomputeTypes();
+            return;
+        }
+        HouseWorld.ItemDef d = house.defs.get(housePlaceTypeId);
+        if (d == null) { houseCancelPlace(); return; }
+        if (d.priceXu > 0 && d.priceLuong > 0) {
+            housePayTypeId = d.id;
+            housePayCx = houseGhostCx;
+            housePayCy = houseGhostCy;
+            housePayOpen = true;
+            return;
+        }
+        houseDoBuy(d.priceXu > 0 ? 1 : 2);
+    }
+
+    private void houseDoBuy(int moneyType) {
+        int typeId = housePayOpen ? housePayTypeId : housePlaceTypeId;
+        int cx = housePayOpen ? housePayCx : houseGhostCx;
+        int cy = housePayOpen ? housePayCy : houseGhostCy;
+        housePayOpen = false;
+        houseCancelPlace();
+        if (typeId < 0) return;
+        if (online()) {
+            try {
+                AvatarProtocol.buyItemHouse(game.connection, typeId, cx, cy, moneyType);
+            } catch (IOException e) {
+                addChatLog(TAB_SYSTEM, null, "Không mua được đồ (mất kết nối?).", true);
+            }
+        } else {
+            house.items.add(new HouseWorld.Placed(typeId, cx, cy, 0));
+            house.recomputeTypes();
+        }
+    }
+
+    /** Thanh xác nhận khi đang cầm đồ (trên khung chat). */
+    private void drawHousePlaceBar() {
+        HouseWorld.ItemDef d = house.defs.get(housePlaceTypeId);
+        if (d == null) return;
+        float pw = 560, ph = 64, px = (Ui.W - pw) / 2f, py = CHAT_Y + chatH + 12;
+        batch.draw(Ui.roundedRect((int) pw, (int) ph, 14, GLASS_FILL, GLASS_RIM), px, py);
+        Ui.fontSmall.setColor(1f, 1f, 1f, 0.96f);
+        Ui.fontSmall.draw(batch, "Đặt: " + truncTo(Ui.fontSmall, d.name, 210), px + 20, py + 41);
+        boolean ok = houseGhostValid();
+        if (ok) {
+            batch.draw(Ui.gradientRect(120, 42, 10, EntryUi.ORANGE_TOP, EntryUi.ORANGE_BOT),
+                px + pw - 246, py + 11);
+        } else {
+            batch.draw(Ui.roundedRect(120, 42, 10,
+                new Color(0.25f, 0.27f, 0.30f, 0.9f), GLASS_RIM), px + pw - 246, py + 11);
+        }
+        Ui.centered(batch, Ui.fontSmall, "Đặt ở đây", px + pw - 186, py + 38, Color.WHITE);
+        batch.draw(Ui.roundedRect(104, 42, 10, Ui.BTN_CANCEL, GLASS_RIM), px + pw - 116, py + 11);
+        Ui.centered(batch, Ui.fontSmall, "Huỷ", px + pw - 64, py + 38, Color.WHITE);
+    }
+
+    private boolean housePlaceBarTouch(float x, float y) {
+        if (housePlaceTypeId < 0) return false;
+        float pw = 560, ph = 64, px = (Ui.W - pw) / 2f, py = CHAT_Y + chatH + 12;
+        if (x < px || x > px + pw || y < py || y > py + ph) return false;
+        if (x >= px + pw - 246 && x <= px + pw - 126) houseConfirmPlace();
+        else if (x >= px + pw - 116) houseCancelPlace();
+        return true;
+    }
+
+    /** Sheet chọn cách trả khi món có cả giá Xu lẫn giá Lượng. */
+    private void drawHousePaySheet() {
+        HouseWorld.ItemDef d = house.defs.get(housePayTypeId);
+        if (d == null) return;
+        float pw = 440, ph = 252, px = (Ui.W - pw) / 2f, py = (Ui.H - ph) / 2f, top = py + ph;
+        batch.setColor(0f, 0f, 0f, 0.45f);
+        batch.draw(whiteTex, 0, 0, Ui.W, Ui.H);
+        batch.setColor(Color.WHITE);
+        batch.draw(Ui.roundedRect((int) pw, (int) ph, 16,
+            new Color(0.07f, 0.11f, 0.17f, 0.97f), GLASS_RIM), px, py);
+        Ui.font.setColor(1f, 0.85f, 0.38f, 1f);
+        Ui.font.draw(batch, "Trả bằng gì?", px + 28, top - 26);
+        Ui.font.setColor(Color.WHITE);
+        batch.draw(Ui.gradientRect((int) pw - 56, 56, 12, EntryUi.ORANGE_TOP, EntryUi.ORANGE_BOT),
+            px + 28, top - 142);
+        Ui.centered(batch, Ui.font, "Xu · " + fmtMoney(d.priceXu) + " xu", px + pw / 2f, top - 104, Color.WHITE);
+        batch.draw(Ui.roundedRect((int) pw - 56, 56, 12, Ui.BTN_CANCEL, GLASS_RIM), px + 28, top - 214);
+        Ui.centered(batch, Ui.font, "Lượng · " + d.priceLuong + " lượng", px + pw / 2f, top - 176, Color.WHITE);
+    }
+
+    private boolean housePayTouch(float x, float y) {
+        if (!housePayOpen) return false;
+        float pw = 440, ph = 252, px = (Ui.W - pw) / 2f, py = (Ui.H - ph) / 2f, top = py + ph;
+        if (x >= px + 28 && x <= px + pw - 28) {
+            if (y >= top - 142 && y <= top - 86) { houseDoBuy(1); return true; }
+            if (y >= top - 214 && y <= top - 158) { houseDoBuy(2); return true; }
+        }
+        housePayOpen = false; // chạm ra ngoài: quay lại chế độ đặt
+        return true;
+    }
+
+    /** Sheet hành động cho món đã bày được chạm chọn. */
+    private void drawHouseSheet() {
+        HouseWorld.ItemDef d = house.defs.get(houseSelItem.typeId);
+        float pw = 620, ph = 132, px = (Ui.W - pw) / 2f, py = CHAT_Y + chatH + 12;
+        batch.draw(Ui.roundedRect((int) pw, (int) ph, 14, GLASS_FILL, GLASS_RIM), px, py);
+        Ui.font.setColor(1f, 0.9f, 0.55f, 1f);
+        Ui.font.draw(batch, d != null ? d.name : "Nội thất", px + 22, py + ph - 24);
+        Ui.font.setColor(Color.WHITE);
+        batch.draw(Ui.roundedRect(36, 36, 10, Ui.BTN_CLOSE, GLASS_RIM), px + pw - 54, py + ph - 54);
+        Ui.faIcon(batch, Ui.fa20, Ui.FA_XMARK, px + pw - 36, py + ph - 36,
+            new Color(0.9f, 0.93f, 1f, 1f));
+        String[] labels = {"Di chuyển", "Xoay", "Thu hồi"};
+        for (int i = 0; i < 3; i++) {
+            float bx = px + 22 + i * 196;
+            if (i == 0) {
+                batch.draw(Ui.gradientRect(180, 48, 10, EntryUi.ORANGE_TOP, EntryUi.ORANGE_BOT), bx, py + 18);
+            } else {
+                batch.draw(Ui.roundedRect(180, 48, 10, Ui.BTN_CANCEL, GLASS_RIM), bx, py + 18);
+            }
+            Ui.centered(batch, Ui.fontSmall, labels[i], bx + 90, py + 49, Color.WHITE);
+        }
+    }
+
+    private boolean houseSheetTouch(float x, float y) {
+        if (!houseSheetOpen || houseSelItem == null) return false;
+        float pw = 620, ph = 132, px = (Ui.W - pw) / 2f, py = CHAT_Y + chatH + 12;
+        if (x < px || x > px + pw || y < py || y > py + ph) {
+            houseSheetOpen = false;
+            houseSelItem = null;
+            return true;
+        }
+        if (x >= px + pw - 54 && x <= px + pw - 18 && y >= py + ph - 54 && y <= py + ph - 18) {
+            houseSheetOpen = false;
+            houseSelItem = null;
+            return true;
+        }
+        if (y >= py + 18 && y <= py + 66) {
+            for (int i = 0; i < 3; i++) {
+                float bx = px + 22 + i * 196;
+                if (x >= bx && x <= bx + 180) {
+                    HouseWorld.Placed p = houseSelItem;
+                    if (i == 0) {
+                        houseBeginPlace(p.typeId, p);
+                    } else if (i == 1) {
+                        houseSheetOpen = false;
+                        houseSelItem = null;
+                        p.dir = p.dir == 0 ? 2 : 0;
+                        if (online()) {
+                            try {
+                                AvatarProtocol.sortItemHouse(game.connection,
+                                    p.typeId, p.x, p.y, p.x, p.y, p.dir);
+                            } catch (IOException ignored) {
+                            }
+                        }
+                    } else {
+                        houseSheetOpen = false;
+                        houseSelItem = null;
+                        if (p.typeId == 69) { // hoa tình yêu: gốc cấm bán
+                            addChatLog(TAB_SYSTEM, null, "Món này không thu hồi được.", true);
+                            return true;
+                        }
+                        if (online()) {
+                            try {
+                                AvatarProtocol.delItemHouse(game.connection,
+                                    p.typeId, p.x, p.y, p.dir);
+                            } catch (IOException ignored) {
+                            }
+                        } else {
+                            house.items.remove(p);
+                            house.recomputeTypes();
+                        }
+                    }
+                    return true;
+                }
+            }
+        }
+        return true;
+    }
+
+    /** Ngắt dòng theo bề rộng đo thật (bản tổng quát của wrapGuideLines). */
+    private java.util.List<String> wrapText(String text, com.badlogic.gdx.graphics.g2d.BitmapFont font, float maxW) {
+        java.util.List<String> lines = new ArrayList<>();
+        for (String para : text.split("\n", -1)) {
+            StringBuilder cur = new StringBuilder();
+            for (String word : para.split(" ")) {
+                String cand = cur.length() == 0 ? word : cur + " " + word;
+                layout.setText(font, cand);
+                if (layout.width > maxW && cur.length() > 0) {
+                    lines.add(cur.toString());
+                    cur = new StringBuilder(word);
+                } else {
+                    cur = new StringBuilder(cand);
+                }
+            }
+            lines.add(cur.toString());
+        }
+        return lines;
+    }
+
+    /** Hộp xác nhận nâng cấp rương (gói −90 trả câu hỏi kèm giá). */
+    private void drawChestUpConfirm() {
+        float pw = 520, ph = 210, px = (Ui.W - pw) / 2f, py = (Ui.H - ph) / 2f;
+        batch.setColor(0f, 0f, 0f, 0.45f);
+        batch.draw(whiteTex, 0, 0, Ui.W, Ui.H);
+        batch.setColor(Color.WHITE);
+        batch.draw(Ui.roundedRect((int) pw, (int) ph, 16,
+            new Color(0.08f, 0.13f, 0.20f, 0.98f), GLASS_RIM), px, py);
+        java.util.List<String> lines = wrapText(chestUpText, Ui.fontSmall, pw - 56);
+        for (int i = 0; i < Math.min(3, lines.size()); i++) {
+            Ui.centered(batch, Ui.fontSmall, lines.get(i), px + pw / 2f,
+                py + ph - 44 - i * 26, new Color(1f, 0.9f, 0.6f, 1f));
+        }
+        batch.draw(Ui.gradientRect(170, 48, 12, EntryUi.ORANGE_TOP, EntryUi.ORANGE_BOT),
+            px + 40, py + 26);
+        Ui.centered(batch, Ui.fontSmall, "Đồng ý", px + 40 + 85, py + 57, Color.WHITE);
+        batch.draw(Ui.roundedRect(170, 48, 12, Ui.BTN_CANCEL, GLASS_RIM),
+            px + pw - 40 - 170, py + 26);
+        Ui.centered(batch, Ui.fontSmall, "Huỷ", px + pw - 40 - 85, py + 57, Color.WHITE);
+    }
+
+    private boolean chestUpTouch(float x, float y) {
+        if (!chestUpConfirmOpen) return false;
+        float pw = 520, ph = 210, px = (Ui.W - pw) / 2f, py = (Ui.H - ph) / 2f;
+        chestUpConfirmOpen = false;
+        if (x >= px + 40 && x <= px + 210 && y >= py + 26 && y <= py + 74 && online()) {
+            try {
+                AvatarProtocol.upgradeChest(game.connection, 1);
+            } catch (IOException ignored) {
+            }
+        }
+        return true;
+    }
+
+    /** Harness: mở menu nhà để chụp kiểm chứng. */
+    public void debugHouseMenu() { houseMenuOpen = true; }
+
+    /** Harness: đưa người chơi lên phòng trên của nhà để chụp nội thất. */
+    public void debugHouseCamUp() { playerX = 336f; playerY = 216f; }
+
+    /** Harness: mở panel mua nội thất để chụp kiểm chứng. */
+    public void debugHouseBuy() { houseMenuOpen = false; houseBuyOpen = true; }
+
+    /** Harness: vào thẳng nhà offline (bản mặc định + vài món mẫu). */
+    public void debugEnterHouse() {
+        house.load(game);
+        house.loadDefault();
+        // bày sẵn vài món để kiểm chứng hình + footprint (bản offline)
+        house.items.add(new HouseWorld.Placed(3, 6, 4, 0));   // giường nệm xanh
+        house.items.add(new HouseWorld.Placed(6, 10, 4, 0));  // tủ quần áo
+        house.items.add(new HouseWorld.Placed(5, 12, 4, 2));  // tủ vải, lật ngang
+        house.recomputeTypes();
+        enterHouseScene();
+    }
+
     public void debugOpenBoard(int[] statuses, int area) {
         boardStatus = statuses;
         currentArea = area;
@@ -4002,6 +4797,14 @@ public class WorldScreen extends ScreenAdapter {
             return;
         }
         netLossAnnounced = false;
+        if (houseIn || houseEntering) {
+            // đang ở nhà / đang vào nhà: chỉ nhận gói — joinHouse phía
+            // server đã rời zone như gốc nên không join park, không gửi
+            // di chuyển park nữa (vào nhà là cảnh đơn như bản fan)
+            Msg hm;
+            while ((hm = conn.poll()) != null) handleNetMsg(hm);
+            return;
+        }
         if (joinedClientMap != mapDef.id) {
             try {
                 // Farm: vào map Nông trại (client 25) thì đổi handler sang
@@ -4365,6 +5168,15 @@ public class WorldScreen extends ScreenAdapter {
     private void onTouch(float x, float y, int pointer) {
         // hộp hỏi thoát về thành phố (ô cổng 9/12/17) là lớp trên cùng
         if (exitConfirmTouch(x, y)) return;
+        // hộp xác nhận nâng cấp rương (−90) là modal trên cùng
+        if (chestUpTouch(x, y)) return;
+        // các lớp nhà: sheet chọn tiền / menu nhà / panel mua / sheet món /
+        // thanh đặt đồ — đều modal khi đang mở
+        if (housePayTouch(x, y)) return;
+        if (houseMenuTouch(x, y)) return;
+        if (houseBuyTouch(x, y)) return;
+        if (houseSheetTouch(x, y)) return;
+        if (housePlaceBarTouch(x, y)) return;
         // form Đổi mật khẩu đang mở là lớp trên cùng (modal, nuốt mọi chạm)
         if (passFormOpen) {
             passFormTouch(x, y);
@@ -4549,9 +5361,11 @@ public class WorldScreen extends ScreenAdapter {
             openCharPanel();
             return;
         }
-        // nút burger (phải trên): mở/đóng panel kính
+        // nút burger (phải trên): mở/đóng panel kính; trong nhà thì nút
+        // này mở menu nhà thay cho menu burger (phố) như HouseScr gốc
         if (x >= BURGER_X && x <= BURGER_X + BURGER_S && y >= BURGER_Y && y <= BURGER_Y + BURGER_S) {
-            menuOpen = !menuOpen;
+            if (houseIn) houseMenuOpen = !houseMenuOpen;
+            else menuOpen = !menuOpen;
             return;
         }
         // nút hành động (asset action0) trên vòng cung quanh nút Tương tác: mở/đóng sheet hành động
@@ -4728,6 +5542,27 @@ public class WorldScreen extends ScreenAdapter {
             float dx = x - JOY_CX, dy = y - JOY_CY;
             float len = (float) Math.hypot(dx, dy);
             if (len > 8f) { joyVecX = dx / len; joyVecY = dy / len; }
+            return;
+        }
+        // trong nhà: chạm vào một ô = chọn ô đặt (khi đang cầm đồ) hoặc
+        // chọn món nội thất tại ô đó để hiện sheet hành động
+        if (houseIn) {
+            float wx = x + lastCamX - Ui.W / 2f;
+            float wy = y + lastCamY - Ui.H / 2f;
+            int cx = (int) (wx / (24 * AvatarDkGame.HD));
+            int cy = (int) ((mapBottomPx - wy) / (24 * AvatarDkGame.HD));
+            if (cx >= 0 && cy >= 0 && cx < house.w && cy < house.h) {
+                if (housePlaceTypeId >= 0) {
+                    houseGhostCx = cx;
+                    houseGhostCy = cy;
+                } else {
+                    HouseWorld.Placed p = house.itemAtCell(cx, cy);
+                    if (p != null) {
+                        houseSelItem = p;
+                        houseSheetOpen = true;
+                    }
+                }
+            }
         }
     }
 
@@ -4759,6 +5594,18 @@ public class WorldScreen extends ScreenAdapter {
     /** Hành động của nút tương tác: NPC gần nhất cất lời chào theo dữ liệu chat gốc của nó;
      *  không có ai ở gần thì nhân vật tự nói một câu báo rõ. */
     public void interact() {
+        // trong nhà: đang cầm đồ thì nút Tương tác = chốt đặt; còn lại mở
+        // menu nhà (Rương / Mua đồ / Thoát) như menu HouseScr của gốc
+        if (houseIn) {
+            if (housePlaceTypeId >= 0) { houseConfirmPlace(); return; }
+            if (houseSheetOpen) {
+                houseSheetOpen = false;
+                houseSelItem = null;
+                return;
+            }
+            houseMenuOpen = true;
+            return;
+        }
         NpcFigure n = findNearestNpc();
         if (n == null) {
             // trong farm: nút Tương tác dùng cho ô đất / vật nuôi / công
@@ -7177,6 +8024,12 @@ public class WorldScreen extends ScreenAdapter {
         // thanh dưới: món đang chọn + nút Di chuyển (mũi tên chỉ hướng sang panel kia)
         float by = py + 22;
         batch.draw(Ui.roundedRect((int) CH_PW - 56, 66, 12, new Color(0f, 0f, 0f, 0.30f), GLASS_RIM), px + 28, by);
+        if (side == 1) {
+            // nút Nâng cấp rương nhà (gói −90 của gốc) — luôn hiện ở phía rương
+            float ubx = px + CH_PW - 28 - 132 - 122 + 12;
+            batch.draw(Ui.roundedRect(110, 40, 10, Ui.BTN_CANCEL, GLASS_RIM), ubx, by + 13);
+            Ui.centered(batch, Ui.fontSmall, "Nâng cấp", ubx + 55, by + 39, Color.WHITE);
+        }
         if (items.isEmpty()) {
             Ui.centered(batch, Ui.fontSmall, "Chưa có món nào", px + CH_PW / 2f, by + 41,
                 new Color(1f, 1f, 1f, 0.55f));
@@ -7322,6 +8175,22 @@ public class WorldScreen extends ScreenAdapter {
                     return;
                 }
             }
+            // nút Nâng cấp ở phía rương nhà: hỏi giá nâng cấp (gói −90 {0})
+            if (side == 1) {
+                float by = py + 22;
+                float ubx = px + CH_PW - 28 - 132 - 122 + 12;
+                if (x >= ubx && x <= ubx + 110 && y >= by + 13 && y <= by + 53) {
+                    if (online()) {
+                        try {
+                            AvatarProtocol.upgradeChest(game.connection, 0);
+                        } catch (IOException ignored) {
+                        }
+                    } else {
+                        addChatLog(TAB_SYSTEM, null, "Đăng nhập để nâng cấp rương.", true);
+                    }
+                    return;
+                }
+            }
             return; // trong panel: nuốt chạm
         }
         if (!inside) chestPanel = false;
@@ -7405,6 +8274,7 @@ public class WorldScreen extends ScreenAdapter {
      *  cấm, mặt tiền shop, hàng rào, mặt đường…; (2) ô chân vật thể
      *  gắn map. Ngoài lưới = không đứng được. */
     public boolean canStand(float mx, float my) {
+        if (houseIn) return house.canStand(mx, my);
         if (mapDef == null || mapDef.gridW <= 0) return true;
         // Hồ cá ở farm (ô type 88, cột 36–40): nhân vật chỉ đứng trên bờ,
         // TUYỆT ĐỐI không đi xuống nước — chặn cứng theo hình chữ nhật hồ
@@ -7485,7 +8355,8 @@ public class WorldScreen extends ScreenAdapter {
                 worldW / AvatarDkGame.HD - 16);
             if (canStand(nx, playerY)) playerX = nx;
             else tryPortal(nx, playerY);
-            float ny = MathUtils.clamp(playerY + my * SPEED * dt, 30, 190);
+            float ny = MathUtils.clamp(playerY + my * SPEED * dt, 30,
+                houseIn ? house.h * 24 - 26 : 190);
             if (canStand(playerX, ny)) playerY = ny;
             else tryPortal(playerX, ny);
             if (Math.abs(mx) > 0.05f) playerAnim.facingLeft = mx < 0;
@@ -7559,7 +8430,9 @@ public class WorldScreen extends ScreenAdapter {
         // trước có thể đã thu viewport (đặc biệt khi resize chưa được chuyển tiếp).
         Gdx.gl.glViewport(0, 0, Gdx.graphics.getBackBufferWidth(), Gdx.graphics.getBackBufferHeight());
         // Map không nền: gốc tô phẳng màu tối (setColor(1)) thay cho màu trời.
-        Color sky = mapDef.bg == null ? NO_BG_FILL : SKY_COLOR[bgStatus];
+        // Trong nhà: nền tối trong phòng, không có trời/mây của phố.
+        Color sky = houseIn ? new Color(0.04f, 0.03f, 0.05f, 1f)
+            : mapDef.bg == null ? NO_BG_FILL : SKY_COLOR[bgStatus];
         Gdx.gl.glClearColor(sky.r, sky.g, sky.b, 1f);
         Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT);
 
@@ -7596,10 +8469,11 @@ public class WorldScreen extends ScreenAdapter {
         worldCam.position.set(camX, camY, 0);
         worldCam.update();
 
-        drawBackground(camX, camY);
+        if (!houseIn) drawBackground(camX, camY);
 
         batch.setProjectionMatrix(worldCam.combined);
         batch.begin();
+        if (houseIn) drawHouseTiles();
         // dải tối dưới đáy map khi camera nâng vì xe buýt (che khoảng trống
         // dưới đường vừa lộ ra, cùng tông hai cột đen hai bên của gốc)
         if (busLift > 0 && whiteTex != null) {
@@ -7607,11 +8481,11 @@ public class WorldScreen extends ScreenAdapter {
             batch.draw(whiteTex, -60f, -busLift, worldW + 120f, busLift);
             batch.setColor(Color.WHITE);
         }
-        for (int i = 0; i < strips.size(); i++) {
+        for (int i = 0; !houseIn && i < strips.size(); i++) {
             Texture t = strips.get(i);
             batch.draw(t, stripLefts.get(i), 0);
         }
-        if (mapDef.tileMode() && tileRegions != null) {
+        if (!houseIn && mapDef.tileMode() && tileRegions != null) {
             // paintMap của gốc: mỗi ô vẽ frame drawTiles[idx] tại
             // (cột*48, hàng*48) từ góc trên-trái map; ở thang GL (y lên)
             // hàng r nằm tại y = đáy map - (r+1)*48. Ô -1 không vẽ.
@@ -7626,17 +8500,19 @@ public class WorldScreen extends ScreenAdapter {
                 batch.draw(r, (idx % gw) * cell, mapBottomPx - (idx / gw + 1) * cell);
             }
         }
-        if (!daydien.isEmpty()) {
+        if (!houseIn && !daydien.isEmpty()) {
             float dx = 0f;
             float bottom = mapBottomPx - 60f;
             for (Texture t : daydien) { batch.draw(t, dx, bottom); dx += t.getWidth(); }
         }
-        if (mapDef.id == 25) drawFarmSoil();
+        if (!houseIn && mapDef.id == 25) drawFarmSoil();
         // Vật thể gắn map + nhân vật vẽ TRỘN THEO ĐỘ SÂU như paintObject
         // của gốc: đáy/chân ở càng cao trên màn hình (worldY càng lớn) vẽ
         // càng trước. Vật thể neo đáy–giữa tại (anchorX, anchorY) của lưới.
         drawItems.clear();
+        if (houseIn) buildHouseDrawItems();
         for (int[] o : mapDef.objects) {
+            if (houseIn) break; // trong nhà không vẽ vật thể của phố
             if (o[0] < 0) continue; // SubObject trang trại: đợt farm riêng
             Texture t = objTexture(o[0]);
             if (t == null) continue;
@@ -7719,6 +8595,11 @@ public class WorldScreen extends ScreenAdapter {
                         batch.draw(it.region, it.x, it.y, it.dw, it.dh);
                     } else if (it.tex != null) {
                         batch.draw(it.tex, it.x, it.y, it.dw, it.dh);
+                    }
+                    break;
+                case DrawItem.HOUSE_ITEM:
+                    if (it.region != null) {
+                        batch.draw(it.region, it.x, it.drawY, it.dw, it.dh);
                     }
                     break;
                 case DrawItem.FARM_ANIMAL_INFO: {
@@ -7808,6 +8689,7 @@ public class WorldScreen extends ScreenAdapter {
                     break;
             }
         }
+        if (houseIn) drawHouseGhost();
         // xe buýt vẽ sau cùng trong thế giới (ở làn đường, trước mọi nhân vật)
         if (busPhase > 0) {
             batch.draw(busTex, busX * AvatarDkGame.HD - busTex.getWidth() / 2f, 2f);
@@ -7925,6 +8807,7 @@ public class WorldScreen extends ScreenAdapter {
         batch.begin();
         drawPlayerCard();
         drawFarmChip();
+        drawHouseChip();
         drawBurger();
         if (menuOpen) drawBurgerPanel();
         drawJoystick();
@@ -7958,6 +8841,12 @@ public class WorldScreen extends ScreenAdapter {
         if (passFormOpen) drawPassFormPanel();
         if (giftFormOpen) drawGiftFormPanel();
         if (tbOpen) drawTextBoxPanel();
+        if (housePlaceTypeId >= 0 && !housePayOpen) drawHousePlaceBar();
+        if (houseSheetOpen && houseSelItem != null) drawHouseSheet();
+        if (houseMenuOpen) drawHouseMenu();
+        if (houseBuyOpen) drawHouseBuyPanel();
+        if (housePayOpen) drawHousePaySheet();
+        if (chestUpConfirmOpen) drawChestUpConfirm();
         batch.end();
     }
 
@@ -9689,6 +10578,8 @@ public class WorldScreen extends ScreenAdapter {
             || mailOpen || friendOpen || settingsOpen || musicOpen
             || farmSeedOpen || farmFertOpen || farmLandOpen || farmStoreOpen
             || farmShopOpen || farmCookOpen || farmAnimalSellOpen
+            || houseMenuOpen || houseBuyOpen || houseSheetOpen || housePayOpen
+            || chestUpConfirmOpen || housePlaceTypeId >= 0
             || panelPlayer != null || confirmText != null || exitConfirmOpen || tbOpen;
     }
 
