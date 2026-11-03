@@ -670,6 +670,7 @@ public class ScreenshotMain {
                         }
                         break;
                     case 58:
+                        if (frame == 10) world.debugInteract();
                         if (frame == 15) {
                             shot("shot-farm.png");
                             world.debugOpenFarmSeeds();
@@ -679,41 +680,58 @@ public class ScreenshotMain {
                     case 59:
                         if (frame == 15) {
                             shot("shot-farm-seeds.png");
-                            world.debugOpenFarmStore();
+                            world.debugShowFarmShed();
                             stage = 60; frame = 0;
                         }
                         break;
                     case 60:
+                        if (frame == 10) world.debugInteract();
                         if (frame == 15) {
-                            shot("shot-farm-store.png");
-                            world.debugOpenFarmShop();
+                            shot("shot-farm-shed.png");
+                            world.debugOpenFarmStore();
                             stage = 61; frame = 0;
                         }
                         break;
                     case 61:
                         if (frame == 15) {
-                            shot("shot-farm-shop.png");
-                            world.debugOpenFarmCook();
+                            shot("shot-farm-store.png");
+                            world.debugOpenFarmShop();
                             stage = 62; frame = 0;
                         }
                         break;
                     case 62:
                         if (frame == 15) {
-                            shot("shot-farm-cook.png");
-                            world.debugShowFarmAnimal();
+                            shot("shot-farm-shop.png");
+                            world.debugShowFarmKitchen();
                             stage = 63; frame = 0;
                         }
                         break;
                     case 63:
+                        if (frame == 10) world.debugInteract();
                         if (frame == 15) {
-                            shot("shot-farm-animal.png");
-                            world.debugOpenFarmShopAnimals();
+                            shot("shot-farm-cook.png");
+                            world.debugShowFarmAnimal();
                             stage = 64; frame = 0;
                         }
                         break;
                     case 64:
+                        if (frame == 10) world.debugInteract();
+                        if (frame == 15) {
+                            shot("shot-farm-animal.png");
+                            world.debugOpenFarmShopAnimals();
+                            stage = 65; frame = 0;
+                        }
+                        break;
+                    case 65:
                         if (frame == 15) {
                             shot("shot-farm-shop-animals.png");
+                            world.debugShowFarmKitchen();
+                            stage = 66; frame = 0;
+                        }
+                        break;
+                    case 66:
+                        if (frame == 15) {
+                            shot("shot-farm-kitchen-hint.png");
                             System.out.println("SCREENSHOT DONE");
                             Gdx.app.exit();
                         }

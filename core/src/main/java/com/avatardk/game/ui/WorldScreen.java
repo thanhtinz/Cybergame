@@ -1010,9 +1010,6 @@ public class WorldScreen extends ScreenAdapter {
     private int farmFocus = -1;
     private boolean farmSeedOpen, farmFertOpen, farmLandOpen;
     private String farmLandText = "";
-    private final java.util.List<float[]> farmBarBtns = new java.util.ArrayList<>();
-    // mã hành động thanh farm: 1 mở chọn hạt, 2 tưới, 3 mở chọn phân, 4 thu hoạch,
-    // 5 xin giá mở ô, 6 mua ô bằng xu, 7 mua ô bằng lượng
 
     /** Ô tiêu điểm = ô đất gần người chơi nhất (gốc: ô dưới chân nhân vật);
      *  chỉ số == cells.size() là mốc mua đất. */
@@ -1131,94 +1128,185 @@ public class WorldScreen extends ScreenAdapter {
         return false;
     }
 
-    /** Thanh hành động theo ô tiêu điểm (menu ngữ cảnh của FarmScr gốc),
-     *  vẽ ngay trên khung chat; nút cũng được ghi lại để bắt chạm. */
-    private void drawFarmBar() {
-        farmBarBtns.clear();
-        if (mapDef == null || mapDef.id != 25 || !farm.joined) return;
-        if (farmFocus < 0 && farmAnimalFocus < 0) return;
-        if (farmSeedOpen || farmFertOpen || farmLandOpen) return;
-        java.util.List<String> labels = new java.util.ArrayList<>();
-        java.util.List<Integer> codes = new java.util.ArrayList<>();
-        if (farmAnimalFocus >= 0) {
-            // Thanh vật nuôi (GĐ4): thu hoạch / cho ăn / bán
-            FarmWorld.Animal a = farm.animals.get(farmAnimalFocus);
-            FarmWorld.AnimalDef def = farm.animalDefs.get(a.species);
-            if (def != null && def.priceProduct > 0 && a.numEggOne > 0) {
-                labels.add("Thu hoạch");
-                codes.add(8);
+    // ---- Tương tác farm bằng NÚT TƯƠNG TÁC (mô hình chung của game:
+    // đi lại gần mục tiêu rồi bấm nút Tương tác — không chạm thẳng vào
+    // cây như bản gốc, không nút nổi thường trực). Mã hành động: 1 chọn
+    // hạt, 2 tưới, 3 chọn phân, 4 thu hoạch cây, 8 thu hoạch vật nuôi,
+    // 9 cho ăn, 10 bán vật nuôi, 20 mở Kho, 21 mở Cửa hàng farm. ----
+    // Vị trí công trình trên map farm (đo từ ảnh dựng cảnh đã duyệt):
+    // NHÀ BẾP ở x≈252, nhà kho rơm ở x≈346, hàng đứng tương tác y≈96.
+    private static final float FARM_KITCHEN_X = 252f, FARM_SHED_X = 346f;
+    private static final float FARM_BUILD_Y = 96f, FARM_BUILD_R = 80f;
+    private String farmSheetTitle = "";
+    private int[] farmSheetCodes = new int[0];
+    private String[] farmSheetLabels = new String[0];
+    private boolean farmSheetOpen;
+    private final java.util.List<float[]> farmSheetBtns = new java.util.ArrayList<>();
+
+    private boolean farmAnyPanelOpen() {
+        return farmSeedOpen || farmFertOpen || farmLandOpen || farmStoreOpen
+            || farmShopOpen || farmCookOpen || farmAnimalSellOpen || farmSheetOpen;
+    }
+
+    /** Mục tiêu tương tác farm tại chỗ đứng hiện tại: 0 không có, 1 ô đất,
+     *  2 vật nuôi, 3 nhà bếp, 4 nhà kho, 5 mốc mở ô đất. */
+    private int farmTargetKind() {
+        if (mapDef == null || mapDef.id != 25 || !farm.joined) return 0;
+        if (farmAnimalFocus >= 0) return 2;
+        if (farmFocus >= 0) return farmFocus == farm.cells.size() ? 5 : 1;
+        if (Math.hypot(playerX - FARM_KITCHEN_X, playerY - FARM_BUILD_Y) <= FARM_BUILD_R) return 3;
+        if (Math.hypot(playerX - FARM_SHED_X, playerY - FARM_BUILD_Y) <= FARM_BUILD_R) return 4;
+        return 0;
+    }
+
+    /** Nhãn gợi ý hiện phía trên nút Tương tác khi đứng gần mục tiêu farm. */
+    private String farmTargetLabel() {
+        switch (farmTargetKind()) {
+            case 1: {
+                FarmWorld.Cell c = farm.cells.get(farmFocus);
+                if (c.idTree < 0) return "Trồng cây";
+                FarmWorld.TreeDef d = farm.trees.get(c.idTree);
+                String n = d != null ? d.name : "Cây";
+                return c.hervestPer >= 100 ? "Thu hoạch" : n;
             }
-            if (def != null && farmFoodFor(def.area) > 0) {
-                labels.add("Cho ăn");
-                codes.add(9);
+            case 2: {
+                FarmWorld.AnimalDef d = farm.animalDefs.get(
+                    farm.animals.get(farmAnimalFocus).species);
+                return d != null ? d.name : "Vật nuôi";
             }
-            labels.add("Bán");
-            codes.add(10);
-        } else if (farmFocus == farm.cells.size()) {
-            labels.add("Mở ô đất");
-            codes.add(5);
-        } else if (farmFocus < farm.cells.size()) {
-            FarmWorld.Cell c = farm.cells.get(farmFocus);
-            if (c.idTree < 0) {
-                labels.add("Trồng cây");
-                codes.add(1);
-            } else if (c.hervestPer >= 100) {
-                labels.add("Thu hoạch");
-                codes.add(4);
-            } else {
-                if (c.arid) {
-                    labels.add("Tưới nước");
-                    codes.add(2);
-                }
-                if (farmHasFert()) {
-                    labels.add("Bón phân");
-                    codes.add(3);
-                }
-            }
-        }
-        if (labels.isEmpty()) return;
-        float bh = 46f, gap = 10f, totalW = 0f;
-        float[] ws = new float[labels.size()];
-        for (int i = 0; i < labels.size(); i++) {
-            layout.setText(Ui.font, labels.get(i));
-            ws[i] = layout.width + 40f;
-            totalW += ws[i] + gap;
-        }
-        totalW -= gap;
-        float x = Ui.W / 2f - totalW / 2f, y = 252f;
-        for (int i = 0; i < labels.size(); i++) {
-            boolean primary = codes.get(i) == 4 || codes.get(i) == 1 || codes.get(i) == 5 || codes.get(i) == 8;
-            if (primary) {
-                batch.draw(Ui.gradientRect((int) ws[i], (int) bh, 14,
-                    EntryUi.ORANGE_TOP, EntryUi.ORANGE_BOT), x, y);
-            } else {
-                batch.draw(Ui.roundedRect((int) ws[i], (int) bh, 14, GLASS_FILL_DARK, GLASS_RIM), x, y);
-            }
-            Ui.centered(batch, Ui.font, labels.get(i), x + ws[i] / 2f, y + 31f,
-                new Color(1f, 1f, 1f, 1f));
-            farmBarBtns.add(new float[]{x, y, ws[i], codes.get(i)});
-            x += ws[i] + gap;
+            case 3: return "Nấu ăn";
+            case 4: return "Kho · Cửa hàng";
+            case 5: return "Mở ô đất";
+            default: return null;
         }
     }
 
-    private boolean farmBarTouch(float x, float y) {
-        for (float[] b : farmBarBtns) {
-            if (x >= b[0] && x <= b[0] + b[2] && y >= b[1] && y <= b[1] + 46f) {
-                switch ((int) b[3]) {
-                    case 1: farmSeedOpen = true; break;
-                    case 2: farmUseItem(100); break;
-                    case 3: farmFertOpen = true; break;
-                    case 4: farmHarvestFocus(); break;
-                    case 5: farmAskLand(); break;
-                    case 8: farmHarvestAnimalFocus(); break;
-                    case 9: farmFeedAnimalFocus(); break;
-                    case 10: farmAskSellAnimal(); break;
-                    default: break;
+    /** Nút Tương tác khi đang ở trong farm: mở bảng chọn hành động cho
+     *  mục tiêu gần nhất, hoặc mở thẳng panel của công trình. */
+    private boolean farmInteract() {
+        if (mapDef == null || mapDef.id != 25 || !farm.joined) return false;
+        if (farmAnyPanelOpen()) return false;
+        int kind = farmTargetKind();
+        if (kind == 0) return false;
+        if (kind == 5) { farmAskLand(); return true; }
+        if (kind == 3) { farmCookOpen = true; return true; }
+        if (kind == 4) {
+            openFarmSheet("Nhà kho nông trại", new int[]{20, 21},
+                new String[]{"Kho nông trại", "Cửa hàng farm"});
+            return true;
+        }
+        java.util.List<Integer> codes = new java.util.ArrayList<>();
+        java.util.List<String> labels = new java.util.ArrayList<>();
+        String title;
+        if (kind == 2) {
+            FarmWorld.Animal a = farm.animals.get(farmAnimalFocus);
+            FarmWorld.AnimalDef def = farm.animalDefs.get(a.species);
+            title = def != null ? def.name : "Vật nuôi";
+            if (def != null && def.priceProduct > 0 && a.numEggOne > 0) {
+                codes.add(8); labels.add("Thu hoạch");
+            }
+            if (def != null && farmFoodFor(def.area) > 0) {
+                codes.add(9); labels.add("Cho ăn");
+            }
+            codes.add(10); labels.add("Bán");
+        } else {
+            FarmWorld.Cell c = farm.cells.get(farmFocus);
+            if (c.idTree < 0) {
+                title = "Ô đất trống";
+                codes.add(1); labels.add("Trồng cây");
+            } else {
+                FarmWorld.TreeDef def = farm.trees.get(c.idTree);
+                title = def != null ? def.name : "Cây";
+                if (c.hervestPer >= 100) {
+                    codes.add(4); labels.add("Thu hoạch");
+                } else {
+                    if (c.arid) { codes.add(2); labels.add("Tưới nước"); }
+                    if (farmHasFert()) { codes.add(3); labels.add("Bón phân"); }
                 }
+            }
+        }
+        if (codes.isEmpty()) {
+            addChatLog(TAB_SYSTEM, null, title + " đang lớn, chưa cần chăm gì.", true);
+            return true;
+        }
+        int[] ca = new int[codes.size()];
+        for (int i = 0; i < ca.length; i++) ca[i] = codes.get(i);
+        openFarmSheet(title, ca, labels.toArray(new String[0]));
+        return true;
+    }
+
+    private void openFarmSheet(String title, int[] codes, String[] labels) {
+        farmSheetTitle = title;
+        farmSheetCodes = codes;
+        farmSheetLabels = labels;
+        farmSheetOpen = true;
+    }
+
+    private void farmDoAction(int code) {
+        farmSheetOpen = false;
+        switch (code) {
+            case 1: farmSeedOpen = true; break;
+            case 2: farmUseItem(100); break;
+            case 3: farmFertOpen = true; break;
+            case 4: farmHarvestFocus(); break;
+            case 8: farmHarvestAnimalFocus(); break;
+            case 9: farmFeedAnimalFocus(); break;
+            case 10: farmAskSellAnimal(); break;
+            case 20: farmStoreOpen = true; break;
+            case 21: farmShopOpen = true; farmShopTab = 0; break;
+            default: break;
+        }
+    }
+
+    // Bảng chọn hành động farm: panel kính giữa màn hình, nút cam đồng bộ
+    // hệ nút của game, nút tắt ô vuông đỏ trong góc như mọi panel.
+    private static final float FSH_PW = 480f;
+
+    private float farmSheetH() { return 108f + farmSheetCodes.length * 64f; }
+    private float farmSheetX() { return (Ui.W - FSH_PW) / 2f; }
+    private float farmSheetY() { return (Ui.H - farmSheetH()) / 2f; }
+
+    private void drawFarmSheet() {
+        if (!farmSheetOpen) return;
+        float h = farmSheetH(), x = farmSheetX(), y = farmSheetY();
+        batch.setColor(0f, 0f, 0f, 0.45f);
+        batch.draw(whiteTex, 0, 0, Ui.W, Ui.H);
+        batch.setColor(Color.WHITE);
+        batch.draw(Ui.roundedRect((int) FSH_PW, (int) h, 16, GLASS_FILL_DARK, GLASS_RIM), x, y);
+        Ui.font.setColor(1f, 0.85f, 0.38f, 1f);
+        Ui.font.draw(batch, farmSheetTitle, x + 26, y + h - 30);
+        Ui.font.setColor(Color.WHITE);
+        batch.draw(Ui.roundedRect(36, 36, 10, Ui.BTN_CLOSE, GLASS_RIM), x + FSH_PW - 54, y + h - 54);
+        Ui.faIcon(batch, Ui.fa20, Ui.FA_XMARK, x + FSH_PW - 36, y + h - 36,
+            new Color(1f, 1f, 1f, 0.9f));
+        farmSheetBtns.clear();
+        float bw = FSH_PW - 80f, bh = 52f, bx = x + 40f;
+        for (int i = 0; i < farmSheetCodes.length; i++) {
+            float by = y + h - 84f - i * 64f - bh;
+            batch.draw(Ui.gradientRect((int) bw, (int) bh, 14,
+                EntryUi.ORANGE_TOP, EntryUi.ORANGE_BOT), bx, by);
+            Ui.centered(batch, Ui.font, farmSheetLabels[i], bx + bw / 2f, by + 37,
+                new Color(1f, 1f, 1f, 1f));
+            farmSheetBtns.add(new float[]{bx, by, bw, farmSheetCodes[i]});
+        }
+    }
+
+    private boolean farmSheetTouch(float x, float y) {
+        if (!farmSheetOpen) return false;
+        float h = farmSheetH(), px = farmSheetX(), py = farmSheetY();
+        if (x >= px + FSH_PW - 54 && x <= px + FSH_PW - 18
+                && y >= py + h - 54 && y <= py + h - 18) {
+            farmSheetOpen = false;
+            return true;
+        }
+        for (float[] b : farmSheetBtns) {
+            if (x >= b[0] && x <= b[0] + b[2] && y >= b[1] && y <= b[1] + 52f) {
+                farmDoAction((int) b[3]);
                 return true;
             }
         }
-        return false;
+        if (x < px || x > px + FSH_PW || y < py || y > py + h) farmSheetOpen = false;
+        return true;
     }
 
     // --- Panel chọn hạt (gieo từ kho giống) ---
@@ -1393,56 +1481,10 @@ public class WorldScreen extends ScreenAdapter {
         farmSeedOpen = true;
     }
 
-    // ---- Farm GĐ3: nút Kho/Cửa hàng + panel kho (bán nông sản) + shop farm ----
+    // ---- Farm GĐ3: panel kho (bán nông sản) + shop farm — mở bằng nút
+    // Tương tác tại nhà kho (xem farmInteract), không còn nút nổi. ----
     private boolean farmStoreOpen, farmShopOpen;
     private int farmShopTab; // 0 = hạt giống, 1 = phân bón/vật phẩm
-    private final float[] farmHubBtns = new float[6]; // x,y của 3 nút dưới chip
-
-    /** Ba nút kính dưới chip farm: Kho · Cửa hàng · Nấu ăn (menu của FarmScr gốc). */
-    private void drawFarmHubButtons() {
-        if (mapDef == null || mapDef.id != 25 || !farm.joined) return;
-        String[] labels = {"Kho", "Cửa hàng", "Nấu ăn"};
-        float bh = 40f, gap = 10f;
-        float[] ws = new float[3];
-        float total = 0;
-        for (int i = 0; i < 3; i++) {
-            layout.setText(Ui.fontSmall, labels[i]);
-            ws[i] = layout.width + 44f;
-            total += ws[i] + gap;
-        }
-        total -= gap;
-        float x = Ui.W / 2f - total / 2f, y = Ui.H - 118f;
-        for (int i = 0; i < 3; i++) {
-            batch.draw(Ui.roundedRect((int) ws[i], (int) bh, 12, GLASS_FILL_DARK, GLASS_RIM), x, y);
-            Ui.centered(batch, Ui.fontSmall, labels[i], x + ws[i] / 2f, y + 27f, new Color(1f, 1f, 1f, 0.95f));
-            farmHubBtns[i * 2] = x;
-            farmHubBtns[i * 2 + 1] = y;
-            x += ws[i] + gap;
-        }
-    }
-
-    private boolean farmHubTouch(float x, float y) {
-        if (mapDef == null || mapDef.id != 25 || !farm.joined) return false;
-        // rộng nút tính lại giống lúc vẽ
-        String[] labels = {"Kho", "Cửa hàng", "Nấu ăn"};
-        for (int i = 0; i < 3; i++) {
-            layout.setText(Ui.fontSmall, labels[i]);
-            float w = layout.width + 44f;
-            float bx = farmHubBtns[i * 2], by = farmHubBtns[i * 2 + 1];
-            if (bx == 0 && by == 0) continue;
-            if (x >= bx && x <= bx + w && y >= by && y <= by + 40f) {
-                if (i == 0) farmStoreOpen = true;
-                else if (i == 1) {
-                    farmShopOpen = true;
-                    farmShopTab = 0;
-                } else {
-                    farmCookOpen = true;
-                }
-                return true;
-            }
-        }
-        return false;
-    }
 
     private void farmBuy(int id, int type) {
         Msg m = new Msg(AvatarProtocol.FARM_BUY_ITEM);
@@ -2050,6 +2092,38 @@ public class WorldScreen extends ScreenAdapter {
         farmCookOpen = true;
     }
 
+    /** Đứng trước nhà kho rơm (điểm tương tác Kho · Cửa hàng). */
+    public void debugShowFarmShed() {
+        debugShowFarm();
+        farmSeedOpen = farmFertOpen = farmLandOpen = farmStoreOpen = farmShopOpen = false;
+        farmCookOpen = false;
+        farmAnimalSellOpen = false;
+        farmSheetOpen = false;
+        playerX = FARM_SHED_X;
+        playerY = FARM_BUILD_Y + 4f;
+    }
+
+    /** Đứng trước NHÀ BẾP (điểm tương tác Nấu ăn). */
+    public void debugShowFarmKitchen() {
+        debugShowFarm();
+        farmSeedOpen = farmFertOpen = farmLandOpen = farmStoreOpen = farmShopOpen = false;
+        farmCookOpen = false;
+        farmAnimalSellOpen = false;
+        farmSheetOpen = false;
+        playerX = FARM_KITCHEN_X;
+        playerY = FARM_BUILD_Y + 4f;
+    }
+
+    /** Đứng ở đầu trái map farm để soi toàn cảnh phía tây (đo vùng tương tác). */
+    public void debugShowFarmWest() {
+        debugShowFarm();
+        farmSeedOpen = farmFertOpen = farmLandOpen = farmStoreOpen = farmShopOpen = false;
+        farmCookOpen = false;
+        farmAnimalSellOpen = false;
+        playerX = 150f;
+        playerY = 100f;
+    }
+
     /** Đứng cạnh hồ cá để chụp thanh hành động vật nuôi (cá có hình trong
      *  Pack5; gà/bò chờ đào hình từ server live). */
     public void debugShowFarmAnimal() {
@@ -2085,6 +2159,23 @@ public class WorldScreen extends ScreenAdapter {
         layout.setText(Ui.font, label);
         Ui.font.draw(batch, label, x + w / 2f - layout.width / 2f, y + h - 13f);
         Ui.font.setColor(Color.WHITE);
+        // Gợi ý phía trên nút Tương tác: đang đứng gần mục tiêu farm nào
+        // thì bấm nút sẽ tương tác với mục tiêu đó.
+        if (!farmAnyPanelOpen()) {
+            String hint = farmTargetLabel();
+            if (hint != null) {
+                String text = "Tương tác: " + hint;
+                layout.setText(Ui.fontSmall, text);
+                float pw = layout.width + 32f, ph = 34f;
+                // mép phải của pill thẳng hàng mép phải nút Tương tác
+                // (tâm nút ở Ui.W − 84, bán kính 46) để pill dài không tràn màn hình
+                float px = Ui.W - 38f - pw, py = 198f;
+                batch.draw(Ui.roundedRect((int) pw, (int) ph, 17, GLASS_FILL_DARK, GLASS_RIM), px, py);
+                Ui.fontSmall.setColor(1f, 1f, 1f, 0.95f);
+                Ui.fontSmall.draw(batch, text, px + 16f, py + 23f);
+                Ui.fontSmall.setColor(Color.WHITE);
+            }
+        }
     }
 
     /** Harness: mở thẳng cảnh farm offline với dữ liệu mẫu (ScreenshotMain). */
@@ -4092,8 +4183,8 @@ public class WorldScreen extends ScreenAdapter {
             typing = true;
             return;
         }
-        // thanh hành động farm (trồng/tưới/bón/thu hoạch/mở ô)
-        if (farmBarTouch(x, y)) return;
+        // bảng chọn hành động farm (mở bằng nút Tương tác)
+        if (farmSheetTouch(x, y)) return;
         // nút tương tác (phải dưới)
         if (Math.hypot(x - ACT_CX, y - ACT_CY) <= ACT_R + 10) { interact(); return; }
         // chạm vào người chơi khác trên phố: mở panel tương tác của họ
@@ -4131,6 +4222,9 @@ public class WorldScreen extends ScreenAdapter {
     public void interact() {
         NpcFigure n = findNearestNpc();
         if (n == null) {
+            // trong farm: nút Tương tác dùng cho ô đất / vật nuôi / công
+            // trình gần nhất (đi lại gần rồi bấm nút, đúng mô hình của game)
+            if (farmInteract()) return;
             // đứng gần bảng KHU (846) thì tương tác = mở danh sách khu
             if (nearestSign() != null) { openBoardRequest(); return; }
             // bong bóng trên đầu như cũ, nhưng trong khung chat thì đây là
@@ -7209,8 +7303,7 @@ public class WorldScreen extends ScreenAdapter {
         batch.begin();
         drawPlayerCard();
         drawFarmChip();
-        drawFarmHubButtons();
-        drawFarmBar();
+        drawFarmSheet();
         drawBurger();
         if (menuOpen) drawBurgerPanel();
         drawJoystick();
