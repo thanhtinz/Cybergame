@@ -2390,8 +2390,8 @@ public class WorldScreen extends ScreenAdapter {
         }
         // panel chọn khu đang mở là lớp trên (sau bản đồ thành phố)
         if (boardOpen) {
-            if (x >= BOARD_PX + BOARD_PW - 52 && x <= BOARD_PX + BOARD_PW
-                && y >= BOARD_PY + BOARD_PH - 52 && y <= BOARD_PY + BOARD_PH) {
+            if (x >= BOARD_PX + BOARD_PW - 54 && x <= BOARD_PX + BOARD_PW - 18
+                && y >= BOARD_PY + BOARD_PH - 54 && y <= BOARD_PY + BOARD_PH - 18) {
                 boardOpen = false;
                 return;
             }
@@ -2471,7 +2471,7 @@ public class WorldScreen extends ScreenAdapter {
         if (panelPlayer != null) {
             float[] g = playerPanelGeom();
             float px = g[0], py = g[1];
-            if (x >= px + PP_W - 46 && x <= px + PP_W && y >= py + PP_H - 46 && y <= py + PP_H) {
+            if (x >= px + PP_W - 54 && x <= px + PP_W - 18 && y >= py + PP_H - 54 && y <= py + PP_H - 18) {
                 panelPlayer = null;
                 panelSub = false;
                 return;
@@ -3115,7 +3115,9 @@ public class WorldScreen extends ScreenAdapter {
         Ui.font.setColor(1f, 0.83f, 0.38f, 1f);
         Ui.font.draw(batch, nm, nx, ny);
         Ui.font.setColor(Color.WHITE);
-        Ui.font.draw(batch, "X", px + PP_W - 38, py + PP_H - 18);
+        batch.draw(Ui.roundedRect(36, 36, 10, Ui.BTN_CLOSE, GLASS_RIM), px + PP_W - 54, py + PP_H - 54);
+        Ui.faIcon(batch, Ui.fa20, Ui.FA_XMARK, px + PP_W - 36, py + PP_H - 36,
+            new Color(0.9f, 0.93f, 1f, 1f));
         // 5 nút chính: ô icon bo góc + nhãn nằm DƯỚI ô (đúng mẫu)
         for (int i = 0; i < 5; i++) {
             float bx = ppBtnX(i);
@@ -4380,7 +4382,9 @@ public class WorldScreen extends ScreenAdapter {
         Ui.fontSmall.setColor(cTitle);
         Ui.fontSmall.draw(batch, "THÔNG TIN NHÂN VẬT", px + 24, py + CP_H - 22);
         Ui.font.setColor(light ? cText : Color.WHITE);
-        Ui.font.draw(batch, "X", px + CP_W - 38, py + CP_H - 20);
+        batch.draw(Ui.roundedRect(36, 36, 10, Ui.BTN_CLOSE, GLASS_RIM), px + CP_W - 54, py + CP_H - 54);
+        Ui.faIcon(batch, Ui.fa20, Ui.FA_XMARK, px + CP_W - 36, py + CP_H - 36,
+            new Color(0.9f, 0.93f, 1f, 1f));
         int[] st = charStats();
         // cột tiền bằng icon myinfo gốc: Xu, Lượng, Lượng khoá, Xèng, Cấp
         int[] icons = {0, 1, 4, 2};
@@ -4472,7 +4476,9 @@ public class WorldScreen extends ScreenAdapter {
         batch.draw(Ui.roundedRect((int) CP_W, (int) CP_H, 14,
             new Color(0.97f, 0.95f, 0.89f, 1f), brown), px, py);
         Ui.font.setColor(brown);
-        Ui.font.draw(batch, "X", px + CP_W - 38, py + CP_H - 20);
+        batch.draw(Ui.roundedRect(36, 36, 10, Ui.BTN_CLOSE, GLASS_RIM), px + CP_W - 54, py + CP_H - 54);
+        Ui.faIcon(batch, Ui.fa20, Ui.FA_XMARK, px + CP_W - 36, py + CP_H - 36,
+            new Color(0.9f, 0.93f, 1f, 1f));
         int[] st = charStats();
         // tên xanh đậm trên cùng trái (vị trí tab tên của PopupShop gốc)
         Ui.font.setColor(blue);
@@ -6792,8 +6798,10 @@ public class WorldScreen extends ScreenAdapter {
         Ui.font.setColor(1f, 0.85f, 0.45f, 1f);
         Ui.font.draw(batch, "CHỌN KHU — " + (mapDef.name != null ? mapDef.name : ("MAP " + mapDef.id)),
             BOARD_PX + 22, BOARD_PY + BOARD_PH - 20);
-        Ui.font.setColor(Color.WHITE);
-        Ui.font.draw(batch, "X", BOARD_PX + BOARD_PW - 38, BOARD_PY + BOARD_PH - 18);
+        batch.draw(Ui.roundedRect(36, 36, 10, Ui.BTN_CLOSE, GLASS_RIM),
+            BOARD_PX + BOARD_PW - 54, BOARD_PY + BOARD_PH - 54);
+        Ui.faIcon(batch, Ui.fa20, Ui.FA_XMARK, BOARD_PX + BOARD_PW - 36, BOARD_PY + BOARD_PH - 36,
+            new Color(0.9f, 0.93f, 1f, 1f));
         if (boardStatus == null) {
             Ui.fontSmall.setColor(1f, 1f, 1f, 0.85f);
             String s = "Đang tải danh sách khu…";
@@ -6983,10 +6991,10 @@ public class WorldScreen extends ScreenAdapter {
         Ui.font.draw(batch, title, 42, Ui.H - 44);
         Ui.fontTiny.setColor(1f, 1f, 1f, 0.75f);
         Ui.fontTiny.draw(batch, hint, 42, Ui.H - 76);
-        // nút đóng tròn ở góc trên phải
-        batch.draw(Ui.roundedRect(52, 52, 26, new Color(0.05f, 0.09f, 0.14f, 0.85f), GLASS_RIM),
-            Ui.W - 74, Ui.H - 78);
-        Ui.centered(batch, Ui.font, "X", Ui.W - 48, Ui.H - 41, Color.WHITE);
+        // nút đóng: ô vuông đỏ chuẩn như mọi panel, góc trên phải
+        batch.draw(Ui.roundedRect(36, 36, 10, Ui.BTN_CLOSE, GLASS_RIM), Ui.W - 54, Ui.H - 54);
+        Ui.faIcon(batch, Ui.fa20, Ui.FA_XMARK, Ui.W - 36, Ui.H - 36,
+            new Color(0.9f, 0.93f, 1f, 1f));
         // cụm zoom ở mép phải: + / mức zoom / −, dưới là nút về vị trí của bạn
         float zx = Ui.W - 80, zy = 300;
         batch.draw(Ui.roundedRect(58, 176, 16, new Color(0.05f, 0.09f, 0.14f, 0.85f), GLASS_RIM), zx, zy);
@@ -7021,7 +7029,7 @@ public class WorldScreen extends ScreenAdapter {
     /** Chạm xuống khi bản đồ mở: các nút ăn ngay; còn lại bắt đầu kéo.
      *  Chọn vùng xảy ra ở touchUp khi chạm nhẹ không kéo (mẫu sheet biểu cảm). */
     private void cityMapTouchDown(float x, float y, int pointer) {
-        if (x >= Ui.W - 74 && x <= Ui.W - 22 && y >= Ui.H - 78 && y <= Ui.H - 26) {
+        if (x >= Ui.W - 54 && x <= Ui.W - 18 && y >= Ui.H - 54 && y <= Ui.H - 18) {
             cityMapOpen = false;
             mapPointer = -1;
             return;
@@ -7622,10 +7630,9 @@ public class WorldScreen extends ScreenAdapter {
             new Color(0.08f, 0.12f, 0.19f, 0.98f), GLASS_RIM), cx, cy);
         Ui.font.setColor(1f, 0.85f, 0.38f, 1f);
         Ui.font.draw(batch, "Hoá đơn mua", cx + 28, cy + ch - 30);
-        // nút X nằm GỌN TRONG góc panel (không chồm ra viền như panel
-        // shop) để không đè lên chữ của panel phía sau
-        batch.draw(Ui.roundedRect(36, 36, 10, Ui.BTN_CLOSE, GLASS_RIM), cx + cw - 44, cy + ch - 44);
-        Ui.faIcon(batch, Ui.fa20, Ui.FA_XMARK, cx + cw - 26, cy + ch - 26,
+        // nút đóng: ô vuông đỏ chuẩn như mọi panel
+        batch.draw(Ui.roundedRect(36, 36, 10, Ui.BTN_CLOSE, GLASS_RIM), cx + cw - 54, cy + ch - 54);
+        Ui.faIcon(batch, Ui.fa20, Ui.FA_XMARK, cx + cw - 36, cy + ch - 36,
             new Color(0.9f, 0.93f, 1f, 1f));
         // món đang mua: icon + tên + giới tính/cấp
         drawPartIcon(sel.id, cx + 62, cy + ch - 100, 76);
@@ -7718,7 +7725,7 @@ public class WorldScreen extends ScreenAdapter {
     private void billTouch(float x, float y) {
         com.avatardk.game.data.PartData sel = shopSelPart();
         float cw = 640, ch = 520, cx = (Ui.W - cw) / 2f, cy = (Ui.H - ch) / 2f;
-        if ((x >= cx + cw - 44 && x <= cx + cw - 8 && y >= cy + ch - 44 && y <= cy + ch - 8)
+        if ((x >= cx + cw - 54 && x <= cx + cw - 18 && y >= cy + ch - 54 && y <= cy + ch - 18)
             || x < cx || x > cx + cw || y < cy || y > cy + ch) {
             billOpen = false;
             return;
