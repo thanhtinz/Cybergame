@@ -99,9 +99,15 @@ Nguồn sự thật: `docs/maps-spec.md` (kiểm kê map/NPC từ Pack5), code g
 
 ## C. HỆ LỚN CÒN LẠI (theo thứ tự đợt đã chốt)
 
-1. **Đợt 4 — Nhà/nội thất**: HouseScr (vào nhà client 22), mua biệt thự (857),
-   đặt/bày nội thất (dữ liệu chests_home đã có), rương mở trong nhà, nội thất
-   tile (map 21, 23, 61–68, 106 — phụ thuộc A1). Asset: `Resources/hd/home/` có sẵn.
+1. **Đợt 4 — Nhà/nội thất** (đặc tả đầy đủ: docs/house-spec.md): nhà là MAP
+   ĐỘNG (lưới trong DB house_buy.map_data, atlas riêng hd/house/tile.png 41
+   frame, numW 21) — vào qua ô 68/69/70 trên client map 22, mua biệt thự qua
+   NPC 857 (1.000.000 xu, server đã có BuyHouse). Nội thất là catalog RIÊNG
+   MapItemType 70 loại (ĐÃ giải mã -> assets/data/houseitems.json + 72 ảnh
+   assets/house/img/ + atlas assets/tiles/house.png). chests_home là RƯƠNG
+   nhà, không phải nội thất đã bày (nội thất ở bảng house_player_item).
+   Phạm vi tối thiểu 8 việc ở house-spec §11. Các map tile 61–68 là phòng
+   shop công cộng, không liên quan nhà riêng.
 2. **Mini-game**: Tài Xỉu (864), bài (assets `hd/card/`), đua thú (RaceScr,
    map 108 đã có ảnh), casino handler (type ô 72–77), câu cá (map 14–17 + 430).
 3. **Vòng quay may mắn**: tạo mới theo DialLuckyScr (assets `hd/diallucky/` có sẵn)

@@ -864,6 +864,14 @@ public class ScreenshotMain {
                     case 82:
                         if (frame == 15) {
                             shot("shot-portal-city.png");
+                            // hộp nhập server (TEXT_BOX -60) hỏi tiền cược
+                            world.debugOpenTextBox();
+                            stage = 83; frame = 0;
+                        }
+                        break;
+                    case 83:
+                        if (frame == 15) {
+                            shot("shot-textbox.png");
                             System.out.println("SCREENSHOT DONE");
                             Gdx.app.exit();
                         }

@@ -3467,6 +3467,20 @@ public class WorldScreen extends ScreenAdapter {
                     openGuide(r.readUTF(), r.readUTF());
                     break;
                 }
+                case AvatarProtocol.TEXT_BOX: {
+                    // gói −60 server CHỦ ĐỘNG mở hộp nhập (NPC Tài Xỉu hỏi
+                    // số tiền cược...): {int userId, byte menuId, UTF câu
+                    // hỏi, byte type}. Khác gói +60 (kho farm) và khác
+                    // chiều client gửi (giftcode dùng chung cmd này).
+                    if (!farmIn) {
+                        java.io.DataInputStream r = m.reader();
+                        r.readInt();
+                        int menuId = r.readByte();
+                        String prompt = r.readUTF();
+                        openTextBox(menuId, prompt);
+                    }
+                    break;
+                }
                 case AvatarProtocol.OPEN_SHOP: {
                     // gói −49: {byte idShop, UTF tên shop, short n,
                     // n×short idPart} — mở panel shop theo danh sách này
@@ -4095,6 +4109,16 @@ public class WorldScreen extends ScreenAdapter {
                     }
                     return true;
                 }
+                if (tbOpen) {
+                    if (c == '\b') {
+                        if (tbField.length() > 0) tbField.deleteCharAt(tbField.length() - 1);
+                    } else if (c == '\r' || c == '\n') {
+                        submitTextBox();
+                    } else if (c >= 32 && tbField.length() < 24) {
+                        tbField.append(c);
+                    }
+                    return true;
+                }
                 if (passFormOpen) {
                     StringBuilder b = passFields[passFocus];
                     if (c == '\b') {
@@ -4329,6 +4353,11 @@ public class WorldScreen extends ScreenAdapter {
         // form Đổi mật khẩu đang mở là lớp trên cùng (modal, nuốt mọi chạm)
         if (passFormOpen) {
             passFormTouch(x, y);
+            return;
+        }
+        // hộp nhập server mở (TEXT_BOX) là lớp trên cùng
+        if (tbOpen) {
+            textBoxTouch(x, y);
             return;
         }
         // form giftcode đang mở là lớp trên cùng (modal, nuốt mọi chạm)
@@ -4698,6 +4727,20 @@ public class WorldScreen extends ScreenAdapter {
         return best;
     }
 
+    /** NPC có case xử lý phía server gốc (NpcHandler): Cửa Hàng 761, Lái
+     *  buôn 850, Tài Xỉu 864, Tiên tri 860, Đổi Quà/Lượng 861, Pay/Chay
+     *  862/863, Chủ đầu tư 857, Thợ kim hoàn 95, Thợ câu 430, Quay số 185,
+     *  Đấu giá 186. (Saitama 165 + Bạch/Hắc vô thường 858/859 để đợt riêng:
+     *  dùng chung gói −81/shop sự kiện, dễ xung đột ngữ cảnh.) */
+    private static boolean npcHasServerMenu(int id) {
+        switch (id) {
+            case 95: case 185: case 186: case 430: case 761: case 850:
+            case 857: case 860: case 861: case 862: case 863: case 864:
+                return true;
+            default: return false;
+        }
+    }
+
     /** Hành động của nút tương tác: NPC gần nhất cất lời chào theo dữ liệu chat gốc của nó;
      *  không có ai ở gần thì nhân vật tự nói một câu báo rõ. */
     public void interact() {
@@ -4722,11 +4765,11 @@ public class WorldScreen extends ScreenAdapter {
             openLaiBuonLocalMenu();
             return;
         }
-        // NPC Cửa Hàng + Lái Buôn: nói chuyện qua server (gói −61) để
-        // nhận menu NPC — đúng luồng gốc, thay cho lời chào; chế độ
-        // offline (không có kết nối) thì vẫn chào như NPC thường
-        if ((n.data.id == NPC_CUA_HANG || n.data.id == NPC_LAI_BUON)
-                && game.connection != null) {
+        // NPC có case phía server (menu/hướng dẫn/cược...): nói chuyện
+        // qua server (gói −61) để nhận menu NPC — đúng luồng gốc, thay
+        // cho lời chào; chế độ offline thì vẫn chào như NPC thường.
+        // NPC không có case (chỉ đứng + chat) KHÔNG gửi: server im lặng.
+        if (npcHasServerMenu(n.data.id) && game.connection != null) {
             try {
                 AvatarProtocol.communicate(game.connection, NPC_ID_ADD + n.data.id);
                 return;
@@ -7881,6 +7924,7 @@ public class WorldScreen extends ScreenAdapter {
         if (friendOpen) drawFriendPanel();
         if (passFormOpen) drawPassFormPanel();
         if (giftFormOpen) drawGiftFormPanel();
+        if (tbOpen) drawTextBoxPanel();
         batch.end();
     }
 
@@ -8611,6 +8655,114 @@ public class WorldScreen extends ScreenAdapter {
         } catch (IOException e) {
             setGiftStatus("Không gửi được (mất kết nối?).", 2);
         }
+    }
+
+    // ---------- Hộp nhập SERVER mở (TEXT_BOX −60, S→C) ----------
+    // Server chủ động hỏi một dòng chữ (NPC Tài Xỉu hỏi số tiền cược —
+    // menuId 0..3; các luồng khác dùng menuId riêng). Client hiện form,
+    // người chơi nhập rồi gửi lại −60 {ownId, menuId, text} — phía server
+    // GlobalHandler.handleTextBox rẽ theo menuId.
+    private boolean tbOpen = false;
+    private int tbMenuId = 0;
+    private String tbPrompt = "";
+    private final StringBuilder tbField = new StringBuilder();
+    private String tbStatus = null;
+    private static final float TB_PW = 560f, TB_PH = 320f;
+    private static final float TB_PX = (Ui.W - TB_PW) / 2f, TB_PY = (Ui.H - TB_PH) / 2f;
+
+    private void openTextBox(int menuId, String prompt) {
+        tbMenuId = menuId;
+        tbPrompt = prompt != null ? prompt : "";
+        tbField.setLength(0);
+        tbStatus = null;
+        npcMenuOpen = false;
+        tbOpen = true;
+    }
+
+    private void closeTextBox() {
+        tbOpen = false;
+        Gdx.input.setOnscreenKeyboardVisible(false);
+    }
+
+    private void drawTextBoxPanel() {
+        batch.setColor(0f, 0f, 0f, 0.45f);
+        batch.draw(whiteTex, 0, 0, Ui.W, Ui.H);
+        batch.setColor(Color.WHITE);
+        batch.draw(Ui.roundedRect((int) TB_PW, (int) TB_PH, 16, GLASS_FILL_DARK, GLASS_RIM),
+            TB_PX, TB_PY);
+        batch.draw(Ui.roundedRect(36, 36, 10, Ui.BTN_CLOSE, GLASS_RIM),
+            TB_PX + TB_PW - 54, TB_PY + TB_PH - 54);
+        Ui.faIcon(batch, Ui.fa20, Ui.FA_XMARK, TB_PX + TB_PW - 36, TB_PY + TB_PH - 36,
+            new Color(1f, 1f, 1f, 0.9f));
+        // câu hỏi của server: ngắt dòng theo bề rộng đo thật, tối đa 3 dòng
+        Ui.font.setColor(1f, 0.85f, 0.38f, 1f);
+        float qy = TB_PY + TB_PH - 34;
+        String rest = tbPrompt;
+        for (int i = 0; i < 3 && !rest.isEmpty(); i++) {
+            String line = truncTo(Ui.font, rest, TB_PW - 120);
+            Ui.font.draw(batch, line, TB_PX + 26, qy);
+            if (line.length() >= rest.length()) { rest = ""; break; }
+            rest = rest.substring(line.length()).trim();
+            qy -= 30;
+        }
+        float by = TB_PY + TB_PH - 178;
+        batch.draw(Ui.roundedRect((int) TB_PW - 52, 54, 12,
+            new Color(0.10f, 0.13f, 0.22f, 0.97f), new Color(1f, 0.62f, 0.25f, 1f)),
+            TB_PX + 26, by);
+        Ui.font.setColor(1f, 1f, 1f, 0.95f);
+        Ui.font.draw(batch, tbField.toString(), TB_PX + 42, by + 37);
+        if ((System.currentTimeMillis() / 500) % 2 == 0) {
+            layout.setText(Ui.font, tbField.toString());
+            batch.setColor(1f, 1f, 1f, 0.85f);
+            batch.draw(whiteTex, TB_PX + 44 + layout.width, by + 14, 3, 26);
+            batch.setColor(Color.WHITE);
+        }
+        if (tbStatus != null) {
+            Ui.centered(batch, Ui.fontSmall, tbStatus, TB_PX + TB_PW / 2f, TB_PY + 104,
+                new Color(1f, 0.45f, 0.40f, 1f));
+        }
+        float bw = 240, bh = 56, bx = TB_PX + (TB_PW - bw) / 2f, sby = TB_PY + 26;
+        batch.draw(Ui.gradientRect((int) bw, (int) bh, 14, EntryUi.ORANGE_TOP, EntryUi.ORANGE_BOT), bx, sby);
+        Ui.centered(batch, Ui.font, "Gửi", TB_PX + TB_PW / 2f, sby + 37, new Color(1f, 1f, 1f, 1f));
+    }
+
+    private void textBoxTouch(float x, float y) {
+        if (x >= TB_PX + TB_PW - 54 && x <= TB_PX + TB_PW - 18
+                && y >= TB_PY + TB_PH - 54 && y <= TB_PY + TB_PH - 18) {
+            closeTextBox();
+            return;
+        }
+        float bw = 240, bh = 56, bx = TB_PX + (TB_PW - bw) / 2f, sby = TB_PY + 26;
+        if (x >= bx && x <= bx + bw && y >= sby && y <= sby + bh) {
+            submitTextBox();
+            return;
+        }
+        float by = TB_PY + TB_PH - 178;
+        if (x >= TB_PX + 26 && x <= TB_PX + TB_PW - 26 && y >= by && y <= by + 54) {
+            Gdx.input.setOnscreenKeyboardVisible(true);
+            return;
+        }
+        if (x < TB_PX || x > TB_PX + TB_PW || y < TB_PY || y > TB_PY + TB_PH) {
+            closeTextBox();
+        }
+    }
+
+    private void submitTextBox() {
+        String text = tbField.toString().trim();
+        if (text.isEmpty()) { tbStatus = "Chưa nhập nội dung."; return; }
+        if (!online()) { tbStatus = "Chưa kết nối máy chủ."; return; }
+        try {
+            AvatarProtocol.sendTextBox(game.connection, ownId(), tbMenuId, text);
+            closeTextBox();
+        } catch (IOException e) {
+            tbStatus = "Không gửi được (mất kết nối?).";
+        }
+    }
+
+    /** Mở hộp nhập server cho harness chụp kiểm chứng. */
+    public void debugOpenTextBox() {
+        openTextBox(0, "Nhập số xu bạn muốn cược vào Tài:");
+        tbField.append("5000");
     }
 
     /** Mở form giftcode cho harness chụp kiểm chứng. */
@@ -9504,7 +9656,7 @@ public class WorldScreen extends ScreenAdapter {
             || mailOpen || friendOpen || settingsOpen || musicOpen
             || farmSeedOpen || farmFertOpen || farmLandOpen || farmStoreOpen
             || farmShopOpen || farmCookOpen || farmAnimalSellOpen
-            || panelPlayer != null || confirmText != null || exitConfirmOpen;
+            || panelPlayer != null || confirmText != null || exitConfirmOpen || tbOpen;
     }
 
 
