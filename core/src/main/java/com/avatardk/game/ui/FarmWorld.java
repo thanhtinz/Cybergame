@@ -62,6 +62,9 @@ public class FarmWorld {
         public String name;
         public int priceXu;
         public int img = -1; // -1 = dùng icon của cây (sản phẩm cây tĩnh)
+        /** Sản phẩm vật nuôi: img thuộc không gian AvatarData
+         *  (res/hd/object) chứ không phải ảnh farm. */
+        public boolean animal;
     }
 
     public static class FarmItemDef {
@@ -151,6 +154,7 @@ public class FarmWorld {
                     d.name = p.getString("name");
                     d.priceXu = p.getInt("priceXu");
                     if (p.has("img")) d.img = p.getInt("img");
+                    if (p.has("animal")) d.animal = p.getInt("animal") != 0;
                     productDefs.put(Integer.parseInt(p.name), d);
                 }
             }
@@ -186,9 +190,14 @@ public class FarmWorld {
             JsonValue rects = new JsonReader().parse(
                 GameFiles.data("data/farmimgdata.json").readString("UTF-8"));
             for (JsonValue r : rects) {
+                // farm_image_data của gốc là toạ độ SD; sheet big0/big1
+                // của bản port là bản HD (x2) — phải nhân HD, nếu không
+                // mọi ảnh tĩnh (cây + icon) bị cắt mất 3/4 thành mảnh
+                // vụn (gốc rễ vụ "icon cây tĩnh hiện mầm/quả lạ").
+                int hd = AvatarDkGame.HD;
                 imgRects.put(r.getInt("id"), new int[]{
-                    r.getInt("big"), r.getInt("x"), r.getInt("y"),
-                    r.getInt("w"), r.getInt("h")});
+                    r.getInt("big"), r.getInt("x") * hd, r.getInt("y") * hd,
+                    r.getInt("w") * hd, r.getInt("h") * hd});
             }
         } catch (Exception e) {
             System.out.println("FarmWorld.load loi: " + e.getMessage());
@@ -213,6 +222,21 @@ public class FarmWorld {
         r = new TextureRegion(bigSheet(rc[0]), rc[1], rc[2], rc[3], rc[4]);
         regionCache.put(imgId, r);
         return r;
+    }
+
+    private final Map<Integer, Texture> objIconCache = new HashMap<>();
+
+    /** Icon không gian AvatarData (res/hd/object, server trả qua gói
+     *  -80 ở bản gốc): icon shop vật nuôi (iconID) + icon sản phẩm vật
+     *  nuôi (iconProduct). File nằm chung thư mục object với nội thất
+     *  nhà (assets/house/img). Null nếu không có file. */
+    public Texture objTexture(int imgId) {
+        if (objIconCache.containsKey(imgId)) return objIconCache.get(imgId);
+        Texture t = null;
+        String path = "house/img/" + imgId + ".png";
+        if (GameFiles.data(path).exists()) t = game.texture(path);
+        objIconCache.put(imgId, t);
+        return t;
     }
 
     /** File hình động (cây động/vật nuôi/sản phẩm) — null nếu Pack5 không có file này. */

@@ -1850,12 +1850,23 @@ public class WorldScreen extends ScreenAdapter {
         }
     }
 
-    /** Icon nông sản: cây tĩnh dùng icon cây; còn lại dùng ảnh sản phẩm (img của dat). */
+    /** Icon nông sản: cây tĩnh dùng icon cây; sản phẩm vật nuôi dùng
+     *  icon object (không gian AvatarData); còn lại dùng ảnh sản phẩm
+     *  (img của dat). */
     private void drawProductIcon(int productId, FarmWorld.ProductDef pd, float x, float y, float size) {
         if (productId >= 0 && productId < 30) {
             FarmWorld.TreeDef def = farm.trees.get(productId);
             if (def != null) {
                 drawFarmIcon(def, productId, x, y, size);
+                return;
+            }
+        }
+        if (pd != null && pd.animal && pd.img >= 0) {
+            // iconProduct của dat nằm ở res/hd/object (trứng/sữa...) —
+            // tra theo không gian farm sẽ ra mầm Bí Ngô hoặc trống
+            Texture tx = farm.objTexture(pd.img);
+            if (tx != null) {
+                batch.draw(tx, x, y, size, size);
                 return;
             }
         }
@@ -1989,7 +2000,9 @@ public class WorldScreen extends ScreenAdapter {
                 batch.draw(Ui.roundedRect((int) cw, (int) ch, 12,
                     new Color(0.09f, 0.14f, 0.22f, 0.92f), GLASS_RIM), cx, cy);
                 drawFarmMedallion(cx + cw / 2f - 25, cy + ch - 59, 50);
-                Texture tx = farm.dynTexture(def.iconID);
+                // iconID của vật nuôi cũng ở không gian AvatarData
+                // (object) như iconProduct — bản gốc paintImg qua -80
+                Texture tx = farm.objTexture(def.iconID);
                 if (tx != null) {
                     batch.draw(tx, cx + cw / 2f - 19, cy + ch - 53, 38, 38);
                 } else {
@@ -2503,6 +2516,12 @@ public class WorldScreen extends ScreenAdapter {
         for (Integer id : farm.productDefs.keySet()) {
             if (n++ >= 20) break;
             farm.products.add(new int[]{id, 7});
+        }
+        // sản phẩm vật nuôi phải có mặt để kiểm icon object (trứng/sữa)
+        for (int aid : new int[]{50, 51, 55, 56}) {
+            boolean has = false;
+            for (int[] pr : farm.products) if (pr[0] == aid) { has = true; break; }
+            if (!has && farm.productDefs.containsKey(aid)) farm.products.add(new int[]{aid, 7});
         }
         farm.specials.clear();
         farm.specials.add(new int[]{215, 180});
@@ -3618,10 +3637,9 @@ public class WorldScreen extends ScreenAdapter {
                         int ln = r.readShort() & 0xFFFF;
                         byte[] png = new byte[ln];
                         r.readFully(png);
-                        try {
-                            q.imgs[i] = new Texture(new Pixmap(png, 0, ln));
-                        } catch (Exception ignored) {
-                        }
+                        // qua PngTexture: bản web không có
+                        // Pixmap(byte[]) nên lớp đó có super-source
+                        q.imgs[i] = PngTexture.fromPng(png, ln);
                     }
                     fishQte = q;
                     fishState = FISH_BITE;
@@ -5857,7 +5875,7 @@ public class WorldScreen extends ScreenAdapter {
         q.idx++;
         q.stepT = 0f;
         if (q.idx < q.inputs.length) return;
-        byte[] sent = q.inputs.clone();
+        byte[] sent = java.util.Arrays.copyOf(q.inputs, q.inputs.length); // GWT không có array.clone()
         fishQte = null;
         if (online()) {
             try {

@@ -747,8 +747,8 @@ public class ScreenshotMain {
                     case 67:
                         if (frame == 15) {
                             shot("shot-farm-store-products.png");
-                            world.debugOpenFarmShopTab(1);
-                            stage = 68; frame = 0;
+                            world.debugStoreNextPage();
+                            stage = 106; frame = 0;
                         }
                         break;
                     case 68:
@@ -1035,6 +1035,13 @@ public class ScreenshotMain {
                             shot("shot-fish-shop.png");
                             System.out.println("SCREENSHOT DONE");
                             Gdx.app.exit();
+                        }
+                        break;
+                    case 106: // trang 2 tab Nông sản: icon sản phẩm vật nuôi
+                        if (frame == 15) {
+                            shot("shot-farm-store-products-p2.png");
+                            world.debugOpenFarmShopTab(1);
+                            stage = 68; frame = 0;
                         }
                         break;
                     case 57:

@@ -19,10 +19,24 @@ import sys
 ROOT = "/home/hatch/workspace/avatardk-java"
 dec = json.load(open(f"{ROOT}/docs/farm-info-decoded.json"))
 
+# Sửa chính tả/viết hoa tên cây theo lệnh của Tín 2026-11-03 ("sửa hết
+# cả 5 nhóm" icon/tên farm): dat gốc ghi sai/thiếu nhất quán, tên hiển
+# thị cho người chơi thì sửa đúng. Áp cho tên cây ở mọi nơi sinh ra.
+NAME_FIX = {
+    "Thanh long": "Thanh Long",
+    "Hoa hướng dương": "Hoa Hướng Dương",
+    "đào": "Đào",
+}
+
+
+def fix_name(n):
+    return NAME_FIX.get(n, n)
+
+
 trees = []
 for t in dec["trees"]:
     trees.append({
-        "id": t["ID"], "name": t["name"], "minutes": t["harvestTime"] * 60,
+        "id": t["ID"], "name": fix_name(t["name"]), "minutes": t["harvestTime"] * 60,
         "quantity": t["numProduct"], "seedXu": t["priceSeedXu"],
         "seedLuong": t.get("priceSeedLuong", 0), "productId": t["ID"],
         "productPrice": t["priceProduct"], "lv": 0, "img": t["img"],
@@ -30,7 +44,7 @@ for t in dec["trees"]:
     })
 for t in dec["dynamicTrees"]:
     trees.append({
-        "id": t["ID"], "name": t["name"], "minutes": t["harvestTime"] * 60,
+        "id": t["ID"], "name": fix_name(t["name"]), "minutes": t["harvestTime"] * 60,
         "quantity": t["numProduct"], "seedXu": t["priceSeedXu"],
         "seedLuong": t.get("priceSeedLuong", 0), "productId": t["productID"],
         "productPrice": 3, "lv": t.get("lv", 1), "img": t["img"],
@@ -43,9 +57,9 @@ assert len(trees) == 25, len(trees)
 sql = ["ALTER TABLE `farmitems` ADD COLUMN `gia_hat_luong` int(11) NOT NULL DEFAULT 0;"]
 for t in trees:
     sql.append(
-        "UPDATE `farmitems` SET `so_phut_chin`=%d, `san_luong_khi_chin`=%d, "
+        "UPDATE `farmitems` SET `name`='%s', `so_phut_chin`=%d, `san_luong_khi_chin`=%d, "
         "`gia_san_pham`=%d, `gia_hat_luong`=%d WHERE `id`=%d;"
-        % (t["minutes"], t["quantity"], t["seedXu"], t["seedLuong"], t["id"]))
+        % (t["name"], t["minutes"], t["quantity"], t["seedXu"], t["seedLuong"], t["id"]))
 sql_text = "\n".join(sql) + "\n"
 open("/tmp/farm_sync.sql", "w").write(sql_text)
 print("[1] /tmp/farm_sync.sql:", len(sql), "câu lệnh")
@@ -74,13 +88,12 @@ if old_create in dump:
 else:
     assert new_create in dump, "không thấy CREATE TABLE farmitems trong dump"
 
-# INSERT: thay số của từng dòng theo id, giữ nguyên tên trong dump.
+# INSERT: thay số + tên của từng dòng theo id (tên đã qua NAME_FIX).
 def fix_row(m):
     row_id = int(m.group(1))
-    name = m.group(2)
     t = next(x for x in trees if x["id"] == row_id)
     return "(%d, '%s', %d, %d, %d, %d)" % (
-        row_id, name, t["minutes"], t["quantity"], t["seedXu"], t["seedLuong"])
+        row_id, t["name"], t["minutes"], t["quantity"], t["seedXu"], t["seedLuong"])
 
 pat = re.compile(r"\((\d+), '((?:[^'\\]|\\.)*)', \d+, \d+, \d+(?:, \d+)?\)")
 # chỉ áp trong đoạn INSERT của farmitems
@@ -99,7 +112,14 @@ products = {}
 for t in trees:
     products[t["productId"]] = {"name": t["name"], "priceXu": t["productPrice"]}
 for it in dec["items2_notAdded"]:
-    products[it["ID"]] = {"name": it["des"], "priceXu": it["priceXu"], "img": it["IDImg"]}
+    if it["ID"] in products:
+        # Sản phẩm CỦA CÂY: mục des của items2 trong dat bị lỗi chính
+        # tả/viết thường ("Cà tìm", "Cúc chuồn chuồn", "ớt") — giữ tên
+        # cây làm tên sản phẩm, items2 chỉ cấp icon + giá.
+        products[it["ID"]]["img"] = it["IDImg"]
+        products[it["ID"]]["priceXu"] = it["priceXu"]
+    else:
+        products[it["ID"]] = {"name": it["des"], "priceXu": it["priceXu"], "img": it["IDImg"]}
 animals = [{
     "species": a["species"], "name": a["name"], "priceXu": a["priceXu"],
     "priceLuong": a["priceLuong"], "harvestHours": a["harvestTime"],
@@ -115,8 +135,11 @@ farm_items = [{
 # để kho/bán/nấu ăn dùng chung một bảng.
 for a in dec["animals"]:
     if a["priceProduct"] > 0:
+        # iconProduct nằm ở không gian AvatarData (res/hd/object, gói
+        # -80 của gốc) — KHÔNG phải không gian ảnh farm; cờ "animal"
+        # để client vẽ icon từ object thay vì ảnh farm.
         products[a["species"]] = {"name": a["name"], "priceXu": a["priceProduct"],
-                                  "img": a["iconProduct"]}
+                                  "img": a["iconProduct"], "animal": 1}
 out = {"trees": trees, "animals": animals, "products": products, "items": farm_items,
        "foods": dec["foods"]}
 with open(f"{ROOT}/assets/data/farmtrees.json", "w", encoding="utf-8") as f:
