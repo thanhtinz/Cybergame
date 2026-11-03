@@ -186,37 +186,149 @@ public class FarmService extends Service {
         ds.flush();
         this.session.sendMessage(ms);
     }
-   // mở ô đất
+    // [PORT] Giá mở ô đất KHÔNG có ở bất cứ đâu trong Pack5 (bản fan để nguyên
+    // mẫu chuỗi có dấu @). Bảng giá dưới đây là TẠM — chỉ server live mới có số
+    // thật; khi dò được (gói 69 trên server live) thì thay đúng 2 hàm này
+    // (client FarmWorld có bảng gương giống hệt cho hộp xác nhận).
+    public static final int MAX_CELLS = 48; // 4 khối đất x 12 ô trên map farm
+
+    public static int landPriceXu(int ownedCells) {
+        return (ownedCells - 5) * 1000;
+    }
+
+    public static int landPriceLuong(int ownedCells) {
+        return Math.max(1, (ownedCells - 5) / 2);
+    }
+
+    private static String fmtMoney(int n) {
+        return String.format("%,d", n).replace(',', '.');
+    }
+
+   // mở ô đất — xin giá (gói 69): client gốc hiện chuỗi này trong hộp thoại
+   // kèm 2 nút Xu / Lượng (FarmScr.onPricePlant).
     public void doRequestslot(Message ms) throws IOException {
         int id = ms.reader().readInt();//id user
+        int owned = this.session.user.landItems.size();
         ms = new Message(Cmd.REQUEST_SLOT);
         DataOutputStream ds = ms.writer();
-        ds.writeUTF("Bạn có muốn mở ô đất @ với giá @ xu hoặc @ lượng không ?");
+        if (owned >= MAX_CELLS) {
+            ds.writeUTF("Bạn đã mở hết ô đất rồi.");
+        } else {
+            ds.writeUTF("Bạn có muốn mở ô đất với giá " + fmtMoney(landPriceXu(owned))
+                    + " xu hoặc " + landPriceLuong(owned) + " lượng không ?");
+        }
         ds.flush();
         this.session.sendMessage(ms);
     }
 
-//mở ô đất
+//mở ô đất (gói 70): {int idFarm, byte typeBuy 1=xu 2=lượng} -> trừ tiền thật,
+//trả đúng khuôn onOpenLand của client gốc {int idFarm, int curMoney, byte typeBuy,
+//UTF text, int xu, int luong, int luongKhoa}. Bản fan cộng ô MIỄN PHÍ + curMoney=1.
     public void openLand(Message ms) throws IOException {
-    int id = ms.reader().readInt(); // ID của nông trại
-    byte typeBuy = ms.reader().readByte(); // Loại giao dịch hoặc mã người dùng
+        int id = ms.reader().readInt(); // ID của nông trại
+        byte typeBuy = ms.reader().readByte(); // 1 = xu, 2 = lượng
+        int owned = this.session.user.landItems.size();
+        if (owned >= MAX_CELLS) {
+            this.session.user.getAvatarService().serverDialog("Bạn đã mở hết ô đất rồi.");
+            return;
+        }
+        boolean byXu = typeBuy == 1;
+        int price = byXu ? landPriceXu(owned) : landPriceLuong(owned);
+        long before = byXu ? this.session.user.getXu() : this.session.user.getLuong();
+        if (before < price) {
+            this.session.user.getAvatarService().serverDialog(
+                    byXu ? "Bạn không đủ xu để mở ô đất." : "Bạn không đủ lượng để mở ô đất.");
+            return;
+        }
+        if (byXu) {
+            this.session.user.updateXu(-price);
+        } else {
+            this.session.user.updateLuong(-price);
+        }
+        this.session.user.landItems.add(new LandItem(0, -1, 100, 0, false, false, false, LocalDateTime.now()));
 
-    this.session.user.landItems.add(new LandItem(0, -1,0, 0, false, false, false, LocalDateTime.now())); // Ô đất mặc định
+        ms = new Message(Cmd.OPEN_LAND);
+        DataOutputStream ds = ms.writer();
+        ds.writeInt(id);
+        ds.writeInt((int) (byXu ? this.session.user.getXu() : this.session.user.getLuong()));
+        ds.writeByte(typeBuy);
+        ds.writeUTF("Đã mở ô đất thành công");
+        ds.writeInt((int) this.session.user.getXu());
+        ds.writeInt((int) this.session.user.getLuong());
+        ds.writeInt((int) this.session.user.getLuongKhoa());
+        ds.flush();
+        this.session.sendMessage(ms);
+    }
 
-    ms = new Message(Cmd.OPEN_LAND);
-    DataOutputStream ds = ms.writer();
-    ds.writeInt(id);
-    ds.writeInt(1);
-    ds.writeByte(typeBuy);     // Thông tin giao dịch hoặc mã người dùng
-    ds.writeUTF("Đã mở ô đất thành công"); // Thông báo mở đất thành công
+    // [PORT] Gói 65 USING_ITEM — bản fan KHÔNG có case này trong handler (method
+    // này là viết mới theo đúng client gốc): xin {int idUser, byte ô, short idItem}.
+    // Item 100 = tưới nước; 111/112 = phân bón (tăng sức khoẻ); 113/114/115 = giảm
+    // 15/30/60 phút chín; 123/124 = diệt cỏ/trừ sâu (farm port không phát sinh 2
+    // trạng thái này). Trả gói 65 {byte ô, short idItem} cho client gốc trừ kho
+    // listItemFarm — đúng case 65 phía client.
+    public void useItem(Message ms) throws IOException {
+        ms.reader().readInt(); // idUser (farm của chính mình)
+        int idx = ms.reader().readByte();
+        int idItem = ms.reader().readShort();
+        if (idx < 0 || idx >= this.session.user.landItems.size()) {
+            return;
+        }
+        LandItem cell = this.session.user.landItems.get(idx);
+        if (idItem == 100) {
+            if (cell.getType() >= 0) {
+                cell.setWatered(true);
+            }
+            sendUseItemEcho(idx, idItem);
+            return;
+        }
+        PhanBon pb = null;
+        for (PhanBon p : this.session.user.PhanBon) {
+            if (p.getId() == idItem && p.getSoluong() > 0) {
+                pb = p;
+                break;
+            }
+        }
+        if (pb == null || cell.getType() < 0) {
+            return;
+        }
+        switch (idItem) {
+            case 111: // phân bón trung cấp: +10 sức khoẻ
+                cell.setFertilized(true);
+                cell.setSucKhoe(Math.min(100, cell.getSucKhoe() + 10));
+                break;
+            case 112: // phân bón siêu cấp: sức khoẻ đầy
+                cell.setFertilized(true);
+                cell.setSucKhoe(100);
+                break;
+            case 113:
+                cell.setPlantedTime(cell.getPlantedTime().minusMinutes(15));
+                break;
+            case 114:
+                cell.setPlantedTime(cell.getPlantedTime().minusMinutes(30));
+                break;
+            case 115:
+                cell.setPlantedTime(cell.getPlantedTime().minusMinutes(60));
+                break;
+            case 123: // thuốc diệt cỏ
+            case 124: // thuốc trừ sâu — không trạng thái để chữa trong bản port
+                break;
+            default:
+                return; // không phải vật phẩm dùng trên ô đất — không trừ kho
+        }
+        pb.setSoluong(pb.getSoluong() - 1);
+        if (pb.getSoluong() <= 0) {
+            this.session.user.PhanBon.remove(pb);
+        }
+        sendUseItemEcho(idx, idItem);
+    }
 
-    // Ghi thêm thông tin mô tả cho ô đất vừa được mở
-    ds.writeInt((int)this.session.user.getXu());
-    ds.writeInt(this.session.user.getLuong());
-    ds.writeInt(0);
-    ds.flush();
-
-    this.session.sendMessage(ms);
+    private void sendUseItemEcho(int idx, int idItem) throws IOException {
+        Message ms = new Message(Cmd.USING_ITEM);
+        DataOutputStream ds = ms.writer();
+        ds.writeByte(idx);
+        ds.writeShort(idItem);
+        ds.flush();
+        this.session.sendMessage(ms);
     }
 
 
@@ -463,10 +575,14 @@ public class FarmService extends Service {
         ds.writeByte(us.getLeverFarm());
         ds.writeByte(us.getLeverPercen());
 
-        ds.writeByte(this.session.user.NongSanDacBiet.size());
-        for (NongSanDacBiet db : this.session.user.NongSanDacBiet) {
-            ds.writeShort(db.getId());
-            ds.writeShort(db.getSoluong());
+        // [PORT] Lượt {short, short} thứ nhất sau lvFarm là listItemFarm của
+        // client gốc = vật phẩm DÙNG ĐƯỢC trong farm (phân bón/thuốc) — tức
+        // kho PhanBon, không phải nông sản đặc biệt (bản GĐ0 ghi nhầm dacbiet
+        // vào cả hai lượt). Lượt thứ hai mới là đặc biệt lượt 1.
+        ds.writeByte(this.session.user.PhanBon.size());
+        for (PhanBon pb : this.session.user.PhanBon) {
+            ds.writeShort(pb.getId());
+            ds.writeShort(pb.getSoluong());
         }
         ds.writeByte(this.session.user.NongSanDacBiet.size());
         for (NongSanDacBiet db : this.session.user.NongSanDacBiet) {

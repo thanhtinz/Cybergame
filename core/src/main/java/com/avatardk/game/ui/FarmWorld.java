@@ -374,6 +374,43 @@ public class FarmWorld {
         }
     }
 
+    // [PORT] Bảng giá mở ô GƯƠNG phía server (FarmService.landPrice*) — TẠM như
+    // phía server, thay cả hai nơi khi dò được giá thật trên server live.
+    public static int landPriceXu(int ownedCells) {
+        return (ownedCells - 5) * 1000;
+    }
+
+    public static int landPriceLuong(int ownedCells) {
+        return Math.max(1, (ownedCells - 5) / 2);
+    }
+
+    /** Tên + ảnh các vật phẩm bón (theo bảng items của farm_info.dat). */
+    public static String fertName(int id) {
+        switch (id) {
+            case 111: return "Phân bón trung cấp";
+            case 112: return "Phân bón siêu cấp";
+            case 113: return "Phân giảm 15 phút";
+            case 114: return "Phân giảm 30 phút";
+            case 115: return "Phân giảm 60 phút";
+            case 123: return "Thuốc diệt cỏ";
+            case 124: return "Thuốc trừ sâu";
+            default: return "Vật phẩm " + id;
+        }
+    }
+
+    public static int fertImg(int id) {
+        switch (id) {
+            case 111: return 235;
+            case 112: return 197;
+            case 113: return 198;
+            case 114: return 199;
+            case 115: return 200;
+            case 123: return 318;
+            case 124: return 317;
+            default: return 0;
+        }
+    }
+
     /** Dữ liệu mẫu cho harness chụp hình (offline). */
     public void demo() {
         cells.clear();
@@ -410,6 +447,14 @@ public class FarmWorld {
         pond = 10;
         lvFarm = 3;
         perLv = 40;
+        seeds.clear();
+        seeds.add(new int[]{43, 5});
+        seeds.add(new int[]{0, 3});
+        seeds.add(new int[]{36, 2});
+        seeds.add(new int[]{30, 4});
+        usableItems.clear();
+        usableItems.add(new int[]{113, 2});
+        usableItems.add(new int[]{112, 1});
         joined = true;
         invLoaded = true;
     }

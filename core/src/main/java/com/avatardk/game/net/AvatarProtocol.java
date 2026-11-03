@@ -120,6 +120,7 @@ public final class AvatarProtocol {
     public static final byte FARM_PLANT = 64;
     public static final byte FARM_USE_ITEM = 65;
     public static final byte FARM_HARVEST = 66;
+    public static final byte FARM_PRICE_SLOT = 69;
     public static final byte FARM_OPEN_LAND = 70;
     public static final byte FARM_BUY_ANIMAL = 71;
     public static final byte FARM_HARVEST_ANIMAL = 74;

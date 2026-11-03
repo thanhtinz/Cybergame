@@ -79,6 +79,10 @@ public class FarmMsgHandler extends MessageHandler {
                     this.service.doRequestslot(mss);
                     break;
                 }
+                case Cmd.USING_ITEM: {
+                    this.service.useItem(mss);
+                    break;
+                }
                 case Cmd.TREE_HARVEST: {
                     this.service.treeHarvest(mss);
                     break;

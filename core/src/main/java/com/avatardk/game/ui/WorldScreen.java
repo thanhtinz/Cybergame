@@ -169,7 +169,7 @@ public class WorldScreen extends ScreenAdapter {
      *  chính mình): sắp theo y đáy trong thế giới, y lớn (cao hơn trên màn
      *  hình) vẽ trước — đúng thứ tự merge của paintObject gốc. */
     private static class DrawItem {
-        static final int OBJ = 0, NPC = 1, REMOTE = 2, PLAYER = 3, FARM = 4;
+        static final int OBJ = 0, NPC = 1, REMOTE = 2, PLAYER = 3, FARM = 4, FARM_INFO = 5;
         int kind;
         float y;
         float x;
@@ -899,6 +899,16 @@ public class WorldScreen extends ScreenAdapter {
                 it.x = pos[0] * hd - it.dw / 2f;
                 it.y = pos[1] * hd; // chân ô — sprite vươn lên từ đây (paint BOTTOM của gốc)
                 drawItems.add(it);
+                // ô tiêu điểm có cây: thêm mục thông tin (thanh sức khoẻ +
+                // % lớn + thời gian còn lại) như paint của CellFarm gốc
+                if (farmFocus == i) {
+                    DrawItem info = new DrawItem();
+                    info.kind = DrawItem.FARM_INFO;
+                    info.objId = i;
+                    info.x = pos[0] * hd;
+                    info.y = pos[1] * hd + it.dh + 46f;
+                    drawItems.add(info);
+                }
                 // icon trạng thái: khô đất (w) / sâu (wg) / cỏ (g) của gốc
                 String icon = c.arid ? "w" : (c.worm ? "wg" : (c.grass ? "g" : null));
                 if (icon != null) {
@@ -971,11 +981,369 @@ public class WorldScreen extends ScreenAdapter {
                 else status = c.idTree < 0 ? 1 : (c.arid ? 2 : 0);
                 Texture t = game.texture("farm/ui/cell" + status + ".png");
                 batch.draw(t, (pos[0] - 14f) * hd, (pos[1] - 8f) * hd);
+                if (farmFocus == i) { // viền chọn ô tiêu điểm (imgFocusCel của gốc)
+                    batch.draw(Ui.roundedRect(56, 60, 8, new Color(0, 0, 0, 0),
+                        new Color(0.45f, 0.95f, 1f, 0.95f)),
+                        (pos[0] - 14f) * hd - 2, (pos[1] - 8f) * hd - 2);
+                }
             } else if (i == farm.cells.size()) {
                 Texture t = game.texture("farm/ui/buyLand.png");
                 batch.draw(t, pos[0] * hd - t.getWidth() / 2f, pos[1] * hd);
+                if (farmFocus == i) {
+                    batch.draw(Ui.roundedRect(48, 58, 8, new Color(0, 0, 0, 0),
+                        new Color(0.45f, 0.95f, 1f, 0.95f)),
+                        pos[0] * hd - 24, pos[1] * hd - 2);
+                }
             }
         }
+    }
+
+    // ---- Farm GĐ2: ô tiêu điểm + thanh hành động + các panel chọn ----
+    private int farmFocus = -1;
+    private boolean farmSeedOpen, farmFertOpen, farmLandOpen;
+    private String farmLandText = "";
+    private final java.util.List<float[]> farmBarBtns = new java.util.ArrayList<>();
+    // mã hành động thanh farm: 1 mở chọn hạt, 2 tưới, 3 mở chọn phân, 4 thu hoạch,
+    // 5 xin giá mở ô, 6 mua ô bằng xu, 7 mua ô bằng lượng
+
+    /** Ô tiêu điểm = ô đất gần người chơi nhất (gốc: ô dưới chân nhân vật);
+     *  chỉ số == cells.size() là mốc mua đất. */
+    private void updateFarmFocus() {
+        farmFocus = -1;
+        if (mapDef == null || mapDef.id != 25 || !farm.joined || farmBlocks == null) return;
+        float best = 32f;
+        int n = Math.min(farm.cells.size() + 1, farmBlocks.size() * 12);
+        for (int i = 0; i < n; i++) {
+            float[] pos = FarmWorld.cellPos(farmBlocks, i, mapDef.hmap);
+            if (pos == null) continue;
+            float d = (float) Math.hypot(playerX - pos[0], playerY - (pos[1] - 4f));
+            if (d < best) {
+                best = d;
+                farmFocus = i;
+            }
+        }
+    }
+
+    private void farmSend(Msg m) {
+        if (!online() || !farmIn) return;
+        try {
+            game.connection.send(m);
+        } catch (Exception ignored) {
+        }
+    }
+
+    private void farmPlant(int seedId) {
+        Msg m = new Msg(AvatarProtocol.FARM_PLANT);
+        try {
+            m.writer().writeInt(ownId());
+            m.writer().writeByte(farmFocus);
+            m.writer().writeByte(seedId);
+        } catch (Exception ignored) {
+        }
+        farmSend(m);
+        farmSeedOpen = false;
+    }
+
+    private void farmUseItem(int itemId) {
+        Msg m = new Msg(AvatarProtocol.FARM_USE_ITEM);
+        try {
+            m.writer().writeInt(ownId());
+            m.writer().writeByte(farmFocus);
+            m.writer().writeShort(itemId);
+        } catch (Exception ignored) {
+        }
+        farmSend(m);
+        if (itemId == 100 && farmFocus >= 0 && farmFocus < farm.cells.size()) {
+            farm.cells.get(farmFocus).arid = false; // client gốc cũng cập nhật tại chỗ
+        }
+        farmFertOpen = false;
+    }
+
+    private void farmHarvestFocus() {
+        Msg m = new Msg(AvatarProtocol.FARM_HARVEST);
+        try {
+            m.writer().writeInt(ownId());
+            m.writer().writeByte(farmFocus);
+        } catch (Exception ignored) {
+        }
+        farmSend(m);
+    }
+
+    private void farmAskLand() {
+        Msg m = new Msg(AvatarProtocol.FARM_PRICE_SLOT);
+        try {
+            m.writer().writeInt(ownId());
+        } catch (Exception ignored) {
+        }
+        farmSend(m);
+        if (!online()) { // offline (harness): hiện hộp xác nhận bằng bảng giá gương
+            farmLandText = "Bạn có muốn mở ô đất với giá "
+                + String.format("%,d", FarmWorld.landPriceXu(farm.cells.size())).replace(',', '.')
+                + " xu hoặc " + FarmWorld.landPriceLuong(farm.cells.size()) + " lượng không ?";
+            farmLandOpen = true;
+        }
+    }
+
+    private void farmBuyLand(int type) {
+        Msg m = new Msg(AvatarProtocol.FARM_OPEN_LAND);
+        try {
+            m.writer().writeInt(ownId());
+            m.writer().writeByte(type);
+        } catch (Exception ignored) {
+        }
+        farmSend(m);
+        farmLandOpen = false;
+    }
+
+    private boolean farmHasFert() {
+        for (int[] u : farm.usableItems) {
+            if (u[0] >= 111 && u[0] <= 115 && u[1] > 0) return true;
+        }
+        return false;
+    }
+
+    /** Thanh hành động theo ô tiêu điểm (menu ngữ cảnh của FarmScr gốc),
+     *  vẽ ngay trên khung chat; nút cũng được ghi lại để bắt chạm. */
+    private void drawFarmBar() {
+        farmBarBtns.clear();
+        if (mapDef == null || mapDef.id != 25 || !farm.joined || farmFocus < 0) return;
+        if (farmSeedOpen || farmFertOpen || farmLandOpen) return;
+        java.util.List<String> labels = new java.util.ArrayList<>();
+        java.util.List<Integer> codes = new java.util.ArrayList<>();
+        if (farmFocus == farm.cells.size()) {
+            labels.add("Mở ô đất");
+            codes.add(5);
+        } else if (farmFocus < farm.cells.size()) {
+            FarmWorld.Cell c = farm.cells.get(farmFocus);
+            if (c.idTree < 0) {
+                labels.add("Trồng cây");
+                codes.add(1);
+            } else if (c.hervestPer >= 100) {
+                labels.add("Thu hoạch");
+                codes.add(4);
+            } else {
+                if (c.arid) {
+                    labels.add("Tưới nước");
+                    codes.add(2);
+                }
+                if (farmHasFert()) {
+                    labels.add("Bón phân");
+                    codes.add(3);
+                }
+            }
+        }
+        if (labels.isEmpty()) return;
+        float bh = 46f, gap = 10f, totalW = 0f;
+        float[] ws = new float[labels.size()];
+        for (int i = 0; i < labels.size(); i++) {
+            layout.setText(Ui.font, labels.get(i));
+            ws[i] = layout.width + 40f;
+            totalW += ws[i] + gap;
+        }
+        totalW -= gap;
+        float x = Ui.W / 2f - totalW / 2f, y = 252f;
+        for (int i = 0; i < labels.size(); i++) {
+            boolean primary = codes.get(i) == 4 || codes.get(i) == 1 || codes.get(i) == 5;
+            if (primary) {
+                batch.draw(Ui.gradientRect((int) ws[i], (int) bh, 14,
+                    EntryUi.ORANGE_TOP, EntryUi.ORANGE_BOT), x, y);
+            } else {
+                batch.draw(Ui.roundedRect((int) ws[i], (int) bh, 14, GLASS_FILL_DARK, GLASS_RIM), x, y);
+            }
+            Ui.centered(batch, Ui.font, labels.get(i), x + ws[i] / 2f, y + 31f,
+                new Color(1f, 1f, 1f, 1f));
+            farmBarBtns.add(new float[]{x, y, ws[i], codes.get(i)});
+            x += ws[i] + gap;
+        }
+    }
+
+    private boolean farmBarTouch(float x, float y) {
+        for (float[] b : farmBarBtns) {
+            if (x >= b[0] && x <= b[0] + b[2] && y >= b[1] && y <= b[1] + 46f) {
+                switch ((int) b[3]) {
+                    case 1: farmSeedOpen = true; break;
+                    case 2: farmUseItem(100); break;
+                    case 3: farmFertOpen = true; break;
+                    case 4: farmHarvestFocus(); break;
+                    case 5: farmAskLand(); break;
+                    default: break;
+                }
+                return true;
+            }
+        }
+        return false;
+    }
+
+    // --- Panel chọn hạt (gieo từ kho giống) ---
+    private static final float FS_PW = 640f, FS_PH = 470f;
+    private static final float FS_PX = (Ui.W - FS_PW) / 2f, FS_PY = (Ui.H - FS_PH) / 2f;
+
+    private void drawFarmSeedPanel() {
+        batch.setColor(0f, 0f, 0f, 0.45f);
+        batch.draw(whiteTex, 0, 0, Ui.W, Ui.H);
+        batch.setColor(Color.WHITE);
+        batch.draw(Ui.roundedRect((int) FS_PW, (int) FS_PH, 16, GLASS_FILL_DARK, GLASS_RIM), FS_PX, FS_PY);
+        Ui.font.setColor(1f, 0.85f, 0.38f, 1f);
+        Ui.font.draw(batch, "Chọn hạt giống", FS_PX + 26, FS_PY + FS_PH - 30);
+        batch.draw(Ui.roundedRect(36, 36, 10, Ui.BTN_CLOSE, GLASS_RIM), FS_PX + FS_PW - 54, FS_PY + FS_PH - 54);
+        Ui.faIcon(batch, Ui.fa20, Ui.FA_XMARK, FS_PX + FS_PW - 36, FS_PY + FS_PH - 36, new Color(1f, 1f, 1f, 0.9f));
+        if (farm.seeds.isEmpty()) {
+            Ui.fontSmall.setColor(1f, 1f, 1f, 0.75f);
+            Ui.centered(batch, Ui.fontSmall, "Chưa có hạt giống nào trong kho.",
+                FS_PX + FS_PW / 2f, FS_PY + FS_PH / 2f + 20, new Color(1f, 1f, 1f, 0.75f));
+            Ui.centered(batch, Ui.fontSmall, "Mua hạt ở cửa hàng trong nông trại.",
+                FS_PX + FS_PW / 2f, FS_PY + FS_PH / 2f - 8, new Color(1f, 1f, 1f, 0.55f));
+            return;
+        }
+        float cw = 112f, ch = 118f, gx = 14f, gy = 12f;
+        float x0 = FS_PX + (FS_PW - (5 * cw + 4 * gx)) / 2f, yTop = FS_PY + FS_PH - 76f;
+        for (int i = 0; i < farm.seeds.size() && i < 15; i++) {
+            int[] s = farm.seeds.get(i);
+            FarmWorld.TreeDef def = farm.trees.get(s[0]);
+            if (def == null) continue;
+            float cx = x0 + (i % 5) * (cw + gx);
+            float cy = yTop - (i / 5) * (ch + gy) - ch;
+            batch.draw(Ui.roundedRect((int) cw, (int) ch, 12,
+                new Color(0.10f, 0.16f, 0.24f, 0.9f), GLASS_RIM), cx, cy);
+            int iconId = def.img.length > 7 ? def.img[7] : (def.img.length > 0 ? def.img[0] : 0);
+            if (s[0] < 30) {
+                com.badlogic.gdx.graphics.g2d.TextureRegion rg = farm.staticRegion(iconId);
+                if (rg != null) batch.draw(rg, cx + cw / 2f - 24, cy + ch - 62, 48, 48);
+            } else {
+                Texture tx = farm.dynTexture(iconId);
+                if (tx != null) batch.draw(tx, cx + cw / 2f - 24, cy + ch - 62,
+                    Math.min(48, tx.getWidth()), Math.min(48, tx.getHeight()));
+            }
+            Ui.centered(batch, Ui.fontSmall, def.name, cx + cw / 2f, cy + 42, new Color(1f, 1f, 1f, 0.92f));
+            Ui.centered(batch, Ui.fontSmall, "x" + s[1], cx + cw / 2f, cy + 20, new Color(1f, 0.85f, 0.38f, 1f));
+        }
+    }
+
+    private void farmSeedTouch(float x, float y) {
+        if (x >= FS_PX + FS_PW - 54 && x <= FS_PX + FS_PW - 18
+                && y >= FS_PY + FS_PH - 54 && y <= FS_PY + FS_PH - 18) {
+            farmSeedOpen = false;
+            return;
+        }
+        float cw = 112f, ch = 118f, gx = 14f, gy = 12f;
+        float x0 = FS_PX + (FS_PW - (5 * cw + 4 * gx)) / 2f, yTop = FS_PY + FS_PH - 76f;
+        for (int i = 0; i < farm.seeds.size() && i < 15; i++) {
+            float cx = x0 + (i % 5) * (cw + gx);
+            float cy = yTop - (i / 5) * (ch + gy) - ch;
+            if (x >= cx && x <= cx + cw && y >= cy && y <= cy + ch) {
+                farmPlant(farm.seeds.get(i)[0]);
+                return;
+            }
+        }
+        if (x < FS_PX || x > FS_PX + FS_PW || y < FS_PY || y > FS_PY + FS_PH) farmSeedOpen = false;
+    }
+
+    // --- Panel chọn phân bón ---
+    private static final float FF_PW = 540f;
+    private static final float FF_PX = (Ui.W - FF_PW) / 2f;
+
+    private java.util.List<int[]> farmFertList() {
+        java.util.List<int[]> out = new java.util.ArrayList<>();
+        for (int[] u : farm.usableItems) {
+            if (u[0] >= 111 && u[0] <= 115 && u[1] > 0) out.add(u);
+        }
+        return out;
+    }
+
+    private float farmFertH() {
+        return 120f + farmFertList().size() * 62f;
+    }
+
+    private void drawFarmFertPanel() {
+        float ph = farmFertH(), py = (Ui.H - ph) / 2f;
+        batch.setColor(0f, 0f, 0f, 0.45f);
+        batch.draw(whiteTex, 0, 0, Ui.W, Ui.H);
+        batch.setColor(Color.WHITE);
+        batch.draw(Ui.roundedRect((int) FF_PW, (int) ph, 16, GLASS_FILL_DARK, GLASS_RIM), FF_PX, py);
+        Ui.font.setColor(1f, 0.85f, 0.38f, 1f);
+        Ui.font.draw(batch, "Bón phân", FF_PX + 26, py + ph - 30);
+        batch.draw(Ui.roundedRect(36, 36, 10, Ui.BTN_CLOSE, GLASS_RIM), FF_PX + FF_PW - 54, py + ph - 54);
+        Ui.faIcon(batch, Ui.fa20, Ui.FA_XMARK, FF_PX + FF_PW - 36, py + ph - 36, new Color(1f, 1f, 1f, 0.9f));
+        java.util.List<int[]> list = farmFertList();
+        for (int i = 0; i < list.size(); i++) {
+            int[] u = list.get(i);
+            float ry = py + ph - 76f - (i + 1) * 62f + 8f;
+            batch.draw(Ui.roundedRect((int) FF_PW - 40, 54, 12,
+                new Color(0.10f, 0.16f, 0.24f, 0.9f), GLASS_RIM), FF_PX + 20, ry);
+            Texture tx = farm.dynTexture(FarmWorld.fertImg(u[0]));
+            if (tx != null) batch.draw(tx, FF_PX + 34, ry + 11, 32, 32);
+            Ui.font.setColor(1f, 1f, 1f, 0.95f);
+            Ui.font.draw(batch, FarmWorld.fertName(u[0]), FF_PX + 78, ry + 36);
+            Ui.centered(batch, Ui.fontSmall, "x" + u[1], FF_PX + FF_PW - 52, ry + 33,
+                new Color(1f, 0.85f, 0.38f, 1f));
+        }
+    }
+
+    private void farmFertTouch(float x, float y) {
+        float ph = farmFertH(), py = (Ui.H - ph) / 2f;
+        if (x >= FF_PX + FF_PW - 54 && x <= FF_PX + FF_PW - 18
+                && y >= py + ph - 54 && y <= py + ph - 18) {
+            farmFertOpen = false;
+            return;
+        }
+        java.util.List<int[]> list = farmFertList();
+        for (int i = 0; i < list.size(); i++) {
+            float ry = py + ph - 76f - (i + 1) * 62f + 8f;
+            if (x >= FF_PX + 20 && x <= FF_PX + FF_PW - 20 && y >= ry && y <= ry + 54) {
+                farmUseItem(list.get(i)[0]);
+                return;
+            }
+        }
+        if (x < FF_PX || x > FF_PX + FF_PW || y < py || y > py + ph) farmFertOpen = false;
+    }
+
+    // --- Hộp xác nhận mở ô đất ---
+    private static final float FL_PW = 580f, FL_PH = 300f;
+    private static final float FL_PX = (Ui.W - FL_PW) / 2f, FL_PY = (Ui.H - FL_PH) / 2f;
+
+    private void drawFarmLandPanel() {
+        batch.setColor(0f, 0f, 0f, 0.45f);
+        batch.draw(whiteTex, 0, 0, Ui.W, Ui.H);
+        batch.setColor(Color.WHITE);
+        batch.draw(Ui.roundedRect((int) FL_PW, (int) FL_PH, 16, GLASS_FILL_DARK, GLASS_RIM), FL_PX, FL_PY);
+        Ui.font.setColor(1f, 0.85f, 0.38f, 1f);
+        Ui.font.draw(batch, "Mở ô đất", FL_PX + 26, FL_PY + FL_PH - 30);
+        batch.draw(Ui.roundedRect(36, 36, 10, Ui.BTN_CLOSE, GLASS_RIM), FL_PX + FL_PW - 54, FL_PY + FL_PH - 54);
+        Ui.faIcon(batch, Ui.fa20, Ui.FA_XMARK, FL_PX + FL_PW - 36, FL_PY + FL_PH - 36, new Color(1f, 1f, 1f, 0.9f));
+        Ui.fontSmall.setColor(1f, 1f, 1f, 0.9f);
+        layout.setText(Ui.fontSmall, farmLandText);
+        float tw = layout.width;
+        if (tw > FL_PW - 52) { // rút gọn hiển thị nếu quá dài (đo thực tế bằng layout)
+            Ui.fontSmall.draw(batch, farmLandText, FL_PX + 26, FL_PY + FL_PH - 96);
+        } else {
+            Ui.fontSmall.draw(batch, farmLandText, FL_PX + (FL_PW - tw) / 2f, FL_PY + FL_PH - 96);
+        }
+        float bw = 216f, bh = 56f, by = FL_PY + 34f;
+        float bx1 = FL_PX + 40f, bx2 = FL_PX + FL_PW - 40f - bw;
+        batch.draw(Ui.gradientRect((int) bw, (int) bh, 14, EntryUi.ORANGE_TOP, EntryUi.ORANGE_BOT), bx1, by);
+        Ui.centered(batch, Ui.font, "Mua bằng Xu", bx1 + bw / 2f, by + 37, new Color(1f, 1f, 1f, 1f));
+        batch.draw(Ui.gradientRect((int) bw, (int) bh, 14, EntryUi.ORANGE_TOP, EntryUi.ORANGE_BOT), bx2, by);
+        Ui.centered(batch, Ui.font, "Mua bằng Lượng", bx2 + bw / 2f, by + 37, new Color(1f, 1f, 1f, 1f));
+    }
+
+    private void farmLandTouch(float x, float y) {
+        if (x >= FL_PX + FL_PW - 54 && x <= FL_PX + FL_PW - 18
+                && y >= FL_PY + FL_PH - 54 && y <= FL_PY + FL_PH - 18) {
+            farmLandOpen = false;
+            return;
+        }
+        float bw = 216f, bh = 56f, by = FL_PY + 34f;
+        float bx1 = FL_PX + 40f, bx2 = FL_PX + FL_PW - 40f - bw;
+        if (y >= by && y <= by + bh) {
+            if (x >= bx1 && x <= bx1 + bw) { farmBuyLand(1); return; }
+            if (x >= bx2 && x <= bx2 + bw) { farmBuyLand(2); return; }
+        }
+        if (x < FL_PX || x > FL_PX + FL_PW || y < FL_PY || y > FL_PY + FL_PH) farmLandOpen = false;
+    }
+
+    /** Mở panel chọn hạt cho harness chụp kiểm chứng. */
+    public void debugOpenFarmSeeds() {
+        farmSeedOpen = true;
     }
 
     /** Chip kính giữa-trên khi ở farm: tên + cấp nông trại (HUD farm của gốc). */
@@ -997,8 +1365,8 @@ public class WorldScreen extends ScreenAdapter {
         loadMap(findMap(25));
         farm.load(game);
         farm.demo();
-        playerX = 660f;
-        playerY = 58f;
+        playerX = 540f; // đứng ngay ô 0 (cà chua chín) để thấy thanh Thu hoạch
+        playerY = 128f;
     }
 
     private void loadBackground(MapDef def) {
@@ -1639,7 +2007,9 @@ public class WorldScreen extends ScreenAdapter {
                     break;
                 }
                 case AvatarProtocol.PLAYER_JOIN: {
-                    addRemote(ZonePlayers.parsePlayerJoin(m));
+                    // cmd 51 ở handler farm là trả lời SET_BIG_FARM, không phải
+                    // người chơi vào park — đang ở farm thì bỏ qua
+                    if (!farmIn) addRemote(ZonePlayers.parsePlayerJoin(m));
                     break;
                 }
                 case AvatarProtocol.PLAYER_LEAVE: {
@@ -2088,6 +2458,62 @@ public class WorldScreen extends ScreenAdapter {
                         setPassStatus("Đổi mật khẩu thành công.", 1);
                         for (StringBuilder b : passFields) b.setLength(0);
                     }
+                    break;
+                }
+                case AvatarProtocol.FARM_USE_ITEM: {
+                    // gói 65 server xác nhận đã dùng vật phẩm: {byte ô, short
+                    // idItem} — client gốc trừ kho listItemFarm tại đây; phân
+                    // giảm giờ thì cộng phút cho ô tại chỗ.
+                    java.io.DataInputStream r = m.reader();
+                    int idx = r.readUnsignedByte();
+                    int itemId = r.readShort();
+                    if (itemId == 100) {
+                        if (idx < farm.cells.size()) farm.cells.get(idx).arid = false;
+                    } else {
+                        for (int[] u : farm.usableItems) {
+                            if (u[0] == itemId && u[1] > 0) { u[1]--; break; }
+                        }
+                        if (idx < farm.cells.size()) {
+                            FarmWorld.Cell fc = farm.cells.get(idx);
+                            if (itemId == 113) fc.time += 15;
+                            else if (itemId == 114) fc.time += 30;
+                            else if (itemId == 115) fc.time += 60;
+                            else if (itemId == 111) fc.vitality = Math.min(100, fc.vitality + 10);
+                            else if (itemId == 112) fc.vitality = 100;
+                            if ((itemId == 113 || itemId == 114 || itemId == 115)
+                                    && fc.idTree >= 0) {
+                                FarmWorld.TreeDef td = farm.trees.get(fc.idTree);
+                                if (td != null && td.minutes > 0) {
+                                    fc.hervestPer = Math.min(100, fc.time * 100 / td.minutes);
+                                }
+                            }
+                        }
+                    }
+                    break;
+                }
+                case AvatarProtocol.FARM_PRICE_SLOT: {
+                    // gói 69: {UTF câu giá} -> hộp xác nhận mở ô (2 nút Xu/Lượng)
+                    farmLandText = m.reader().readUTF();
+                    farmLandOpen = true;
+                    break;
+                }
+                case AvatarProtocol.FARM_OPEN_LAND: {
+                    // gói 70: {int idFarm, int curMoney, byte type, UTF báo,
+                    // int xu, int lượng, int lượng khoá} -> cập nhật tiền +
+                    // xin lại dữ liệu farm cho thấy ô mới (gốc cũng doJoinFarm lại)
+                    java.io.DataInputStream r = m.reader();
+                    r.readInt();
+                    r.readInt();
+                    r.readByte();
+                    String text = r.readUTF();
+                    myXu = r.readInt();
+                    myLuong = r.readInt();
+                    myLuongKhoa = r.readInt();
+                    syncMoneyText();
+                    addChatLog(TAB_SYSTEM, null, text, true);
+                    Msg join = new Msg(AvatarProtocol.FARM_JOIN);
+                    join.writer().writeInt(ownId());
+                    farmSend(join);
                     break;
                 }
                 case AvatarProtocol.FARM_CELL_UPDATE: {
@@ -2606,6 +3032,19 @@ public class WorldScreen extends ScreenAdapter {
             giftFormTouch(x, y);
             return;
         }
+        // các panel farm (chọn hạt / bón phân / mở ô) là modal
+        if (farmSeedOpen) {
+            farmSeedTouch(x, y);
+            return;
+        }
+        if (farmFertOpen) {
+            farmFertTouch(x, y);
+            return;
+        }
+        if (farmLandOpen) {
+            farmLandTouch(x, y);
+            return;
+        }
         // panel Cài đặt đang mở là lớp trên cùng (modal, nuốt mọi chạm)
         if (settingsOpen) {
             settingsTouch(x, y);
@@ -2902,6 +3341,8 @@ public class WorldScreen extends ScreenAdapter {
             typing = true;
             return;
         }
+        // thanh hành động farm (trồng/tưới/bón/thu hoạch/mở ô)
+        if (farmBarTouch(x, y)) return;
         // nút tương tác (phải dưới)
         if (Math.hypot(x - ACT_CX, y - ACT_CY) <= ACT_R + 10) { interact(); return; }
         // chạm vào người chơi khác trên phố: mở panel tương tác của họ
@@ -5708,6 +6149,7 @@ public class WorldScreen extends ScreenAdapter {
     @Override
     public void render(float dt) {
         update(dt);
+        updateFarmFocus();
         // Đặt lại glViewport về đúng backbuffer mỗi frame: FitViewport của HUD ở frame
         // trước có thể đã thu viewport (đặc biệt khi resize chưa được chuyển tiếp).
         Gdx.gl.glViewport(0, 0, Gdx.graphics.getBackBufferWidth(), Gdx.graphics.getBackBufferHeight());
@@ -5859,6 +6301,36 @@ public class WorldScreen extends ScreenAdapter {
                         batch.draw(it.tex, it.x, it.y, it.dw, it.dh);
                     }
                     break;
+                case DrawItem.FARM_INFO: {
+                    FarmWorld.Cell fc = farm.cells.get(it.objId);
+                    FarmWorld.TreeDef td = farm.trees.get(fc.idTree);
+                    if (td != null) {
+                        float bx = it.x - 40f, by = it.y;
+                        Ui.fontSmall.setColor(1f, 0.95f, 0.45f, 1f);
+                        layout.setText(Ui.fontSmall, td.name);
+                        Ui.fontSmall.draw(batch, td.name, it.x - layout.width / 2f, by + 44f);
+                        // thanh sức khoẻ (xanh lá) + thanh lớn (vàng) như gốc
+                        batch.setColor(0f, 0f, 0f, 0.75f);
+                        batch.draw(whiteTex, bx - 1, by + 22, 82, 8);
+                        batch.draw(whiteTex, bx - 1, by + 10, 82, 8);
+                        batch.setColor(0.25f, 0.9f, 0.3f, 1f);
+                        batch.draw(whiteTex, bx, by + 23, 80f * fc.vitality / 100f, 6);
+                        batch.setColor(1f, 0.85f, 0.2f, 1f);
+                        batch.draw(whiteTex, bx, by + 11, 80f * fc.hervestPer / 100f, 6);
+                        batch.setColor(Color.WHITE);
+                        String tail;
+                        if (fc.hervestPer >= 100) {
+                            tail = "Có thể thu hoạch";
+                        } else {
+                            int remain = Math.max(0, td.minutes - fc.time);
+                            tail = remain >= 60 ? (remain / 60) + "g " + (remain % 60) + "p" : remain + " phút";
+                        }
+                        Ui.fontSmall.setColor(1f, 1f, 1f, 0.95f);
+                        layout.setText(Ui.fontSmall, tail);
+                        Ui.fontSmall.draw(batch, tail, it.x - layout.width / 2f, by + 2f);
+                    }
+                    break;
+                }
                 default: // PLAYER
                     drawFigure(playerDoll, playerAnim, playerFeetX,
                         playerFeetY + jumpOffsetY(playerJumpT), displayName, true);
@@ -5968,6 +6440,7 @@ public class WorldScreen extends ScreenAdapter {
         batch.begin();
         drawPlayerCard();
         drawFarmChip();
+        drawFarmBar();
         drawBurger();
         if (menuOpen) drawBurgerPanel();
         drawJoystick();
@@ -5984,6 +6457,9 @@ public class WorldScreen extends ScreenAdapter {
         if (npcMenuOpen) drawNpcMenu();
         if (boardOpen) drawBoardPanel();
         if (cityMapOpen) drawCityMap();
+        if (farmSeedOpen) drawFarmSeedPanel();
+        if (farmFertOpen) drawFarmFertPanel();
+        if (farmLandOpen) drawFarmLandPanel();
         if (settingsOpen) drawSettingsPanel();
         if (musicOpen) drawMusicPanel();
         if (msgOpen) drawMsgPanel();
