@@ -664,6 +664,14 @@ public class ScreenshotMain {
                     case 56:
                         if (frame == 15) {
                             shot("shot-createchar-nu.png");
+                            world.debugShowFarm();
+                            game.setScreen(world);
+                            stage = 58; frame = 0;
+                        }
+                        break;
+                    case 58:
+                        if (frame == 15) {
+                            shot("shot-farm.png");
                             System.out.println("SCREENSHOT DONE");
                             Gdx.app.exit();
                         }

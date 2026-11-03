@@ -105,6 +105,27 @@ public final class AvatarProtocol {
 
     /** Handler Avatar trong GET_HANDLER (CLIENT_TYPE = 8 của gốc). */
     public static final byte HANDLER_AVATAR = 8;
+    /** Handler Farm trong GET_HANDLER (HANDLER_FARM = 10 của gốc). */
+    public static final byte HANDLER_FARM = 10;
+
+    // ---- Farm (Cmd của gốc, handler FarmMsgHandler) ----
+    public static final byte FARM_SET_BIG = 51;
+    public static final byte FARM_GET_BIG = 54;
+    public static final byte FARM_GET_IMAGE = 55;
+    public static final byte FARM_GET_TREE_INFO = 56;
+    public static final byte FARM_INVENTORY = 60;
+    public static final byte FARM_JOIN = 61;
+    public static final byte FARM_BUY_ITEM = 62;
+    public static final byte FARM_SELL = 63;
+    public static final byte FARM_PLANT = 64;
+    public static final byte FARM_USE_ITEM = 65;
+    public static final byte FARM_HARVEST = 66;
+    public static final byte FARM_OPEN_LAND = 70;
+    public static final byte FARM_BUY_ANIMAL = 71;
+    public static final byte FARM_HARVEST_ANIMAL = 74;
+    public static final byte FARM_CELL_UPDATE = 78;
+    public static final byte FARM_ANIMAL_UPDATE = 79;
+    public static final byte FARM_GET_IMG = 82;
     public static final String CLIENT_VERSION = "2.5.8";
 
     private AvatarProtocol() {

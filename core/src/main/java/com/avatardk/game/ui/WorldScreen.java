@@ -169,15 +169,23 @@ public class WorldScreen extends ScreenAdapter {
      *  chính mình): sắp theo y đáy trong thế giới, y lớn (cao hơn trên màn
      *  hình) vẽ trước — đúng thứ tự merge của paintObject gốc. */
     private static class DrawItem {
-        static final int OBJ = 0, NPC = 1, REMOTE = 2, PLAYER = 3;
+        static final int OBJ = 0, NPC = 1, REMOTE = 2, PLAYER = 3, FARM = 4;
         int kind;
         float y;
         float x;
         Texture tex;
+        com.badlogic.gdx.graphics.g2d.TextureRegion region;
+        float dw, dh;
         int objId;
         NpcFigure npc;
         RemoteFigure remote;
     }
+
+    // ---- Farm (đợt 3): trạng thái nông trại + cờ đang ở map farm ----
+    private final FarmWorld farm = new FarmWorld();
+    private boolean farmIn;
+    private java.util.List<int[]> farmBlocks;
+    private float[] farmStarPos;
     private final List<DrawItem> drawItems = new ArrayList<>();
 
     // ---- Người chơi khác qua mạng (đợt 2d, docs/park-spec.md) ----
@@ -789,6 +797,20 @@ public class WorldScreen extends ScreenAdapter {
 
     public void loadMap(MapDef def) {
         mapDef = def;
+        if (def.id == 25) {
+            // map Nông trại: nạp dữ liệu farm + tính vị trí các khối đất (ô 142)
+            // và cây khế (ô 189) từ lưới map
+            farm.load(game);
+            com.avatardk.game.data.MapGrids.Grid g =
+                new com.avatardk.game.data.MapGrids(
+                    com.avatardk.game.GameFiles.data("data/mapgrids.json").readString("UTF-8"))
+                    .grid(25);
+            if (g != null) {
+                farmBlocks = FarmWorld.plotBlocks(g.cells(), g.w);
+                farmStarPos = FarmWorld.starPos(g.cells(), g.w,
+                    g.w > 0 ? g.cells().length / g.w : 0);
+            }
+        }
         mapBottomPx = def.hmap * 24 * AvatarDkGame.HD;
         strips.clear(); stripLefts.clear(); daydien.clear();
         float acc = -1f;
@@ -842,6 +864,143 @@ public class WorldScreen extends ScreenAdapter {
     /** Nạp lớp nền đúng LoadMap.loadBG: status theo giờ máy (18h–6h = đêm),
      *  ảnh trời bghd/may<num><status> và ảnh silhouette bghd/<num><status>,
      *  mây trôi effect/cl<anchor><status>. */
+    /** Dựng các mục vẽ farm (cây trên ô đất, cây khế, vật nuôi) vào cùng
+     *  lượt sắp xếp độ sâu với vật thể/nhân vật. Tọa độ: đơn vị medium của
+     *  gốc x HD; cây neo đáy–giữa tại chân ô như CellFarm.paint của gốc. */
+    private void buildFarmDrawItems() {
+        int hd = AvatarDkGame.HD;
+        int gridH = mapDef.hmap;
+        // cây trên từng ô đất
+        if (farmBlocks != null) {
+            for (int i = 0; i < farm.cells.size(); i++) {
+                FarmWorld.Cell c = farm.cells.get(i);
+                if (c.idTree < 0) continue;
+                FarmWorld.TreeDef def = farm.trees.get(c.idTree);
+                if (def == null || def.img.length == 0) continue;
+                float[] pos = FarmWorld.cellPos(farmBlocks, i, gridH);
+                if (pos == null) continue;
+                int stage = farm.stageOf(c);
+                int imgId = def.img[Math.min(stage, def.img.length - 1)];
+                DrawItem it = new DrawItem();
+                it.kind = DrawItem.FARM;
+                it.y = pos[1] * hd;
+                if (c.idTree < 30) {
+                    // sheet bigFarm trong res của bản fan là bản medium -> phóng xHD
+                    it.region = farm.staticRegion(imgId);
+                    if (it.region == null) continue;
+                    it.dw = it.region.getRegionWidth() * hd;
+                    it.dh = it.region.getRegionHeight() * hd;
+                } else {
+                    it.tex = farm.dynTexture(imgId);
+                    if (it.tex == null) continue;
+                    it.dw = it.tex.getWidth();
+                    it.dh = it.tex.getHeight();
+                }
+                it.x = pos[0] * hd - it.dw / 2f;
+                it.y = pos[1] * hd; // chân ô — sprite vươn lên từ đây (paint BOTTOM của gốc)
+                drawItems.add(it);
+                // icon trạng thái: khô đất (w) / sâu (wg) / cỏ (g) của gốc
+                String icon = c.arid ? "w" : (c.worm ? "wg" : (c.grass ? "g" : null));
+                if (icon != null) {
+                    Texture ic = game.texture("farm/ui/" + icon + ".png");
+                    DrawItem ii = new DrawItem();
+                    ii.kind = DrawItem.FARM;
+                    ii.tex = ic;
+                    ii.dw = ic.getWidth();
+                    ii.dh = ic.getHeight();
+                    ii.x = pos[0] * hd + 6f;
+                    ii.y = pos[1] * hd + 4f + (float) Math.sin(netTime * 3 + i) * 2f;
+                    drawItems.add(ii);
+                }
+            }
+        }
+        // cây khế: thân cây đã nằm trong hình nền map (ô 189 do LoadMap gốc
+        // sơn cùng map) — ở đây chỉ rải QUẢ (fruitID) lên tán khi đang có quả.
+        if (farmStarPos != null && farm.starNum > 0) {
+            com.badlogic.gdx.graphics.g2d.TextureRegion fruit = farm.staticRegion(farm.starFruit);
+            if (fruit != null) {
+                java.util.Random rnd = new java.util.Random(4242);
+                for (int k = 0; k < 6; k++) {
+                    DrawItem fi = new DrawItem();
+                    fi.kind = DrawItem.FARM;
+                    fi.region = fruit;
+                    fi.dw = fruit.getRegionWidth();
+                    fi.dh = fruit.getRegionHeight();
+                    fi.x = farmStarPos[0] * hd + (rnd.nextFloat() - 0.5f) * 90f;
+                    fi.y = farmStarPos[1] * hd + 55f + rnd.nextFloat() * 55f;
+                    drawItems.add(fi);
+                }
+            }
+        }
+        // vật nuôi theo khu, lang thang nhẹ quanh mỏ neo
+        for (int i = 0; i < farm.animals.size(); i++) {
+            FarmWorld.Animal a = farm.animals.get(i);
+            FarmWorld.AnimalDef def = farm.animalDefs.get(a.species);
+            if (def == null || def.idImg.length == 0) continue;
+            long ageH = a.bornTime > 0
+                ? (System.currentTimeMillis() / 1000L - a.bornTime) / 3600L : 9999;
+            int stage = ageH >= def.harvestHours ? 2 : (ageH >= def.harvestHours / 2 ? 1 : 0);
+            Texture t = farm.dynTexture(def.idImg[Math.min(stage, def.idImg.length - 1)]);
+            if (t == null) continue; // loài chưa có file hình trong Pack5 (chờ đào từ server live)
+            float[] anchor = FarmWorld.animalAnchor(def.area, i);
+            float wx = anchor[0] + (float) Math.sin(netTime * 0.25f + a.phase) * 10f;
+            DrawItem it = new DrawItem();
+            it.kind = DrawItem.FARM;
+            it.tex = t;
+            it.dw = t.getWidth();
+            it.dh = t.getHeight();
+            it.x = wx * hd - it.dw / 2f;
+            it.y = anchor[1] * hd;
+            drawItems.add(it);
+        }
+    }
+
+    /** Nền đất từng ô + mốc mua đất: gốc sơn cùng lớp map (dưới mọi vật
+     *  thể/nhân vật) nên vẽ ngay sau các dải nền, không qua lượt sắp xếp sâu. */
+    private void drawFarmSoil() {
+        if (farmBlocks == null || !farm.joined) return;
+        int hd = AvatarDkGame.HD;
+        int totalSlots = farmBlocks.size() * 12;
+        for (int i = 0; i < totalSlots; i++) {
+            float[] pos = FarmWorld.cellPos(farmBlocks, i, mapDef.hmap);
+            if (pos == null) continue;
+            if (i < farm.cells.size()) {
+                FarmWorld.Cell c = farm.cells.get(i);
+                int status;
+                if (c.level >= 2) status = c.idTree < 0 ? 5 : (c.arid ? 6 : 4);
+                else status = c.idTree < 0 ? 1 : (c.arid ? 2 : 0);
+                Texture t = game.texture("farm/ui/cell" + status + ".png");
+                batch.draw(t, (pos[0] - 14f) * hd, (pos[1] - 8f) * hd);
+            } else if (i == farm.cells.size()) {
+                Texture t = game.texture("farm/ui/buyLand.png");
+                batch.draw(t, pos[0] * hd - t.getWidth() / 2f, pos[1] * hd);
+            }
+        }
+    }
+
+    /** Chip kính giữa-trên khi ở farm: tên + cấp nông trại (HUD farm của gốc). */
+    private void drawFarmChip() {
+        if (mapDef == null || mapDef.id != 25) return;
+        String label = "Nông trại" + (farm.invLoaded ? " · Cấp " + farm.lvFarm : "");
+        float w = 240f, h = 46f, x = Ui.W / 2f - w / 2f, y = Ui.H - h - 12f;
+        batch.draw(Ui.roundedRect((int) w, (int) h, 14, GLASS_FILL, GLASS_RIM), x, y);
+        Ui.font.setColor(1f, 0.87f, 0.35f, 1f);
+        layout.setText(Ui.font, label);
+        Ui.font.draw(batch, label, x + w / 2f - layout.width / 2f, y + h - 13f);
+        Ui.font.setColor(Color.WHITE);
+    }
+
+    /** Harness: mở thẳng cảnh farm offline với dữ liệu mẫu (ScreenshotMain). */
+    public void debugShowFarm() {
+        msgOpen = mailOpen = friendOpen = settingsOpen = musicOpen = false;
+        passFormOpen = giftFormOpen = menuOpen = boardOpen = false;
+        loadMap(findMap(25));
+        farm.load(game);
+        farm.demo();
+        playerX = 660f;
+        playerY = 58f;
+    }
+
     private void loadBackground(MapDef def) {
         int hour = new java.util.Date().getHours();
         bgStatus = bgStatusOverride >= 0 ? bgStatusOverride
@@ -1468,8 +1627,15 @@ public class WorldScreen extends ScreenAdapter {
                     break;
                 }
                 case AvatarProtocol.PARK_BOARD_LIST: {
-                    boardStatus = ZonePlayers.parseBoardList(m);
-                    boardOpen = true;
+                    // cmd 60 dùng chung 2 nghĩa theo handler: park = danh sách
+                    // khu, farm = kho nông trại (gốc đổi cả handler nên không
+                    // lẫn; bản port rẽ theo cờ farmIn)
+                    if (farmIn) {
+                        farm.parseInventory(m);
+                    } else {
+                        boardStatus = ZonePlayers.parseBoardList(m);
+                        boardOpen = true;
+                    }
                     break;
                 }
                 case AvatarProtocol.PLAYER_JOIN: {
@@ -1706,7 +1872,12 @@ public class WorldScreen extends ScreenAdapter {
                     break;
                 }
                 case AvatarProtocol.VOICE_PARK: {
-                    onVoiceChunk(ZonePlayers.parseVoice(m));
+                    // cmd 61: park = tin thoại, farm = dữ liệu nông trại (JOIN)
+                    if (farmIn) {
+                        farm.parseJoin(m);
+                    } else {
+                        onVoiceChunk(ZonePlayers.parseVoice(m));
+                    }
                     break;
                 }
                 case AvatarProtocol.CHAT_PARK:
@@ -1919,6 +2090,46 @@ public class WorldScreen extends ScreenAdapter {
                     }
                     break;
                 }
+                case AvatarProtocol.FARM_CELL_UPDATE: {
+                    farm.parseCellUpdate(m);
+                    break;
+                }
+                case AvatarProtocol.FARM_ANIMAL_UPDATE: {
+                    farm.parseAnimalUpdate(m);
+                    break;
+                }
+                case AvatarProtocol.FARM_PLANT: {
+                    // gói 64 echo: {int idUser, byte ô, byte hạt} — đặt cây lên ô
+                    java.io.DataInputStream r = m.reader();
+                    r.readInt();
+                    int idx = r.readUnsignedByte();
+                    int seed = r.readByte();
+                    if (idx < farm.cells.size()) {
+                        FarmWorld.Cell c = farm.cells.get(idx);
+                        c.idTree = seed;
+                        c.time = 0;
+                        c.vitality = 100;
+                        c.hervestPer = 0;
+                        c.arid = true;
+                    }
+                    break;
+                }
+                case AvatarProtocol.FARM_HARVEST: {
+                    // gói 66: {byte ô, short số lượng} — ô trống lại
+                    java.io.DataInputStream r = m.reader();
+                    int idx = r.readUnsignedByte();
+                    r.readShort();
+                    if (idx < farm.cells.size()) {
+                        farm.cells.get(idx).idTree = -1;
+                    }
+                    if (farmIn) { // xin lại kho cho khớp số nông sản
+                        try {
+                            game.connection.send(new Msg(AvatarProtocol.FARM_INVENTORY));
+                        } catch (Exception ignored) {
+                        }
+                    }
+                    break;
+                }
                 default:
                     break;
             }
@@ -2036,6 +2247,28 @@ public class WorldScreen extends ScreenAdapter {
         netLossAnnounced = false;
         if (joinedClientMap != mapDef.id) {
             try {
+                // Farm: vào map Nông trại (client 25) thì đổi handler sang
+                // Farm (10) rồi xin đồng bộ farm như GlobalLogicHandler gốc;
+                // rời farm thì trả handler Avatar (8) trước khi join park lại.
+                if (mapDef.id == 25 && !farmIn) {
+                    farmIn = true;
+                    Msg sw = new Msg(AvatarProtocol.GET_HANDLER);
+                    sw.writer().writeByte(AvatarProtocol.HANDLER_FARM);
+                    conn.send(sw);
+                    conn.send(new Msg(AvatarProtocol.FARM_SET_BIG));
+                    conn.send(new Msg(AvatarProtocol.FARM_GET_IMAGE));
+                    conn.send(new Msg(AvatarProtocol.FARM_GET_TREE_INFO));
+                    conn.send(new Msg(AvatarProtocol.FARM_INVENTORY));
+                    Msg join = new Msg(AvatarProtocol.FARM_JOIN);
+                    join.writer().writeInt(ownId());
+                    conn.send(join);
+                } else if (mapDef.id != 25 && farmIn) {
+                    farmIn = false;
+                    farm.clear();
+                    Msg sw = new Msg(AvatarProtocol.GET_HANDLER);
+                    sw.writer().writeByte(AvatarProtocol.HANDLER_AVATAR);
+                    conn.send(sw);
+                }
                 int area = pendingArea != null ? pendingArea : -1;
                 AvatarProtocol.joinPark(conn, mapDef.id, area, (int) playerX, (int) playerY);
                 pendingArea = null;
@@ -5536,6 +5769,7 @@ public class WorldScreen extends ScreenAdapter {
             float bottom = mapBottomPx - 60f;
             for (Texture t : daydien) { batch.draw(t, dx, bottom); dx += t.getWidth(); }
         }
+        if (mapDef.id == 25) drawFarmSoil();
         // Vật thể gắn map + nhân vật vẽ TRỘN THEO ĐỘ SÂU như paintObject
         // của gốc: đáy/chân ở càng cao trên màn hình (worldY càng lớn) vẽ
         // càng trước. Vật thể neo đáy–giữa tại (anchorX, anchorY) của lưới.
@@ -5551,6 +5785,9 @@ public class WorldScreen extends ScreenAdapter {
             it.objId = o[0];
             it.x = o[1] * AvatarDkGame.HD - t.getWidth() / 2f;
             drawItems.add(it);
+        }
+        if (mapDef.id == 25 && farm.joined) {
+            buildFarmDrawItems();
         }
         for (NpcFigure f : npcFigures) {
             DrawItem it = new DrawItem();
@@ -5613,6 +5850,13 @@ public class WorldScreen extends ScreenAdapter {
                     if (it.remote.bubble != null) {
                         drawBubble(it.remote.doll, it.remote.anim, it.remote.feetX,
                             it.remote.feetY + it.remote.jumpOffY(), it.remote.bubble);
+                    }
+                    break;
+                case DrawItem.FARM:
+                    if (it.region != null) {
+                        batch.draw(it.region, it.x, it.y, it.dw, it.dh);
+                    } else if (it.tex != null) {
+                        batch.draw(it.tex, it.x, it.y, it.dw, it.dh);
                     }
                     break;
                 default: // PLAYER
@@ -5723,6 +5967,7 @@ public class WorldScreen extends ScreenAdapter {
         batch.setProjectionMatrix(hudViewport.getCamera().combined);
         batch.begin();
         drawPlayerCard();
+        drawFarmChip();
         drawBurger();
         if (menuOpen) drawBurgerPanel();
         drawJoystick();
