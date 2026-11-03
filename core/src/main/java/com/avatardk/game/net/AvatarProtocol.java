@@ -98,6 +98,9 @@ public final class AvatarProtocol {
      *  các boolean có-menu-con}; C→S chọn mục {int id, byte menuId,
      *  byte vị trí chọn} (Cmd.MENU_OPTION của gốc, dùng hai chiều). */
     public static final byte MENU_OPTION = -59;
+    /** Tab thông tin server gửi (Cmd.CUSTOM_TAB của gốc): S→C {byte 0,
+     *  UTF tiêu đề, UTF nội dung} — dùng cho "Xem hướng dẫn" của các NPC. */
+    public static final byte CUSTOM_TAB = -58;
     /** Server mở shop: S→C {byte idShop, UTF tên shop, short số món,
      *  các short idPart} — danh sách hàng do server quyết (Cmd.OPEN_SHOP
      *  của gốc, tới sau khi chọn mục shop trong menu NPC cửa hàng). */

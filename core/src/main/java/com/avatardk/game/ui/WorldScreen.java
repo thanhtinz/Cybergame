@@ -2443,6 +2443,11 @@ public class WorldScreen extends ScreenAdapter {
     public void debugShowFarm() {
         msgOpen = mailOpen = friendOpen = settingsOpen = musicOpen = false;
         passFormOpen = giftFormOpen = menuOpen = boardOpen = false;
+        farmSeedOpen = farmFertOpen = farmLandOpen = farmStoreOpen = false;
+        farmShopOpen = farmCookOpen = farmAnimalSellOpen = false;
+        npcMenuOpen = false;
+        guideOpen = false;
+        confirmText = null;
         loadMap(findMap(25));
         farm.load(game);
         farm.demo();
@@ -3389,6 +3394,7 @@ public class WorldScreen extends ScreenAdapter {
                     } catch (Exception ignored) {
                         // tên các mục đã đọc đủ để hiện menu
                     }
+                    npcMenuLocal = false;
                     npcMenuUserId = uid;
                     npcMenuId = mid;
                     npcMenuItems.clear();
@@ -3396,6 +3402,24 @@ public class WorldScreen extends ScreenAdapter {
                     npcMenuTitle = uid >= NPC_ID_ADD
                         ? npcDisplayName(uid - NPC_ID_ADD) : "Menu";
                     npcMenuOpen = true;
+                    break;
+                }
+                case AvatarProtocol.SERVER_MESSAGE: {
+                    // gói −9 của gốc: {UTF} — tin hệ thống toàn cục
+                    // (vd "Điểm Danh" của lái buôn trả "đang xây dựng")
+                    String text = m.reader().readUTF();
+                    if (!text.isEmpty()) {
+                        addChatLog(TAB_SYSTEM, null, text, true);
+                    }
+                    break;
+                }
+                case AvatarProtocol.CUSTOM_TAB: {
+                    // gói −58 của gốc: {byte 0, UTF tiêu đề, UTF nội dung}
+                    // — tab thông tin/hướng dẫn server gửi (NPC "Xem
+                    // hướng dẫn"); bản port trước đây bỏ qua gói này.
+                    java.io.DataInputStream r = m.reader();
+                    r.readByte();
+                    openGuide(r.readUTF(), r.readUTF());
                     break;
                 }
                 case AvatarProtocol.OPEN_SHOP: {
@@ -4235,6 +4259,11 @@ public class WorldScreen extends ScreenAdapter {
             charPanel = false;
             return;
         }
+        // panel tab hướng dẫn (−58) đang mở: modal, trên cả menu NPC
+        if (guideOpen) {
+            guideTouch(x, y);
+            return;
+        }
         // menu NPC đang mở: modal, nuốt mọi chạm
         if (npcMenuOpen) {
             npcMenuTouch(x, y);
@@ -4505,10 +4534,18 @@ public class WorldScreen extends ScreenAdapter {
             addChatLog(TAB_SYSTEM, null, "Không có ai ở gần để tương tác.", true);
             return;
         }
-        // NPC Cửa Hàng: nói chuyện qua server (gói −61) để nhận menu NPC
-        // rồi mở shop bằng gói −49 — đúng luồng gốc, thay cho lời chào;
-        // chế độ offline (không có kết nối) thì vẫn chào như NPC thường
-        if (n.data.id == NPC_CUA_HANG && game.connection != null) {
+        // NPC Lái Buôn khi offline (bản web chơi thử): mở menu cục bộ
+        // đúng 3 mục của gốc để xem được panel; hành động chạy tại chỗ
+        // (xem openLaiBuonLocalMenu / laiBuonLocalSelect).
+        if (n.data.id == NPC_LAI_BUON && game.connection == null) {
+            openLaiBuonLocalMenu();
+            return;
+        }
+        // NPC Cửa Hàng + Lái Buôn: nói chuyện qua server (gói −61) để
+        // nhận menu NPC — đúng luồng gốc, thay cho lời chào; chế độ
+        // offline (không có kết nối) thì vẫn chào như NPC thường
+        if ((n.data.id == NPC_CUA_HANG || n.data.id == NPC_LAI_BUON)
+                && game.connection != null) {
             try {
                 AvatarProtocol.communicate(game.connection, NPC_ID_ADD + n.data.id);
                 return;
@@ -7225,6 +7262,7 @@ public class WorldScreen extends ScreenAdapter {
         playerAnim.update(dt);
         updateNet(dt);
         updateRemotes(dt);
+        updateEdgeTransitions(dt);
         for (NpcFigure f : npcFigures) {
             f.anim.update(dt);
             if (f.bubbleTimer > 0) { f.bubbleTimer -= dt; if (f.bubbleTimer <= 0) f.bubble = null; }
@@ -7621,6 +7659,7 @@ public class WorldScreen extends ScreenAdapter {
         if (chestPanel) drawChestPanels();
         if (shopOpen) drawShop();
         if (npcMenuOpen) drawNpcMenu();
+        if (guideOpen) drawGuidePanel();
         if (boardOpen) drawBoardPanel();
         if (cityMapOpen) drawCityMap();
         if (farmSeedOpen) drawFarmSeedPanel();
@@ -8966,6 +9005,9 @@ public class WorldScreen extends ScreenAdapter {
     // chạy hành động tương ứng (mở shop, mở hướng dẫn, đóng...). Panel vẽ
     // theo ngôn ngữ kính của các panel đã chốt, neo giữa màn hình.
     private boolean npcMenuOpen = false;
+    /** Menu NPC mở cục bộ khi offline (hiện chỉ lái buôn): chọn mục thì
+     *  chạy tại chỗ thay vì gửi gói chọn menu lên server. */
+    private boolean npcMenuLocal = false;
     private int npcMenuUserId, npcMenuId;
     private String npcMenuTitle = "";
     private final java.util.List<String> npcMenuItems = new ArrayList<>();
@@ -8973,6 +9015,7 @@ public class WorldScreen extends ScreenAdapter {
 
     private String npcDisplayName(int code) {
         if (code == NPC_CUA_HANG) return "Cửa Hàng";
+        if (code == NPC_LAI_BUON) return "Lái buôn";
         for (com.avatardk.game.data.NpcData nd : game.data.npcs) {
             if (nd.id == code) return nd.name.replace('.', ' ');
         }
@@ -9022,16 +9065,23 @@ public class WorldScreen extends ScreenAdapter {
         float px = (Ui.W - w) / 2f, py = (Ui.H - h) / 2f;
         if (x >= px + w - 54 && x <= px + w - 18 && y >= py + h - 54 && y <= py + h - 18) {
             npcMenuOpen = false;
+            npcMenuLocal = false;
             return;
         }
         if (x < px || x > px + w || y < py || y > py + h) {
             npcMenuOpen = false;
+            npcMenuLocal = false;
             return;
         }
         for (int i = 0; i < npcMenuItems.size(); i++) {
             float ry = py + h - NM_HEAD - (i + 1) * NM_ROW + 6;
             if (x >= px + 16 && x <= px + w - 16 && y >= ry && y <= ry + NM_ROW - 10) {
                 npcMenuOpen = false;
+                if (npcMenuLocal) {
+                    npcMenuLocal = false;
+                    laiBuonLocalSelect(i);
+                    return;
+                }
                 if (game.connection != null) {
                     try {
                         AvatarProtocol.selectMenuOption(game.connection,
@@ -9043,6 +9093,213 @@ public class WorldScreen extends ScreenAdapter {
                 return;
             }
         }
+    }
+
+
+    // ---------- LÁI BUÔN (NPC 850, map 26) + PANEL TAB HƯỚNG DẪN ----------
+    // Gốc: nói chuyện (gói −61) → server trả menu −59 "Điểm Danh /
+    // Xem hướng dẫn / Thoát"; "Điểm Danh" phía server gốc là stub chỉ
+    // trả tin hệ thống "đang xây dựng" (gói −9), "Xem hướng dẫn" trả
+    // tab thông tin qua gói −58 (CUSTOM_TAB). Online chạy đúng luồng
+    // đó; offline (bản web chơi thử) mở menu cục bộ cùng nội dung để
+    // xem/chạm được panel.
+
+    /** Nội dung tab hướng dẫn của lái buôn — nguyên văn server gốc. */
+    private static final String LAI_BUON_GUIDE =
+        "Đăng nhập mỗi ngày để nhận quà.\n"
+        + "Dùng điểm chuyên cần để nhận đucợ những món quà có giá trị trong tương lai";
+
+    private void openLaiBuonLocalMenu() {
+        npcMenuLocal = true;
+        npcMenuUserId = NPC_ID_ADD + NPC_LAI_BUON;
+        npcMenuId = 0;
+        npcMenuTitle = "Lái buôn";
+        npcMenuItems.clear();
+        npcMenuItems.add("Điểm Danh");
+        npcMenuItems.add("Xem hướng dẫn");
+        npcMenuItems.add("Thoát");
+        npcMenuOpen = true;
+    }
+
+    private void laiBuonLocalSelect(int i) {
+        if (i == 0) {
+            // đúng stub của server gốc: chỉ báo "đang xây dựng"
+            addChatLog(TAB_SYSTEM, null, "đang xây dựng", true);
+            chatBubble = "đang xây dựng";
+            chatTimer = 3f;
+        } else if (i == 1) {
+            openGuide("Hướng dẫn", LAI_BUON_GUIDE);
+        }
+    }
+
+    // ----- Panel tab thông tin (gói −58 CUSTOM_TAB của gốc) -----
+    private boolean guideOpen = false;
+    private String guideTitle = "";
+    private String guideText = "";
+    private static final float GP_W = 700f, GP_H = 500f;
+    private static final float GP_PX = (Ui.W - GP_W) / 2f, GP_PY = (Ui.H - GP_H) / 2f;
+
+    private void openGuide(String title, String text) {
+        guideTitle = title != null ? title : "";
+        guideText = text != null ? text : "";
+        guideOpen = true;
+    }
+
+    /** Ngắt dòng theo bề rộng đo thật của font (giữ nguyên ngắt dòng \n). */
+    private java.util.List<String> wrapGuideLines() {
+        java.util.List<String> lines = new ArrayList<>();
+        float maxW = GP_W - 56f;
+        for (String para : guideText.split("\n", -1)) {
+            StringBuilder cur = new StringBuilder();
+            for (String word : para.split(" ")) {
+                String cand = cur.length() == 0 ? word : cur + " " + word;
+                layout.setText(Ui.fontSmall, cand);
+                if (layout.width > maxW && cur.length() > 0) {
+                    lines.add(cur.toString());
+                    cur = new StringBuilder(word);
+                } else {
+                    cur = new StringBuilder(cand);
+                }
+            }
+            lines.add(cur.toString());
+        }
+        return lines;
+    }
+
+    private void drawGuidePanel() {
+        batch.setColor(0f, 0f, 0f, 0.45f);
+        batch.draw(whiteTex, 0, 0, Ui.W, Ui.H);
+        batch.setColor(Color.WHITE);
+        // nền đặc như panel menu NPC (0.97): bản đầu dùng GLASS_FILL_DARK
+        // 0.78 nên nền cảnh lọt qua rất rõ ở vùng trống
+        batch.draw(Ui.roundedRect((int) GP_W, (int) GP_H, 16,
+            new Color(0.07f, 0.11f, 0.17f, 0.97f), GLASS_RIM), GP_PX, GP_PY);
+        drawFarmPanelHeader(GP_PX, GP_PY, GP_W, GP_H, Ui.FA_CIRCLE_INFO,
+            new Color(0.13f, 0.42f, 0.60f, 0.95f), guideTitle, "Thông tin từ NPC");
+        java.util.List<String> lines = wrapGuideLines();
+        // dòng đầu ở GP_H−122: mực chữ (tới +5 trên baseline) vẫn nằm
+        // trong vùng clip [GP_PY+10, GP_PY+GP_H−90] — bản đầu bị clip
+        // cắt mất đỉnh dòng đầu
+        float top = GP_PY + GP_H - 122f;
+        boolean clipped = pushPanelClip(GP_PX + 6, GP_PY + 10, GP_W - 12, GP_H - 90);
+        Ui.fontSmall.setColor(1f, 1f, 1f, 0.94f);
+        for (int i = 0; i < lines.size(); i++) {
+            float y = top - i * 25f;
+            if (y < GP_PY + 44) break;
+            Ui.fontSmall.draw(batch, lines.get(i), GP_PX + 28, y);
+        }
+        Ui.fontSmall.setColor(Color.WHITE);
+        if (clipped) popPanelClip();
+    }
+
+    private void guideTouch(float x, float y) {
+        if (x >= GP_PX + GP_W - 54 && x <= GP_PX + GP_W - 18
+                && y >= GP_PY + GP_H - 54 && y <= GP_PY + GP_H - 18) {
+            guideOpen = false;
+            return;
+        }
+        if (x < GP_PX || x > GP_PX + GP_W || y < GP_PY || y > GP_PY + GP_H) {
+            guideOpen = false;
+        }
+        // chạm trong panel: nuốt, không làm gì thêm
+    }
+
+    /** Harness: đứng cạnh lái buôn ở map 26 rồi bấm Tương tác (offline
+     *  sẽ mở menu cục bộ của ổng). */
+    public void debugShowLaiBuon() {
+        loadMap(findMap(26));
+        debugBusSkip();
+        for (NpcFigure f : npcFigures) {
+            if (f.data.id == NPC_LAI_BUON) {
+                // đứng sát phải–dưới NPC: findNearestNpc đo tới tọa độ
+                // dữ liệu gốc của NPC (hệ y trên–xuống) nên phải đặt
+                // người chơi lệch xuống mới lọt tầm tương tác 80
+                playerX = f.feetX / AvatarDkGame.HD + 14f;
+                playerY = f.feetY / AvatarDkGame.HD - 6f;
+                break;
+            }
+        }
+        interact();
+    }
+
+    /** Harness: chọn mục "Xem hướng dẫn" trong menu lái buôn cục bộ. */
+    public void debugLaiBuonGuide() {
+        if (npcMenuOpen && npcMenuLocal) {
+            npcMenuOpen = false;
+            npcMenuLocal = false;
+            laiBuonLocalSelect(1);
+        }
+    }
+
+    /** Harness: đặt người chơi ở miệng đường phía tây nông trại để
+     *  kiểm chứng tự chuyển sang map 26 khi đi bộ ra. */
+    public void debugPlaceAtFarmExit() {
+        playerX = 49f;
+        playerY = 130f;
+    }
+
+    // ----- Chuyển map ở mép đường: nông trại ↔ đường ra (26) ↔ khu 1 -----
+    // Gốc ra/vào nông trại bằng cách ĐI BỘ qua miệng đường (FarmScr gửi
+    // doJoinPark(25) khi ra đường); bản port trước đây chỉ nhảy map qua
+    // bản đồ thành phố nên map 26 không tới được. Chỉ 3 map này nối
+    // nhau bằng mép đường; các map khác vẫn đi qua bản đồ thành phố.
+    private float edgeCd = 0f;
+
+    private void updateEdgeTransitions(float dt) {
+        if (edgeCd > 0f) {
+            edgeCd -= dt;
+            return;
+        }
+        if (mapDef == null || anyModalOpen()) return;
+        if (mapDef.id == 25) {
+            // miệng đường phía tây nông trại (cột ô 0–1, nửa trên cảnh —
+            // nơi bếp/kho đứng) → sang đường ra nông trại
+            if (playerX <= 50f && playerY >= 110f) {
+                gotoMap(26, -70f, 130f);
+            }
+        } else if (mapDef.id == 26) {
+            float eastX = worldW / AvatarDkGame.HD - 50f;
+            if (playerX >= eastX) {
+                gotoMap(25, 70f, 130f); // mép đông đường ra = cổng nông trại
+            } else if (playerX <= 50f) {
+                loadMap(findMap(1)); // mép tây = về Khu Mặt trời
+                spawnPlayer();
+                edgeCd = 1.2f;
+            }
+        }
+    }
+
+    /** Sang map kề qua mép đường: spawnX âm = lùi từ mép phải vào. */
+    private void gotoMap(int mapId, float spawnX, float spawnY) {
+        loadMap(findMap(mapId));
+        playerX = spawnX < 0 ? worldW / AvatarDkGame.HD + spawnX : spawnX;
+        playerY = spawnY;
+        if (!canStand(playerX, playerY)) {
+            boolean found = false;
+            for (int r = 1; r <= 6 && !found; r++) {
+                for (int dx = -r; dx <= r && !found; dx++) {
+                    for (int dy = -r; dy <= r && !found; dy++) {
+                        float tx = playerX + dx * 24, ty = playerY + dy * 24;
+                        if (canStand(tx, ty)) {
+                            playerX = tx;
+                            playerY = ty;
+                            found = true;
+                        }
+                    }
+                }
+            }
+        }
+        edgeCd = 1.2f;
+    }
+
+    /** Có panel modal nào đang mở không (đang mở thì không chuyển map). */
+    private boolean anyModalOpen() {
+        return npcMenuOpen || guideOpen || shopOpen || bagPanel || chestPanel
+            || charPanel || boardOpen || cityMapOpen || menuOpen || msgOpen
+            || mailOpen || friendOpen || settingsOpen || musicOpen
+            || farmSeedOpen || farmFertOpen || farmLandOpen || farmStoreOpen
+            || farmShopOpen || farmCookOpen || farmAnimalSellOpen
+            || panelPlayer != null || confirmText != null;
     }
 
 
@@ -9093,6 +9350,9 @@ public class WorldScreen extends ScreenAdapter {
     private static final int SHOP_COLS = 6, SHOP_CELL = 96, SHOP_GAP = 12;
     /** Mã NPC Cửa Hàng trong npcs.json (NpcName.CUA_HANG của gốc). */
     private static final int NPC_CUA_HANG = 761;
+    /** Mã NPC Lái Buôn (NpcName.LAI_BUON của gốc): đứng ở map 26
+     *  (đường ra nông trại), menu Điểm Danh / Xem hướng dẫn / Thoát. */
+    private static final int NPC_LAI_BUON = 850;
     /** Cộng số này vào mã NPC ra id trên đường truyền (Npc.ID_ADD). */
     private static final int NPC_ID_ADD = 2000000000;
 

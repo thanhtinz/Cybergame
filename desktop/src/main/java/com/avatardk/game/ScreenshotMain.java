@@ -770,6 +770,30 @@ public class ScreenshotMain {
                     case 70:
                         if (frame == 15) {
                             shot("shot-farm-shop-seeds-p2.png");
+                            // lái buôn: ra cổng farm bằng đường bộ ->
+                            // tự chuyển sang map 26 (đường ra nông trại)
+                            world.debugShowFarm();
+                            world.debugPlaceAtFarmExit();
+                            stage = 71; frame = 0;
+                        }
+                        break;
+                    case 71:
+                        if (frame == 25) {
+                            shot("shot-farm-road.png");
+                            world.debugShowLaiBuon();
+                            stage = 72; frame = 0;
+                        }
+                        break;
+                    case 72:
+                        if (frame == 15) {
+                            shot("shot-laibuon-menu.png");
+                            world.debugLaiBuonGuide();
+                            stage = 73; frame = 0;
+                        }
+                        break;
+                    case 73:
+                        if (frame == 15) {
+                            shot("shot-laibuon-guide.png");
                             System.out.println("SCREENSHOT DONE");
                             Gdx.app.exit();
                         }
