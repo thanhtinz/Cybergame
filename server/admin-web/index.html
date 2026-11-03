@@ -178,6 +178,19 @@
         <button id="gcReset" class="btn">Làm mới form</button>
       </div>
       <div class="panel">
+        <h3>Gửi quà qua Hòm Thư</h3>
+        <p class="muted">Quà sẽ nằm trong Hòm Thư của người chơi — họ mở thư và bấm "Nhận thưởng" để lấy, giống quà giftcode.</p>
+        <div class="grid-form">
+          <label>Người nhận <input id="mgTo" type="text" placeholder="tên tài khoản, hoặc * = tất cả"></label>
+          <label>Tiêu đề thư <input id="mgTitle" type="text" placeholder="Quà từ Hệ Thống"></label>
+          <label>Xu <input id="mgXu" type="number" value="0"></label>
+          <label>Lượng <input id="mgLuong" type="number" value="0"></label>
+          <label>Vật phẩm <input id="mgItems" type="text" placeholder="id:số lượng:ngày hạn — VD 2169:1:0, 294:2:30"></label>
+        </div>
+        <label>Nội dung thư <textarea id="mgBody" rows="3" placeholder="Lời nhắn kèm trong thư"></textarea></label>
+        <button id="mgSend" class="btn primary">Gửi vào Hòm Thư</button>
+      </div>
+      <div class="panel">
         <table id="gcTable">
           <thead><tr>
             <th>ID</th><th>Mã</th><th>Quà (JSON)</th><th>Lượt dùng</th><th>Bắt đầu</th><th>Kết thúc</th><th>Thao tác</th>

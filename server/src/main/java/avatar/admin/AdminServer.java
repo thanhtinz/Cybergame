@@ -5,6 +5,7 @@ import avatar.item.PartManager;
 import avatar.lucky.DialLuckyManager;
 import avatar.model.Npc;
 import avatar.model.User;
+import avatar.service.MailService;
 import avatar.play.MapManager;
 import avatar.play.NpcManager;
 import avatar.server.ServerManager;
@@ -23,6 +24,8 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.Statement;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -230,6 +233,7 @@ public class AdminServer {
                 case "/api/giftcodes": giftcodes(ex); break;
                 case "/api/giftcodes/save": giftcodeSave(ex); break;
                 case "/api/giftcodes/delete": giftcodeDelete(ex); break;
+                case "/api/mail/send": mailSend(ex); break;
                 case "/api/flags": flags(ex); break;
                 case "/api/flags/set": flagSet(ex); break;
                 case "/api/announce": announce(ex); break;
@@ -852,6 +856,84 @@ public class AdminServer {
             ps.executeUpdate();
         }
         sendJson(ex, 200, ok());
+    }
+
+    /** Gửi quà vào Hòm Thư của một người chơi hoặc toàn server
+     *  (user chốt: quà admin gửi vào thư như quà giftcode). Body:
+     *  {to: tên tài khoản | "*", title, body, xu, luong,
+     *   items: [{id, day, quantity}]}. */
+    private static void mailSend(HttpExchange ex) throws Exception {
+        JSONObject body = readJson(ex);
+        String to = str(body, "to", "").trim();
+        String title = str(body, "title", "").trim();
+        if (title.isEmpty()) title = "Quà từ Hệ Thống";
+        String text = str(body, "body", "");
+        long xu = num(body, "xu", 0);
+        long luong = num(body, "luong", 0);
+        JSONArray atts = new JSONArray();
+        if (xu > 0) {
+            JSONObject a = new JSONObject();
+            a.put("t", "xu");
+            a.put("n", xu);
+            atts.add(a);
+        }
+        if (luong > 0) {
+            JSONObject a = new JSONObject();
+            a.put("t", "luong");
+            a.put("n", luong);
+            atts.add(a);
+        }
+        Object itemsObj = body.get("items");
+        if (itemsObj instanceof JSONArray) {
+            for (Object o : (JSONArray) itemsObj) {
+                if (!(o instanceof JSONObject)) continue;
+                JSONObject it = (JSONObject) o;
+                long pid = num(it, "id", 0);
+                long qty = num(it, "quantity", 1);
+                long day = num(it, "day", 0);
+                if (pid <= 0 || qty <= 0) continue;
+                JSONObject a = new JSONObject();
+                a.put("t", "item");
+                a.put("id", pid);
+                a.put("n", qty);
+                if (day > 0) a.put("d", day);
+                atts.add(a);
+            }
+        }
+        if (atts.isEmpty()) {
+            sendJson(ex, 400, err("Chưa có quà nào để gửi — cần ít nhất Xu, Lượng hoặc một vật phẩm."));
+            return;
+        }
+        List<Integer> targets = new ArrayList<>();
+        try (Connection c = DbManager.getInstance().getConnection()) {
+            if (to.equals("*")) {
+                try (Statement st = c.createStatement();
+                     ResultSet rs = st.executeQuery("SELECT id FROM users")) {
+                    while (rs.next()) targets.add(rs.getInt(1));
+                }
+            } else {
+                try (PreparedStatement ps = c.prepareStatement(
+                        "SELECT id FROM users WHERE username = ?")) {
+                    ps.setString(1, to);
+                    try (ResultSet rs = ps.executeQuery()) {
+                        while (rs.next()) targets.add(rs.getInt(1));
+                    }
+                }
+            }
+        }
+        if (targets.isEmpty()) {
+            sendJson(ex, 404, err("Không tìm thấy người chơi: " + to));
+            return;
+        }
+        int sent = 0;
+        for (int uid : targets) {
+            if (MailService.sendLetter(uid, "gift", title, "Hệ Thống", text, atts.toJSONString())) {
+                sent++;
+            }
+        }
+        JSONObject r = ok();
+        r.put("sent", sent);
+        sendJson(ex, 200, r);
     }
 
     // ======================== Cờ tính năng / sự kiện ========================

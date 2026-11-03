@@ -109,6 +109,30 @@ public class MailService extends Service {
         return out;
     }
 
+    /** Gửi một thư vào Hòm Thư của người chơi — dùng cho quà
+     *  giftcode, quà admin gửi và thư sự kiện. attachments theo đúng
+     *  format của grant(): [{"t":"xu","n":..},{"t":"luong","n":..},
+     *  {"t":"item","id":..,"n":..,"d":<số ngày hạn, bỏ qua = vĩnh viễn>}]. */
+    public static boolean sendLetter(int userId, String kind, String title,
+            String sender, String body, String attachmentsJson) {
+        try (Connection c = DbManager.getInstance().getConnection();
+             PreparedStatement ps = c.prepareStatement(
+                     "INSERT INTO letters (user_id, kind, title, sender, body, attachments)"
+                             + " VALUES (?, ?, ?, ?, ?, ?)")) {
+            ps.setInt(1, userId);
+            ps.setString(2, kind);
+            ps.setString(3, title);
+            ps.setString(4, sender);
+            ps.setString(5, body);
+            ps.setString(6, attachmentsJson);
+            ps.executeUpdate();
+            return true;
+        } catch (Exception e) {
+            System.out.println("[Mail] sendLetter loi: " + e.getMessage());
+            return false;
+        }
+    }
+
     /** Gói −108 (C→S không payload): trả toàn bộ danh sách thư. */
     public void sendList() {
         User me = this.session.user;
@@ -174,8 +198,10 @@ public class MailService extends Service {
                 me.updateLuong((int) n);
             } else if ("item".equals(t)) {
                 long pid = a.get("id") instanceof Number ? ((Number) a.get("id")).longValue() : 0;
+                long day = a.get("d") instanceof Number ? ((Number) a.get("d")).longValue() : 0;
                 if (pid > 0 && n > 0) {
-                    me.addItemToChests(new Item((int) pid, -1, (int) n));
+                    long exp = day > 0 ? System.currentTimeMillis() + day * 86400000L : -1;
+                    me.addItemToChests(new Item((int) pid, exp, (int) n));
                 }
             }
         }

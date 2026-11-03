@@ -650,10 +650,8 @@ public class ScreenshotMain {
                     case 54:
                         if (frame == 15) {
                             shot("shot-mail.png");
-                            game.playerName = "nguoimoi01";
-                            game.createChar.prepare();
-                            game.setScreen(game.createChar);
-                            stage = 55; frame = 0;
+                            world.debugOpenGiftForm();
+                            stage = 57; frame = 0;
                         }
                         break;
                     case 55:
@@ -668,6 +666,15 @@ public class ScreenshotMain {
                             shot("shot-createchar-nu.png");
                             System.out.println("SCREENSHOT DONE");
                             Gdx.app.exit();
+                        }
+                        break;
+                    case 57:
+                        if (frame == 15) {
+                            shot("shot-giftform.png");
+                            game.playerName = "nguoimoi01";
+                            game.createChar.prepare();
+                            game.setScreen(game.createChar);
+                            stage = 55; frame = 0;
                         }
                         break;
                 }

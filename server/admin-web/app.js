@@ -335,6 +335,28 @@ $("gcReset").addEventListener("click", () => {
   $("gcData").value = '{"xu": 0, "luong": 0, "items": [{"id": 0, "day": 0, "quantity": 1}]}';
   $("gcFormTitle").textContent = "Tạo giftcode mới";
 });
+$("mgSend").addEventListener("click", () => guard((async () => {
+  const items = [];
+  const raw = $("mgItems").value.trim();
+  if (raw) {
+    for (const part of raw.split(",")) {
+      const bits = part.split(":").map((x) => +x.trim());
+      if (bits[0] > 0) items.push({ id: bits[0], quantity: bits[1] || 1, day: bits[2] || 0 });
+    }
+  }
+  const body = {
+    to: $("mgTo").value.trim(),
+    title: $("mgTitle").value.trim(),
+    body: $("mgBody").value,
+    xu: +$("mgXu").value || 0,
+    luong: +$("mgLuong").value || 0,
+    items: items
+  };
+  if (!body.to) { toast("Cần người nhận (tên tài khoản hoặc *)"); return; }
+  if (body.to === "*" && !confirm("Gửi quà cho TẤT CẢ người chơi?")) return;
+  const r = await api("/api/mail/send", body);
+  toast("Đã gửi thư quà tới " + r.sent + " người chơi");
+})()));
 LOADERS.giftcodes = loadGiftcodes;
 
 // ===== Sự kiện & Thông báo =====

@@ -107,11 +107,25 @@ public class GiftCodeService {
     public boolean useGiftCode(int userId, String code) {
         GiftCode giftCode = giftCodes.get(code);
         if (giftCode == null) {
+            User u0 = UserManager.getInstance().find(userId);
+            if (u0 != null) {
+                u0.getAvatarService().serverDialog("Mã quà tặng không đúng.");
+            }
             return false; // Mã không tồn tại
         }
 
         long now = System.currentTimeMillis();
         if (giftCode.startTime.getTime() <= now && giftCode.endTime.getTime() >= now && giftCode.num > 0) {
+            // [THƯ QUÀ] Mỗi người chỉ dùng một mã một lần — bản gốc
+            // chỉ ghi log mà không chặn nên dùng lại được tới khi hết
+            // lượt toàn cục.
+            if (hasUsed(userId, giftCode.id)) {
+                User u0 = UserManager.getInstance().find(userId);
+                if (u0 != null) {
+                    u0.getAvatarService().serverDialog("Bạn đã dùng mã quà tặng này rồi.");
+                }
+                return false;
+            }
             // Giảm số lượng mã quà tặng trong bộ nhớ
             giftCode.num -= 1;
 
@@ -122,8 +136,12 @@ public class GiftCodeService {
                 // Ghi nhận việc sử dụng mã quà tặng
                 recordGiftCodeUsage(userId, giftCode.id);
 
-                // Phân phối quà tương ứng
-                distributeGift(userId, giftCode);
+                // [THƯ QUÀ — user chốt 2026-11-02] Quà giftcode gửi
+                // vào Hòm Thư để người chơi bấm Nhận trong thư; code
+                // cũ không có quà JSON thì giữ đường phát trực tiếp.
+                if (!deliverToMail(userId, giftCode)) {
+                    distributeGift(userId, giftCode);
+                }
 
             } catch (SQLException e) {
                 e.printStackTrace();
@@ -132,7 +150,86 @@ public class GiftCodeService {
 
             return true;
         }
+        User u1 = UserManager.getInstance().find(userId);
+        if (u1 != null) {
+            u1.getAvatarService().serverDialog("Mã quà tặng đã hết hạn hoặc hết lượt dùng.");
+        }
         return false; // Mã không hợp lệ hoặc hết số lượng
+    }
+
+    /** Người chơi đã dùng mã này chưa (bảng giftcode_use). */
+    private boolean hasUsed(int userId, int giftCodeId) {
+        String sql = "SELECT COUNT(*) FROM giftcode_use WHERE user = ? AND giftcode_id = ?";
+        try (Connection connection = DbManager.getInstance().getConnection();
+             PreparedStatement ps = connection.prepareStatement(sql)) {
+            ps.setInt(1, userId);
+            ps.setInt(2, giftCodeId);
+            ResultSet rs = ps.executeQuery();
+            return rs.next() && rs.getInt(1) > 0;
+        } catch (SQLException e) {
+            e.printStackTrace();
+            return false;
+        }
+    }
+
+    /** [THƯ QUÀ] Chuyển quà trong data JSON của giftcode
+     *  ({"xu","luong","items":[{"id","day","quantity"}]}) thành một
+     *  thư đính kèm trong Hòm Thư của người chơi. Trả false khi code
+     *  không có quà JSON hợp lệ để nơi gọi dùng đường phát cũ. */
+    private boolean deliverToMail(int userId, GiftCode giftCode) {
+        try {
+            Object parsed = JSONValue.parse(giftCode.data == null ? "" : giftCode.data);
+            if (!(parsed instanceof JSONObject)) return false;
+            JSONObject data = (JSONObject) parsed;
+            JSONArray atts = new JSONArray();
+            long xu = data.get("xu") instanceof Number ? ((Number) data.get("xu")).longValue() : 0;
+            long luong = data.get("luong") instanceof Number ? ((Number) data.get("luong")).longValue() : 0;
+            if (xu > 0) {
+                JSONObject a = new JSONObject();
+                a.put("t", "xu");
+                a.put("n", xu);
+                atts.add(a);
+            }
+            if (luong > 0) {
+                JSONObject a = new JSONObject();
+                a.put("t", "luong");
+                a.put("n", luong);
+                atts.add(a);
+            }
+            Object itemsObj = data.get("items");
+            if (itemsObj instanceof JSONArray) {
+                for (Object o : (JSONArray) itemsObj) {
+                    if (!(o instanceof JSONObject)) continue;
+                    JSONObject it = (JSONObject) o;
+                    long pid = it.get("id") instanceof Number ? ((Number) it.get("id")).longValue() : 0;
+                    long qty = it.get("quantity") instanceof Number ? ((Number) it.get("quantity")).longValue() : 1;
+                    long day = it.get("day") instanceof Number ? ((Number) it.get("day")).longValue() : 0;
+                    if (pid <= 0 || qty <= 0) continue;
+                    JSONObject a = new JSONObject();
+                    a.put("t", "item");
+                    a.put("id", pid);
+                    a.put("n", qty);
+                    if (day > 0) a.put("d", day);
+                    atts.add(a);
+                }
+            }
+            if (atts.isEmpty()) return false;
+            String body = giftCode.message != null && !giftCode.message.isEmpty()
+                    ? giftCode.message
+                    : "Bạn đã nhập thành công giftcode. Bấm Nhận thưởng để lấy quà!";
+            boolean ok = avatar.service.MailService.sendLetter(userId, "giftcode",
+                    "Quà giftcode " + giftCode.code, "Hệ Thống", body, atts.toJSONString());
+            User u = UserManager.getInstance().find(userId);
+            if (u != null) {
+                u.getAvatarService().serverDialog(ok
+                        ? "Nhập mã thành công! Quà đã được gửi vào Hòm Thư — mở mục Thư để nhận."
+                        : "Có lỗi khi gửi quà vào thư, vui lòng liên hệ admin.");
+            }
+            return ok;
+        } catch (Exception e) {
+            e.printStackTrace();
+            return false;
+        }
     }
 
 

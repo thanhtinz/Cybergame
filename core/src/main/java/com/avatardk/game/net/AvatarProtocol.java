@@ -327,6 +327,20 @@ public final class AvatarProtocol {
         conn.send(m);
     }
 
+    /** Hộp nhập văn bản của gốc (TEXT_BOX). */
+    public static final byte TEXT_BOX = -60;
+
+    /** Gửi nội dung hộp nhập văn bản (gói −60): {int userId, byte
+     *  menuId, UTF text}. menuId 20 = nhập giftcode. */
+    public static void sendTextBox(GameConnection conn, int userId, int menuId, String text) throws IOException {
+        Msg m = new Msg(TEXT_BOX);
+        DataOutputStream w = m.writer();
+        w.writeInt(userId);
+        w.writeByte(menuId);
+        w.writeUTF(text);
+        conn.send(m);
+    }
+
     /** Đổi mật khẩu (gói −62 của gốc): UTF mật khẩu cũ + UTF mật khẩu
      *  mới. Server đúng mật khẩu cũ thì cập nhật MD5 mới, trả lại gói −62
      *  {UTF mật khẩu mới} kèm dialog "Đổi mật khẩu thành công."; sai thì

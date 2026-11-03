@@ -209,7 +209,7 @@ public class WorldScreen extends ScreenAdapter {
     // burger; 3 hàng Tên / Chỉ đường / Âm thanh với nút bước ‹ › hai bên
     // như gốc, nút "Xong" đóng và lưu (gốc lưu RMS khi đóng).
     private boolean settingsOpen = false;
-    private static final float SET_PW = 560f, SET_PH = 392f;
+    private static final float SET_PW = 560f, SET_PH = 468f;
     private static final float SET_PX = (Ui.W - SET_PW) / 2f, SET_PY = (Ui.H - SET_PH) / 2f;
 
     private float setRowCenter(int i) { return SET_PY + SET_PH - 118 - i * 76; }
@@ -2145,6 +2145,16 @@ public class WorldScreen extends ScreenAdapter {
                     }
                     return true;
                 }
+                if (giftFormOpen) {
+                    if (c == '\b') {
+                        if (giftField.length() > 0) giftField.deleteCharAt(giftField.length() - 1);
+                    } else if (c == '\r' || c == '\n') {
+                        submitGiftForm();
+                    } else if (c >= 32 && giftField.length() < 32) {
+                        giftField.append(c);
+                    }
+                    return true;
+                }
                 if (!typing) return false;
                 if (c == '\b') {
                     if (typeBuffer.length() > 0) typeBuffer.deleteCharAt(typeBuffer.length() - 1);
@@ -2356,6 +2366,11 @@ public class WorldScreen extends ScreenAdapter {
         // form Đổi mật khẩu đang mở là lớp trên cùng (modal, nuốt mọi chạm)
         if (passFormOpen) {
             passFormTouch(x, y);
+            return;
+        }
+        // form giftcode đang mở là lớp trên cùng (modal, nuốt mọi chạm)
+        if (giftFormOpen) {
+            giftFormTouch(x, y);
             return;
         }
         // panel Cài đặt đang mở là lớp trên cùng (modal, nuốt mọi chạm)
@@ -3187,6 +3202,7 @@ public class WorldScreen extends ScreenAdapter {
         charPanel = false;
         settingsOpen = false;
         passFormOpen = false;
+        giftFormOpen = false;
         cityMapOpen = false;
         boardOpen = false;
         npcMenuOpen = false;
@@ -4204,53 +4220,15 @@ public class WorldScreen extends ScreenAdapter {
         }
     }
 
-    /** Mở panel Hòm Thư với dữ liệu mẫu giống ảnh user chốt (harness). */
+    /** Mở panel Hòm Thư cho harness — KHÔNG nạp thư mẫu nữa (user
+     *  lệnh 2026-11-02 xoá mấy thư mẫu): panel hiện dữ liệu thật,
+     *  rỗng thì hiện trạng thái "Chưa có thư nào". */
     public void debugOpenMailPanel() {
-        debugSeedMail();
         closeOtherPanels();
         msgOpen = false;
         friendOpen = false;
-        mailOpen = true;
-    }
-
-    public void debugSeedMail() {
-        mailLetters.clear();
-        long now = System.currentTimeMillis();
-        long day = 86400000L;
-        mailLetters.add(debugLetter(9001, "daily", "Quà đăng nhập hằng ngày", "Hệ Thống",
-            "Xin chào!\nĐây là phần quà đăng nhập hằng ngày của bạn.\nCảm ơn bạn đã đồng hành cùng game!",
-            "[{\"t\":\"luong\",\"n\":100},{\"t\":\"xu\",\"n\":50000},{\"t\":\"item\",\"id\":593,\"n\":5},{\"t\":\"item\",\"id\":683,\"n\":10}]",
-            false, false, now));
-        mailLetters.add(debugLetter(9002, "event", "Sự kiện cuối tuần", "Hệ Thống",
-            "Sự kiện cuối tuần đã bắt đầu!\nTham gia các hoạt động trong thị trấn để nhận thêm nhiều phần quà hấp dẫn.",
-            "", true, true, now - day));
-        mailLetters.add(debugLetter(9003, "friend", "Quà từ bạn bè", "Nguyễn An",
-            "Tặng bạn ít xu tiêu vặt nè, cuối tuần ra công viên chơi nhé!",
-            "[{\"t\":\"xu\",\"n\":5000}]", true, false, now - 2 * day));
-        mailLetters.add(debugLetter(9004, "system", "Bồi thường bảo trì", "Hệ Thống",
-            "Thị trấn vừa bảo trì xong. Gửi bạn phần bồi thường nhỏ, cảm ơn bạn đã kiên nhẫn chờ đợi!",
-            "[{\"t\":\"luong\",\"n\":20}]", true, false, now - 3 * day));
-        mailLetters.add(debugLetter(9005, "update", "Thông báo cập nhật v1.4.0", "Hệ Thống",
-            "Phiên bản 1.4.0 đã sẵn sàng với nhiều nội dung mới. Chúc bạn chơi game vui vẻ!",
-            "", true, true, now - 4 * day));
-        mailSelId = 9001;
         mailLoaded = true;
-        mailScroll = 0f;
-    }
-
-    private MailLetter debugLetter(int id, String kind, String title, String sender,
-            String body, String atts, boolean read, boolean claimed, long created) {
-        MailLetter l = new MailLetter();
-        l.id = id;
-        l.kind = kind;
-        l.title = title;
-        l.sender = sender;
-        l.body = body;
-        l.read = read;
-        l.claimed = claimed;
-        l.created = created;
-        parseMailAtts(atts, l.atts);
-        return l;
+        mailOpen = true;
     }
 
     // ----- Harness chụp kiểm chứng (chỉ ScreenshotMain dùng) -----
@@ -5761,6 +5739,7 @@ public class WorldScreen extends ScreenAdapter {
         if (mailOpen) drawMailPanel();
         if (friendOpen) drawFriendPanel();
         if (passFormOpen) drawPassFormPanel();
+        if (giftFormOpen) drawGiftFormPanel();
         batch.end();
     }
 
@@ -6172,8 +6151,8 @@ public class WorldScreen extends ScreenAdapter {
         batch.draw(Ui.roundedRect(36, 36, 18,
             Ui.BTN_CLOSE, GLASS_RIM), xCx - 18, xCy - 18);
         Ui.faIcon(batch, Ui.fa20, Ui.FA_XMARK, xCx, xCy, new Color(1f, 1f, 1f, 0.9f));
-        String[] labels = {"Tên", "Chỉ đường", "Âm thanh", "Đổi mật khẩu"};
-        for (int i = 0; i < 4; i++) {
+        String[] labels = {"Tên", "Chỉ đường", "Âm thanh", "Đổi mật khẩu", "Giftcode"};
+        for (int i = 0; i < 5; i++) {
             float cy = setRowCenter(i);
             if (i > 0) {
                 batch.draw(Ui.roundedRect((int) SET_PW - 48, 2, 1,
@@ -6185,11 +6164,11 @@ public class WorldScreen extends ScreenAdapter {
             if (i < 3) {
                 drawSetToggle(i, cy);
             } else {
-                // hàng Đổi mật khẩu: nút "Đổi" mở form riêng
+                // hàng Đổi mật khẩu / Giftcode: nút mở form riêng
                 float bw = 116, bh = 46, bx = SET_PX + SET_PW - 26 - bw, by = cy - bh / 2f;
                 batch.draw(Ui.roundedRect((int) bw, (int) bh, 12,
                     new Color(0.98f, 0.58f, 0.16f, 1f), new Color(0.98f, 0.58f, 0.16f, 1f)), bx, by);
-                Ui.centered(batch, Ui.font, "Đổi", bx + bw / 2f, by + 31, new Color(1f, 1f, 1f, 1f));
+                Ui.centered(batch, Ui.font, i == 3 ? "Đổi" : "Nhập", bx + bw / 2f, by + 31, new Color(1f, 1f, 1f, 1f));
             }
         }
     }
@@ -6252,12 +6231,14 @@ public class WorldScreen extends ScreenAdapter {
             closeSettings();
             return;
         }
-        for (int i = 0; i < 4; i++) {
+        for (int i = 0; i < 5; i++) {
             if (Math.abs(y - setRowCenter(i)) <= 36) {
                 if (i < 3) {
                     applySettingsToggle(i);
-                } else {
+                } else if (i == 3) {
                     openPassForm();
+                } else {
+                    openGiftForm();
                 }
                 return;
             }
@@ -6389,6 +6370,112 @@ public class WorldScreen extends ScreenAdapter {
         } catch (IOException e) {
             setPassStatus("Không gửi được (mất kết nối?).", 2);
         }
+    }
+
+    // ---------- Form NHẬP GIFTCODE (gốc: TEXT_BOX −60, menuId 20) ----------
+    // Mở từ hàng Giftcode trong panel Cài đặt. Server trả dialog kết
+    // quả qua gói −10; quà của mã đúng được gửi vào HÒM THƯ (user
+    // chốt 2026-11-02), người chơi mở Thư để nhận.
+    private boolean giftFormOpen = false;
+    private final StringBuilder giftField = new StringBuilder();
+    private String giftStatus = null;
+    private int giftStatusKind = 0; // 0 xám, 1 xanh, 2 đỏ
+    private static final float GF_PW = 560f, GF_PH = 320f;
+    private static final float GF_PX = (Ui.W - GF_PW) / 2f, GF_PY = (Ui.H - GF_PH) / 2f;
+
+    private void openGiftForm() {
+        giftField.setLength(0);
+        giftStatus = null;
+        giftFormOpen = true;
+    }
+
+    private void closeGiftForm() {
+        giftFormOpen = false;
+        Gdx.input.setOnscreenKeyboardVisible(false);
+    }
+
+    private void setGiftStatus(String s, int kind) {
+        giftStatus = s;
+        giftStatusKind = kind;
+    }
+
+    private void drawGiftFormPanel() {
+        batch.setColor(0f, 0f, 0f, 0.45f);
+        batch.draw(whiteTex, 0, 0, Ui.W, Ui.H);
+        batch.setColor(Color.WHITE);
+        batch.draw(Ui.roundedRect((int) GF_PW, (int) GF_PH, 16, GLASS_FILL_DARK, GLASS_RIM),
+            GF_PX, GF_PY);
+        Ui.font.setColor(1f, 0.85f, 0.38f, 1f);
+        Ui.font.draw(batch, "Nhập giftcode", GF_PX + 26, GF_PY + GF_PH - 30);
+        float xCx = GF_PX + GF_PW - 27, xCy = GF_PY + GF_PH - 27;
+        batch.draw(Ui.roundedRect(36, 36, 18, Ui.BTN_CLOSE, GLASS_RIM), xCx - 18, xCy - 18);
+        Ui.faIcon(batch, Ui.fa20, Ui.FA_XMARK, xCx, xCy, new Color(1f, 1f, 1f, 0.9f));
+        Ui.fontSmall.setColor(1f, 1f, 1f, 0.85f);
+        Ui.fontSmall.draw(batch, "Mã quà tặng", GF_PX + 26, GF_PY + GF_PH - 92);
+        float by = GF_PY + GF_PH - 168;
+        batch.draw(Ui.roundedRect((int) GF_PW - 52, 54, 12,
+            new Color(0.10f, 0.13f, 0.22f, 0.97f), new Color(1f, 0.62f, 0.25f, 1f)),
+            GF_PX + 26, by);
+        Ui.font.setColor(1f, 1f, 1f, 0.95f);
+        Ui.font.draw(batch, giftField.toString(), GF_PX + 42, by + 37);
+        if ((System.currentTimeMillis() / 500) % 2 == 0) {
+            layout.setText(Ui.font, giftField.toString());
+            batch.setColor(1f, 1f, 1f, 0.85f);
+            batch.draw(whiteTex, GF_PX + 44 + layout.width, by + 14, 3, 26);
+            batch.setColor(Color.WHITE);
+        }
+        Ui.fontSmall.setColor(1f, 1f, 1f, 0.55f);
+        Ui.fontSmall.draw(batch, "Quà sẽ được gửi vào Hòm Thư, mở Thư để nhận.",
+            GF_PX + 26, by - 26);
+        if (giftStatus != null) {
+            Color sc = giftStatusKind == 1 ? new Color(0.55f, 0.95f, 0.60f, 1f)
+                : giftStatusKind == 2 ? new Color(1f, 0.45f, 0.40f, 1f)
+                : new Color(1f, 1f, 1f, 0.65f);
+            Ui.centered(batch, Ui.fontSmall, giftStatus, GF_PX + GF_PW / 2f, GF_PY + 104, sc);
+        }
+        float bw = 240, bh = 56, bx = GF_PX + (GF_PW - bw) / 2f, sby = GF_PY + 26;
+        batch.draw(Ui.gradientRect((int) bw, (int) bh, 14, EntryUi.ORANGE_TOP, EntryUi.ORANGE_BOT), bx, sby);
+        Ui.centered(batch, Ui.font, "Nhận quà", GF_PX + GF_PW / 2f, sby + 37, new Color(1f, 1f, 1f, 1f));
+    }
+
+    private void giftFormTouch(float x, float y) {
+        float xCx = GF_PX + GF_PW - 27, xCy = GF_PY + GF_PH - 27;
+        if ((x - xCx) * (x - xCx) + (y - xCy) * (y - xCy) <= 24 * 24) {
+            closeGiftForm();
+            return;
+        }
+        float bw = 240, bh = 56, bx = GF_PX + (GF_PW - bw) / 2f, sby = GF_PY + 26;
+        if (x >= bx && x <= bx + bw && y >= sby && y <= sby + bh) {
+            submitGiftForm();
+            return;
+        }
+        float by = GF_PY + GF_PH - 168;
+        if (x >= GF_PX + 26 && x <= GF_PX + GF_PW - 26 && y >= by && y <= by + 54) {
+            Gdx.input.setOnscreenKeyboardVisible(true);
+            return;
+        }
+        if (x < GF_PX || x > GF_PX + GF_PW || y < GF_PY || y > GF_PY + GF_PH) {
+            closeGiftForm();
+        }
+    }
+
+    private void submitGiftForm() {
+        String code = giftField.toString().trim();
+        if (code.isEmpty()) { setGiftStatus("Chưa nhập mã giftcode.", 2); return; }
+        if (!online()) { setGiftStatus("Chưa kết nối máy chủ.", 2); return; }
+        try {
+            AvatarProtocol.sendTextBox(game.connection, ownId(), 20, code);
+            setGiftStatus("Đã gửi mã, chờ phản hồi…", 0);
+        } catch (IOException e) {
+            setGiftStatus("Không gửi được (mất kết nối?).", 2);
+        }
+    }
+
+    /** Mở form giftcode cho harness chụp kiểm chứng. */
+    public void debugOpenGiftForm() {
+        settingsOpen = true;
+        openGiftForm();
+        giftField.append("TANTHU2026");
     }
 
     /** Mở form Đổi mật khẩu cho harness chụp kiểm chứng (điền sẵn để thấy
@@ -7133,18 +7220,22 @@ public class WorldScreen extends ScreenAdapter {
 
     /** Dựng các danh sách theo mục từ danh sách id hàng (giữ nguyên thứ
      *  tự server đưa; món lạ/không tên thì bỏ qua). */
+    /** Món thuộc giới khác với nhân vật của mình: vẫn hiện trong shop
+     *  để phân biệt NAM/NỮ (user chốt lại 2026-11-02 sau khi bản lọc ẩn
+     *  làm kho trông quá ít món) nhưng làm mờ và không mua được —
+     *  server cũng chặn mua đồ sai giới. */
+    private boolean shopOtherGender(com.avatardk.game.data.PartData p) {
+        int my = game.player != null ? game.player.gender : 0;
+        return p.gender != 0 && my != 0 && p.gender != my;
+    }
+
     private java.util.List<java.util.List<com.avatardk.game.data.PartData>> buildShopLists(
             java.util.List<Integer> ids) {
         java.util.List<java.util.List<com.avatardk.game.data.PartData>> lists = new ArrayList<>();
         for (int i = 0; i < SHOP_TABS.length; i++) lists.add(new ArrayList<>());
-        int myGender = game.player != null ? game.player.gender : 0;
         for (int id : ids) {
             com.avatardk.game.data.PartData p = game.data.part(id);
             if (p != null && p.name != null && !p.name.isEmpty()) {
-                // phân biệt nam/nữ (user lệnh 2026-11-02): shop chỉ hiện
-                // đồ của giới mình + đồ chung (gender 0); đồ giới kia
-                // không hiện (server cũng chặn mua đồ sai giới).
-                if (p.gender != 0 && myGender != 0 && p.gender != myGender) continue;
                 lists.get(shopCategory(p)).add(p);
             }
         }
@@ -7281,9 +7372,10 @@ public class WorldScreen extends ScreenAdapter {
         if (sel != null) {
             float stX = px + 24, bW = 296, bH = 44;
             if (shopNewFlow) {
-                // luồng mới (mockup): MỘT nút Mua duy nhất -> mở hoá đơn
+                // MỘT nút Mua duy nhất -> mở hoá đơn (đồ giới khác thì
+                // nút đang xám, chạm không làm gì)
                 if (x >= stX && x <= stX + bW && y >= py + 34 && y <= py + 90) {
-                    openBill();
+                    if (!shopOtherGender(sel)) openBill();
                     return;
                 }
             } else {
@@ -7383,11 +7475,34 @@ public class WorldScreen extends ScreenAdapter {
                 ? new Color(1f, 1f, 1f, 0.75f) : new Color(1f, 0.72f, 0.45f, 1f));
             Ui.fontSmall.draw(batch, meta, stX + 4, shopNewFlow ? py + 148 : py + 126);
             if (shopNewFlow) {
-                // luồng mới (mockup): chỉ MỘT nút Mua — bấm vào mới mở
-                // hoá đơn chọn tiền + thời hạn (xem drawShopBill)
-                batch.draw(Ui.gradientRect((int) bW, 56, 12,
-                    EntryUi.ORANGE_TOP, EntryUi.ORANGE_BOT), stX, py + 34);
-                Ui.centered(batch, Ui.font, "Mua", stX + bW / 2f, py + 34 + 37, Color.WHITE);
+                // giá niêm yết hiện ngay ở cột chi tiết — khỏi phải bấm
+                // Mua mới thấy giá (user sửa 2026-11-02)
+                String gia = null;
+                if (sel.coin > 0 && sel.gold > 0) {
+                    gia = fmtMoney(sel.coin) + " Xu • " + fmtMoney(sel.gold) + " Lượng";
+                } else if (sel.coin > 0) {
+                    gia = fmtMoney(sel.coin) + " Xu";
+                } else if (sel.gold > 0) {
+                    gia = fmtMoney(sel.gold) + " Lượng";
+                }
+                if (gia != null) {
+                    Ui.fontSmall.setColor(1f, 1f, 1f, 0.88f);
+                    Ui.fontSmall.draw(batch, "Giá: ", stX + 4, py + 120);
+                    Ui.fontSmall.setColor(1f, 0.85f, 0.38f, 1f);
+                    Ui.fontSmall.draw(batch, gia, stX + 4 + Ui.textWidth(Ui.fontSmall, "Giá: "), py + 120);
+                }
+                if (shopOtherGender(sel)) {
+                    // đồ giới khác: nút Mua xám, không bấm mua được
+                    batch.draw(Ui.roundedRect((int) bW, 56, 12,
+                        new Color(0.35f, 0.38f, 0.44f, 0.55f), GLASS_RIM), stX, py + 34);
+                    Ui.centered(batch, Ui.font, "Mua", stX + bW / 2f, py + 34 + 37,
+                        new Color(1f, 1f, 1f, 0.55f));
+                } else {
+                    // một nút Mua — bấm vào mở hoá đơn (xem drawShopBill)
+                    batch.draw(Ui.gradientRect((int) bW, 56, 12,
+                        EntryUi.ORANGE_TOP, EntryUi.ORANGE_BOT), stX, py + 34);
+                    Ui.centered(batch, Ui.font, "Mua", stX + bW / 2f, py + 34 + 37, Color.WHITE);
+                }
             } else {
                 drawShopBuyButton(stX, py + 66, bW, bH, sel.gold, "Lượng", myLuong);
                 drawShopBuyButton(stX, py + 14, bW, bH, sel.coin, "Xu", myXu);
@@ -7429,9 +7544,31 @@ public class WorldScreen extends ScreenAdapter {
                     new Color(0.16f, 0.24f, 0.34f, 0.9f),
                     isSel ? new Color(1f, 0.78f, 0.30f, 1f) : GLASS_RIM), cx, cy);
                 drawPartIcon(it.id, cx + SHOP_CELL / 2f, cy + SHOP_CELL / 2f + 8, 56);
+                if (shopOtherGender(it)) {
+                    // đồ giới khác: phủ mờ cả ô cho khác hẳn đồ mặc được
+                    batch.draw(Ui.roundedRect(SHOP_CELL, SHOP_CELL, 12,
+                        new Color(0.04f, 0.06f, 0.10f, 0.52f), GLASS_RIM), cx, cy);
+                }
+                // giá: chữ TO (fontSmall) trên pill tối cho dễ đọc ở cỡ
+                // nhỏ (user: giá dưới sản phẩm khó thấy)
                 String price = it.coin > 0 ? fmtMoney(it.coin) + " xu" : fmtMoney(it.gold) + " lượng";
-                Ui.centered(batch, Ui.fontTiny, price, cx + SHOP_CELL / 2f, cy + 16,
-                    it.coin > 0 ? new Color(1f, 1f, 1f, 0.9f) : new Color(1f, 0.85f, 0.38f, 1f));
+                float priceW = Ui.textWidth(Ui.fontSmall, price) + 16;
+                batch.draw(Ui.roundedRect((int) priceW, 26, 9,
+                    new Color(0f, 0f, 0f, 0.5f), GLASS_RIM),
+                    cx + SHOP_CELL / 2f - priceW / 2f, cy + 5);
+                Ui.centered(batch, Ui.fontSmall, price, cx + SHOP_CELL / 2f, cy + 23,
+                    it.coin > 0 ? new Color(1f, 1f, 1f, 0.95f) : new Color(1f, 0.85f, 0.38f, 1f));
+                if (it.gender != 0) {
+                    // thẻ giới tính ở góc trái trên của ô
+                    String tag = it.gender == 1 ? "NAM" : "NỮ";
+                    float tagW = Ui.textWidth(Ui.fontTiny, tag) + 12;
+                    batch.draw(Ui.roundedRect((int) tagW, 20, 7,
+                        it.gender == 1 ? new Color(0.25f, 0.50f, 0.95f, 0.95f)
+                            : new Color(0.95f, 0.40f, 0.62f, 0.95f), GLASS_RIM),
+                        cx + 5, cy + SHOP_CELL - 25);
+                    Ui.centered(batch, Ui.fontTiny, tag, cx + 5 + tagW / 2f,
+                        cy + SHOP_CELL - 11, Color.WHITE);
+                }
             }
             batch.flush();
             com.badlogic.gdx.scenes.scene2d.utils.ScissorStack.popScissors();
