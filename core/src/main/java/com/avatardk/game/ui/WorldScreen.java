@@ -7137,9 +7137,14 @@ public class WorldScreen extends ScreenAdapter {
             java.util.List<Integer> ids) {
         java.util.List<java.util.List<com.avatardk.game.data.PartData>> lists = new ArrayList<>();
         for (int i = 0; i < SHOP_TABS.length; i++) lists.add(new ArrayList<>());
+        int myGender = game.player != null ? game.player.gender : 0;
         for (int id : ids) {
             com.avatardk.game.data.PartData p = game.data.part(id);
             if (p != null && p.name != null && !p.name.isEmpty()) {
+                // phân biệt nam/nữ (user lệnh 2026-11-02): shop chỉ hiện
+                // đồ của giới mình + đồ chung (gender 0); đồ giới kia
+                // không hiện (server cũng chặn mua đồ sai giới).
+                if (p.gender != 0 && myGender != 0 && p.gender != myGender) continue;
                 lists.get(shopCategory(p)).add(p);
             }
         }
