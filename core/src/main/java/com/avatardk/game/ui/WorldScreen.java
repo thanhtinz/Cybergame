@@ -366,6 +366,9 @@ public class WorldScreen extends ScreenAdapter {
     private float setStepRx() { return SET_PX + SET_PW - 58; }
     private int[] boardStatus = null;   // trạng thái từng khu từ gói 60
     private float boardLatch = 0f;      // chống mở panel liên tục khi va bảng
+    private float portalLatch = 0f;     // chống kích hoạt cổng ô liên tục khi va
+    private boolean exitConfirmOpen;    // hộp hỏi thoát về thành phố (ô type 9/12/17)
+    private boolean portalFarmShopPending; // cổng 52 ở farmway: vào farm xong mở cửa hàng
     private float lastMoveSentAt = 0f, netTime = 0f;
     private int lastSentX = Integer.MIN_VALUE, lastSentY = Integer.MIN_VALUE;
     private boolean lastSentLeft = false;
@@ -3789,6 +3792,140 @@ public class WorldScreen extends ScreenAdapter {
         return mapDef.types[cy * mapDef.gridW + cx];
     }
 
+    /** Va vào một ô không đứng được: nếu ô đó là CỔNG theo bảng doJoin của
+     *  gốc (LoadMap.doJoin, docs/tile-engine-spec.md §9) thì kích hoạt thay
+     *  vì chỉ chặn đường — đúng cách gốc gọi doJoin trước khi xét va chạm. */
+    private void tryPortal(float mx, float my) {
+        int type = cellTypeAt(mx, my);
+        if (type == -999) return;
+        if (type == 29) { // CHECK_POINT: danh sách khu/bàn (cơ chế có sẵn)
+            if (portalLatch <= 0f && boardLatch <= 0f && !boardOpen) openBoardRequest();
+            return;
+        }
+        if (portalLatch > 0f || busPhase > 0 || anyModalOpen()) return;
+        if (!isPortalActionable(type)) return;
+        portalLatch = 1.5f;
+        doJoinCell(type);
+    }
+
+    /** Các type ô đã nối hành động ở bản port (phần còn lại của bảng doJoin
+     *  — shop 57–64, casino 72–77/108, nhà 21/68–70/110, câu cá 54... —
+     *  thuộc các đợt riêng, tạm thời không làm gì). */
+    private boolean isPortalActionable(int type) {
+        switch (type) {
+            case -1: case 0: case 1: case 2: case 3: case 4: case 5: case 6:
+            case 7: case 8: case 9: case 10: case 11: case 12: case 13:
+            case 14: case 15: case 16: case 17: case 18: case 19: case 23:
+            case 24: case 25: case 28: case 52: case 84: case 85: case 97:
+                return true;
+            default: return false;
+        }
+    }
+
+    /** Hành động khi bước vào ô cổng (bảng doJoin của gốc). */
+    private void doJoinCell(int type) {
+        switch (type) {
+            // doJoinPark(type): byte JOIN của gốc chính là id map server —
+            // type 0..19 ↔ client map type+1 (phòng cưới 19→20, câu cá
+            // 13→14, nhà tù 18→19... khớp đúng dữ liệu map hai chiều)
+            case 0: case 1: case 2: case 3: case 4: case 5: case 6: case 7:
+            case 8: case 10: case 11: case 13: case 14: case 15: case 16:
+            case 18: case 19:
+                portalJoinMap(type + 1);
+                break;
+            case -1: // MAPMAIN: thoát về thành phố
+            case 23: // KHU_MUA_SAM: getHandler(9) về thành phố
+                portalJoinMap(1);
+                break;
+            case 9: case 12: case 17: // hỏi xác nhận rồi mới thoát
+                exitConfirmOpen = true;
+                break;
+            case 24: portalJoinMap(25); break; // ô cổng vào farm (ở farmway)
+            case 25: portalJoinMap(26); break; // ô cổng farm → farmway
+            case 28: // STORE: mở kho farm (ô nhà kho trên map farm)
+                if (farmIn && farm != null) farmStoreOpen = true;
+                break;
+            case 52: // CUAHANG: cửa hàng farm (ô ở farmway — vào farm rồi mở)
+                portalJoinMap(25);
+                if (!online()) {
+                    farmShopOpen = true;
+                    farmShopTab = 0;
+                } else {
+                    portalFarmShopPending = true;
+                }
+                break;
+            case 84: farmFeedArea(2); break; // máng heo (khu chuồng 2)
+            case 85: farmFeedArea(3); break; // máng chó (khu 3)
+            case 97: // STAR_FRUIT: cây khế — thu ngay như nút Tương tác
+                if (farmIn && farm != null) farmHarvestStar();
+                break;
+            default: break;
+        }
+    }
+
+    /** Chuyển map qua cổng: online gửi gói JOIN 50 như ParkService của gốc
+     *  (byte đầu là id map server), offline nạp map tại chỗ. */
+    private void portalJoinMap(int clientMapId) {
+        GameConnection conn = game.connection;
+        if (conn != null && game.player != null && !conn.isClosed()) {
+            try {
+                AvatarProtocol.joinPark(conn, clientMapId, (int) playerX, (int) playerY);
+            } catch (IOException ignored) {
+            }
+        } else {
+            loadMap(findMap(clientMapId));
+            spawnPlayer();
+        }
+    }
+
+    /** Cho ăn cả khu chuồng khi va vào ô máng (type 84/85 của gốc:
+     *  doCattleFeeding) — cho con đang đói đầu tiên có sẵn thức ăn. */
+    private void farmFeedArea(int area) {
+        if (farm == null) return;
+        for (int i = 0; i < farm.animals.size(); i++) {
+            FarmWorld.Animal a = farm.animals.get(i);
+            FarmWorld.AnimalDef d = farm.animalDefs.get(a.species);
+            if (d == null || d.area != area) continue;
+            if (a.hunger && farmFoodFor(area) > 0) {
+                farmAnimalFocus = i;
+                farmFeedAnimalFocus();
+                return;
+            }
+        }
+    }
+
+    /** Hộp hỏi thoát về thành phố (ô type 9/12/17): Đồng ý / Huỷ. */
+    private void drawExitConfirm() {
+        float pw = 480, ph = 176, px = (Ui.W - pw) / 2f, py = (Ui.H - ph) / 2f;
+        batch.setColor(0f, 0f, 0f, 0.45f);
+        batch.draw(whiteTex, 0, 0, Ui.W, Ui.H);
+        batch.setColor(Color.WHITE);
+        batch.draw(Ui.roundedRect((int) pw, (int) ph, 16,
+            new Color(0.08f, 0.13f, 0.20f, 0.98f), GLASS_RIM), px, py);
+        Ui.centered(batch, Ui.font, "Bạn muốn thoát về thành phố?",
+            px + pw / 2f, py + ph - 42, new Color(1f, 0.85f, 0.38f, 1f));
+        batch.draw(Ui.gradientRect(170, 48, 12, EntryUi.ORANGE_TOP, EntryUi.ORANGE_BOT),
+            px + 40, py + 26);
+        Ui.centered(batch, Ui.fontSmall, "Đồng ý", px + 40 + 85, py + 57, Color.WHITE);
+        batch.draw(Ui.roundedRect(170, 48, 12, Ui.BTN_CANCEL, GLASS_RIM),
+            px + pw - 40 - 170, py + 26);
+        Ui.centered(batch, Ui.fontSmall, "Huỷ", px + pw - 40 - 85, py + 57, Color.WHITE);
+    }
+
+    /** Chạm khi hộp hỏi thoát đang mở: trả true nếu đã nuốt chạm. */
+    private boolean exitConfirmTouch(float x, float y) {
+        if (!exitConfirmOpen) return false;
+        float pw = 480, ph = 176, cx0 = (Ui.W - pw) / 2f, cy0 = (Ui.H - ph) / 2f;
+        exitConfirmOpen = false;
+        if (x >= cx0 + 40 && x <= cx0 + 210 && y >= cy0 + 26 && y <= cy0 + 74) {
+            portalJoinMap(1);
+        }
+        return true;
+    }
+
+    /** Kích hoạt thẳng một ô cổng (harness kiểm chứng bảng doJoin). */
+    public void debugDoJoin(int type) { doJoinCell(type); }
+
     public void debugOpenBoard(int[] statuses, int area) {
         boardStatus = statuses;
         currentArea = area;
@@ -4187,6 +4324,8 @@ public class WorldScreen extends ScreenAdapter {
     }
 
     private void onTouch(float x, float y, int pointer) {
+        // hộp hỏi thoát về thành phố (ô cổng 9/12/17) là lớp trên cùng
+        if (exitConfirmTouch(x, y)) return;
         // form Đổi mật khẩu đang mở là lớp trên cùng (modal, nuốt mọi chạm)
         if (passFormOpen) {
             passFormTouch(x, y);
@@ -7225,6 +7364,14 @@ public class WorldScreen extends ScreenAdapter {
 
     private void update(float dt) {
         if (boardLatch > 0f) boardLatch -= dt;
+        if (portalLatch > 0f) portalLatch -= dt;
+        // cổng cửa hàng farm ở farmway (type 52): đã vào farm + có dữ liệu
+        // thì mở panel cửa hàng như gốc (FarmScr.doOpenCuaHang)
+        if (portalFarmShopPending && farmIn && farm != null && farm.joined) {
+            portalFarmShopPending = false;
+            farmShopOpen = true;
+            farmShopTab = 0;
+        }
         // hiệu ứng Đánh/Hôn: chạy 1,4 giây rồi tự dọn
         for (int i = actFx.size() - 1; i >= 0; i--) {
             ActFx fx = actFx.get(i);
@@ -7279,10 +7426,10 @@ public class WorldScreen extends ScreenAdapter {
             float nx = MathUtils.clamp(playerX + mx * SPEED * dt, 16,
                 worldW / AvatarDkGame.HD - 16);
             if (canStand(nx, playerY)) playerX = nx;
-            else if (cellTypeAt(nx, playerY) == 29 && boardLatch <= 0f && !boardOpen) openBoardRequest();
+            else tryPortal(nx, playerY);
             float ny = MathUtils.clamp(playerY + my * SPEED * dt, 30, 190);
             if (canStand(playerX, ny)) playerY = ny;
-            else if (cellTypeAt(playerX, ny) == 29 && boardLatch <= 0f && !boardOpen) openBoardRequest();
+            else tryPortal(playerX, ny);
             if (Math.abs(mx) > 0.05f) playerAnim.facingLeft = mx < 0;
             // di chuyển huỷ mọi tư thế hành động (đúng gốc)
             playerPose = 0;
@@ -7717,6 +7864,7 @@ public class WorldScreen extends ScreenAdapter {
         if (shopOpen) drawShop();
         if (npcMenuOpen) drawNpcMenu();
         if (guideOpen) drawGuidePanel();
+        if (exitConfirmOpen) drawExitConfirm();
         if (boardOpen) drawBoardPanel();
         if (cityMapOpen) drawCityMap();
         if (farmSeedOpen) drawFarmSeedPanel();
@@ -9356,7 +9504,7 @@ public class WorldScreen extends ScreenAdapter {
             || mailOpen || friendOpen || settingsOpen || musicOpen
             || farmSeedOpen || farmFertOpen || farmLandOpen || farmStoreOpen
             || farmShopOpen || farmCookOpen || farmAnimalSellOpen
-            || panelPlayer != null || confirmText != null;
+            || panelPlayer != null || confirmText != null || exitConfirmOpen;
     }
 
 

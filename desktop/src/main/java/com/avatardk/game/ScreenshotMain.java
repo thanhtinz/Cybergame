@@ -839,6 +839,31 @@ public class ScreenshotMain {
                     case 79:
                         if (frame == 15) {
                             shot("shot-tile-map28.png");
+                            // A3: kiểm chứng cổng ô (doJoin) — farmway -(24)-> farm
+                            world.debugSetMap(26);
+                            world.debugDoJoin(24);
+                            stage = 80; frame = 0;
+                        }
+                        break;
+                    case 80:
+                        if (frame == 15) {
+                            shot("shot-portal-farm.png");
+                            // farm -(25)-> farmway
+                            world.debugDoJoin(25);
+                            stage = 81; frame = 0;
+                        }
+                        break;
+                    case 81:
+                        if (frame == 15) {
+                            shot("shot-portal-farmway.png");
+                            // farmway -(-1)-> thành phố
+                            world.debugDoJoin(-1);
+                            stage = 82; frame = 0;
+                        }
+                        break;
+                    case 82:
+                        if (frame == 15) {
+                            shot("shot-portal-city.png");
                             System.out.println("SCREENSHOT DONE");
                             Gdx.app.exit();
                         }
