@@ -185,6 +185,8 @@ i:iconmenu/chat1.png:iconmenu/chat1-2f3ce61729ed1913ffb745dbf0e970ab.png:4527:im
 i:iconmenu/balo.png:iconmenu/balo-bf84fe748bfbcdc0111739c5a67d7862.png:27569:image/png:1
 i:iconmenu/gear.png:iconmenu/gear-f306f4b9a9933d96128f728804166a93.png:35870:image/png:1
 i:iconmenu/music.png:iconmenu/music-fa10366cd6a3f105debd67a6ec5d7000.png:17175:image/png:1
+i:iconmenu/gender-male.png:iconmenu/gender-male-0757df984ca3000b7613281708b6e353.png:7241:image/png:1
+i:iconmenu/gender-female.png:iconmenu/gender-female-ad37fd0e72b8fcd8b60f136b155cfb24.png:7074:image/png:1
 i:minimap.png:minimap-736d6788fe5f7d3be38307534440e0d0.png:616334:image/png:1
 i:banner.jpg:banner-73a584eae638d90d937492b732fa750d.jpg:304159:image/jpeg:1
 d:sprites:sprites:0:application/unknown:1
