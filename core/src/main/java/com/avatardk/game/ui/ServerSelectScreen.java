@@ -93,7 +93,7 @@ public class ServerSelectScreen extends ScreenAdapter {
 
     private void onPanelTouch(float x, float y) {
         boolean inside = x >= P_X && x <= P_X + P_W && y >= P_Y && y <= P_Y + P_H;
-        boolean closeBtn = Math.abs(x - (P_X + P_W - 40)) < 26 && Math.abs(y - (P_Y + P_H - 42)) < 26;
+        boolean closeBtn = Math.abs(x - (P_X + P_W - 36)) < 26 && Math.abs(y - (P_Y + P_H - 36)) < 26;
         if (!inside || closeBtn) {
             panelOpen = false;
             return;
@@ -176,8 +176,8 @@ public class ServerSelectScreen extends ScreenAdapter {
         float top = P_Y + P_H;
         Ui.fontBaloo36.setColor(EntryUi.GOLD);
         Ui.fontBaloo36.draw(batch, "CHỌN MÁY CHỦ", P_X + 28, top - 28);
-        batch.draw(Ui.roundedRect(36, 36, 18, Ui.BTN_CLOSE, null), P_X + P_W - 58, top - 60);
-        Ui.faIcon(batch, Ui.fa26, Ui.FA_XMARK, P_X + P_W - 40, top - 42, Color.WHITE);
+        batch.draw(Ui.roundedRect(36, 36, 10, Ui.BTN_CLOSE, null), P_X + P_W - 54, top - 54);
+        Ui.faIcon(batch, Ui.fa26, Ui.FA_XMARK, P_X + P_W - 36, top - 36, Color.WHITE);
         float lx = P_X + 24, rx = P_X + 272, rw = P_W - 272 - 24;
         Ui.fontSmall.setColor(SUB_TEXT);
         Ui.fontSmall.draw(batch, "CỤM MÁY CHỦ", lx + 4, top - 66);

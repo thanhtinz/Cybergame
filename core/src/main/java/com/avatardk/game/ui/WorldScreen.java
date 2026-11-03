@@ -6147,10 +6147,10 @@ public class WorldScreen extends ScreenAdapter {
             SET_PX, SET_PY);
         Ui.font.setColor(1f, 0.85f, 0.38f, 1f);
         Ui.font.draw(batch, "Cài đặt", SET_PX + 26, SET_PY + SET_PH - 30);
-        float xCx = SET_PX + SET_PW - 27, xCy = SET_PY + SET_PH - 27;
-        batch.draw(Ui.roundedRect(36, 36, 18,
-            Ui.BTN_CLOSE, GLASS_RIM), xCx - 18, xCy - 18);
-        Ui.faIcon(batch, Ui.fa20, Ui.FA_XMARK, xCx, xCy, new Color(1f, 1f, 1f, 0.9f));
+        batch.draw(Ui.roundedRect(36, 36, 10, Ui.BTN_CLOSE, GLASS_RIM),
+            SET_PX + SET_PW - 54, SET_PY + SET_PH - 54);
+        Ui.faIcon(batch, Ui.fa20, Ui.FA_XMARK, SET_PX + SET_PW - 36, SET_PY + SET_PH - 36,
+            new Color(1f, 1f, 1f, 0.9f));
         String[] labels = {"Tên", "Chỉ đường", "Âm thanh", "Đổi mật khẩu", "Giftcode"};
         for (int i = 0; i < 5; i++) {
             float cy = setRowCenter(i);
@@ -6226,8 +6226,8 @@ public class WorldScreen extends ScreenAdapter {
     }
 
     private void settingsTouch(float x, float y) {
-        float xCx = SET_PX + SET_PW - 27, xCy = SET_PY + SET_PH - 27;
-        if ((x - xCx) * (x - xCx) + (y - xCy) * (y - xCy) <= 24 * 24) {
+        if (x >= SET_PX + SET_PW - 54 && x <= SET_PX + SET_PW - 18
+                && y >= SET_PY + SET_PH - 54 && y <= SET_PY + SET_PH - 18) {
             closeSettings();
             return;
         }
@@ -6293,10 +6293,10 @@ public class WorldScreen extends ScreenAdapter {
             PF_PX, PF_PY);
         Ui.font.setColor(1f, 0.85f, 0.38f, 1f);
         Ui.font.draw(batch, "Đổi mật khẩu", PF_PX + 26, PF_PY + PF_PH - 30);
-        float xCx = PF_PX + PF_PW - 27, xCy = PF_PY + PF_PH - 27;
-        batch.draw(Ui.roundedRect(36, 36, 18,
-            Ui.BTN_CLOSE, GLASS_RIM), xCx - 18, xCy - 18);
-        Ui.faIcon(batch, Ui.fa20, Ui.FA_XMARK, xCx, xCy, new Color(1f, 1f, 1f, 0.9f));
+        batch.draw(Ui.roundedRect(36, 36, 10, Ui.BTN_CLOSE, GLASS_RIM),
+            PF_PX + PF_PW - 54, PF_PY + PF_PH - 54);
+        Ui.faIcon(batch, Ui.fa20, Ui.FA_XMARK, PF_PX + PF_PW - 36, PF_PY + PF_PH - 36,
+            new Color(1f, 1f, 1f, 0.9f));
         for (int i = 0; i < 3; i++) {
             float by = passBoxY(i);
             Ui.fontSmall.setColor(1f, 1f, 1f, 0.85f);
@@ -6330,8 +6330,8 @@ public class WorldScreen extends ScreenAdapter {
     }
 
     private void passFormTouch(float x, float y) {
-        float xCx = PF_PX + PF_PW - 27, xCy = PF_PY + PF_PH - 27;
-        if ((x - xCx) * (x - xCx) + (y - xCy) * (y - xCy) <= 24 * 24) {
+        if (x >= PF_PX + PF_PW - 54 && x <= PF_PX + PF_PW - 18
+                && y >= PF_PY + PF_PH - 54 && y <= PF_PY + PF_PH - 18) {
             closePassForm();
             return;
         }
@@ -6407,9 +6407,10 @@ public class WorldScreen extends ScreenAdapter {
             GF_PX, GF_PY);
         Ui.font.setColor(1f, 0.85f, 0.38f, 1f);
         Ui.font.draw(batch, "Nhập giftcode", GF_PX + 26, GF_PY + GF_PH - 30);
-        float xCx = GF_PX + GF_PW - 27, xCy = GF_PY + GF_PH - 27;
-        batch.draw(Ui.roundedRect(36, 36, 18, Ui.BTN_CLOSE, GLASS_RIM), xCx - 18, xCy - 18);
-        Ui.faIcon(batch, Ui.fa20, Ui.FA_XMARK, xCx, xCy, new Color(1f, 1f, 1f, 0.9f));
+        batch.draw(Ui.roundedRect(36, 36, 10, Ui.BTN_CLOSE, GLASS_RIM),
+            GF_PX + GF_PW - 54, GF_PY + GF_PH - 54);
+        Ui.faIcon(batch, Ui.fa20, Ui.FA_XMARK, GF_PX + GF_PW - 36, GF_PY + GF_PH - 36,
+            new Color(1f, 1f, 1f, 0.9f));
         Ui.fontSmall.setColor(1f, 1f, 1f, 0.85f);
         Ui.fontSmall.draw(batch, "Mã quà tặng", GF_PX + 26, GF_PY + GF_PH - 92);
         float by = GF_PY + GF_PH - 168;
@@ -6439,8 +6440,8 @@ public class WorldScreen extends ScreenAdapter {
     }
 
     private void giftFormTouch(float x, float y) {
-        float xCx = GF_PX + GF_PW - 27, xCy = GF_PY + GF_PH - 27;
-        if ((x - xCx) * (x - xCx) + (y - xCy) * (y - xCy) <= 24 * 24) {
+        if (x >= GF_PX + GF_PW - 54 && x <= GF_PX + GF_PW - 18
+                && y >= GF_PY + GF_PH - 54 && y <= GF_PY + GF_PH - 18) {
             closeGiftForm();
             return;
         }
@@ -7372,8 +7373,8 @@ public class WorldScreen extends ScreenAdapter {
         if (sel != null) {
             float stX = px + 24, bW = 296, bH = 44;
             if (shopNewFlow) {
-                // MỘT nút Mua duy nhất -> mở hoá đơn (đồ giới khác thì
-                // nút đang xám, chạm không làm gì)
+                // nút Xem duy nhất -> mở hoá đơn xem giá (đồ giới khác
+                // thì nút đang xám, chạm không làm gì)
                 if (x >= stX && x <= stX + bW && y >= py + 34 && y <= py + 90) {
                     if (!shopOtherGender(sel)) openBill();
                     return;
@@ -7423,16 +7424,9 @@ public class WorldScreen extends ScreenAdapter {
         batch.setColor(Color.WHITE);
         batch.draw(Ui.roundedRect((int) pw, (int) ph, 18,
             new Color(0.07f, 0.11f, 0.17f, 0.97f), GLASS_RIM), px, py);
-        // tiêu đề + chip tiền của mình + nút đóng trên viền
+        // tiêu đề + nút đóng (user lệnh: cửa hàng KHÔNG hiện tiền tệ)
         Ui.font.setColor(1f, 0.85f, 0.38f, 1f);
         Ui.font.draw(batch, shopTitle, px + 28, py + ph - 26);
-        String[] chips = {"Xu: " + fmtMoney(myXu), "Lượng: " + fmtMoney(myLuong)};
-        for (int i = 0; i < chips.length; i++) {
-            float cx = px + pw - 424 + i * 166;
-            batch.draw(Ui.roundedRect(150, 38, 12, new Color(0f, 0f, 0f, 0.30f), GLASS_RIM), cx, py + ph - 64);
-            Ui.centered(batch, Ui.fontSmall, chips[i], cx + 75, py + ph - 39,
-                i == 0 ? new Color(1f, 1f, 1f, 0.95f) : new Color(1f, 0.85f, 0.38f, 1f));
-        }
         batch.draw(Ui.roundedRect(36, 36, 10, Ui.BTN_CLOSE, GLASS_RIM), px + pw - 54, py + ph - 54);
         Ui.faIcon(batch, Ui.fa20, Ui.FA_XMARK, px + pw - 36, py + ph - 36,
             new Color(0.9f, 0.93f, 1f, 1f));
@@ -7475,33 +7469,18 @@ public class WorldScreen extends ScreenAdapter {
                 ? new Color(1f, 1f, 1f, 0.75f) : new Color(1f, 0.72f, 0.45f, 1f));
             Ui.fontSmall.draw(batch, meta, stX + 4, shopNewFlow ? py + 148 : py + 126);
             if (shopNewFlow) {
-                // giá niêm yết hiện ngay ở cột chi tiết — khỏi phải bấm
-                // Mua mới thấy giá (user sửa 2026-11-02)
-                String gia = null;
-                if (sel.coin > 0 && sel.gold > 0) {
-                    gia = fmtMoney(sel.coin) + " Xu • " + fmtMoney(sel.gold) + " Lượng";
-                } else if (sel.coin > 0) {
-                    gia = fmtMoney(sel.coin) + " Xu";
-                } else if (sel.gold > 0) {
-                    gia = fmtMoney(sel.gold) + " Lượng";
-                }
-                if (gia != null) {
-                    Ui.fontSmall.setColor(1f, 1f, 1f, 0.88f);
-                    Ui.fontSmall.draw(batch, "Giá: ", stX + 4, py + 120);
-                    Ui.fontSmall.setColor(1f, 0.85f, 0.38f, 1f);
-                    Ui.fontSmall.draw(batch, gia, stX + 4 + Ui.textWidth(Ui.fontSmall, "Giá: "), py + 120);
-                }
+                // nút XEM — bấm vào mở hoá đơn, trong hoá đơn mới thấy
+                // giá (user lệnh: giá chỉ hiện trong hoá đơn)
                 if (shopOtherGender(sel)) {
-                    // đồ giới khác: nút Mua xám, không bấm mua được
+                    // đồ giới khác: nút Xem xám, không bấm được
                     batch.draw(Ui.roundedRect((int) bW, 56, 12,
                         new Color(0.35f, 0.38f, 0.44f, 0.55f), GLASS_RIM), stX, py + 34);
-                    Ui.centered(batch, Ui.font, "Mua", stX + bW / 2f, py + 34 + 37,
+                    Ui.centered(batch, Ui.font, "Xem", stX + bW / 2f, py + 34 + 37,
                         new Color(1f, 1f, 1f, 0.55f));
                 } else {
-                    // một nút Mua — bấm vào mở hoá đơn (xem drawShopBill)
                     batch.draw(Ui.gradientRect((int) bW, 56, 12,
                         EntryUi.ORANGE_TOP, EntryUi.ORANGE_BOT), stX, py + 34);
-                    Ui.centered(batch, Ui.font, "Mua", stX + bW / 2f, py + 34 + 37, Color.WHITE);
+                    Ui.centered(batch, Ui.font, "Xem", stX + bW / 2f, py + 34 + 37, Color.WHITE);
                 }
             } else {
                 drawShopBuyButton(stX, py + 66, bW, bH, sel.gold, "Lượng", myLuong);
@@ -7543,31 +7522,22 @@ public class WorldScreen extends ScreenAdapter {
                 batch.draw(Ui.roundedRect(SHOP_CELL, SHOP_CELL, 12,
                     new Color(0.16f, 0.24f, 0.34f, 0.9f),
                     isSel ? new Color(1f, 0.78f, 0.30f, 1f) : GLASS_RIM), cx, cy);
-                drawPartIcon(it.id, cx + SHOP_CELL / 2f, cy + SHOP_CELL / 2f + 8, 56);
+                drawPartIcon(it.id, cx + SHOP_CELL / 2f, cy + SHOP_CELL / 2f + 2, 56);
                 if (shopOtherGender(it)) {
                     // đồ giới khác: phủ mờ cả ô cho khác hẳn đồ mặc được
                     batch.draw(Ui.roundedRect(SHOP_CELL, SHOP_CELL, 12,
                         new Color(0.04f, 0.06f, 0.10f, 0.52f), GLASS_RIM), cx, cy);
                 }
-                // giá: chữ TO (fontSmall) trên pill tối cho dễ đọc ở cỡ
-                // nhỏ (user: giá dưới sản phẩm khó thấy)
-                String price = it.coin > 0 ? fmtMoney(it.coin) + " xu" : fmtMoney(it.gold) + " lượng";
-                float priceW = Ui.textWidth(Ui.fontSmall, price) + 16;
-                batch.draw(Ui.roundedRect((int) priceW, 26, 9,
-                    new Color(0f, 0f, 0f, 0.5f), GLASS_RIM),
-                    cx + SHOP_CELL / 2f - priceW / 2f, cy + 5);
-                Ui.centered(batch, Ui.fontSmall, price, cx + SHOP_CELL / 2f, cy + 23,
-                    it.coin > 0 ? new Color(1f, 1f, 1f, 0.95f) : new Color(1f, 0.85f, 0.38f, 1f));
+                // KHÔNG hiện giá dưới sản phẩm (user lệnh) — bấm Xem ở
+                // cột chi tiết để vào hoá đơn xem giá.
                 if (it.gender != 0) {
-                    // thẻ giới tính ở góc trái trên của ô
-                    String tag = it.gender == 1 ? "NAM" : "NỮ";
-                    float tagW = Ui.textWidth(Ui.fontTiny, tag) + 12;
-                    batch.draw(Ui.roundedRect((int) tagW, 20, 7,
-                        it.gender == 1 ? new Color(0.25f, 0.50f, 0.95f, 0.95f)
-                            : new Color(0.95f, 0.40f, 0.62f, 0.95f), GLASS_RIM),
-                        cx + 5, cy + SHOP_CELL - 25);
-                    Ui.centered(batch, Ui.fontTiny, tag, cx + 5 + tagW / 2f,
-                        cy + SHOP_CELL - 11, Color.WHITE);
+                    // asset giới tính ở góc trái trên của ô (user lệnh:
+                    // đổi thẻ chữ NAM/NỮ thành asset)
+                    Texture gtex = game.texture(it.gender == 1
+                        ? "iconmenu/gender-male.png" : "iconmenu/gender-female.png");
+                    if (gtex != null) {
+                        batch.draw(gtex, cx + 5, cy + SHOP_CELL - 31, 26, 26);
+                    }
                 }
             }
             batch.flush();
