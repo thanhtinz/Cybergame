@@ -6782,12 +6782,12 @@ public class WorldScreen extends ScreenAdapter {
     }
 
     // ---------- Panel chọn KHU (ParkListSrc của gốc, vẽ theo tông kính) ----------
-    private static final float BOARD_PW = 560f, BOARD_PH = 308f;
+    private static final float BOARD_PW = 560f, BOARD_PH = 336f;
     private static final float BOARD_PX = (Ui.W - BOARD_PW) / 2f, BOARD_PY = (Ui.H - BOARD_PH) / 2f;
     private static final float BOARD_CELL_W = 100f, BOARD_CELL_H = 88f;
 
     private float boardCellX(int col) { return BOARD_PX + 14 + col * (BOARD_CELL_W + 8); }
-    private float boardCellY(int row) { return BOARD_PY + BOARD_PH - 56 - (row + 1) * BOARD_CELL_H - row * 8; }
+    private float boardCellY(int row) { return BOARD_PY + BOARD_PH - 84 - (row + 1) * BOARD_CELL_H - row * 8; }
 
     private void drawBoardPanel() {
         batch.setColor(0f, 0f, 0f, 0.45f);
