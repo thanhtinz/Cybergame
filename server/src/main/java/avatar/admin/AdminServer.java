@@ -94,6 +94,17 @@ public class AdminServer {
             } catch (Exception ignore) {
                 // cột đã tồn tại
             }
+            try {
+                // Cây khế của farm (gói 85 của bản port): số quả hiện có
+                st.execute("ALTER TABLE `farm_data` ADD COLUMN `star_num` INT NOT NULL DEFAULT 180");
+            } catch (Exception ignore) {
+                // cột đã tồn tại
+            }
+            try {
+                st.execute("ALTER TABLE `farm_data` ADD COLUMN `star_regrow` BIGINT NOT NULL DEFAULT 0");
+            } catch (Exception ignore) {
+                // cột đã tồn tại
+            }
             // Bảng bạn bè (hệ bạn bè của bản port): mỗi quan hệ lưu 2 chiều
             st.execute("CREATE TABLE IF NOT EXISTS `friends` ("
                     + "`user_id` INT NOT NULL, `friend_id` INT NOT NULL,"

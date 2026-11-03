@@ -126,6 +126,7 @@ public final class AvatarProtocol {
     public static final byte FARM_PRICE_ANIMAL = 72;
     public static final byte FARM_SELL_ANIMAL = 73;
     public static final byte FARM_HARVEST_ANIMAL = 74;
+    public static final byte FARM_HARVEST_STAR = 85;
     public static final byte FARM_COOK = 91;
     public static final byte FARM_HARVEST_COOK = 92;
     public static final byte FARM_CELL_UPDATE = 78;

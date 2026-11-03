@@ -472,6 +472,50 @@ public class FarmService extends Service {
         this.session.sendMessage(ms);
     }
 
+    /** Số quả khế hiện có (áp mốc ra quả lại nếu đã tới). */
+    public int currentStarNum() {
+        avatar.model.User u = this.session.user;
+        if (u.starNum < 0) return 180; // chưa nạp dữ liệu: đầy cây như gốc
+        if (u.starNum <= 0 && u.starRegrow > 0
+                && System.currentTimeMillis() / 1000L >= u.starRegrow) {
+            u.starNum = 180;
+            u.starRegrow = 0;
+        }
+        return u.starNum;
+    }
+
+    // ---- [PORT] Thu hoạch khế (gói 85) ----
+    // Client gốc đọc S->C 85: {short productID, short numberPro}. Server
+    // gốc và bản fan đều không có handler (chỉ có hằng số). Quy ước port:
+    // thu hết quả đang có -> sản phẩm 215 vào kho nông sản; cây ra quả lại
+    // (180 quả) sau 24 giờ (star_regrow), trạng thái lưu ở farm_data.
+    public void harvestStarFruit(Message ms) throws IOException {
+        avatar.model.User u = this.session.user;
+        int n = currentStarNum();
+        if (n > 0) {
+            avatar.Farm.NongSan exist = null;
+            for (avatar.Farm.NongSan p : u.NongSan) {
+                if (p.getId() == 215) {
+                    exist = p;
+                    break;
+                }
+            }
+            if (exist != null) {
+                exist.setSoluong(exist.getSoluong() + n);
+            } else {
+                u.NongSan.add(new avatar.Farm.NongSan(215, n));
+            }
+            u.starNum = 0;
+            u.starRegrow = System.currentTimeMillis() / 1000L + 24L * 3600L;
+        }
+        Message out = new Message(Cmd.HARVEST_STARFRUIT);
+        DataOutputStream ds = out.writer();
+        ds.writeShort(215);
+        ds.writeShort(Math.min(32000, n));
+        ds.flush();
+        this.session.sendMessage(out);
+    }
+
     // ---- [PORT] Nấu ăn (91 bắt đầu / 92 nhận món) ----
     // Bản fan để trống cả hai. Công thức từ FarmFoodData (sinh từ dat):
     // nguyên liệu trừ trong kho nông sản (thường + đặc biệt), món chín sau
@@ -1045,7 +1089,7 @@ public class FarmService extends Service {
         ds.writeShort(10);  //cấp độ cây khế
         ds.writeShort(43);//43//img cay khe
         ds.writeShort(46);//46//img qua khe
-        ds.writeShort(180);  // Số khế có thể thu hoạch
+        ds.writeShort(currentStarNum());  // Số khế có thể thu hoạch (trạng thái thật của user)
         ds.writeShort(0);//
         ds.writeShort(0);//0
         ds.writeShort(0);//0

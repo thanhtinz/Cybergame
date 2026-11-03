@@ -125,6 +125,11 @@ public class User {
     // cookFinish = giây epoch khi món chín. Lưu ở farm_data.food_id/cook_finish.
     public int foodId = 0;
     public long cookFinish = 0;
+    // [PORT] Cây khế (gói 85): starNum = số quả đang có trên cây (-1 = chưa
+    // nạp), starRegrow = giây epoch khi cây ra quả lại sau thu hoạch.
+    // Lưu ở farm_data.star_num/star_regrow.
+    public int starNum = -1;
+    public long starRegrow = 0;
     public List<HatGiong> hatgiong = new ArrayList<>();
     public List<NongSan> NongSan = new ArrayList<>();
     public List<PhanBon> PhanBon = new ArrayList<>();
@@ -689,8 +694,8 @@ public class User {
 
 
         // Cập nhật cơ sở dữ liệu với dữ liệu đã tạo
-        String query = "INSERT INTO `farm_data` (user_id, land_data, animal_data,hatgiong,phanbon,nongsan,nongsandacbiet,food_id,cook_finish) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) " +
-                "ON DUPLICATE KEY UPDATE land_data = ?, animal_data = ?, hatgiong = ?, phanbon = ?, nongsan = ?, nongsandacbiet = ?, food_id = ?, cook_finish = ?";
+        String query = "INSERT INTO `farm_data` (user_id, land_data, animal_data,hatgiong,phanbon,nongsan,nongsandacbiet,food_id,cook_finish,star_num,star_regrow) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) " +
+                "ON DUPLICATE KEY UPDATE land_data = ?, animal_data = ?, hatgiong = ?, phanbon = ?, nongsan = ?, nongsandacbiet = ?, food_id = ?, cook_finish = ?, star_num = ?, star_regrow = ?";
         try (Connection connection = DbManager.getInstance().getConnection();
              PreparedStatement ps = connection.prepareStatement(query)) {
 
@@ -712,21 +717,25 @@ public class User {
             ps.setString(7, nongsandacbietDataString);
             ps.setInt(8, this.session.user.foodId);
             ps.setLong(9, this.session.user.cookFinish);
-            ps.setString(10, landDataString);
-            ps.setString(11, animalDataString);
-            ps.setString(12, hatgiongDataString);
-            ps.setString(13, phanbonDataString);
-            ps.setString(14, nongsanDataString);
-            ps.setString(15, nongsandacbietDataString);
-            ps.setInt(16, this.session.user.foodId);
-            ps.setLong(17, this.session.user.cookFinish);
+            ps.setInt(10, this.session.user.starNum < 0 ? 180 : this.session.user.starNum);
+            ps.setLong(11, this.session.user.starRegrow);
+            ps.setString(12, landDataString);
+            ps.setString(13, animalDataString);
+            ps.setString(14, hatgiongDataString);
+            ps.setString(15, phanbonDataString);
+            ps.setString(16, nongsanDataString);
+            ps.setString(17, nongsandacbietDataString);
+            ps.setInt(18, this.session.user.foodId);
+            ps.setLong(19, this.session.user.cookFinish);
+            ps.setInt(20, this.session.user.starNum < 0 ? 180 : this.session.user.starNum);
+            ps.setLong(21, this.session.user.starRegrow);
             ps.executeUpdate();
         }
     }
 
     public void loadFarmData(int userId) throws SQLException {
 
-        String query = "SELECT land_data, animal_data,hatgiong,phanbon,nongsan,nongsandacbiet,food_id,cook_finish FROM `farm_data` WHERE user_id = ?";
+        String query = "SELECT land_data, animal_data,hatgiong,phanbon,nongsan,nongsandacbiet,food_id,cook_finish,star_num,star_regrow FROM `farm_data` WHERE user_id = ?";
 
         try (Connection connection = DbManager.getInstance().getConnection();
              PreparedStatement ps = connection.prepareStatement(query)) {
@@ -747,6 +756,20 @@ public class User {
                     } catch (SQLException ignored) {
                         this.session.user.foodId = 0;
                         this.session.user.cookFinish = 0;
+                    }
+                    // [PORT] Cây khế: số quả + mốc ra quả lại; thiếu cột thì
+                    // mặc định cây đầy quả như server gốc hardcode (180).
+                    try {
+                        this.session.user.starNum = res.getInt("star_num");
+                        this.session.user.starRegrow = res.getLong("star_regrow");
+                    } catch (SQLException ignored) {
+                        this.session.user.starNum = 180;
+                        this.session.user.starRegrow = 0;
+                    }
+                    if (this.session.user.starNum <= 0 && this.session.user.starRegrow > 0
+                            && System.currentTimeMillis() / 1000L >= this.session.user.starRegrow) {
+                        this.session.user.starNum = 180;
+                        this.session.user.starRegrow = 0;
                     }
 
                     // Phân tích dữ liệu ô đất (land_data)

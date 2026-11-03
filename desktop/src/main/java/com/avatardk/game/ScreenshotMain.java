@@ -670,7 +670,8 @@ public class ScreenshotMain {
                         }
                         break;
                     case 58:
-                        if (frame == 10) world.debugInteract();
+                        // ô chín + pill gợi ý "Thu hoạch ..." — KHÔNG bấm:
+                        // chứng minh nút tròn làm ngay, không còn bảng chọn
                         if (frame == 15) {
                             shot("shot-farm.png");
                             world.debugOpenFarmSeeds();
@@ -685,23 +686,26 @@ public class ScreenshotMain {
                         }
                         break;
                     case 60:
+                        // nửa trái nhà kho + nút Tương tác -> mở thẳng Kho
                         if (frame == 10) world.debugInteract();
                         if (frame == 15) {
-                            shot("shot-farm-shed.png");
-                            world.debugOpenFarmStore();
+                            shot("shot-farm-store.png");
+                            world.debugShowFarmShopFront();
                             stage = 61; frame = 0;
                         }
                         break;
                     case 61:
+                        // nửa phải nhà kho + nút Tương tác -> mở thẳng Cửa hàng
+                        if (frame == 10) world.debugInteract();
                         if (frame == 15) {
-                            shot("shot-farm-store.png");
-                            world.debugOpenFarmShop();
+                            shot("shot-farm-shop.png");
+                            world.debugOpenFarmShopAnimals();
                             stage = 62; frame = 0;
                         }
                         break;
                     case 62:
                         if (frame == 15) {
-                            shot("shot-farm-shop.png");
+                            shot("shot-farm-shop-animals.png");
                             world.debugShowFarmKitchen();
                             stage = 63; frame = 0;
                         }
@@ -715,23 +719,17 @@ public class ScreenshotMain {
                         }
                         break;
                     case 64:
+                        // đứng trên BỜ hồ (không xuống nước) + tương tác cá
                         if (frame == 10) world.debugInteract();
                         if (frame == 15) {
                             shot("shot-farm-animal.png");
-                            world.debugOpenFarmShopAnimals();
+                            world.debugShowFarmStar();
                             stage = 65; frame = 0;
                         }
                         break;
                     case 65:
                         if (frame == 15) {
-                            shot("shot-farm-shop-animals.png");
-                            world.debugShowFarmKitchen();
-                            stage = 66; frame = 0;
-                        }
-                        break;
-                    case 66:
-                        if (frame == 15) {
-                            shot("shot-farm-kitchen-hint.png");
+                            shot("shot-farm-star.png");
                             System.out.println("SCREENSHOT DONE");
                             Gdx.app.exit();
                         }

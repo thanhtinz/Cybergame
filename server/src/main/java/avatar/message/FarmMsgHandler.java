@@ -131,6 +131,11 @@ public class FarmMsgHandler extends MessageHandler {
                     this.service.harvestAnimal(mss);
                     break;
                 }
+                case Cmd.HARVEST_STARFRUIT: {
+                    // [PORT] Gốc không có handler; bản port thu khế thật (xem FarmService).
+                    this.service.harvestStarFruit(mss);
+                    break;
+                }
                 case Cmd.COOKING: {
                     // [PORT] Bản fan để trống; bản port nấu thật theo FarmFoodData.
                     this.service.doCooking(mss);
