@@ -944,6 +944,27 @@ public class ScreenshotMain {
                     case 93:
                         if (frame == 15) {
                             shot("shot-map344-22.png");
+                            world.debugSetMap(27);
+                            stage = 94; frame = 0;
+                        }
+                        break;
+                    case 94:
+                        if (frame == 15) {
+                            shot("shot-map344-27.png");
+                            world.debugSetMap(30);
+                            stage = 95; frame = 0;
+                        }
+                        break;
+                    case 95:
+                        if (frame == 15) {
+                            shot("shot-map344-30.png");
+                            world.debugSetMap(29);
+                            stage = 96; frame = 0;
+                        }
+                        break;
+                    case 96:
+                        if (frame == 15) {
+                            shot("shot-map344-29.png");
                             System.out.println("SCREENSHOT DONE");
                             Gdx.app.exit();
                         }
