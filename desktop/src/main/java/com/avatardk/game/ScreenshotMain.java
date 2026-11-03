@@ -888,6 +888,20 @@ public class ScreenshotMain {
                     case 85:
                         if (frame == 15) {
                             shot("shot-map344-24.png");
+                            world.debugSetMap(5);
+                            stage = 86; frame = 0;
+                        }
+                        break;
+                    case 86:
+                        if (frame == 15) {
+                            shot("shot-map344-5.png");
+                            world.debugSetMap(26);
+                            stage = 87; frame = 0;
+                        }
+                        break;
+                    case 87:
+                        if (frame == 15) {
+                            shot("shot-map344-26.png");
                             System.out.println("SCREENSHOT DONE");
                             Gdx.app.exit();
                         }
