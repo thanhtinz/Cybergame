@@ -117,13 +117,15 @@ public class WorldScreen extends ScreenAdapter {
     /** Màu tô phẳng cho map không nền (LoadMap.paintBackGround khi imgBG == null). */
     private static final Color NO_BG_FILL = new Color(0.02f, 0.02f, 0.03f, 1f);
     /** x0_imgTreeBg theo số nền (đơn vị hd): bg0=20, bg1=25, bg2=10, bg3=33 (×hd). */
-    private static final int[] X0_TREE_HD = {20, 25, 10, 33};
+    private static final int[] X0_TREE_HD = {20, 25, 10, 33, 0, 0, 0, 0, 0};
     /** x0_imgBG theo số nền (đơn vị hd): bg0=2, bg1=20, bg2=15, bg3=0 (×hd). */
-    private static final int[] X0_BG_HD = {2, 20, 15, 0};
+    private static final int[] X0_BG_HD = {2, 20, 15, 0, 0, 0, 0, 0, 0};
     private int bgStatus = 0;
     /** Ghi đè ngày/đêm cho ảnh kiểm chứng (debug); -1 = theo giờ thật. */
     private int bgStatusOverride = -1;
     private Texture bgSkyTex, bgLineTex;
+    /** Nền gộp một ảnh của bản chính 3.4.4 (BGMap) — khác null thì vẽ một lớp. */
+    private Texture bgFullTex;
     private final Texture[] cloudTex = new Texture[2];
     private static class Cloud { float x100, yW, speed; int anchor; }
     private final List<Cloud> clouds = new ArrayList<>();
@@ -2504,24 +2506,37 @@ public class WorldScreen extends ScreenAdapter {
         if (def.bg == null) {
             bgSkyTex = null;
             bgLineTex = null;
+            bgFullTex = null;
             cloudTex[0] = null;
             cloudTex[1] = null;
             clouds.clear();
             ensureWhiteTex();
             return;
         }
-        bgSkyTex = game.texture("bghd/may" + def.bgNum() + bgStatus + ".png");
-        bgLineTex = game.texture("bghd/" + def.bgNum() + bgStatus + ".png");
+        // Bản chính 3.4.4 gộp nền trời + silhouette thành MỘT ảnh BGMap<bg><status>:
+        // có file bgfull thì dùng chế độ một lớp, không có thì hai lớp bghd cũ.
+        String fullPath = "bgfull/" + def.bgNum() + bgStatus + ".png";
+        if (com.avatardk.game.GameFiles.data(fullPath).exists()) {
+            bgFullTex = game.texture(fullPath);
+            bgSkyTex = null;
+            bgLineTex = null;
+        } else {
+            bgFullTex = null;
+            bgSkyTex = game.texture("bghd/may" + def.bgNum() + bgStatus + ".png");
+            bgLineTex = game.texture("bghd/" + def.bgNum() + bgStatus + ".png");
+        }
         cloudTex[0] = game.texture("effect/cl0" + bgStatus + ".png");
         cloudTex[1] = game.texture("effect/cl1" + bgStatus + ".png");
         clouds.clear();
         java.util.Random rnd = new java.util.Random(1234 + def.id);
+        float lineH = bgFullTex != null ? bgFullTex.getHeight()
+            : bgLineTex != null ? bgLineTex.getHeight() : 200f;
         for (int i = 0; i < 8; i++) {
             Cloud c = new Cloud();
             c.anchor = i % 2;
             c.x100 = rnd.nextFloat() * (2200 + 800) * 100f;
             // dải mây của gốc nằm trên nóc ảnh silhouette một đoạn
-            c.yW = mapBottomPx + bgLineTex.getHeight() / 2f + 30 + rnd.nextFloat() * 170f;
+            c.yW = mapBottomPx + lineH / 2f + 30 + rnd.nextFloat() * 170f;
             c.speed = 900 + rnd.nextFloat() * 900; // đơn vị x100/giây (~9–18 px/giây)
             clouds.add(c);
         }
@@ -7829,13 +7844,31 @@ public class WorldScreen extends ScreenAdapter {
      *  4) ảnh silhouette lát liền, thị sai 30/50, đáy thấp hơn đường đáy map x0_imgBG.
      *  Đổi sang hệ dưới–lên của mình: đáy map ở y=0 ↔ y gốc (trên–xuống) = 384. */
     private void drawBackground(float camX, float camY) {
-        if (bgSkyTex == null || bgLineTex == null) return;
+        if (bgFullTex == null && (bgSkyTex == null || bgLineTex == null)) return;
         hudViewport.update(Gdx.graphics.getWidth(), Gdx.graphics.getHeight(), true);
         hudViewport.apply();
         batch.setProjectionMatrix(hudViewport.getCamera().combined);
         batch.begin();
         float visBottom = camY - Ui.H / 2f; // y thế giới ở đáy màn hình
         int bg = mapDef.bgNum();
+        if (bgFullTex != null) {
+            // nền gộp một ảnh (bản chính 3.4.4): ảnh rộng ~bằng bề ngang map
+            // nên neo cứng theo thế giới (thị sai 1.0) và lát theo chu kỳ ảnh —
+            // map hẹp hơn một chu kỳ thì không thấy mối nối; mây trôi giữ nguyên
+            float fullBottomY = mapBottomPx - X0_BG_HD[bg] * AvatarDkGame.HD - visBottom;
+            int stepF = bgFullTex.getWidth() - 2;
+            float startXF = -1f - camX % stepF;
+            for (float x = startXF; x < Ui.W; x += stepF) batch.draw(bgFullTex, x, fullBottomY);
+            for (Cloud c : clouds) {
+                Texture t = cloudTex[c.anchor];
+                float pf = (c.anchor == 0) ? 0.25f : (1f - 30f / 35f);
+                float sx = c.x100 / 100f - camX * pf;
+                if (sx < -t.getWidth() || sx > Ui.W) continue;
+                batch.draw(t, sx, c.yW - visBottom);
+            }
+            batch.end();
+            return;
+        }
         // lớp trời (may)
         float skyBottomY = mapBottomPx + X0_TREE_HD[bg] * AvatarDkGame.HD - visBottom;
         int step = bgSkyTex.getWidth() - 2;

@@ -902,6 +902,48 @@ public class ScreenshotMain {
                     case 87:
                         if (frame == 15) {
                             shot("shot-map344-26.png");
+                            world.debugSetMap(1);
+                            stage = 88; frame = 0;
+                        }
+                        break;
+                    case 88:
+                        if (frame == 15) {
+                            shot("shot-map344-1.png");
+                            world.debugSetMap(18);
+                            stage = 89; frame = 0;
+                        }
+                        break;
+                    case 89:
+                        if (frame == 15) {
+                            shot("shot-map344-18.png");
+                            world.debugSetMap(28);
+                            stage = 90; frame = 0;
+                        }
+                        break;
+                    case 90:
+                        if (frame == 15) {
+                            shot("shot-map344-28.png");
+                            world.debugSetMap(21);
+                            stage = 91; frame = 0;
+                        }
+                        break;
+                    case 91:
+                        if (frame == 15) {
+                            shot("shot-map344-21.png");
+                            world.debugSetMap(23);
+                            stage = 92; frame = 0;
+                        }
+                        break;
+                    case 92:
+                        if (frame == 15) {
+                            shot("shot-map344-23.png");
+                            world.debugSetMap(22);
+                            stage = 93; frame = 0;
+                        }
+                        break;
+                    case 93:
+                        if (frame == 15) {
+                            shot("shot-map344-22.png");
                             System.out.println("SCREENSHOT DONE");
                             Gdx.app.exit();
                         }
