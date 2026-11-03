@@ -185,6 +185,230 @@ def simulate(client_id, wmap, cells_unsigned):
             b["b37"] = 0  # case default: b37 = 0; b29 = 0
     return objs
 
+# ---------- Mảng TILE VẼ (sau setMap) — khóa "d" ----------
+#
+# Mô phỏng MỌI đột biến lên map[] trong vòng quét setMap (đường load()
+# thường: newType=true, idTileImg=-1, TYPEMAP lúc nạp = -1 như phần type).
+# Các helper gốc: setTypeMap(i,t,m) gán map[i]=m; setTypePark gán 43 ở
+# hàng 0, 6 ở hàng khác; setMapPaint(i) sao ô kề (cột 0 lấy ô PHẢI — còn
+# nguyên vì chưa quét tới; cột khác lấy ô TRÁI — đã là giá trị SAU đột
+# biến). Quét row-major, đột biến tại chỗ nên mảng Python dùng chung một
+# list là khớp: ô dưới (j+wMap) của case 128/141/143 chưa bị quét nên vẫn
+# là giá trị GỐC, đúng ghi chú trong yêu cầu.
+# Giả định bổ sung (ghi trong báo cáo docs/map-draw-extraction.md):
+# - SessionHelper.isConnected() == True khi load() chạy (game gốc nạp map
+#   sau đăng nhập) -> case 28 KHÔNG đổi map[j] (chỉ offline mới gán 4).
+# - Cattle.numPig > 0, Dog.numBer > 0 (như phần "o"/"t"): case 155 kết
+#   thúc ở setTypeMap(84, 112) -> tile vẽ 112.
+# - Map client 20 dùng vòng riêng của switch(index); map 108 bỏ qua
+#   (không thuộc danh sách tile, trả None).
+# - Nếu case 128/141/143 (hoặc setMapPaint ở ô cuối) đọc ngoài mảng, C#
+#   gốc văng ngoại lệ và TOÀN BỘ setMap dừng tại đó (try bao cả vòng lặp);
+#   ở đây mô phỏng đúng: dừng quét, các ô còn lại giữ nguyên, ghi cảnh báo.
+
+def simulate_draw(client_id, wmap, cells_unsigned):
+    """Trả list tile vẽ (sbyte: -1 hoặc 0..254) row-major, hoặc None cho
+    map 108. cells_unsigned: list byte 0..255 như trong khóa 'g'."""
+    srv = client_id - 1
+    m = [-1 if c == 255 else c for c in cells_unsigned]
+    n = len(m)
+    if client_id == 108:
+        return None
+    if client_id == 20:
+        # Vòng riêng map cưới (LoadMap.cs:2161): chỉ tile 65 đổi —
+        # ô 65 đầu tiên -> 1, ô thứ hai -> 16, từ ô thứ ba -> 1.
+        b42 = 0
+        for k in range(n):
+            if m[k] == 65:
+                m[k] = 1
+                if b42 == 1:
+                    m[k] = 16
+                b42 += 1
+        return m
+    b18 = 0  # case 191: tile xen kẽ 46/44 theo thứ tự gặp
+    for j in range(n):
+        v = m[j]  # tại thời điểm quét, m[j] vẫn là giá trị gốc (mọi đột
+        # biến chỉ ghi vào chính ô đang quét hoặc đọc ô kề không ghi)
+        if v == 127:
+            m[j] = 96  # setTypeMap(108, 96)
+        elif v == 128:
+            if srv != 25:
+                if j + wmap >= n:
+                    warnings.append(f"map {client_id}: case 128 tại j={j} đọc ngoài mảng (gốc dừng setMap)")
+                    break
+                m[j] = m[j + wmap]  # setTypeMap(55, 20) rồi ghi đè ô dưới
+        elif v in (129, 160):
+            m[j] = 96  # setTypeMap(57/62, 96)
+        elif 130 <= v <= 138 or v == 153:
+            m[j] = 43 if j // wmap == 0 else 6  # setTypePark
+        elif v == 139:
+            # setMapPaint: cột 0 sao ô phải (chưa quét), còn lại sao ô
+            # trái (đã quét xong = giá trị vẽ cuối của ô đó)
+            if j % wmap == 0:
+                if j + 1 >= n:
+                    warnings.append(f"map {client_id}: setMapPaint tại j={j} đọc ngoài mảng (gốc dừng setMap)")
+                    break
+                m[j] = m[j + 1]
+            else:
+                m[j] = m[j - 1]
+        elif v == 140:
+            m[j] = 55  # setTypeMap(25, 55)
+        elif v == 141:
+            if j + wmap >= n:
+                warnings.append(f"map {client_id}: case 141 tại j={j} đọc ngoài mảng (gốc dừng setMap)")
+                break
+            m[j] = m[j + wmap]  # setTypeMap(24, 5) rồi ghi đè ô dưới
+        elif v == 142:
+            # setTypeMap(80, 4) trong C# gốc: tile vẽ ĐỔI THÀNH 4 (nền cỏ);
+            # ô đất trồng thật do FarmScr vẽ theo posTree. Xem báo cáo —
+            # điểm này khác câu chữ "giữ nguyên 142" trong yêu cầu.
+            m[j] = 4
+        elif v == 143:
+            if j + wmap >= n:
+                warnings.append(f"map {client_id}: case 143 tại j={j} đọc ngoài mảng (gốc dừng setMap)")
+                break
+            m[j] = m[j + wmap]  # setTypeMap(52, 51) rồi ghi đè ô dưới
+        elif v == 144:
+            m[j] = 5  # setTypeMap(53, 5)
+        elif v == 145:
+            # setTypeMap(..., -1) ở cả 3 nhánh (TYPEMAP=-1); riêng
+            # index-1 == 100 (client 101) bị ghi đè 47 sau cùng
+            m[j] = 47 if srv == 100 else -1
+        elif v in (147, 161):
+            m[j] = 96  # setTypeMap(58/63, 96)
+        elif v in (148, 162):
+            m[j] = 96  # map[j]=0 trước, rồi setTypeMap(64, 96)
+        elif v == 149:
+            m[j] = 4  # setTypeMap(28, 4)
+        elif v == 150:
+            m[j] = 4 if client_id == 26 else 0  # setTypeMap(93, ...)
+        elif v == 151:
+            m[j] = 0  # setTypeMap(78, 0)
+        elif v == 152:
+            m[j] = 55 if srv == 25 else 0  # setTypeMap(81, ...)
+        elif v == 155:
+            m[j] = 112  # setTypeMap(80, 55) rồi numPig>0: setTypeMap(84, 112)
+        elif v == 156:
+            m[j] = 5  # setTypeMap(80, 5); numBer>0 vẫn là 5
+        elif v == 157:
+            m[j] = 111  # setTypeMap(80, 111)
+        elif v == 158:
+            m[j] = 5  # setTypeMap(80, 5)
+        elif v == 159:
+            mm = 4
+            if client_id in (109, 110):
+                mm = 47
+            elif client_id == 14:
+                mm = 0
+            m[j] = mm  # setTypeMap(89, mm); client 26 -> 4 (mặc định)
+        elif v == 163:
+            m[j] = -1  # setTypeMap(12, -1)
+        elif v == 164:
+            m[j] = 6  # setTypeMap(13, 6)
+        elif v == 165:
+            m[j] = 0  # setTypeMap(14, 0)
+        elif v == 166:
+            m[j] = 0  # setTypeMap(15, 0)
+        elif v == 167:
+            m[j] = 43  # setTypeMap(16, 43)
+        elif v in (172, 173, 174):
+            m[j] = 96  # setTypeMap(88, 96)
+        elif v in (175, 176, 177):
+            m[j] = 96  # setTypeMap(68/69/70, 96)
+        elif v == 178:
+            m[j] = 96  # setTypeMap(109, 96)
+        elif v == 179:
+            m[j] = 96  # setTypeMap(18, 96)
+        elif v == 180:
+            m[j] = 0 if srv == 101 else 77  # setTypeMap(17, 77); client 102 -> 0
+        elif v == 181:
+            if srv not in (100, 101, 103, 104):
+                m[j] = 46  # setTypeMap(56, 46); các map offline giữ nguyên
+        elif v == 182:
+            m[j] = 39  # setTypeMap(80, 39)
+        elif v == 183:
+            m[j] = 13  # setTypeMap(88, 13)
+        elif v == 185:
+            m[j] = 43 if client_id == 18 else 47  # setTypeMap(71, ...)
+        elif v == 186:
+            m[j] = 17  # setTypeMap(94, 17)
+        elif v == 187:
+            m[j] = 4  # setTypeMap(95/80, 4)
+        elif v == 188:
+            m[j] = 4  # setTypeMap(96/80, 4)
+        elif v == 189:
+            m[j] = 4  # gán trực tiếp map[j] = 4
+        elif v == 190:
+            m[j] = 4  # gán trực tiếp map[j] = 4
+        elif v == 191:
+            if srv == 104:
+                m[j] = 0
+            else:
+                m[j] = 46 if b18 % 2 == 0 else 44
+            b18 += 1
+        elif v in (192, 193, 194, 195, 196, 197, 198, 199):
+            m[j] = 4  # type[j]=...; map[j]=4 trực tiếp
+        elif v == 200:
+            m[j] = 5
+        elif v == 201:
+            m[j] = 5
+        elif v == 202:
+            m[j] = 96  # setTypeMap(88, 96)
+        elif v == 203:
+            m[j] = 96  # setTypeMap(110, 96)
+        elif v == 204:
+            m[j] = 43  # gán trực tiếp map[j] = 43
+        elif v == 98:
+            if srv in (108, 109):  # map casino: map[j] = 56
+                m[j] = 56
+        # Các case còn lại không chạm map[j]: -1, 24, 25, 26, 27, 28 (đang
+        # kết nối), 63, 65, 68, 69, 97, 102, 110, 184 (chỉ gán type),
+        # và default.
+    return m
+
+
+# Các giá trị marker mà setMap CÓ THỂ đổi tile vẽ (dùng cho kiểm chứng b:
+# ô ngoài tập này phải giữ nguyên giá trị). 98 chỉ đổi ở map casino
+# (server 108/109 — không có trong danh sách map), 181 chỉ đổi ngoài các
+# map offline; cả hai vẫn liệt kê ở đây và kiểm chứng chặt hơn nằm ở (a).
+DRAW_MUTATING = {
+    98, 127, 128, 129, 130, 131, 132, 133, 134, 135, 136, 137, 138, 139,
+    140, 141, 142, 143, 144, 145, 147, 148, 149, 150, 151, 152, 153, 155,
+    156, 157, 158, 159, 160, 161, 162, 163, 164, 165, 166, 167, 172, 173,
+    174, 175, 176, 177, 178, 179, 180, 181, 182, 183, 185, 186, 187, 188,
+    189, 190, 191, 192, 193, 194, 195, 196, 197, 198, 199, 200, 201, 202,
+    203, 204,
+}
+
+MAP_DIR = ("/home/hatch/workspace/goals/game-s-ng-v-t-phong-c-ch-thu-n-vi-t"
+           "/hidden_files/pack5/archive_x/project-client-avt-main"
+           "/Assets/Resources/map")
+NEW_MAP_FILES = {67: "67.txt", 68: "68.txt", 106: "106.bytes"}
+NEW_MAP_HMAP = 8  # mặc định LoadMap; server 66/67/105 không có case riêng
+
+
+def build_new_entry(client_id):
+    """Sinh entry mapgrids cho map chưa có: đọc file Resources/map, Hmap=8,
+    wMap = size // Hmap (đúng công thức gốc available()/Hmap), chỉ lấy
+    wMap*Hmap byte đầu. Sinh đủ g/w/s/o/t/d bằng các hàm mô phỏng chung."""
+    with open(f"{MAP_DIR}/{NEW_MAP_FILES[client_id]}", "rb") as f:
+        raw = f.read()
+    wmap = len(raw) // NEW_MAP_HMAP
+    cells = list(raw[: wmap * NEW_MAP_HMAP])
+    entry = {"w": wmap, "g": base64.b64encode(bytes(cells)).decode()}
+    stops = []
+    for j, v in enumerate(cells):
+        if v == 139:
+            stops += [j % wmap, j // wmap]
+    if stops:
+        entry["s"] = stops
+    entry["o"] = simulate(client_id, wmap, cells)
+    types = simulate_types(client_id, wmap, cells)
+    entry["t"] = base64.b64encode(
+        struct.pack("<%db" % len(types), *types)).decode()
+    return entry
+
+
 # ---------- Mảng type (va chạm) ----------
 
 # Tập type ĐI ĐƯỢC trích từ LoadMap.doJoin (dòng 1288): mọi case của
@@ -394,11 +618,21 @@ def simulate_types(client_id, wmap, cells_unsigned):
 def main():
     with open(PATH, encoding="utf-8") as f:
         data = json.load(f)
+    # Bổ sung 3 map còn thiếu trong Pack5 (client 67, 68, 106) — entry
+    # sinh mới hoàn toàn bằng cùng các hàm mô phỏng.
+    for cid in sorted(NEW_MAP_FILES):
+        if str(cid) not in data:
+            data[str(cid)] = build_new_entry(cid)
+            print(f"Đã thêm map mới {cid} (w={data[str(cid)]['w']})")
+    # Giữ thứ tự khóa như file hiện tại: sắp xếp theo CHUỖI ("1","10","101"...)
+    data = {k: data[k] for k in sorted(data)}
     total = 0
     per_map = {}
     id_counter = Counter()
     per_types = {}
     blocked = {}
+    per_draw = {}
+    draw_changed = {}
     for key in sorted(data, key=int):
         g = data[key]
         cells = list(base64.b64decode(g["g"]))
@@ -412,6 +646,17 @@ def main():
         per_types[int(key)] = (types, g["w"])
         g["t"] = base64.b64encode(struct.pack("<%db" % len(types), *types)).decode()
         blocked[int(key)] = sum(1 for t in types if t not in WALKABLE)
+        draw = simulate_draw(int(key), g["w"], cells)
+        per_draw[int(key)] = (draw, cells, g["w"])
+        if draw is not None:  # map 108: không có khóa "d"
+            # Đóng gói byte thô (v & 0xFF): trùng khớp sbyte với mọi giá
+            # trị trong [-1,125]; riêng 3 ô 128 của map 26 (xem kiểm chứng
+            # a) giữ byte 128 như map[] short của gốc.
+            g["d"] = base64.b64encode(
+                bytes(v & 0xFF for v in draw)).decode()
+            orig = [-1 if c == 255 else c for c in cells]
+            draw_changed[int(key)] = sum(
+                1 for a, b in zip(orig, draw) if a != b)
     with open(PATH, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, separators=(",", ":"))
     print(f"Đã ghi 'o' + 't' cho {len(data)} map. Tổng vật thể: {total}")
@@ -450,6 +695,55 @@ def main():
     assert [835, 636, 140] in per_map[24], "SAI: map 24 phải có 835 neo (636,140)"
     assert sum(1 for o in per_map[24] if o[0] == 835) == 1, "SAI: map 24 phải có đúng 1 vật thể 835"
     print("\nKIỂM CHỨNG map 24: 835 neo (636,140) — ĐÚNG")
+
+    # ===== Kiểm chứng mảng TILE VẼ "d" =====
+    print("\n== THỐNG KÊ Ô ĐỔI TILE VẼ theo map ==")
+    print({k: draw_changed[k] for k in sorted(draw_changed)})
+    print(f"Tổng ô đổi tile: {sum(draw_changed.values())}")
+    for k in sorted(per_draw):
+        draw, cells, w = per_draw[k]
+        if draw is None:
+            assert k == 108 and "d" not in data[str(k)]
+            continue
+        orig = [-1 if c == 255 else c for c in cells]
+        # (a) mọi giá trị vẽ phải thuộc {-1} u [0,125] — sót case đột biến
+        # nào là còn marker > 125 lọt qua. Ngoại lệ DUY NHẤT đã đối chiếu
+        # C#: map 26 (server 25) có 3 ô 128 — case 128 trong gốc bị chính
+        # điều kiện `index - 1 != 25` vô hiệu trên map này nên tile giữ
+        # nguyên 128 (không phải sót case).
+        bad = sorted({v for v in draw if not (v == -1 or 0 <= v <= 125)})
+        if bad:
+            assert k == 26 and bad == [128] and draw.count(128) == 3, \
+                f"map {k}: giá trị vẽ ngoài [-1,125]: {bad}"
+            print("KIỂM CHỨNG d (a): ngoại lệ map 26 — 3 ô 128 giữ nguyên "
+                  "vì case 128 bị vô hiệu trên server map 25 (đúng C# gốc)")
+        # (b) ô không phải marker có thể đổi tile thì giữ nguyên giá trị
+        mut = {65} if k == 20 else DRAW_MUTATING
+        for j, (o0, d0) in enumerate(zip(orig, draw)):
+            if o0 not in mut:
+                assert d0 == o0, f"map {k} ô {j}: {o0} -> {d0} (không phải marker đổi tile)"
+    print("KIỂM CHỨNG d (a): mọi giá trị thuộc {-1} U [0,125] — ĐÚNG")
+    print("KIỂM CHỨNG d (b): ô không phải marker đổi tile giữ nguyên — ĐÚNG")
+    # (d) kiểm chứng tay
+    d24, c24, w24 = per_draw[24]
+    j147 = c24.index(147)
+    assert d24[j147] == 96, f"map24 ô 147 đầu tiên -> {d24[j147]}, phải là 96"
+    j139 = c24.index(139)
+    expect139 = d24[j139 - 1] if j139 % w24 != 0 else \
+        (-1 if c24[j139 + 1] == 255 else c24[j139 + 1])
+    assert d24[j139] == expect139, \
+        f"map24 ô 139 đầu tiên -> {d24[j139]}, setMapPaint kỳ vọng {expect139}"
+    print(f"KIỂM CHỨNG d (d): map24 ô 147 -> 96; ô 139 -> {expect139} "
+          f"(sao ô kề theo setMapPaint) — ĐÚNG")
+    d25, c25, w25 = per_draw[25]
+    j189 = c25.index(189)
+    assert d25[j189] == 4, f"map25 ô 189 -> {d25[j189]}, phải là 4"
+    j142 = [j for j, v in enumerate(c25) if v == 142]
+    assert all(d25[j] == 4 for j in j142), \
+        f"map25 các ô 142 -> {[d25[j] for j in j142]}, C# gốc cho 4"
+    print("KIỂM CHỨNG d (d): map25 ô 189 -> 4; các ô 142 -> 4 — ĐÚNG theo "
+          "C# gốc (setTypeMap(80, 4)); LƯU Ý: khác câu chữ 'giữ nguyên 142' "
+          "trong yêu cầu — xem docs/map-draw-extraction.md")
     for wmsg in warnings:
         print("CẢNH BÁO:", wmsg)
 

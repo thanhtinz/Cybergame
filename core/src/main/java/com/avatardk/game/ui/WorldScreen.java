@@ -86,13 +86,26 @@ public class WorldScreen extends ScreenAdapter {
         public int gridW, gridH;
         /** Type ô gốc (sbyte) sau LoadMap.setMap — lớp va chạm nền. */
         public byte[] types;
+        /** Tile vẽ (sbyte) sau setMap cho map đi đường tile (strips == 0):
+         *  -1 = không vẽ, 0..125 = frame atlas tile. Xem MapGrids.Grid.d. */
+        public byte[] drawTiles;
         /** Số nền dùng khi vẽ (map không nền thì tạm dùng 0 cho lớp trời). */
         public int bgNum() { return bg == null ? 0 : bg; }
         public String label() { return name == null || name.isEmpty() ? "Map " + id : name; }
+        /** Map dựng bằng engine tile của gốc (không có dải imagemap) —
+         *  điều kiện đúng như LoadMap.load: imgCreateMap == null. */
+        public boolean tileMode() { return strips == 0 && drawTiles != null && gridW > 0; }
     }
 
-    /** Toàn bộ map dựng được bằng dải imagemap (strips > 0), nạp từ maps.json. */
+    /** Toàn bộ map trong maps.json: map có dải imagemap (strips > 0) vẽ
+     *  bằng dải ảnh, map còn lại vẽ bằng engine tile (docs/tile-engine-spec.md). */
     private final List<MapDef> maps = new ArrayList<>();
+
+    // ---- Engine tile (port LoadMap.paintMap của gốc) ----
+    /** Atlas tile hiện hành của map đang đứng (day/night theo status,
+     *  map 20 dùng atlas cưới riêng) + các frame đã cắt sẵn. */
+    private Texture tileTex;
+    private com.badlogic.gdx.graphics.g2d.TextureRegion[] tileRegions;
 
     // ---- Nền (port từ LoadMap.loadBG + paintBackGround của gốc) ----
     // status: 0 = ngày (06–18h), 1 = đêm — gốc lấy theo giờ máy lúc vào map.
@@ -695,10 +708,11 @@ public class WorldScreen extends ScreenAdapter {
     public WorldScreen(AvatarDkGame game) {
         this.game = game;
         this.playerDoll = game.newDoll(AvatarDkGame.SON_PARTS);
-        // nạp danh sách map từ maps.json — chỉ giữ map dựng được bằng dải imagemap
+        // nạp danh sách map từ maps.json — giữ TẤT CẢ map: có dải thì vẽ
+        // bằng imagemap, không có dải thì vẽ bằng engine tile của gốc
         for (MapDef d : parseMapDefs(
                 com.avatardk.game.GameFiles.data("data/maps.json").readString("UTF-8"))) {
-            if (d.strips > 0) maps.add(d);
+            maps.add(d);
         }
         maps.sort((a, b) -> Integer.compare(a.id, b.id));
         // trạm xe buýt từ lưới ô gốc (ô 139) — docs/mapgrid-spec.md
@@ -718,6 +732,7 @@ public class WorldScreen extends ScreenAdapter {
                 for (int[] o : g.o) d.objects.add(o);
             }
             d.types = g.types();
+            d.drawTiles = g.drawTiles();
             // Va chạm vật thể: ô chứa chân (hàng đáy) của mỗi vật thể theo
             // bề ngang sprite — nhân vật không đi xuyên/lên vật thể được.
             d.gridW = g.w;
@@ -825,6 +840,7 @@ public class WorldScreen extends ScreenAdapter {
             acc += t.getWidth() - 2;
         }
         worldW = acc + 1f;
+        if (worldW <= 0) worldW = 1280f; // map chưa có dữ liệu (28/31/34/56/57): giữ khung an toàn
         if (def.daydien) {
             for (int i = 0; i < 4; i++) {
                 String path = "imagemap/" + def.id + "/daydien" + i + ".png";
@@ -833,6 +849,28 @@ public class WorldScreen extends ScreenAdapter {
             }
         }
         loadBackground(def);
+        // engine tile (gốc: loadMapImage + FrameImage): map không có dải
+        // imagemap thì bề ngang thế giới lấy theo lưới ô; atlas chọn theo
+        // status ngày/đêm vừa tính ở loadBackground, riêng map 20 (phòng
+        // cưới) dùng atlas hd/wedding của gốc. Frame 48px (24 * hd),
+        // nFrame = chiều cao atlas / 48, frame v ở cột v/nFrame, hàng v%nFrame.
+        tileTex = null;
+        tileRegions = null;
+        if (def.tileMode()) {
+            worldW = def.gridW * 24f * AvatarDkGame.HD;
+            tileTex = game.texture(def.id == 20 ? "tiles/wedding.png"
+                : bgStatus == 1 ? "tiles/night.png" : "tiles/day.png");
+            int frame = 24 * AvatarDkGame.HD;
+            int nFrame = tileTex.getHeight() / frame;
+            tileRegions = new com.badlogic.gdx.graphics.g2d.TextureRegion[256];
+            for (int v = 0; v < 256; v++) {
+                int col = v / nFrame, row = v % nFrame;
+                if ((col + 1) * frame > tileTex.getWidth()
+                    || (row + 1) * frame > tileTex.getHeight()) continue;
+                tileRegions[v] = new com.badlogic.gdx.graphics.g2d.TextureRegion(
+                    tileTex, col * frame, row * frame, frame, frame);
+            }
+        }
         buildNpcs();
         // giữ người chơi trong biên map mới
         playerX = MathUtils.clamp(playerX, 24, worldW / AvatarDkGame.HD - 24);
@@ -858,7 +896,8 @@ public class WorldScreen extends ScreenAdapter {
     private boolean centerVertically() {
         int typeMap = mapDef.id - 1;
         return typeMap == 57 || typeMap == 58 || typeMap == 59
-            || (mapDef.bg == null && typeMap < 26);
+            || (mapDef.bg == null && typeMap < 26)
+            || (mapDef.tileMode() && mapDef.bg == null);
     }
 
     /** Nạp lớp nền đúng LoadMap.loadBG: status theo giờ máy (18h–6h = đêm),
@@ -2525,6 +2564,9 @@ public class WorldScreen extends ScreenAdapter {
 
     /** Hủy sự kiện xe buýt (giữ nguyên vị trí spawn) — cho ảnh chụp/tour tĩnh. */
     public void debugBusSkip() { busPhase = 0; }
+
+    /** Đóng panel hướng dẫn + menu NPC (dọn cảnh sau stage lái buôn). */
+    public void debugCloseGuide() { guideOpen = false; npcMenuOpen = false; }
 
     /** Đặt xe đang vào trạm ở cự ly vừa khung hình (kiểm chứng hình). */
     public void debugBusArrive() {
@@ -7363,6 +7405,21 @@ public class WorldScreen extends ScreenAdapter {
         for (int i = 0; i < strips.size(); i++) {
             Texture t = strips.get(i);
             batch.draw(t, stripLefts.get(i), 0);
+        }
+        if (mapDef.tileMode() && tileRegions != null) {
+            // paintMap của gốc: mỗi ô vẽ frame drawTiles[idx] tại
+            // (cột*48, hàng*48) từ góc trên-trái map; ở thang GL (y lên)
+            // hàng r nằm tại y = đáy map - (r+1)*48. Ô -1 không vẽ.
+            int gw = mapDef.gridW;
+            int cell = 24 * AvatarDkGame.HD;
+            byte[] dTiles = mapDef.drawTiles;
+            for (int idx = 0; idx < dTiles.length; idx++) {
+                int v = dTiles[idx] & 0xFF;
+                if (v == 255) continue;
+                com.badlogic.gdx.graphics.g2d.TextureRegion r = tileRegions[v];
+                if (r == null) continue;
+                batch.draw(r, (idx % gw) * cell, mapBottomPx - (idx / gw + 1) * cell);
+            }
         }
         if (!daydien.isEmpty()) {
             float dx = 0f;

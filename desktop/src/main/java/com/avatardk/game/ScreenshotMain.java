@@ -794,6 +794,51 @@ public class ScreenshotMain {
                     case 73:
                         if (frame == 15) {
                             shot("shot-laibuon-guide.png");
+                            // engine tile: tham quan các map không có dải
+                            // imagemap (vẽ bằng atlas tile của gốc)
+                            world.debugCloseGuide();
+                            world.debugSetMap(13);
+                            stage = 74; frame = 0;
+                        }
+                        break;
+                    case 74:
+                        if (frame == 15) {
+                            shot("shot-tile-map13.png");
+                            world.debugSetMap(20);
+                            stage = 75; frame = 0;
+                        }
+                        break;
+                    case 75:
+                        if (frame == 15) {
+                            shot("shot-tile-map20.png");
+                            world.debugSetMap(21);
+                            stage = 76; frame = 0;
+                        }
+                        break;
+                    case 76:
+                        if (frame == 15) {
+                            shot("shot-tile-map21.png");
+                            world.debugSetMap(61);
+                            stage = 77; frame = 0;
+                        }
+                        break;
+                    case 77:
+                        if (frame == 15) {
+                            shot("shot-tile-map61.png");
+                            world.debugSetMap(67);
+                            stage = 78; frame = 0;
+                        }
+                        break;
+                    case 78:
+                        if (frame == 15) {
+                            shot("shot-tile-map67.png");
+                            world.debugSetMap(28);
+                            stage = 79; frame = 0;
+                        }
+                        break;
+                    case 79:
+                        if (frame == 15) {
+                            shot("shot-tile-map28.png");
                             System.out.println("SCREENSHOT DONE");
                             Gdx.app.exit();
                         }

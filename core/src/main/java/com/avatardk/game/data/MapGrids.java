@@ -31,12 +31,24 @@ public class MapGrids {
          *  của gốc (Base.detectCollision → LoadMap.isTrans) chỉ cho
          *  đứng lên type 80 và 51; mọi type khác đều chặn. */
         public String t;
+        /** Tile VẼ (sbyte) của từng ô SAU khi setMap đã đổi các ô marker
+         *  thành tile nền (docs/tile-engine-spec.md mục 6.2), base64 —
+         *  dùng cho các map đi đường tile (không có dải imagemap):
+         *  ô -1 = không vẽ, còn lại 0..125 là chỉ số frame trong atlas
+         *  tile (frame = v/18 cột, v%18 hàng). */
+        public String d;
         private byte[] cells;
         private byte[] types;
+        private byte[] drawTiles;
 
         public byte[] cells() {
             if (cells == null) cells = Base64Coder.decode(g);
             return cells;
+        }
+
+        public byte[] drawTiles() {
+            if (drawTiles == null && d != null) drawTiles = Base64Coder.decode(d);
+            return drawTiles;
         }
 
         public byte[] types() {
@@ -90,6 +102,7 @@ public class MapGrids {
             g.w = r.getInt("w", 0);
             g.g = r.getString("g", null);
             g.t = r.getString("t", null);
+            g.d = r.getString("d", null);
             JsonValue sv = r.get("s");
             if (sv != null && sv.isArray()) {
                 java.util.List<Integer> tmp = new java.util.ArrayList<>();
