@@ -872,6 +872,22 @@ public class ScreenshotMain {
                     case 83:
                         if (frame == 15) {
                             shot("shot-textbox.png");
+                            // map đã thay lưới theo bản chính 3.4.4
+                            world.debugCloseGuide();
+                            world.debugSetMap(16);
+                            stage = 84; frame = 0;
+                        }
+                        break;
+                    case 84:
+                        if (frame == 15) {
+                            shot("shot-map344-16.png");
+                            world.debugSetMap(24);
+                            stage = 85; frame = 0;
+                        }
+                        break;
+                    case 85:
+                        if (frame == 15) {
+                            shot("shot-map344-24.png");
                             System.out.println("SCREENSHOT DONE");
                             Gdx.app.exit();
                         }

@@ -2569,7 +2569,7 @@ public class WorldScreen extends ScreenAdapter {
     public void debugBusSkip() { busPhase = 0; }
 
     /** Đóng panel hướng dẫn + menu NPC (dọn cảnh sau stage lái buôn). */
-    public void debugCloseGuide() { guideOpen = false; npcMenuOpen = false; }
+    public void debugCloseGuide() { guideOpen = false; npcMenuOpen = false; tbOpen = false; }
 
     /** Đặt xe đang vào trạm ở cự ly vừa khung hình (kiểm chứng hình). */
     public void debugBusArrive() {
