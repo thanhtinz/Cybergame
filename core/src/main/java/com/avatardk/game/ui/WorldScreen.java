@@ -9312,7 +9312,7 @@ public class WorldScreen extends ScreenAdapter {
     /** Nội dung tab hướng dẫn của lái buôn — nguyên văn server gốc. */
     private static final String LAI_BUON_GUIDE =
         "Đăng nhập mỗi ngày để nhận quà.\n"
-        + "Dùng điểm chuyên cần để nhận đucợ những món quà có giá trị trong tương lai";
+        + "Dùng điểm chuyên cần để nhận được những món quà có giá trị trong tương lai";
 
     private void openLaiBuonLocalMenu() {
         npcMenuLocal = true;

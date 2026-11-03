@@ -61,10 +61,18 @@ Nguồn sự thật: `docs/maps-spec.md` (kiểm kê map/NPC từ Pack5), code g
   ([CL] LoadMap.cs:1298-1580): type 0–19 → doJoinPark(type), 24 → farm mình,
   25 → đường ra nông trại, 52 → cửa hàng farm, 57–70 → shop/nhà, 72–77 →
   casino, 100/101/103/104 → map offline, 71 → bản đồ thành phố...
-- Port hiện tại: CHƯA trích type ô (mapgrids chỉ có type đứng được/blocked +
-  vật thể). Cơ chế mép đường tự chế (farm ↔ 26 ↔ khu 1) chỉ là xấp xỉ cục bộ.
-- Việc: mở rộng giải mã lưới → xuất type từng ô vào mapgrids.json; cài doJoin
-  theo đúng bảng type của gốc; giữ mép đường làm dự phòng nơi lưới không có ô cổng.
+- **PHẦN CHÍNH ĐÃ XONG (2026-11-03, main aefca0ef6b1d)**: mapgrids đã có type
+  từng ô (khóa "t" từ đợt trích lưới); WorldScreen có `tryPortal` — di chuyển
+  bị ô chặn thì tra doJoin trước (đúng thứ tự gốc). ĐÃ NỐI: type 0–8/10/11/
+  13–16/18/19 → JOIN map type+1 (byte JOIN của gốc = id map server, khớp dữ
+  liệu hai chiều); −1/23 → thành phố; 9/12/17 → hộp hỏi thoát; 24/25 farm ↔
+  farmway; 52 → vào farm + mở cửa hàng farm; 28 → kho farm; 84/85 → cho ăn
+  theo khu máng; 97 → thu khế; 29 giữ cơ chế board có sẵn. Harness kiểm
+  chứng vòng 26 →(24) 25 →(25) 26 →(−1) 1 PASS. CHƯA NỐI (đợt riêng):
+  doJoinShop 57–64 (chưa rõ luồng server vào map shop 61–68), popup offline
+  27/56, ngân hàng 55, casino 72–77/108 + JOIN_ANY (20), nhà 21/68–70/110,
+  IceDream 78/93, map offline 100/101/103/104, đua 107, farm bạn 53. Cơ chế
+  mép đường giữ làm dự phòng nơi lưới không có ô cổng.
 
 ## B. PANEL / CHỨC NĂNG THEO NPC (bảng NPC đầy đủ ở maps-spec §3)
 
