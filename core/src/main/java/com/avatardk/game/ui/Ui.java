@@ -84,6 +84,8 @@ public final class Ui {
     public static final String FA_CHEVRON_RIGHT = "\uf054"; // nút › ở panel Cài đặt
     public static final String FA_ARROW_RIGHT = "\uf061"; // nút Di chuyển ở panel rương
     public static final String FA_ARROW_LEFT = "\uf060";
+    public static final String FA_ARROW_UP = "\uf062"; // đệm hướng câu cá (QTE)
+    public static final String FA_ARROW_DOWN = "\uf063"; // đệm hướng câu cá (QTE)
     public static final String FA_PLUS = "\uf067"; // cụm zoom bản đồ
     public static final String FA_MINUS = "\uf068";
     public static final String FA_LOCATION_DOT = "\uf3c5"; // ghim điểm đến trên bản đồ
@@ -108,6 +110,7 @@ public final class Ui {
         + FA_ICE_CREAM + FA_CAT + FA_DOG + FA_ROCKET
         + FA_COMMENT_DOTS + FA_USER_PLUS + FA_HAND_FIST + FA_HOUSE + FA_CIRCLE_INFO
         + FA_MARS + FA_VENUS + FA_BOX_ARCHIVE + FA_ARROW_RIGHT + FA_ARROW_LEFT
+        + FA_ARROW_UP + FA_ARROW_DOWN
         + FA_PLUS + FA_MINUS + FA_LOCATION_DOT + FA_LOCATION_CROSSHAIRS + FA_STORE
         + FA_GEAR + FA_CHEVRON_LEFT + FA_CHEVRON_RIGHT
         + FA_PAUSE + FA_FORWARD_STEP + FA_BACKWARD_STEP + FA_SHUFFLE + FA_REPEAT

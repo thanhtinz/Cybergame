@@ -57,4 +57,26 @@ public class Fish {
         }
         return idFish[0]; // Trường hợp dự phòng
     }
+
+    private static final int[] idFishPositive = {2130, 2131, 2132, 454, 455, 456, 457, 444, 449, 450, 451, 452};
+    private static final int[] weightsPositive = {80, 80, 80, 80, 80, 80, 1, 80, 80, 80, 80, 80};
+
+    /** [PORT] Chỉ lăn loài DƯƠNG với cùng trọng số của fan. Bản fan
+     *  trộn id âm (−444...) = "cá tuột" cài sẵn bất kể người chơi bấm
+     *  đúng hay sai (van tiết lưu bot farm); bản port để QTE quyết
+     *  định trúng/hụt như thiết kế client gốc. */
+    public static int getRandomFishPositiveID() {
+        int totalWeight = 0;
+        for (int weight : weightsPositive) {
+            totalWeight += weight;
+        }
+        int randomValue = new Random().nextInt(totalWeight);
+        for (int i = 0; i < weightsPositive.length; i++) {
+            randomValue -= weightsPositive[i];
+            if (randomValue < 0) {
+                return idFishPositive[i];
+            }
+        }
+        return idFishPositive[0];
+    }
 }

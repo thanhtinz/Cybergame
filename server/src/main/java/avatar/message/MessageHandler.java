@@ -288,6 +288,37 @@ public class MessageHandler implements IMessageHandler {
                         }
                         break;
                     }
+                    // [PORT câu cá] Client port chỉ dùng handler 8 nên
+                    // các gói câu cá (vốn thuộc ParkMsgHandler) được
+                    // đăng ký thêm ở đây, trỏ về cùng ParkService.
+                    case Cmd.START_CAU_CA: {
+                        if (this.client.user != null) {
+                            this.client.getParkService().handleStartFishing(mss);
+                            break;
+                        }
+                        break;
+                    }
+                    case Cmd.QUANG_CAU: {
+                        if (this.client.user != null) {
+                            this.client.getParkService().handleQuangCau(mss);
+                            break;
+                        }
+                        break;
+                    }
+                    case Cmd.CAU_THANH_CONG: {
+                        if (this.client.user != null) {
+                            this.client.getParkService().handleFinishFishing(mss);
+                            break;
+                        }
+                        break;
+                    }
+                    case Cmd.CAU_CA_XONG: {
+                        if (this.client.user != null) {
+                            this.client.getParkService().CauCaXong();
+                            break;
+                        }
+                        break;
+                    }
                     case Cmd.MAIL_LIST: {
                         if (this.client.user != null) {
                             new avatar.service.MailService(this.client).sendList();

@@ -1198,6 +1198,66 @@ public void NhanThuongEventXuBoss() throws IOException {
                 user.getAvatarService().serverDialog("ITEM lỗi mua item khác tạm đi bro");
                 return;
             }
+            // [PORT câu cá] Đồ câu của NPC Thợ câu (shop −49 qua
+            // openUIShop) KHÔNG theo luật hoá đơn quần áo: giá niêm
+            // yết thẳng của part, cần câu mua xong ĐEO luôn (như
+            // quần áo), mồi/vé vào rương. 446: 100 lượng, hạn gốc
+            // 30 ngày; 448: 30 xu/mồi; 460: 2 lượng, hạn gốc 2 ngày.
+            if (partID == 446 || partID == 448 || partID == 460) {
+                int fPrice;
+                boolean byLuong;
+                if (partID == 448) {
+                    byLuong = false;
+                    fPrice = part.getCoin();
+                } else {
+                    byLuong = true;
+                    fPrice = part.getGold();
+                }
+                if (fPrice <= 0 || (byLuong && type != 2) || (!byLuong && type != 1)) {
+                    return;
+                }
+                if (byLuong) {
+                    if (user.getLuong() < fPrice) {
+                        this.user.getService().serverMessage("Bạn không đủ lượng!");
+                        return;
+                    }
+                    user.updateLuong(-fPrice);
+                } else {
+                    if (user.getXu() < fPrice) {
+                        this.user.getService().serverMessage("Bạn không đủ xu!");
+                        return;
+                    }
+                    this.user.updateXu(-fPrice);
+                }
+                this.getAvatarService().updateMoney(0);
+                long fExpired = part.getExpiredDay() == 0 ? -1
+                        : System.currentTimeMillis() + (long) part.getExpiredDay() * 86400000L;
+                Item fItem = Item.builder().id(partID).expired(fExpired).quantity(1).build();
+                if (partID == 446) {
+                    Item fw = user.findItemWearingByZOrder(part.getZOrder());
+                    if (fw != null) {
+                        user.removeItemFromWearing(fw);
+                        user.addItemToChests(fw);
+                    }
+                    user.addItemToWearing(fItem);
+                    user.sortWearing();
+                    user.getMapService().usingPart(id, (short) fItem.getId());
+                } else {
+                    user.addItemToChests(fItem);
+                }
+                Message fms = new Message(-24);
+                DataOutputStream fds = fms.writer();
+                fds.writeShort(partID);
+                fds.writeInt(fPrice);
+                fds.writeByte(1);
+                fds.writeUTF("Bạn đã mua vật phẩm thành công.");
+                fds.writeInt(Math.toIntExact(user.getXu()));
+                fds.writeInt(user.getLuong());
+                fds.writeInt(user.getLuongKhoa());
+                fds.flush();
+                this.sendMessage(fms);
+                return;
+            }
             if (part != null) {
                 int priceXu = part.getCoin();
                 int priceLuong = part.getGold();

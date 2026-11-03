@@ -196,93 +196,213 @@ public class ParkService extends Service {
         }
     }
 
+    // ================= CÂU CÁ (port theo gốc, docs/minigame-spec.md §1) =====
+    // [PORT] Các sửa so với bản fan: vé cá mập 460 chỉ bắt buộc ở map
+    // server 16 (client 17); quăng câu/84/85 PHÁT CẢ KHU như client gốc
+    // mong đợi; cá cắn được hẹn bằng executor thay vì Thread.sleep trong
+    // handler; gói 84 được CHẤM THẬT theo chuỗi phím client gửi lên (fan
+    // không đọc payload); bỏ AutoFish (bot tự mua mồi/tự câu), bỏ bán
+    // tự động + quà sự kiện khi câu trúng — cá vào rương, người chơi tự
+    // bán ở NPC Thợ câu.
+
+    /** Bộ hẹn giờ cá cắn dùng chung (thread nền, không chặn handler). */
+    private static final java.util.concurrent.ScheduledExecutorService FISH_TIMER =
+            java.util.concurrent.Executors.newScheduledThreadPool(2, r -> {
+                Thread t = new Thread(r, "fish-timer");
+                t.setDaemon(true);
+                return t;
+            });
+
+    /** Pad kỳ vọng suy từ chỉ số ảnh mũi tên (đã XEM TỪNG ẢNH kiểm
+     *  chứng 2026-11-03): ảnh theo chỉ số = [→, ↑, ←, ←, ↓, ←, →, →,
+     *  ←, →] — ảnh 2 và 3 TRÙNG NHAU từng byte trong dữ liệu fan (đều
+     *  là mũi tên trái). HDPaint quy ước: phải=3, lên=2, trái=1,
+     *  xuống=4. */
+    private static final byte[] FISH_IMG_PAD = {3, 2, 1, 1, 4, 1, 3, 3, 1, 3};
+
+    /** Gửi gói cho mọi người trong khu hiện tại của user này. */
+    private void fishBroadcast(Message ms) {
+        try {
+            if (this.session.user.getZone() != null) {
+                this.session.user.getZone().getPlayers().forEach(u -> {
+                    try {
+                        u.session.sendMessage(ms);
+                    } catch (Exception ignored) {
+                    }
+                });
+            } else {
+                this.sendMessage(ms);
+            }
+        } catch (Exception ex) {
+            logger.error("fishBroadcast() ", ex);
+        }
+    }
+
     public void handleStartFishing(Message ms) {
         try {
-            if(!CheckItemAreaFish(460,"bạn phải vé câu cá mập")){
+            // Cần câu VIP phải đang ĐEO (đúng gốc: findItemInWearing).
+            if (this.session.user.findItemInWearing(446) == null) {
+                fishStartReply(false, "bạn phải có cần câu vip");
                 return;
             }
-            if(!CheckItemAreaFish(446,"bạn phải có cần câu vip")){
+            // [PORT] Vé cá mập chỉ bắt buộc ở khu cá mập (server map 16).
+            if (this.session.user.getZone() != null
+                    && this.session.user.getZone().getMap() != null
+                    && this.session.user.getZone().getMap().getId() == 16
+                    && this.session.user.findItemInChests(460) == null) {
+                fishStartReply(false, "bạn phải vé câu cá mập");
                 return;
             }
-
-            if(this.session.user.AutoFish){
-                ByteArrayOutputStream sendFish = new ByteArrayOutputStream();
-                try (DataOutputStream dos2 = new DataOutputStream(sendFish)) {
-
-                    dos2.flush();
-                    byte[] dataQuangCau = sendFish.toByteArray();
-                    ParkMsgHandler parkMsgHandler1 = new ParkMsgHandler(this.session);
-                    parkMsgHandler1.onMessage(new Message(Cmd.QUANG_CAU, dataQuangCau));
-                }
-            }
-
-
-
-//            if(!CheckItemAreaFish(448,"bạn phải có mồi câu cá")){
-//                return;
-//            }
-//            Item MoiCau = this.session.user.findItemInChests(448);
-//            if(MoiCau!=null){
-//                this.session.user.removeItemFromChests(MoiCau);
-//            }
-
-
+            fishStartReply(true, "");
         } catch (IOException ex) {
             logger.error("handleStartFishing() ", ex);
         }
     }
 
-    private boolean CheckItemAreaFish(int ItemID,String messenger) throws IOException {
+    private void fishStartReply(boolean ok, String err) throws IOException {
         Message response = new Message(Cmd.START_CAU_CA);
         DataOutputStream ds = response.writer();
-        boolean isSuccess = true;
-        Item item= null;
-        if(ItemID == 446){
-            item = this.session.user.findItemInWearing(ItemID);
-        }else {
-            item = this.session.user.findItemInChests(ItemID);
-        }
-        if(item==null){
-            isSuccess = false;
-            ds.writeBoolean(isSuccess);
-            ds.writeUTF(messenger);
-            ds.flush();
-            this.sendMessage(response);
-            return false;
-        }
-        ds.writeBoolean(isSuccess);
-        ds.writeUTF("");
+        ds.writeBoolean(ok);
+        ds.writeUTF(err);
         ds.flush();
         this.sendMessage(response);
-        return true;
     }
 
     public void handleQuangCau(Message ms) {
         try {
-
-            Item item = this.session.user.findItemInChests(448);
-            if(item==null){
-                if(this.session.user.AutoFish)
-                {
-                    Item moi = new Item(448,-1,1);
-                    this.session.user.addItemToChests(moi);
-                    this.session.user.updateXu(-30);
-                    this.session.user.getAvatarService().updateMoney(0);
-                }else {
-                    this.session.user.getAvatarService().serverDialog("Hết mồi rồi sếp");
-                    return;
-                }
+            User us = this.session.user;
+            Item bait = us.findItemInChests(448);
+            if (bait == null) {
+                us.getAvatarService().serverDialog("Hết mồi rồi sếp");
+                return;
             }
-            this.session.user.removeItemFromChests(item);
-            int userID = this.session.user.getId();
+            // Trừ ĐÚNG 1 mồi: removeItemFromChests(item) của fan xoá
+            // CẢ chồng — phải dùng removeItem(id, 1) giảm số lượng.
+            us.removeItem(448, 1);
+            // Hủy hẹn cắn của lần quăng trước (nếu còn) bằng số thế hệ.
+            final int castGen = us.nextFishCastGen();
+            us.setIdFish((short) -1);
+            us.setFishExpect(null);
+
             Message response = new Message(Cmd.QUANG_CAU);
             DataOutputStream ds = response.writer();
-            ds.writeInt(userID);
+            ds.writeInt(us.getId());
             ds.flush();
-            this.sendMessage(response);
+            fishBroadcast(response);
 
+            // Cá cắn sau 8–15 giây (gốc fan: 12–18s bằng sleep — giữ
+            // khoảng chờ tương đương nhưng không chặn luồng xử lý).
+            long delay = 8000 + new Random().nextInt(7000);
+            final Session sess = this.session;
+            FISH_TIMER.schedule(() -> {
+                try {
+                    if (sess.user == null || sess.user.getFishCastGen() != castGen) {
+                        return; // đã quăng lại / đã xong / đã thoát
+                    }
+                    new ParkService(sess).onCanCau();
+                } catch (Exception ignored) {
+                }
+            }, delay, java.util.concurrent.TimeUnit.MILLISECONDS);
         } catch (IOException ex) {
-            logger.error("handleStartFishing() ", ex);
+            logger.error("handleQuangCau() ", ex);
+        }
+    }
+
+    public void onCanCau() {
+        try {
+            User us = this.session.user;
+            short idFish = (short) a.getRandomFishPositiveID();
+            us.setIdFish(idFish);
+            Random random = new Random();
+            int n = random.nextInt((12 - 6) + 1) + 4;
+            byte[] expect = new byte[n];
+            Message ms = new Message(Cmd.CAN_CAU);
+            DataOutputStream ds = ms.writer();
+            ds.writeInt(us.getId());
+            ds.writeShort(idFish);
+            ds.writeShort(3000);
+            ds.writeByte((byte) n);
+            for (int i = 0; i < n; i++) {
+                int idx = random.nextInt(a.images.length);
+                expect[i] = FISH_IMG_PAD[idx];
+                byte[] img = a.images[idx];
+                ds.writeShort(img.length);
+                ds.write(img);
+            }
+            ds.flush();
+            us.setFishExpect(expect);
+            this.sendMessage(ms);
+        } catch (IOException ex) {
+            logger.error("onCanCau() ", ex);
+        }
+    }
+
+    /** C→S 84: {bool, byte n, n byte phím}. Chấm theo chuỗi đã sinh ở
+     *  onCanCau; trúng thì cá vào rương, sai/thiếu thì broadcast −1. */
+    public void handleFinishFishing(Message ms) {
+        try {
+            User us = this.session.user;
+            byte[] expect = us.getFishExpect();
+            if (expect == null) {
+                return; // chưa có cá cắn — bỏ qua gói lạc
+            }
+            boolean ok = true;
+            try {
+                ms.reader().readBoolean();
+                int n = ms.reader().readByte();
+                if (n != expect.length) {
+                    ok = false;
+                }
+                for (int i = 0; i < n; i++) {
+                    byte pad = ms.reader().readByte();
+                    if (i < expect.length && pad != expect[i]) {
+                        ok = false;
+                    }
+                }
+            } catch (Exception e) {
+                ok = false;
+            }
+            short result = ok ? us.getIdFish() : (short) -1;
+            us.setFishExpect(null);
+            us.nextFishCastGen(); // hủy mọi hẹn còn treo của lượt này
+
+            Message out = new Message(Cmd.CAU_THANH_CONG);
+            DataOutputStream ds = out.writer();
+            ds.writeInt(us.getId());
+            ds.writeShort(result);
+            ds.flush();
+            fishBroadcast(out);
+
+            if (result > 0) {
+                us.addItemToChests(new Item(result, -1, 1));
+                if (result == 457) {
+                    UserManager.users.forEach(u -> {
+                        try {
+                            u.getAvatarService().serverInfo("Chúc mừng bạn : "
+                                    + us.getUsername() + " đã câu được 1 Cá Mập");
+                        } catch (Exception ignored) {
+                        }
+                    });
+                    Utils.writeLogCaMap(us, "cau duoc 1 ca map");
+                }
+            }
+        } catch (IOException ex) {
+            logger.error("handleFinishFishing() ", ex);
+        }
+    }
+
+    public void CauCaXong() {
+        try {
+            User us = this.session.user;
+            us.setFishExpect(null);
+            us.nextFishCastGen();
+            Message ms = new Message(Cmd.CAU_CA_XONG);
+            DataOutputStream ds = ms.writer();
+            ds.writeInt(us.getId());
+            ds.flush();
+            fishBroadcast(ms);
+        } catch (IOException ex) {
+            logger.error("CauCaXong() ", ex);
         }
     }
 
@@ -292,130 +412,13 @@ public class ParkService extends Service {
             Message ms = new Message(Cmd.STATUS_FISH);
             DataOutputStream ds = ms.writer();
             ds.writeInt(userID);
-            ds.writeByte(1);//ca can cau
+            ds.writeByte(1);
             ds.flush();
             this.sendMessage(ms);
-
         } catch (IOException ex) {
-            logger.error("handleStartFishing() ", ex);
+            logger.error("onStatusFish() ", ex);
         }
     }
-
-    public void onCanCau() {
-        try {
-
-            //us = UserManager.getInstance().find(this.session.user.getId());
-            short idFish = (short) a.getRandomFishID();
-            this.session.user.setIdFish(idFish);
-            time = 3000;
-            if(this.session.user.AutoFish){
-                time = 20;
-            }
-            if(idFish<0)
-            {
-                time = -1;
-                this.session.user.setIdFish(idFish);
-            }
-            Random random = new Random();
-            Message ms = new Message(Cmd.CAN_CAU);
-            DataOutputStream ds = ms.writer();
-            ds.writeInt(this.session.user.getId());
-            ds.writeShort(this.session.user.getIdFish());
-            ds.writeShort(time);
-            int randomNumber = random.nextInt((12 - 6) + 1) + 4;
-            ds.writeByte((byte) randomNumber);
-            for (int i = 0; i < randomNumber; i++) {
-                int randomIndex = random.nextInt(a.images.length);
-                byte[] randomImage = a.images[randomIndex];
-                ds.writeShort(randomImage.length);
-                ds.write(randomImage);
-            }
-            ds.flush();
-            this.sendMessage(ms);
-
-        } catch (IOException ex) {
-            logger.error("handleStartFishing() ", ex);
-        }
-    }
-
-    public void CauThanhCong() {
-        try {
-
-            int userID = this.session.user.getId();
-            Message ms = new Message(Cmd.CAU_THANH_CONG);
-            DataOutputStream ds = ms.writer();
-            ds.writeInt(userID);
-            ds.writeShort(this.session.user.getIdFish());
-            int IDFISH = this.session.user.getIdFish();
-            if(IDFISH>0){
-                Item item = new Item(IDFISH,-1,1);
-                this.session.user.addItemToChests(item);
-                this.session.user.getAvatarService().sellFish(this.session.user,item.getId());
-                if(IDFISH == 457) {
-                    Item keoAcMa = new Item(6822,-1,1);
-                    if(this.session.user.findItemInChests(6822) !=null){
-                        int quantity = this.session.user.findItemInChests(6822).getQuantity();
-                        this.session.user.findItemInChests(6822).setQuantity(quantity+1);
-                    }else {
-                        this.session.user.addItemToChests(keoAcMa);
-                    }
-                    UserManager.users.forEach(user -> {
-                        user.getAvatarService().serverInfo("Chúc mừng bạn : " + this.session.user.getUsername()+" đã câu được 1 Cá Mập");
-                    });
-                    Utils.writeLogCaMap(this.session.user,"bú 1 cá mập");
-                }
-                addVatPhamSuKienFish(this.session.user);
-            }
-            ds.flush();
-            this.sendMessage(ms);
-
-            if(this.session.user.AutoFish)
-            {
-                CauCaXong();
-                ByteArrayOutputStream sendFish = new ByteArrayOutputStream();
-                try (DataOutputStream dos2 = new DataOutputStream(sendFish)) {
-
-                    dos2.flush();
-                    byte[] dataQuangCau = sendFish.toByteArray();
-                    ParkMsgHandler parkMsgHandler1 = new ParkMsgHandler(this.session);
-                    parkMsgHandler1.onMessage(new Message(Cmd.QUANG_CAU, dataQuangCau));
-                }
-            }
-        } catch (IOException ex) {
-            logger.error("handleStartFishing() ", ex);
-        }
-    }
-
-    private void addVatPhamSuKienFish(User us) throws IOException {
-
-        if(this.session.user.getCrazy() >=1000){
-            return;
-        }
-        int ok =  (Utils.nextInt(100) < 70) ? 1 : 0;
-        if(ok==1){
-
-            RandomCollection<Integer> chosenItemCollection = chooseItemCollection();
-            int idItems = chosenItemCollection.next();
-            Item Nro = new Item(idItems,-1,1);
-            if(us.findItemInChests(idItems) !=null){
-                int quantity = us.findItemInChests(idItems).getQuantity();
-                us.findItemInChests(idItems).setQuantity(quantity+1);
-            }else {
-                us.addItemToChests(Nro);
-                us.updateCrazy(+1);
-            }
-            us.getAvatarService().SendTabmsg("Bạn vừa nhận được 1 "+ " " + Nro.getPart().getName());
-
-        }
-    }
-
-    private RandomCollection<Integer> chooseItemCollection() {
-        RandomCollection<RandomCollection<Integer>> itemCollections = new RandomCollection<>();
-        itemCollections.add(100, randomItemList1);
-        return itemCollections.next();
-    }
-
-
 
     public void onInfoFish() {
         try {
@@ -428,26 +431,8 @@ public class ParkService extends Service {
             ds.writeShort(457);
             ds.flush();
             this.sendMessage(ms);
-
         } catch (IOException ex) {
-            logger.error("handleStartFishing() ", ex);
+            logger.error("onInfoFish() ", ex);
         }
     }
-
-
-    public void CauCaXong() {
-        try {
-            int userID = this.session.user.getId();
-            Message ms = new Message(Cmd.CAU_CA_XONG);
-            int IDFISH = this.session.user.getIdFish();
-            DataOutputStream ds = ms.writer();
-            ds.writeInt(userID);
-            ds.writeInt(IDFISH);
-            ds.flush();
-            this.sendMessage(ms);
-        } catch (IOException ex) {
-            logger.error("handleStartFishing() ", ex);
-        }
-    }
-
 }

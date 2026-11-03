@@ -1010,6 +1010,29 @@ public class ScreenshotMain {
                     case 102:
                         if (frame == 15) {
                             shot("shot-citymap-maze.png");
+                            world.debugFishSitCast();
+                            stage = 103; frame = 0;
+                        }
+                        break;
+                    case 103:
+                        if (frame == 15) {
+                            System.out.println("FISH CHECK " + world.debugFishReport());
+                            shot("shot-fish-cast.png");
+                            world.debugFishBite();
+                            stage = 104; frame = 0;
+                        }
+                        break;
+                    case 104:
+                        if (frame == 15) {
+                            System.out.println("FISH QTE CHECK " + world.debugFishReport());
+                            shot("shot-fish-qte.png");
+                            world.debugFishShop();
+                            stage = 105; frame = 0;
+                        }
+                        break;
+                    case 105:
+                        if (frame == 15) {
+                            shot("shot-fish-shop.png");
                             System.out.println("SCREENSHOT DONE");
                             Gdx.app.exit();
                         }

@@ -99,22 +99,19 @@ public class ParkMsgHandler extends MessageHandler {
                     this.client.getParkService().handleStartFishing(mss);
                     break;
                 case Cmd.QUANG_CAU: //82
+                    // [PORT] Bản fan Thread.sleep(12–18s) NGAY trong
+                    // handler rồi mới cho cá cắn — chặn cả luồng xử lý
+                    // gói. Bản port: handleQuangCau tự hẹn giờ cắn
+                    // bằng executor trong ParkService.
                     this.client.getParkService().handleQuangCau(mss);//82
-
-                    long startTime = System.currentTimeMillis();
-                    System.out.println("Waiting started at: " + startTime);
-                    Thread.sleep(Utils.nextInt(12000,18000));
-
-                    long endTime = System.currentTimeMillis();
-                    System.out.println("Waiting ended at: " + endTime);
-                    System.out.println("Elapsed time: " + (endTime - startTime) + " ms");
-                    this.client.getParkService().onCanCau(); // 91
                     break;
                 case Cmd.CAU_CA_XONG: //85
                     this.client.getParkService().CauCaXong();
                     break;
                 case Cmd.CAU_THANH_CONG: //84
-                    this.client.getParkService().CauThanhCong();//84
+                    // [PORT] Chấm thật theo chuỗi phím client gửi
+                    // (bản fan gọi CauThanhCong không đọc payload).
+                    this.client.getParkService().handleFinishFishing(mss);//84
                     break;
                 default:
                     System.out.println("ParkMsgHandler: " + mss.getCommand());

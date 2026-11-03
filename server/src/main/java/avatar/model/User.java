@@ -83,6 +83,28 @@ public class User {
     private String displayName;
     private String password;
     private short idFish;
+    /** [PORT câu cá] Chuỗi pad kỳ vọng của lượt cá cắn hiện tại
+     *  (null = không có cá đang cắn). */
+    private byte[] fishExpect;
+    /** [PORT câu cá] Số thế hệ của lần quăng câu — hẹn giờ cắn của
+     *  thế hệ cũ tự hủy khi thế hệ đổi. */
+    private int fishCastGen;
+
+    public byte[] getFishExpect() {
+        return fishExpect;
+    }
+
+    public void setFishExpect(byte[] fishExpect) {
+        this.fishExpect = fishExpect;
+    }
+
+    public int getFishCastGen() {
+        return fishCastGen;
+    }
+
+    public int nextFishCastGen() {
+        return ++fishCastGen;
+    }
     private byte gender;
     public long xu;
     public int luong;

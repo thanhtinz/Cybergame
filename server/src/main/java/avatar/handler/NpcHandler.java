@@ -624,7 +624,9 @@ public class NpcHandler {
                         }
                     }).build());
                     thocau.add(Menu.builder().name("Xem hướng dẫn").action(() -> {
-                        us.getAvatarService().customTab("Hướng dẫn", "Câu cá kiếm được nhiều xu bản auto lên thanhpholo.com");
+                        // [PORT] Text fan là quảng cáo tool auto của họ
+                        // — thay bằng hướng dẫn câu cá thật.
+                        us.getAvatarService().customTab("Hướng dẫn", "Muốn câu cá, trước hết mua Cần câu VIP ở chỗ ta rồi mặc lên người, đừng quên mua thêm Trứng kiến làm mồi — mỗi lần quăng câu tốn 1 mồi. Sau đó ra khu câu cá, đi tới ghế câu và ngồi xuống để bắt đầu. Khi cá cắn câu, trên màn hình sẽ hiện lần lượt các mũi tên: bấm đúng hướng theo thứ tự trước khi hết giờ là giật được cá lên. Câu được cá rồi thì quay lại đây chọn Bán cá để đổi thành xu. Riêng khu trong cùng là nơi cá mập hay lui tới, muốn vào câu ở đó phải có Vé câu cá mập.");
                     }).build());
                     thocau.add(Menu.builder().name("Thoát").build());
                     us.setMenus(thocau);
@@ -744,26 +746,31 @@ public class NpcHandler {
     }
 
     public static void sellFish(User us) throws IOException {
-        int[] array = {2130,2131,2132,454,455,456,457};
-
+        // [PORT] Bản fan chỉ bán 7 loài cá lớn và spam 1 tin nhắn cho
+        // mỗi con. Bản port: bán ĐỦ 12 loài câu được, giá niêm yết ×
+        // số lượng, một tin tổng kết duy nhất.
+        int[] array = {444, 449, 450, 451, 452, 454, 455, 456, 2130, 2131, 2132, 457};
+        long total = 0;
+        int count = 0;
+        StringBuilder detail = new StringBuilder();
         for (int idFish : array) {
-            Item item = us.findItemInChests(idFish); // Tìm item trong rương theo idFish
-
-            // Nếu không tìm thấy item, tiếp tục với ID tiếp theo
-            while (item != null && item.getQuantity() > 0) {
-                int sellPrice = item.getPart().getCoin(); // Giá bán 1 món đồ
-                String message = String.format("Bạn vừa bán 1 %s với giá = %d xu.", item.getPart().getName(), sellPrice);
-
-                us.removeItemFromChests(item);
-                us.updateXu(sellPrice); // Cập nhật xu
-
-                us.getAvatarService().updateMoney(0); // Cập nhật tiền tệ
-                us.getAvatarService().SendTabmsg(message); // Gửi thông báo bán hàng
-
-                // Cập nhật lại item để kiểm tra số lượng
-                item = us.findItemInChests(idFish);
+            Item item = us.findItemInChests(idFish);
+            if (item != null && item.getQuantity() > 0) {
+                int qty = item.getQuantity();
+                long money = (long) item.getPart().getCoin() * qty;
+                total += money;
+                count += qty;
+                detail.append(String.format("\n%s x%d = %d xu", item.getPart().getName(), qty, money));
+                us.removeItem(idFish, qty);
             }
         }
+        if (count == 0) {
+            us.getAvatarService().SendTabmsg("Bạn không có con cá nào trong rương để bán cả.");
+            return;
+        }
+        us.updateXu(total);
+        us.getAvatarService().updateMoney(0);
+        us.getAvatarService().SendTabmsg(String.format("Bạn vừa bán %d con cá, nhận %d xu.%s", count, total, detail));
     }
 
     public static void GopDiemSK(User us){

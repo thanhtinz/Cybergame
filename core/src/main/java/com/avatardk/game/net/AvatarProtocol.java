@@ -106,6 +106,21 @@ public final class AvatarProtocol {
      *  của gốc, tới sau khi chọn mục shop trong menu NPC cửa hàng). */
     public static final byte OPEN_SHOP = -49;
 
+    // ----- Câu cá (đợt mini-game, docs/minigame-spec.md §1; số lệnh
+    // DƯƠNG của Cmd gốc trong ngữ cảnh park) -----
+    /** Quăng câu (Cmd.QUANG_CAU): C→S rỗng; S→C phát cả khu {int id người quăng}. */
+    public static final byte FISH_CAST = 82;
+    /** Kết quả giật câu (Cmd.CAU_THANH_CONG): C→S {bool true, byte n,
+     *  n byte phím đã bấm}; S→C phát cả khu {int id, short id cá (−1 = hụt)}. */
+    public static final byte FISH_FINISH = 84;
+    /** Xong lượt câu (Cmd.CAU_CA_XONG): C→S rỗng; S→C phát cả khu {int id}. */
+    public static final byte FISH_DONE = 85;
+    /** Bắt đầu câu (Cmd.START_CAU_CA): C→S rỗng; S→C {bool ok, UTF lỗi nếu !ok}. */
+    public static final byte FISH_START = 86;
+    /** Cá cắn câu (Cmd.CAN_CAU, chỉ gửi người câu): {int id, short id cá,
+     *  short ms mỗi bước, byte n, n × {short len, PNG mũi tên}}. */
+    public static final byte FISH_BITE = 91;
+
     /** Handler Avatar trong GET_HANDLER (CLIENT_TYPE = 8 của gốc). */
     public static final byte HANDLER_AVATAR = 8;
     /** Handler Farm trong GET_HANDLER (HANDLER_FARM = 10 của gốc). */
@@ -528,6 +543,35 @@ public final class AvatarProtocol {
         w.writeByte(type);
         w.writeByte(days);
         conn.send(m);
+    }
+
+    /** Bắt đầu câu cá (gói 86, rỗng): server kiểm cần câu/vé rồi trả
+     *  86 {bool ok, UTF lỗi}. */
+    public static void fishStart(GameConnection conn) throws IOException {
+        conn.send(new Msg(FISH_START));
+    }
+
+    /** Quăng câu (gói 82, rỗng): server trừ 1 mồi, phát 82 cả khu và
+     *  hẹn giờ cá cắn (trả 91 cho người câu). */
+    public static void fishCast(GameConnection conn) throws IOException {
+        conn.send(new Msg(FISH_CAST));
+    }
+
+    /** Gửi dãy phím QTE khi cá cắn (gói 84): {bool true, byte n,
+     *  n byte phím} — phím theo HDPaint: phải 3, lên 2, trái 1, xuống 4;
+     *  0 = bước quá giờ/không bấm (server chấm hụt). */
+    public static void fishFinish(GameConnection conn, byte[] pads) throws IOException {
+        Msg m = new Msg(FISH_FINISH);
+        DataOutputStream w = m.writer();
+        w.writeBoolean(true);
+        w.writeByte(pads.length);
+        for (byte p : pads) w.writeByte(p);
+        conn.send(m);
+    }
+
+    /** Xong lượt câu (gói 85, rỗng): dọn cá/phao phía mọi người. */
+    public static void fishDone(GameConnection conn) throws IOException {
+        conn.send(new Msg(FISH_DONE));
     }
 
     /** Nói chuyện với NPC (gói −61): id truyền = 2.000.000.000 + mã NPC. */

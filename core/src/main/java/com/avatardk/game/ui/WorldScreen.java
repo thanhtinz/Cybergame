@@ -221,6 +221,42 @@ public class WorldScreen extends ScreenAdapter {
     private int housePayTypeId = -1, housePayCx, housePayCy;
     private boolean chestUpConfirmOpen; // hộp xác nhận nâng cấp rương (−90)
     private String chestUpText = "";
+    // ---- Câu cá (đợt mini-game, docs/minigame-spec.md §1) ----
+    private static final int FISH_NONE = 0, FISH_SEATED = 1, FISH_CASTING = 2,
+        FISH_BITE = 3, FISH_CAUGHT = 4, FISH_MISS = 5;
+    private int fishState = FISH_NONE;
+    private boolean fishFacingLeft = false;
+    private float fishFloatDx = 0f;     // độ lệch phao theo trục x (medium, có dấu theo hướng mặt)
+    private int fishCaughtId = -1;      // cá vừa câu được (icon bay lên)
+    private float fishFlyT = -1f;       // tiến trình hiệu ứng cá bay (0..1)
+    private float fishLocalBiteT = -1f; // offline: đếm ngược tới lúc cá cắn mô phỏng
+    /** Chuỗi QTE đang chạy: ảnh mũi tên (texture), phím đã bấm, phím đúng
+     *  (chỉ offline mới biết trước; online server chấm). */
+    private static class FishQte {
+        Texture[] imgs;
+        byte[] inputs;
+        byte[] expect;
+        int idx;
+        float stepT;
+        float stepDur = 3f;
+        int fishId = -1;
+    }
+    private FishQte fishQte;
+    /** Trạng thái câu của NGƯỜI KHÁC trong khu (theo các gói phát cả khu
+     *  82/84/85): state CASTING/CAUGHT/MISS + độ lệch phao + cá câu được. */
+    private static class RemoteFish {
+        int state;
+        float floatDx;
+        int fishId = -1;
+        float flyT = -1f;
+    }
+    private final java.util.Map<Integer, RemoteFish> remoteFish = new java.util.HashMap<>();
+    private static final byte[] FISH_IMG_PAD = {3, 2, 1, 1, 4, 1, 3, 3, 1, 3};
+    private static final int[] FISH_POOL = {2130, 2131, 2132, 454, 455, 456, 457, 444, 449, 450, 451, 452};
+    // panel shop đồ câu (NPC 430, giá niêm yết — khác luật hoá đơn quần áo)
+    private boolean fishShopOpen;
+    private java.util.List<Integer> fishShopIds = new ArrayList<>();
+
     private java.util.List<int[]> farmBlocks;
     private float[] farmStarPos;
     private final List<DrawItem> drawItems = new ArrayList<>();
@@ -844,6 +880,16 @@ public class WorldScreen extends ScreenAdapter {
     }
 
     public void loadMap(MapDef def) {
+        // đổi map thì rời ghế câu (nếu đang ngồi) + quên trạng thái câu
+        // của người khác ở map cũ
+        if (fishState != FISH_NONE) fishStandUpLocal();
+        remoteFish.clear();
+        // trạng thái xe buýt KHÔNG đi theo sang map mới: cổng offline /
+        // debug nạp thẳng map mà không qua spawnPlayer nên pha xe kẹt
+        // ở map cũ sẽ làm người chơi ẩn hình + xe ma hiện ở map mới.
+        // Nơi cần sự kiện xe (show, spawnPlayer) luôn gọi
+        // beginBusArrival SAU loadMap nên reset ở đây là an toàn.
+        busPhase = 0;
         mapDef = def;
         if (def.id == 25) {
             // map Nông trại: nạp dữ liệu farm + tính vị trí các khối đất (ô 142)
@@ -3526,16 +3572,99 @@ public class WorldScreen extends ScreenAdapter {
                     }
                     break;
                 }
+                case AvatarProtocol.FISH_START: {
+                    // gói 86 trả lời bắt đầu câu: {bool ok, UTF lỗi}
+                    java.io.DataInputStream r = m.reader();
+                    boolean ok = r.readBoolean();
+                    String err = r.readUTF();
+                    if (ok) {
+                        fishSeatedNow();
+                    } else {
+                        fishStandUpLocal();
+                        if (!err.isEmpty()) addChatLog(TAB_SYSTEM, null, err, true);
+                    }
+                    break;
+                }
+                case AvatarProtocol.FISH_CAST: {
+                    // gói 82 phát cả khu: {int id} — người đó vừa quăng câu
+                    int uid = m.reader().readInt();
+                    if (uid == ownId()) {
+                        fishState = FISH_CASTING;
+                        fishFloatDx = (fishFacingLeft ? -1 : 1) * (78 + (int) (Math.random() * 30));
+                        fishQte = null;
+                    } else {
+                        RemoteFish rf = new RemoteFish();
+                        rf.state = FISH_CASTING;
+                        RemoteFigure f = remotes.get(uid);
+                        boolean left = f != null && f.anim.facingLeft;
+                        rf.floatDx = (left ? -1 : 1) * (78 + (int) (Math.random() * 30));
+                        remoteFish.put(uid, rf);
+                        if (f != null) f.pose = 13;
+                    }
+                    break;
+                }
+                case AvatarProtocol.FISH_BITE: {
+                    // gói 91 chỉ tới người câu: {int id, short id cá,
+                    // short ms/bước, byte n, n × {short len, PNG mũi tên}}
+                    java.io.DataInputStream r = m.reader();
+                    r.readInt();
+                    FishQte q = new FishQte();
+                    q.fishId = r.readShort();
+                    q.stepDur = Math.max(0.8f, r.readShort() / 1000f);
+                    int n = r.readByte();
+                    q.imgs = new Texture[n];
+                    q.inputs = new byte[n];
+                    for (int i = 0; i < n; i++) {
+                        int ln = r.readShort() & 0xFFFF;
+                        byte[] png = new byte[ln];
+                        r.readFully(png);
+                        try {
+                            q.imgs[i] = new Texture(new Pixmap(png, 0, ln));
+                        } catch (Exception ignored) {
+                        }
+                    }
+                    fishQte = q;
+                    fishState = FISH_BITE;
+                    applyAction(2); // giật cần (đúng gốc: action 2 khi cá cắn)
+                    break;
+                }
+                case AvatarProtocol.FISH_FINISH: {
+                    // gói 84 phát cả khu: {int id, short id cá / −1 = hụt}
+                    java.io.DataInputStream r = m.reader();
+                    int uid = r.readInt();
+                    int rid = r.readShort();
+                    if (uid == ownId()) {
+                        fishQte = null;
+                        if (rid > 0) {
+                            fishState = FISH_CAUGHT;
+                            fishCaughtId = rid;
+                            fishFlyT = 0f;
+                        } else {
+                            fishState = FISH_MISS;
+                        }
+                        applyAction(13);
+                    } else {
+                        RemoteFish rf = remoteFish.get(uid);
+                        if (rf != null) {
+                            rf.state = rid > 0 ? FISH_CAUGHT : FISH_MISS;
+                            rf.fishId = rid;
+                            rf.flyT = rid > 0 ? 0f : -1f;
+                        }
+                    }
+                    break;
+                }
                 case AvatarProtocol.OPEN_SHOP: {
                     // gói −49: {byte idShop, UTF tên shop, short n,
-                    // n×short idPart} — mở panel shop theo danh sách này
+                    // n×short idPart} — mở panel shop theo danh sách này;
+                    // danh sách đồ câu (NPC Thợ câu) mở panel đồ câu riêng
                     java.io.DataInputStream r = m.reader();
                     r.readByte();
                     String shopName = r.readUTF();
                     int n = r.readShort();
                     java.util.List<Integer> ids = new ArrayList<>();
                     for (int i = 0; i < n; i++) ids.add((int) r.readShort());
-                    openShopFromServer(ids, shopName);
+                    if (isFishShopList(ids)) openFishShop(ids);
+                    else openShopFromServer(ids, shopName);
                     break;
                 }
                 case AvatarProtocol.BUY_ITEM: {
@@ -3809,6 +3938,22 @@ public class WorldScreen extends ScreenAdapter {
                     break;
                 }
                 case AvatarProtocol.FARM_HARVEST_STAR: {
+                    // cmd 85 dùng CHUNG: trong farm = thu khế {short,
+                    // short}; ngoài farm (park) = CAU_CA_XONG câu cá
+                    // phát cả khu {int id} — rẽ theo ngữ cảnh như các
+                    // cmd trùng khác (60/61)
+                    if (!farmIn) {
+                        int fuid = m.reader().readInt();
+                        if (fuid == ownId()) {
+                            if (fishState != FISH_NONE) fishState = FISH_SEATED;
+                            fishQte = null;
+                        } else {
+                            remoteFish.remove(fuid);
+                            RemoteFigure f = remotes.get(fuid);
+                            if (f != null && f.pose == 13) f.pose = 0;
+                        }
+                        break;
+                    }
                     // gói 85: {short productId, short số quả} — khế về kho
                     java.io.DataInputStream r = m.reader();
                     int pid = r.readShort();
@@ -3938,6 +4083,10 @@ public class WorldScreen extends ScreenAdapter {
         if (type == -999) return;
         if (type == 29) { // CHECK_POINT: danh sách khu/bàn (cơ chế có sẵn)
             if (portalLatch <= 0f && boardLatch <= 0f && !boardOpen) openBoardRequest();
+            return;
+        }
+        if (type == 54) { // ghế câu cá: ngồi xuống (doJoin case 54 của gốc)
+            if (fishState == FISH_NONE && !anyModalOpen()) startFishingSit(mx, my);
             return;
         }
         if (portalLatch > 0f || busPhase > 0 || anyModalOpen()) return;
@@ -5204,6 +5353,11 @@ public class WorldScreen extends ScreenAdapter {
             textBoxTouch(x, y);
             return;
         }
+        // panel shop đồ câu đang mở là modal
+        if (fishShopOpen) {
+            fishShopTouch(x, y);
+            return;
+        }
         // form giftcode đang mở là lớp trên cùng (modal, nuốt mọi chạm)
         if (giftFormOpen) {
             giftFormTouch(x, y);
@@ -5541,6 +5695,8 @@ public class WorldScreen extends ScreenAdapter {
             typing = true;
             return;
         }
+        // thanh câu cá + đệm QTE (khi đang câu)
+        if (fishTouch(x, y)) return;
         // nút tương tác (phải dưới)
         if (Math.hypot(x - ACT_CX, y - ACT_CY) <= ACT_R + 10) { interact(); return; }
         // chạm vào người chơi khác trên phố: mở panel tương tác của họ
@@ -5583,6 +5739,509 @@ public class WorldScreen extends ScreenAdapter {
         }
     }
 
+    // ===== CÂU CÁ (docs/minigame-spec.md §1) =====
+
+    /** Va vào ô ghế câu (type 54): ngồi vào tâm ô, hướng mặt theo gốc
+     *  (FishingScr.doSat — ô kề phía đông trong lưới THÔ thuộc
+     *  {100, 16, 13} là nước thì mặt phải, ngược lại mặt trái), online
+     *  thì gửi 86 chờ server duyệt mới diễn tư thế ngồi câu. */
+    private void startFishingSit(float mx, float my) {
+        int cx = (int) (mx / 24), cy = (int) (my / 24);
+        boolean faceRight = true;
+        if (mapDef != null && mapDef.drawTiles != null && mapDef.gridW > 0
+                && cx + 1 < mapDef.gridW) {
+            int ei = cy * mapDef.gridW + (cx + 1);
+            if (ei >= 0 && ei < mapDef.drawTiles.length) {
+                int v = mapDef.drawTiles[ei] & 0xFF;
+                faceRight = v == 100 || v == 16 || v == 13;
+            }
+        }
+        playerX = cx * 24 + 12;
+        playerY = cy * 24 + 12;
+        fishFacingLeft = !faceRight;
+        playerAnim.facingLeft = fishFacingLeft;
+        fishState = FISH_SEATED; // khoá di chuyển ngay, chờ duyệt tư thế
+        if (online()) {
+            try {
+                AvatarProtocol.movePark(game.connection, (int) playerX, (int) playerY, fishFacingLeft);
+                AvatarProtocol.fishStart(game.connection);
+            } catch (IOException ignored) {
+            }
+        } else {
+            fishSeatedNow();
+        }
+    }
+
+    /** Server đã duyệt (hoặc offline): ngồi hẳn + tư thế câu (action 13). */
+    private void fishSeatedNow() {
+        fishState = FISH_SEATED;
+        fishQte = null;
+        applyAction(13);
+    }
+
+    /** Dọn trạng thái câu phía máy mình (không gửi gói). */
+    private void fishStandUpLocal() {
+        fishState = FISH_NONE;
+        fishQte = null;
+        fishLocalBiteT = -1f;
+        if (playerPose == 13 || playerPose == 2) applyAction(0);
+    }
+
+    /** Đứng dậy rời ghế: báo server xong lượt (85) rồi lùi khỏi ghế như
+     *  doClose của gốc (ngược hướng mặt 18, lên 10). */
+    private void fishStandUp() {
+        if (fishState == FISH_NONE) return;
+        if (online()) {
+            try {
+                AvatarProtocol.fishDone(game.connection);
+            } catch (IOException ignored) {
+            }
+        }
+        fishStandUpLocal();
+        float nx = playerX + (fishFacingLeft ? 18 : -18);
+        float ny = playerY - 10;
+        if (canStand(nx, ny)) {
+            playerX = nx;
+            playerY = ny;
+        }
+    }
+
+    /** Quăng câu: online chờ gói 82 vọng về mới sang CASTING; offline
+     *  mô phỏng tại chỗ (cá cắn sau vài giây, không lưu phần thưởng). */
+    private void fishCast() {
+        if (fishState != FISH_SEATED) return;
+        if (online()) {
+            try {
+                AvatarProtocol.fishCast(game.connection);
+            } catch (IOException ignored) {
+            }
+        } else {
+            fishState = FISH_CASTING;
+            fishFloatDx = (fishFacingLeft ? -1 : 1) * (78 + (int) (Math.random() * 30));
+            fishLocalBiteT = 2.5f + (float) Math.random() * 3f;
+        }
+    }
+
+    /** Nút Xong/Huỷ lượt: gửi 85, quay về trạng thái sẵn sàng quăng tiếp. */
+    private void fishXong() {
+        if (online()) {
+            try {
+                AvatarProtocol.fishDone(game.connection);
+            } catch (IOException ignored) {
+            }
+        }
+        fishQte = null;
+        fishLocalBiteT = -1f;
+        if (fishState != FISH_NONE) fishState = FISH_SEATED;
+    }
+
+    /** Nút Tương tác khi đang câu: theo trạng thái mà quăng/xong. */
+    private void fishInteract() {
+        switch (fishState) {
+            case FISH_SEATED: fishCast(); break;
+            case FISH_CAUGHT: case FISH_MISS: fishXong(); break;
+            default: break;
+        }
+    }
+
+    /** Bấm một phím đệm QTE (phải 3, lên 2, trái 1, xuống 4). */
+    private void fishPress(int pad) {
+        if (fishState != FISH_BITE || fishQte == null) return;
+        fishQte.inputs[fishQte.idx] = (byte) pad;
+        fishQteAdvance();
+    }
+
+    private void fishQteAdvance() {
+        FishQte q = fishQte;
+        if (q == null) return;
+        q.idx++;
+        q.stepT = 0f;
+        if (q.idx < q.inputs.length) return;
+        byte[] sent = q.inputs.clone();
+        fishQte = null;
+        if (online()) {
+            try {
+                AvatarProtocol.fishFinish(game.connection, sent);
+            } catch (IOException ignored) {
+            }
+            fishState = FISH_CASTING; // chờ gói 84 kết quả vọng về
+            applyAction(13);
+        } else {
+            boolean ok = q.expect != null;
+            if (ok) {
+                for (int i = 0; i < sent.length; i++) {
+                    if (sent[i] != q.expect[i]) { ok = false; break; }
+                }
+            }
+            if (ok) {
+                fishState = FISH_CAUGHT;
+                fishCaughtId = q.fishId;
+                fishFlyT = 0f;
+                com.avatardk.game.data.PartData pd = game.data.part(q.fishId);
+                addChatLog(TAB_SYSTEM, null, "Câu được "
+                    + (pd != null ? pd.name : "cá")
+                    + "! (bản chơi thử không lưu vào rương)", true);
+            } else {
+                fishState = FISH_MISS;
+            }
+            applyAction(13);
+        }
+    }
+
+    /** Offline: sinh lượt cá cắn mô phỏng (ảnh mũi tên lấy từ assets —
+     *  chính là 10 ảnh của server gốc; cá mập để dành cho online). */
+    private void fishLocalBite() {
+        FishQte q = new FishQte();
+        q.fishId = FISH_POOL[(int) (Math.random() * (FISH_POOL.length - 1))];
+        int n = 4 + (int) (Math.random() * 5);
+        q.imgs = new Texture[n];
+        q.inputs = new byte[n];
+        q.expect = new byte[n];
+        q.stepDur = 3f;
+        for (int i = 0; i < n; i++) {
+            int idx = (int) (Math.random() * 10);
+            q.expect[i] = FISH_IMG_PAD[idx];
+            q.imgs[i] = game.texture("fish/arrow" + idx + ".png");
+        }
+        fishQte = q;
+        fishState = FISH_BITE;
+        applyAction(2);
+    }
+
+    private void updateFishing(float dt) {
+        if (fishFlyT >= 0f) {
+            fishFlyT += dt / 1.2f;
+            if (fishFlyT >= 1f) fishFlyT = -1f;
+        }
+        for (RemoteFish rf : remoteFish.values()) {
+            if (rf.flyT >= 0f) {
+                rf.flyT += dt / 1.2f;
+                if (rf.flyT >= 1f) rf.flyT = -1f;
+            }
+        }
+        if (fishState == FISH_BITE && fishQte != null) {
+            // phím tắt desktop: mũi tên / WASD = đệm 4 hướng
+            if (Gdx.input.isKeyJustPressed(Input.Keys.RIGHT)
+                    || Gdx.input.isKeyJustPressed(Input.Keys.D)) {
+                fishPress(3);
+            } else if (Gdx.input.isKeyJustPressed(Input.Keys.UP)
+                    || Gdx.input.isKeyJustPressed(Input.Keys.W)) {
+                fishPress(2);
+            } else if (Gdx.input.isKeyJustPressed(Input.Keys.LEFT)
+                    || Gdx.input.isKeyJustPressed(Input.Keys.A)) {
+                fishPress(1);
+            } else if (Gdx.input.isKeyJustPressed(Input.Keys.DOWN)
+                    || Gdx.input.isKeyJustPressed(Input.Keys.S)) {
+                fishPress(4);
+            }
+            if (fishQte != null) {
+                fishQte.stepT += dt;
+                if (fishQte.stepT >= fishQte.stepDur) {
+                    fishQte.inputs[fishQte.idx] = 0; // quá giờ = hỏng bước (gốc cũng vậy)
+                    fishQteAdvance();
+                }
+            }
+        }
+        if (!online() && fishState == FISH_CASTING && fishLocalBiteT > 0f) {
+            fishLocalBiteT -= dt;
+            if (fishLocalBiteT <= 0f) fishLocalBite();
+        }
+    }
+
+    /** Vẽ cần/dây/phao cho mọi người đang câu + icon cá bay khi trúng. */
+    private void drawFishingGear(float playerFeetX, float playerFeetY) {
+        if (fishState == FISH_CASTING || fishState == FISH_BITE
+                || fishState == FISH_CAUGHT || fishState == FISH_MISS) {
+            drawFishGearFor(playerFeetX, playerFeetY, fishFacingLeft, fishFloatDx,
+                fishState == FISH_BITE);
+            if (fishState == FISH_BITE && fishQte != null
+                    && fishQte.idx < fishQte.imgs.length
+                    && fishQte.imgs[fishQte.idx] != null) {
+                float fx = playerFeetX + fishFloatDx * AvatarDkGame.HD;
+                batch.draw(fishQte.imgs[fishQte.idx], fx - 22, playerFeetY + 46, 44, 44);
+            }
+            if (fishFlyT >= 0f && fishCaughtId > 0) {
+                drawPartIcon(fishCaughtId, playerFeetX,
+                    playerFeetY + 118 + fishFlyT * 54, 46);
+            }
+        }
+        for (java.util.Map.Entry<Integer, RemoteFish> e : remoteFish.entrySet()) {
+            RemoteFigure f = remotes.get(e.getKey());
+            if (f == null) continue;
+            RemoteFish rf = e.getValue();
+            drawFishGearFor(f.feetX, f.feetY, f.anim.facingLeft, rf.floatDx, false);
+            if (rf.flyT >= 0f && rf.fishId > 0) {
+                drawPartIcon(rf.fishId, f.feetX, f.feetY + 118 + rf.flyT * 54, 46);
+            }
+        }
+    }
+
+    private void drawFishGearFor(float feetX, float feetY, boolean left,
+            float floatDx, boolean bite) {
+        float dir = left ? -1 : 1;
+        float tipX = feetX + dir * 58, tipY = feetY + 112;
+        float flX = feetX + floatDx * AvatarDkGame.HD;
+        float bob = (float) Math.sin(netTime * 2.2f + feetX) * 2.5f;
+        float flY = feetY + 10 + (bite ? -5 : bob);
+        // dây câu: 10 đoạn thẳng có độ võng ở giữa
+        Color lineC = new Color(0.92f, 0.96f, 1f, 0.75f);
+        float px = tipX, py = tipY;
+        for (int i = 1; i <= 10; i++) {
+            float t = i / 10f;
+            float sag = (float) Math.sin(t * Math.PI) * -12f;
+            float nx = tipX + (flX - tipX) * t;
+            float ny = tipY + (flY - tipY) * t + sag;
+            drawLineSeg(px, py, nx, ny, lineC);
+            px = nx;
+            py = ny;
+        }
+        // phao: nửa đỏ nửa trắng; cá cắn thì thêm vòng sóng lan
+        if (bite) {
+            float ph = (netTime * 1.4f) % 1f;
+            batch.draw(Ui.roundedRect((int) (14 + ph * 22), (int) (6 + ph * 8), 4,
+                new Color(0, 0, 0, 0), new Color(1f, 1f, 1f, 0.7f * (1 - ph))),
+                flX - (14 + ph * 22) / 2f, flY - (6 + ph * 8) / 2f);
+        }
+        batch.draw(Ui.roundedRect(12, 6, 3, new Color(0.92f, 0.25f, 0.2f, 1f), GLASS_RIM),
+            flX - 6, flY);
+        batch.draw(Ui.roundedRect(12, 6, 3, new Color(0.96f, 0.97f, 0.98f, 1f), GLASS_RIM),
+            flX - 6, flY - 6);
+    }
+
+    /** Vẽ một đoạn dây câu bằng các chấm nhỏ dọc theo đoạn thẳng
+     *  (tránh phải xoay texture — dây mảnh nên chấm 2px là đủ liền). */
+    private void drawLineSeg(float x1, float y1, float x2, float y2, Color c) {
+        float dx = x2 - x1, dy = y2 - y1;
+        float len = (float) Math.hypot(dx, dy);
+        int steps = Math.max(1, (int) (len / 5f));
+        for (int i = 0; i <= steps; i++) {
+            float t = i / (float) steps;
+            batch.draw(Ui.roundedRect(3, 3, 1, c, c),
+                x1 + dx * t - 1.5f, y1 + dy * t - 1.5f);
+        }
+    }
+
+    // ----- Thanh câu cá + đệm QTE + shop đồ câu -----
+
+    private static final float FISH_BAR_W = 560, FISH_BAR_H = 64;
+
+    private float fishBarX() { return (Ui.W - FISH_BAR_W) / 2f; }
+    private float fishBarY() { return CHAT_Y + chatH + 12; }
+    private float fishPadCx() { return fishFacingLeft ? Ui.W - 190 : 190; }
+    private float fishPadCy() { return Ui.H * 0.52f; }
+
+    private String fishStatusText() {
+        switch (fishState) {
+            case FISH_SEATED: return "Đã ngồi vào ghế câu";
+            case FISH_CASTING: return "Đang chờ cá cắn...";
+            case FISH_BITE: return "Cá cắn câu! Bấm theo mũi tên";
+            case FISH_CAUGHT: {
+                com.avatardk.game.data.PartData pd = game.data.part(fishCaughtId);
+                return "Câu được " + (pd != null ? pd.name : "cá") + "!";
+            }
+            case FISH_MISS: return "Hụt rồi! Cá tuột mất";
+            default: return "";
+        }
+    }
+
+    private void drawFishingBar() {
+        if (fishState == FISH_NONE || anyModalOpen()) return;
+        float px = fishBarX(), py = fishBarY(), pw = FISH_BAR_W, ph = FISH_BAR_H;
+        batch.draw(Ui.roundedRect((int) pw, (int) ph, 14, GLASS_FILL, GLASS_RIM), px, py);
+        if (fishState == FISH_BITE && fishQte != null) {
+            Ui.fontSmall.setColor(1f, 0.6f, 0.45f, 1f);
+            // cắt theo bề rộng thật: chữ chạy quá nửa thanh sẽ chui
+            // xuống dưới ảnh mũi tên ở giữa (đã dính ở ảnh stage 104)
+            Ui.fontSmall.draw(batch, truncTo(Ui.fontSmall, fishStatusText(), pw / 2f - 50), px + 20, py + 41);
+            // ảnh mũi tên hiện tại ở giữa thanh + chấm tiến trình các bước
+            if (fishQte.idx < fishQte.imgs.length && fishQte.imgs[fishQte.idx] != null) {
+                batch.draw(fishQte.imgs[fishQte.idx], px + pw / 2f - 20, py + 12, 40, 40);
+            }
+            for (int i = 0; i < fishQte.inputs.length; i++) {
+                float dx = px + pw / 2f + 36 + i * 20;
+                Color dc = i < fishQte.idx ? new Color(0.45f, 0.95f, 0.55f, 1f)
+                    : (i == fishQte.idx ? new Color(1f, 0.8f, 0.3f, 1f)
+                        : new Color(1f, 1f, 1f, 0.35f));
+                batch.draw(Ui.roundedRect(12, 12, 6, dc, GLASS_RIM), dx, py + 30);
+            }
+            // thanh thời gian của bước hiện tại
+            float frac = 1f - Math.min(1f, fishQte.stepT / fishQte.stepDur);
+            batch.draw(Ui.roundedRect((int) pw - 24, 5, 2,
+                new Color(0, 0, 0, 0.35f), GLASS_RIM), px + 12, py + 6);
+            batch.draw(Ui.roundedRect(Math.max(2, (int) ((pw - 24) * frac)), 5, 2,
+                new Color(1f, 0.55f, 0.25f, 1f), GLASS_RIM), px + 12, py + 6);
+            drawFishPad();
+            return;
+        }
+        Ui.fontSmall.setColor(1f, 1f, 1f, 0.96f);
+        Ui.fontSmall.draw(batch, truncTo(Ui.fontSmall, fishStatusText(), 250), px + 20, py + 41);
+        switch (fishState) {
+            case FISH_SEATED:
+                batch.draw(Ui.gradientRect(120, 42, 10, EntryUi.ORANGE_TOP, EntryUi.ORANGE_BOT),
+                    px + pw - 246, py + 11);
+                Ui.centered(batch, Ui.fontSmall, "Quăng câu", px + pw - 186, py + 38, Color.WHITE);
+                batch.draw(Ui.roundedRect(104, 42, 10, Ui.BTN_CANCEL, GLASS_RIM), px + pw - 116, py + 11);
+                Ui.centered(batch, Ui.fontSmall, "Đứng dậy", px + pw - 64, py + 38, Color.WHITE);
+                break;
+            case FISH_CASTING:
+                batch.draw(Ui.roundedRect(104, 42, 10, Ui.BTN_CANCEL, GLASS_RIM), px + pw - 116, py + 11);
+                Ui.centered(batch, Ui.fontSmall, "Huỷ lượt", px + pw - 64, py + 38, Color.WHITE);
+                break;
+            case FISH_CAUGHT:
+                batch.draw(Ui.gradientRect(120, 42, 10, EntryUi.ORANGE_TOP, EntryUi.ORANGE_BOT),
+                    px + pw - 136, py + 11);
+                Ui.centered(batch, Ui.fontSmall, "Xong", px + pw - 76, py + 38, Color.WHITE);
+                break;
+            case FISH_MISS:
+                batch.draw(Ui.roundedRect(120, 42, 10, Ui.BTN_CANCEL, GLASS_RIM), px + pw - 136, py + 11);
+                Ui.centered(batch, Ui.fontSmall, "Xong", px + pw - 76, py + 38, Color.WHITE);
+                break;
+            default: break;
+        }
+    }
+
+    private void drawFishPad() {
+        float cx = fishPadCx(), cy = fishPadCy();
+        int[] pads = {3, 2, 1, 4};
+        float[] ox = {84, 0, -84, 0}, oy = {0, 84, 0, -84};
+        String[] ic = {Ui.FA_ARROW_RIGHT, Ui.FA_ARROW_UP, Ui.FA_ARROW_LEFT, Ui.FA_ARROW_DOWN};
+        for (int i = 0; i < 4; i++) {
+            float bx = cx + ox[i], by = cy + oy[i];
+            batch.draw(Ui.roundedRect(74, 74, 37,
+                new Color(0.10f, 0.16f, 0.24f, 0.88f), GLASS_RIM), bx - 37, by - 37);
+            Ui.faIcon(batch, Ui.fa26, ic[i], bx, by, new Color(1f, 1f, 1f, 0.95f));
+        }
+    }
+
+    private boolean fishTouch(float x, float y) {
+        if (fishState == FISH_NONE || anyModalOpen()) return false;
+        if (fishState == FISH_BITE) {
+            float cx = fishPadCx(), cy = fishPadCy();
+            float[] ox = {84, 0, -84, 0}, oy = {0, 84, 0, -84};
+            int[] pads = {3, 2, 1, 4};
+            for (int i = 0; i < 4; i++) {
+                if (Math.hypot(x - (cx + ox[i]), y - (cy + oy[i])) <= 42) {
+                    fishPress(pads[i]);
+                    return true;
+                }
+            }
+        }
+        float px = fishBarX(), py = fishBarY(), pw = FISH_BAR_W, ph = FISH_BAR_H;
+        if (x < px || x > px + pw || y < py || y > py + ph) return false;
+        switch (fishState) {
+            case FISH_SEATED:
+                if (x >= px + pw - 246 && x <= px + pw - 126) fishCast();
+                else if (x >= px + pw - 116) fishStandUp();
+                break;
+            case FISH_CASTING:
+                if (x >= px + pw - 116) fishXong();
+                break;
+            case FISH_CAUGHT: case FISH_MISS:
+                if (x >= px + pw - 136) fishXong();
+                break;
+            default: break;
+        }
+        return true;
+    }
+
+    /** Shop −49 của NPC Thợ câu: toàn đồ câu thì mở panel đồ câu riêng. */
+    private static boolean isFishShopList(java.util.List<Integer> ids) {
+        if (ids == null || ids.isEmpty()) return false;
+        for (int id : ids) {
+            if (id != 446 && id != 448 && id != 460) return false;
+        }
+        return true;
+    }
+
+    private void openFishShop(java.util.List<Integer> ids) {
+        bagPanel = false;
+        chestPanel = false;
+        charPanel = false;
+        menuOpen = false;
+        cityMapOpen = false;
+        boardOpen = false;
+        npcMenuOpen = false;
+        fishShopIds = new ArrayList<>(ids);
+        fishShopOpen = true;
+    }
+
+    private static final float FSHOP_W = 660, FSHOP_H = 470;
+
+    private void drawFishShopPanel() {
+        float pw = FSHOP_W, ph = FSHOP_H, px = (Ui.W - pw) / 2f, py = (Ui.H - ph) / 2f, top = py + ph;
+        batch.setColor(0f, 0f, 0f, 0.45f);
+        batch.draw(whiteTex, 0, 0, Ui.W, Ui.H);
+        batch.setColor(Color.WHITE);
+        batch.draw(Ui.roundedRect((int) pw, (int) ph, 16,
+            new Color(0.07f, 0.11f, 0.17f, 0.97f), GLASS_RIM), px, py);
+        drawFarmPanelHeader(px, py, pw, ph, Ui.FA_STORE,
+            new Color(0.13f, 0.42f, 0.60f, 1f), "Cửa hàng đồ câu",
+            "Thợ câu bán — giá niêm yết, mua xong vào rương");
+        // hàng đầu lùi xuống dưới dòng phụ đề header (top-96 đè nửa dưới dòng phụ — ảnh stage 105)
+        float rowY = top - 114;
+        for (int id : fishShopIds) {
+            com.avatardk.game.data.PartData pd = game.data.part(id);
+            if (pd == null) continue;
+            batch.draw(Ui.roundedRect((int) pw - 48, 88, 12,
+                new Color(0.13f, 0.20f, 0.30f, 0.9f), GLASS_RIM), px + 24, rowY - 62);
+            drawPartIcon(id, px + 72, rowY - 18, 52);
+            Ui.font.setColor(1f, 1f, 1f, 0.97f);
+            Ui.font.draw(batch, truncTo(Ui.font, pd.name, 300), px + 112, rowY + 14);
+            String price = pd.coin > 0 ? fmtMoney(pd.coin) + " xu"
+                : fmtMoney(pd.gold) + " lượng";
+            if (pd.expiredDay > 0) price += " · hạn " + pd.expiredDay + " ngày";
+            Ui.fontSmall.setColor(1f, 0.85f, 0.38f, 1f);
+            Ui.fontSmall.draw(batch, price, px + 112, rowY - 12);
+            boolean afford = pd.coin > 0 ? myXu >= pd.coin : myLuong >= pd.gold;
+            if (afford) {
+                batch.draw(Ui.gradientRect(110, 46, 10, EntryUi.ORANGE_TOP, EntryUi.ORANGE_BOT),
+                    px + pw - 146, rowY - 40);
+            } else {
+                batch.draw(Ui.roundedRect(110, 46, 10,
+                    new Color(0.25f, 0.27f, 0.30f, 0.9f), GLASS_RIM), px + pw - 146, rowY - 40);
+            }
+            Ui.centered(batch, Ui.fontSmall, "Mua", px + pw - 91, rowY - 8, Color.WHITE);
+            rowY -= 100;
+        }
+        Ui.fontSmall.setColor(1f, 1f, 1f, 0.8f);
+        Ui.fontSmall.draw(batch, "Xu: " + fmtMoney(myXu) + " · Lượng: " + fmtMoney(myLuong),
+            px + 28, py + 34);
+        // (nút đóng ô vuông đỏ đã nằm trong drawFarmPanelHeader)
+    }
+
+    private boolean fishShopTouch(float x, float y) {
+        if (!fishShopOpen) return false;
+        float pw = FSHOP_W, ph = FSHOP_H, px = (Ui.W - pw) / 2f, py = (Ui.H - ph) / 2f, top = py + ph;
+        if (x >= px + pw - 54 && x <= px + pw - 18 && y >= top - 54 && y <= top - 18) {
+            fishShopOpen = false;
+            return true;
+        }
+        float rowY = top - 114;
+        for (int id : fishShopIds) {
+            if (x >= px + pw - 146 && x <= px + pw - 36 && y >= rowY - 40 && y <= rowY + 6) {
+                fishBuy(id);
+                return true;
+            }
+            rowY -= 100;
+        }
+        return true; // nuốt mọi chạm khi panel mở
+    }
+
+    private void fishBuy(int partId) {
+        com.avatardk.game.data.PartData pd = game.data.part(partId);
+        if (pd == null) return;
+        if (!online()) {
+            addChatLog(TAB_SYSTEM, null,
+                "Bản chơi thử không mua được đồ câu — hãy chơi online.", true);
+            return;
+        }
+        int type = pd.coin > 0 ? 1 : 2;
+        try {
+            AvatarProtocol.buyItem(game.connection, partId, type);
+        } catch (IOException ignored) {
+        }
+    }
+
     /** NPC gần người chơi nhất trong tầm tương tác (đơn vị medium), null nếu không có ai. */
     private NpcFigure findNearestNpc() {
         NpcFigure best = null;
@@ -5611,6 +6270,8 @@ public class WorldScreen extends ScreenAdapter {
     /** Hành động của nút tương tác: NPC gần nhất cất lời chào theo dữ liệu chat gốc của nó;
      *  không có ai ở gần thì nhân vật tự nói một câu báo rõ. */
     public void interact() {
+        // đang câu cá: nút Tương tác = hành động theo trạng thái câu
+        if (fishState != FISH_NONE) { fishInteract(); return; }
         // trong nhà: đang cầm đồ thì nút Tương tác = chốt đặt; còn lại mở
         // menu nhà (Rương / Mua đồ / Thoát) như menu HouseScr của gốc
         if (houseIn) {
@@ -8363,6 +9024,13 @@ public class WorldScreen extends ScreenAdapter {
         if (busPhase == 1) { mx = 0f; my = 0f; }
         float len = (float) Math.hypot(mx, my);
         boolean moving = len > 0.01f;
+        // đang ngồi câu thì khoá di chuyển; cố đi (trừ lúc cá đang cắn
+        // phải bấm đệm) = đứng dậy rời ghế như nút Đóng của gốc
+        if (fishState != FISH_NONE) {
+            if (moving && fishState != FISH_BITE) fishStandUp();
+            moving = false;
+            mx = 0f; my = 0f;
+        }
         if (moving) {
             mx /= Math.max(1f, len); my /= Math.max(1f, len);
             // di chuyển tách trục + va chạm: trục nào đụng vật thể thì
@@ -8399,6 +9067,7 @@ public class WorldScreen extends ScreenAdapter {
         updateRemotes(dt);
         updateEdgeTransitions(dt);
         updateLinkPortals();
+        updateFishing(dt);
         for (NpcFigure f : npcFigures) {
             f.anim.update(dt);
             if (f.bubbleTimer > 0) { f.bubbleTimer -= dt; if (f.bubbleTimer <= 0) f.bubble = null; }
@@ -8713,6 +9382,7 @@ public class WorldScreen extends ScreenAdapter {
             batch.draw(busTex, busX * AvatarDkGame.HD - busTex.getWidth() / 2f, 2f);
         }
         drawActFx(playerFeetX, playerFeetY);
+        drawFishingGear(playerFeetX, playerFeetY);
         batch.end();
 
         drawSideBars(camX);
@@ -8859,6 +9529,8 @@ public class WorldScreen extends ScreenAdapter {
         if (passFormOpen) drawPassFormPanel();
         if (giftFormOpen) drawGiftFormPanel();
         if (tbOpen) drawTextBoxPanel();
+        drawFishingBar();
+        if (fishShopOpen) drawFishShopPanel();
         if (housePlaceTypeId >= 0 && !housePayOpen) drawHousePlaceBar();
         if (houseSheetOpen && houseSelItem != null) drawHouseSheet();
         if (houseMenuOpen) drawHouseMenu();
@@ -10677,6 +11349,40 @@ public class WorldScreen extends ScreenAdapter {
         tryPortal(1260f, 12f);
     }
 
+    /** Harness: tới map câu cá 15, ngồi vào ghế (4,3) rồi quăng câu. */
+    public void debugFishSitCast() {
+        // dọn panel của stage trước (bản đồ thành phố đang mở sẽ che
+        // hết cảnh — bài học từ đợt LinkMap)
+        cityMapOpen = false;
+        boardOpen = false;
+        menuOpen = false;
+        loadMap(findMap(15));
+        startFishingSit(4 * 24 + 12, 3 * 24 + 12);
+        fishCast();
+    }
+
+    /** Harness: ép cá cắn ngay (offline) để chụp màn QTE. */
+    public void debugFishBite() {
+        if (fishState == FISH_CASTING) fishLocalBite();
+    }
+
+    /** Harness: báo cáo trạng thái câu cá để chẩn đoán qua log tour. */
+    public String debugFishReport() {
+        return "map=" + (mapDef == null ? -1 : mapDef.id)
+            + " px=" + playerX + " py=" + playerY
+            + " feetY=" + (mapBottomPx - playerY * AvatarDkGame.HD)
+            + " bus=" + busPhase + " fish=" + fishState
+            + " pose=" + playerPose + " frame=" + playerAnim.frameIndex()
+            + " dollH=" + (playerDoll == null ? -1
+                : game.dollRenderer.heightPx(playerDoll, playerAnim.frameIndex(), AvatarDkGame.HD))
+            + " camY=" + lastCamY + " worldW=" + worldW + " worldH=" + worldH;
+    }
+
+    /** Harness: mở panel shop đồ câu. */
+    public void debugFishShop() {
+        openFishShop(new ArrayList<>(java.util.Arrays.asList(446, 460, 448)));
+    }
+
     /** Harness: mở bản đồ thành phố với vùng Mê cung đang chọn. */
     public void debugCityMapMaze() {
         houseBuyOpen = false;
@@ -10694,7 +11400,7 @@ public class WorldScreen extends ScreenAdapter {
             || farmSeedOpen || farmFertOpen || farmLandOpen || farmStoreOpen
             || farmShopOpen || farmCookOpen || farmAnimalSellOpen
             || houseMenuOpen || houseBuyOpen || houseSheetOpen || housePayOpen
-            || chestUpConfirmOpen || housePlaceTypeId >= 0
+            || chestUpConfirmOpen || housePlaceTypeId >= 0 || fishShopOpen
             || panelPlayer != null || confirmText != null || exitConfirmOpen || tbOpen;
     }
 
