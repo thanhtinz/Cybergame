@@ -1107,7 +1107,7 @@ public class WorldScreen extends ScreenAdapter {
         farmSend(m);
         if (!online()) { // offline (harness): hiện hộp xác nhận bằng bảng giá gương
             farmLandText = "Bạn có muốn mở ô đất với giá "
-                + String.format("%,d", FarmWorld.landPriceXu(farm.cells.size())).replace(',', '.')
+                + fmtMoney(FarmWorld.landPriceXu(farm.cells.size()))
                 + " xu hoặc " + FarmWorld.landPriceLuong(farm.cells.size()) + " lượng không ?";
             farmLandOpen = true;
         }
