@@ -33,7 +33,21 @@ public class HomeService extends Service {
         byte x = ms.reader().readByte();
         byte y = ms.reader().readByte();
         byte type = ms.reader().readByte();
-        this.session.user.updateXu(-2000);
+        // [PORT] Gốc fan trừ cứng 2.000 xu bất kể món — bản port trừ theo
+        // catalog MapItemType (HouseItemData): type 1 = xu, 2 = lượng như
+        // client gốc gửi; món không bán bằng loại tiền đã chọn (giá 0)
+        // hoặc không đủ tiền thì không trừ, không lưu.
+        int priceXu = avatar.Home.HouseItemData.priceXu(itemId);
+        int priceLuong = avatar.Home.HouseItemData.priceLuong(itemId);
+        if (type == 1) {
+            if (priceXu <= 0 || this.session.user.getXu() < priceXu) return;
+            this.session.user.updateXu(-priceXu);
+        } else if (type == 2) {
+            if (priceLuong <= 0 || this.session.user.getLuong() < priceLuong) return;
+            this.session.user.updateLuong(-priceLuong);
+        } else {
+            return;
+        }
         this.session.getAvatarService().updateMoney(0);
         int result = 0;
         try (Connection connection = DbManager.getInstance().getConnection();
@@ -87,11 +101,23 @@ public class HomeService extends Service {
     public void getTypeHouse(Message ms) throws IOException {
         byte typeHouse = ms.reader().readByte();
         System.out.println("typeHouse = " + typeHouse);
+        // [PORT] Gốc fan luôn trả houseType 3 — bản port trả cấp nhà thật
+        // trong house_buy của người chơi (0 = chưa có nhà).
+        byte myType = 0;
+        try (Connection connection = DbManager.getInstance().getConnection();
+             PreparedStatement ps = connection.prepareStatement(
+                     "SELECT `type` FROM `house_buy` WHERE `user_id` = ? LIMIT 1")) {
+            ps.setInt(1, this.session.user.getId());
+            ResultSet res = ps.executeQuery();
+            if (res.next()) myType = res.getByte("type");
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
         ms = new Message(-67);
         DataOutputStream ds = ms.writer();
         ds.writeByte(0);
         ds.writeShort(6299);
-        ds.writeByte(3);
+        ds.writeByte(myType);
         ds.flush();
         this.session.sendMessage(ms);
     }

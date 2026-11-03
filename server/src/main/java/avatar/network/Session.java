@@ -2237,6 +2237,11 @@ public void NhanThuongEventXuBoss() throws IOException {
                 }
                 ds.flush();
                 this.sendMessage(ms);
+            } else {
+                // [PORT] Gốc fan im lặng khi người chơi chưa có nhà (client
+                // treo ở màn chờ) — bản port trả hộp thoại báo rõ.
+                this.user.session.avatarService.serverDialog(
+                        "Bạn chưa có nhà. Hãy đến phố nhà gặp Chủ đầu tư để mua biệt thự.");
             }
         } catch (SQLException e) {
             e.printStackTrace();
