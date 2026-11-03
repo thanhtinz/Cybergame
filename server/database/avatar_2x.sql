@@ -85174,3 +85174,8 @@ CREATE TABLE IF NOT EXISTS `daily_claims` (
   `day` date NOT NULL,
   PRIMARY KEY (`user_id`, `day`)
 );
+
+-- Bổ sung 2026-11-03: 2 món shop lấy từ bản chính (sell 14)
+INSERT INTO `items` (`id`, `coin`, `gold`, `type`, `icon`, `name`, `sell`, `expired_day`, `zorder`, `gender`, `level`, `animation`) VALUES
+(7124, -1, 150, -1, 16724, 'Sóng biển hồng', 14, 0, 20, 2, 0, '[{"img":16725,"dx":-9,"dy":-13},{"img":16725,"dx":-9,"dy":-12},{"img":16726,"dx":-7,"dy":-12},{"img":16727,"dx":-9,"dy":-13},{"img":16727,"dx":-9,"dy":-10},{"img":16730,"dx":-10,"dy":-8},{"img":16725,"dx":-9,"dy":-11},{"img":16729,"dx":-9,"dy":-13},{"img":16728,"dx":-12,"dy":-16},{"img":16731,"dx":-6,"dy":-13},{"img":16729,"dx":-9,"dy":-11},{"img":16728,"dx":-12,"dy":-14},{"img":16731,"dx":-6,"dy":-11},{"img":16731,"dx":-6,"dy":-13},{"img":16729,"dx":-9,"dy":-13}]'),
+(7125, -1, 150, -1, 16732, 'Sóng biển hồng', 14, 0, 10, 2, 0, '[{"img":16733,"dx":-8,"dy":-7},{"img":16733,"dx":-8,"dy":-7},{"img":16734,"dx":-9,"dy":-7},{"img":16735,"dx":-6,"dy":-7},{"img":16737,"dx":-8,"dy":-5},{"img":16738,"dx":-16,"dy":-7},{"img":16736,"dx":-10,"dy":-5},{"img":16733,"dx":-8,"dy":-7},{"img":16733,"dx":-8,"dy":-7},{"img":16733,"dx":-8,"dy":-7},{"img":16736,"dx":-10,"dy":-5},{"img":16736,"dx":-10,"dy":-5},{"img":16736,"dx":-10,"dy":-5},{"img":16735,"dx":-6,"dy":-7},{"img":16735,"dx":-6,"dy":-7}]');
