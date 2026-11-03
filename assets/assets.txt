@@ -624,6 +624,17 @@ i:bgfull/30.png:bgfull/30-a22a647707fd73fc06c26dd0128d6dbc.png:46837:image/png:1
 i:bgfull/80.png:bgfull/80-a87112f6fff3d90f7ea23a8903a15ef3.png:344570:image/png:1
 i:bgfull/40.png:bgfull/40-bba1329856ae6ac28b6f3900e5f44a99.png:570610:image/png:1
 i:bgfull/70.png:bgfull/70-6a6f32fd857f14fba6fa33cc87cd0058.png:164278:image/png:1
+d:fish:fish:0:application/unknown:1
+i:fish/arrow0.png:fish/arrow0-688e449940b74553511569addd67a456.png:165:image/png:1
+i:fish/arrow1.png:fish/arrow1-b9ef07ffc6b0b728ee9902b67397f06d.png:200:image/png:1
+i:fish/arrow2.png:fish/arrow2-ce982ff10a5af6e1f41c7b6d6de2fe70.png:154:image/png:1
+i:fish/arrow3.png:fish/arrow3-ce982ff10a5af6e1f41c7b6d6de2fe70.png:154:image/png:1
+i:fish/arrow4.png:fish/arrow4-dee83dbb06721177df5c62d6d148432b.png:181:image/png:1
+i:fish/arrow5.png:fish/arrow5-0e5f6aacddedab96f9b48c236e896b2b.png:179:image/png:1
+i:fish/arrow6.png:fish/arrow6-ebce587c4407a2bad94186e29ad6e8f7.png:209:image/png:1
+i:fish/arrow7.png:fish/arrow7-6b459d066562882ecd75948dea1b703d.png:205:image/png:1
+i:fish/arrow8.png:fish/arrow8-1385dc857c8253b05615655e2248ee61.png:215:image/png:1
+i:fish/arrow9.png:fish/arrow9-895912e3230f99e68e81b301d7b8c35a.png:139:image/png:1
 t:com/badlogic/gdx/graphics/g3d/particles/particles.fragment.glsl:particles.fragment-b90524761fdf09b0a836056d590c30b8.glsl:820:application/unknown:1
 t:com/badlogic/gdx/graphics/g3d/particles/particles.vertex.glsl:particles.vertex-f25b8b2fae10b9bfa09bfdd484923148.glsl:2886:application/unknown:1
 t:com/badlogic/gdx/graphics/g3d/shaders/default.fragment.glsl:default.fragment-e1c018bd48044c8b67c7bbc53145e540.glsl:5874:application/unknown:1
