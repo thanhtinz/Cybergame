@@ -37,10 +37,59 @@ public class FarmService extends Service {
     }
 
 
-    public void sellFarmitm(User user,Message ms) throws IOException {
+    // [PORT] Bản fan là stub (chỉ mở dialog "id"). Client gốc đọc gói 63 trả về:
+    // sellMoney (int) · curMoney (int, xu sau bán) · idItem (short) -> onSell.
+    // Giá bán lấy từ bảng sản phẩm của farm_info.dat (FarmProductData): nông sản cây = 3 xu,
+    // quả khế = 10, món nấu = giá niêm yết dat... Bán TOÀN BỘ số đang có của nông sản đó
+    // (gói xin chỉ mang id, không mang số lượng). Tìm trong kho nông sản trước, rồi kho đặc biệt.
+    // Nông sản vật nuôi (trứng/sữa/lông, id 50-59) dat không niêm yết ở bảng sản phẩm ->
+    // để giai đoạn vật nuôi (GĐ4) chốt theo priceProduct của AnimalInfo.
+    public void sellFarmitm(User user, Message ms) throws IOException {
         short idFarmItm = ms.reader().readShort();
-        System.out.println(idFarmItm);
-        user.getAvatarService().serverDialog("id");
+        int price = FarmProductData.sellPriceOf(idFarmItm);
+        if (price < 0) {
+            user.getAvatarService().serverDialog("Chưa bán được nông sản này.");
+            return;
+        }
+        NongSan target = null;
+        for (NongSan ns : this.session.user.NongSan) {
+            if (ns.getId() == idFarmItm) {
+                target = ns;
+                break;
+            }
+        }
+        if (target != null && target.getSoluong() > 0) {
+            int total = price * target.getSoluong();
+            this.session.user.NongSan.remove(target);
+            this.session.user.updateXu(total);
+            sendSellResult(total, idFarmItm);
+            return;
+        }
+        NongSanDacBiet special = null;
+        for (NongSanDacBiet db : this.session.user.NongSanDacBiet) {
+            if (db.getId() == idFarmItm) {
+                special = db;
+                break;
+            }
+        }
+        if (special != null && special.getSoluong() > 0) {
+            int total = price * special.getSoluong();
+            this.session.user.NongSanDacBiet.remove(special);
+            this.session.user.updateXu(total);
+            sendSellResult(total, idFarmItm);
+            return;
+        }
+        user.getAvatarService().serverDialog("Không có nông sản này trong kho.");
+    }
+
+    private void sendSellResult(int total, short idFarmItm) throws IOException {
+        Message ms = new Message(Cmd.GET_CARD);
+        DataOutputStream ds = ms.writer();
+        ds.writeInt(total);
+        ds.writeInt((int) this.session.user.getXu());
+        ds.writeShort(idFarmItm);
+        ds.flush();
+        this.session.sendMessage(ms);
     }
 
 
@@ -53,7 +102,9 @@ public class FarmService extends Service {
 
         HatGiong hd = this.session.user.findhatgiong(idSeed);
         // Kiểm tra ô đất có tồn tại trong danh sách không
-        if (indexCell >= 0 && indexCell < this.session.user.landItems.size() && hd.getSoluong()>0 ) {
+        // [PORT] Bản fan không đặt lại plantedTime (phút đã trồng tính từ lần trồng TRƯỚC) và trồng đè lên ô đang có cây.
+        if (indexCell >= 0 && indexCell < this.session.user.landItems.size() && hd != null && hd.getSoluong() > 0
+                && this.session.user.landItems.get(indexCell).getType() < 0) {
             // Lấy ô đất tại vị trí indexCell và cập nhật thông tin
             LandItem landItem = this.session.user.landItems.get(indexCell);
             landItem.setType(idSeed); // Đặt mã cây mới
@@ -64,9 +115,11 @@ public class FarmService extends Service {
             landItem.setWatered(false); // Đặt trạng thái tưới nước ban đầu
             landItem.setFertilized(false); // Đặt trạng thái bón phân ban đầu
             landItem.setHarvestable(false); // Đặt trạng thái chưa thể thu hoạch
+            landItem.setPlantedTime(LocalDateTime.now());
         } else {
             // Nếu ô đất không tồn tại, có thể xử lý ngoại lệ hoặc thông báo lỗi
             System.out.println("Ô đất không tồn tại hoặc indexCell không hợp lệ.");
+            return;
         }
 
         // Tạo Message và gửi thông tin trồng cây
@@ -81,24 +134,55 @@ public class FarmService extends Service {
 
 
     //thu hoạch
+    // [PORT] Bản fan: công thức sản lượng (quantity % 100) * sucKhoe / 100 (cây sản lượng 720 chỉ thu 20),
+    // không cộng nông sản vào kho, không kiểm tra cây đã chín. Sửa cả ba theo dữ kiện gốc:
+    // sản lượng = quantity * sucKhoe / 100 (farmitems), nông sản vào kho với id = id cây.
     public void treeHarvest(Message ms) throws IOException {
         int idfarm = ms.reader().readInt();//idUser
         byte indexcell = ms.reader().readByte();
+        if (indexcell < 0 || indexcell >= this.session.user.landItems.size()) {
+            System.out.println("Ô đất không tồn tại hoặc indexCell không hợp lệ.");
+            return;
+        }
+        LandItem landItem = this.session.user.landItems.get(indexcell);
+        if (landItem.getType() < 0) {
+            return;
+        }
+        farmItem itemf = PartManager.getInstance().findFarmitemByID(landItem.getType());
+        if (itemf == null) {
+            return;
+        }
+        if (landItem.getMinutesSincePlanted() < itemf.getTime()) {
+            this.session.user.getAvatarService().serverDialog("Cây chưa chín, chưa thu hoạch được.");
+            return;
+        }
+        int sanluong = itemf.getQuantity() * landItem.getSucKhoe() / 100;
+        int treeId = landItem.getType();
+        // [PORT] Cây động (id >= 30) thu ra sản phẩm có id riêng theo dat (Bắp 30 -> sản phẩm 200...).
+        int productId = FarmProductData.productIdOf(treeId);
+        landItem.setType(-1);
+        landItem.setWatered(false);
+        landItem.setFertilized(false);
+        landItem.setHarvestable(false);
+        landItem.setResourceCount(0);
+        if (sanluong > 0) {
+            NongSan existing = null;
+            for (NongSan ns : this.session.user.NongSan) {
+                if (ns.getId() == productId) {
+                    existing = ns;
+                    break;
+                }
+            }
+            if (existing != null) {
+                existing.setSoluong(existing.getSoluong() + sanluong);
+            } else {
+                this.session.user.NongSan.add(new NongSan(productId, sanluong));
+            }
+        }
         ms = new Message(Cmd.TREE_HARVEST);
         DataOutputStream ds = ms.writer();
         ds.writeByte(indexcell);
-        if (indexcell >= 0 && indexcell < this.session.user.landItems.size()) {
-            // Lấy ô đất tại vị trí indexCell và cập nhật thông tin
-            LandItem landItem = this.session.user.landItems.get(indexcell);
-            farmItem itemf = PartManager.getInstance().findFarmitemByID(landItem.getType());
-            landItem.setType(-1);
-            int sanluong = (itemf.getQuantity()%100) * landItem.getSucKhoe()/100;
-            ds.writeShort(sanluong);//so luong thu hoach duoc
-        } else {
-            // Nếu ô đất không tồn tại, có thể xử lý ngoại lệ hoặc thông báo lỗi
-            System.out.println("Ô đất không tồn tại hoặc indexCell không hợp lệ.");
-        }
-        //ds.writeShort(sanluong);//so luong thu hoach duoc
+        ds.writeShort(sanluong);//so luong thu hoach duoc
         ds.flush();
         this.session.sendMessage(ms);
     }
@@ -179,60 +263,124 @@ public class FarmService extends Service {
         System.out.println("item farm id "+id+" sl "+n+" type sell"+type);
 
         farmItem itemf = PartManager.getInstance().findFarmitemByID(id);
+        if (itemf == null) {
+            this.session.user.getAvatarService().serverDialog("Không có hạt giống này");
+            return;
+        }
 
-        if(type == 1){
-            if(this.session.user.getXu()<itemf.getSell()*n){
-                this.session.user.getAvatarService().serverDialog("bạn không đủ xu");
-                return;
-            }
-        } else{
-            if(this.session.user.getLuong()<itemf.getSell()*n){
-                this.session.user.getAvatarService().serverDialog("bạn không đủ lượng");
-                return;
-            }
+        // [PORT] Bản fan luôn trừ xu ở gói trả về kể cả khi mua bằng lượng, và cộng dồn hạt bằng
+        // cách thêm dòng mới trùng id (kho hiện 2 dòng cùng hạt). Sửa: newMoney = số dư TRƯỚC
+        // của đúng loại tiền đã dùng; hạt cộng vào dòng có sẵn.
+        // Giá hạt theo farm_info.dat: mỗi cây có giá xu và giá lượng riêng (0 = không bán
+        // bằng loại tiền đó — vd Nha Đam chỉ bán 1 lượng, không bán bằng xu).
+        boolean byXu = type == 1;
+        int priceSeed = byXu ? itemf.getSell() : itemf.getSellLuong();
+        if (priceSeed <= 0) {
+            this.session.user.getAvatarService().serverDialog(byXu
+                    ? "Hạt này không bán bằng xu" : "Hạt này không bán bằng lượng");
+            return;
+        }
+        long before = byXu ? this.session.user.getXu() : this.session.user.getLuong();
+        if (before < (long) priceSeed * n) {
+            this.session.user.getAvatarService().serverDialog(byXu ? "bạn không đủ xu" : "bạn không đủ lượng");
+            return;
         }
 
         HatGiong hdid = this.session.user.findhatgiong(id);
-        if(hdid != null){
-            if((hdid.getSoluong()+n) >99){
-                this.session.user.getAvatarService().serverDialog("số lượng nhiều rồi");
-                return;
-            }
+        if (hdid != null && (hdid.getSoluong() + n) > 99) {
+            this.session.user.getAvatarService().serverDialog("số lượng nhiều rồi");
+            return;
+        }
+
+        if (byXu) {
+            this.session.user.updateXu(-priceSeed * n);
+        } else {
+            this.session.user.updateLuong(-priceSeed * n);
+        }
+        if (hdid != null) {
+            hdid.setSoluong(hdid.getSoluong() + n);
+        } else {
+            this.session.user.hatgiong.add(new HatGiong(id, n));
         }
 
         ms = new Message(62);
         DataOutputStream ds = ms.writer();
         ds.writeShort(id);
         ds.writeByte(n);
-        ds.writeInt((int) this.session.user.getXu());//.newMoney
-        this.session.user.updateXu(-itemf.getSell()*n);
+        ds.writeInt((int) before);//newMoney
         ds.writeByte(type);
         ds.writeInt((int) this.session.user.getXu());
         ds.writeInt(this.session.user.getLuong());//luong
         ds.writeInt(0);//luongK
         ds.flush();
         this.session.sendMessage(ms);
-
-        this.session.user.hatgiong.add(new HatGiong(id,n));
     }
 
+    // [PORT] Bảng giá vật nuôi theo farm_info.dat (giá -1/0 = không bán bằng loại tiền đó).
+    // species -> {priceXu, priceLuong}: 50 Gà, 51 Bò, 52 Heo, 53 Chó, 54 Cá chép, 55 Cừu, 56 Vịt, 58 Trâu, 59 Rùa.
+    private static final java.util.Map<Integer, int[]> ANIMAL_PRICES = new java.util.HashMap<>();
+    static {
+        ANIMAL_PRICES.put(50, new int[]{500, -1});
+        ANIMAL_PRICES.put(51, new int[]{-1, 5});
+        ANIMAL_PRICES.put(52, new int[]{1000, -1});
+        ANIMAL_PRICES.put(53, new int[]{-1, 1});
+        ANIMAL_PRICES.put(54, new int[]{5000, -1});
+        ANIMAL_PRICES.put(55, new int[]{-1, 2});
+        ANIMAL_PRICES.put(56, new int[]{600, -1});
+        ANIMAL_PRICES.put(58, new int[]{1000, -1});
+        ANIMAL_PRICES.put(59, new int[]{2000, -1});
+    }
+
+    // [PORT] Bản fan trả toàn 0 và không trừ tiền. Client gốc đọc gói 71:
+    // species (byte) · newMoney (int, số dư TRƯỚC khi trừ của loại tiền đã dùng) · typeBuy (byte) ·
+    // xu (int) · luong (int) · luongK (int) -> onBuyItem.
     public void Buy_ANIMAL(Message ms) throws IOException {
         byte n = ms.reader().readByte();//loai
-        byte type = ms.reader().readByte();//typemua
+        byte type = ms.reader().readByte();//typemua (1 = xu, khác = lượng)
+
+        int[] prices = ANIMAL_PRICES.get((int) n);
+        if (prices == null) {
+            this.session.user.getAvatarService().serverDialog("Không có loài vật này.");
+            return;
+        }
+        boolean byXu = type == 1;
+        int price = byXu ? prices[0] : prices[1];
+        if (price <= 0) {
+            this.session.user.getAvatarService().serverDialog(byXu
+                    ? "Loài này không bán bằng xu." : "Loài này không bán bằng lượng.");
+            return;
+        }
+        long before;
+        if (byXu) {
+            before = this.session.user.getXu();
+            if (before < price) {
+                this.session.user.getAvatarService().serverDialog("Bạn không đủ xu.");
+                return;
+            }
+            this.session.user.updateXu(-price);
+        } else {
+            before = this.session.user.getLuong();
+            if (before < price) {
+                this.session.user.getAvatarService().serverDialog("Bạn không đủ lượng.");
+                return;
+            }
+            this.session.user.updateLuong(-price);
+        }
+
+        Animal newAnimal = new Animal(n, 100, 1, 0, 0, true, false, false);
+        newAnimal.setBornTime(System.currentTimeMillis() / 1000L);
+        this.session.user.Animal.add(newAnimal);
 
         ms = new Message(Cmd.BUY_ANIMAL);
         DataOutputStream ds = ms.writer();
         ds.writeByte(n);
-        ds.writeInt(0);//newMoney2
+        ds.writeInt((int) before);
         ds.writeByte(type);
-        ds.writeInt((int) 0);
-        ds.writeInt(0);//luong
+        ds.writeInt((int) this.session.user.getXu());
+        ds.writeInt(this.session.user.getLuong());
         ds.writeInt(0);//luongK
         ds.flush();
         this.session.sendMessage(ms);
-
-        Animal newAnimal = new Animal(n,2000, 100, 0, 20, true, false, true); // Các giá trị mặc định
-        this.session.user.Animal.add(newAnimal);
     }
 
     public void getBigFarm(Message ms) throws IOException {
@@ -288,12 +436,15 @@ public class FarmService extends Service {
         this.session.sendMessage(ms);
     }
 
+    // [PORT] Viết đúng thứ tự client gốc đọc (FarmMsgHandler case 60):
+    // 1) hạt {byte id, short n}  2) phân bón {byte id, short n}  3) int LƯỢNG (client nạp vào money[1])
+    // 4) lvFarm byte + perLv byte  5) đặc biệt {short, short}  6) đặc biệt lượt 1 {short, short}
+    // 7) levelStore byte + capacity int + isNew bool  8) lvFarm short + perLv byte
+    // 9) nông sản {short id, int n}  10) đặc biệt {short id, int n}
+    // Bản fan ghi lệch: nông sản vào ô phân bón, xu vào ô lượng, lượt 2 nông sản sai cỡ số,
+    // và chèn 3 dòng đặc biệt CỨNG (255/215/214) không phải dữ liệu của người chơi.
     public void getInventory(Message ms) throws IOException {
         User us = session.user;
-        Vector<KeyValue<Integer, Integer>> nongsandacbiet = new Vector<>();
-        nongsandacbiet.add(new KeyValue(255, 20));//thit ca
-        nongsandacbiet.add(new KeyValue(215, 680));//khe
-        nongsandacbiet.add(new KeyValue(214, 4));//tinh dau huong duong
         ms = new Message(60);
         DataOutputStream ds = ms.writer();
         ds.writeByte(this.session.user.hatgiong.size());
@@ -302,70 +453,94 @@ public class FarmService extends Service {
             ds.writeShort(hatgiong.getSoluong());
         }
 
-        ds.writeByte(this.session.user.NongSan.size());
-        for (NongSan ns : this.session.user.NongSan) {
-            ds.writeByte(ns.getId());
-            ds.writeShort(ns.getSoluong());
-        }
-
-        ds.writeInt(Math.toIntExact(this.session.user.getXu()));
-        ds.writeByte(us.getLeverFarm());
-        ds.writeByte(us.getLeverPercen());
-
         ds.writeByte(this.session.user.PhanBon.size());
         for (PhanBon pb : this.session.user.PhanBon) {
             ds.writeByte(pb.getId());
             ds.writeShort(pb.getSoluong());
         }
-        /// ///////
-        ds.writeByte(nongsandacbiet.size());
-        for (KeyValue<Integer, Integer> i : nongsandacbiet) {
-            ds.writeShort(i.getKey());
-            ds.writeShort(i.getValue());
+
+        ds.writeInt(this.session.user.getLuong());
+        ds.writeByte(us.getLeverFarm());
+        ds.writeByte(us.getLeverPercen());
+
+        ds.writeByte(this.session.user.NongSanDacBiet.size());
+        for (NongSanDacBiet db : this.session.user.NongSanDacBiet) {
+            ds.writeShort(db.getId());
+            ds.writeShort(db.getSoluong());
         }
-        ds.writeByte(1);
-        ds.writeInt(64000);
-        ds.writeBoolean(true);
+        ds.writeByte(this.session.user.NongSanDacBiet.size());
+        for (NongSanDacBiet db : this.session.user.NongSanDacBiet) {
+            ds.writeShort(db.getId());
+            ds.writeShort(db.getSoluong());
+        }
+        ds.writeByte(1);        // levelStore
+        ds.writeInt(64000);     // capacity
+        ds.writeBoolean(true);  // isNew
         ds.writeShort(us.getLeverFarm());
         ds.writeByte(us.getLeverPercen());
         ds.writeByte(this.session.user.NongSan.size());
         for (NongSan ns : this.session.user.NongSan) {
-            ds.writeByte(ns.getId());
-            ds.writeShort(ns.getSoluong());
+            ds.writeShort(ns.getId());
+            ds.writeInt(ns.getSoluong());
         }
 
-        /// //////
-        ds.writeByte(nongsandacbiet.size());
-        for (KeyValue<Integer, Integer> i : nongsandacbiet) {
-            ds.writeShort(i.getKey());
-            ds.writeInt(i.getValue());
+        ds.writeByte(this.session.user.NongSanDacBiet.size());
+        for (NongSanDacBiet db : this.session.user.NongSanDacBiet) {
+            ds.writeShort(db.getId());
+            ds.writeInt(db.getSoluong());
         }
         ds.flush();
         this.session.sendMessage(ms);
     }
 
+    // [PORT] Ghi đúng nghĩa client gốc đọc (FarmMsgHandler.readInfoCell):
+    // time (short, phút đã trồng) · vitalityPer (byte) · hervestPer (byte, % lớn) ·
+    // isArid (bool, đất khô) · isWorm (bool) · isGrass (bool).
+    // Bản fan ghi watered/fertilized/harvestable vào 3 bool cuối -> client hiểu thành khô/sâu/cỏ (lệch nghĩa).
     private void writeInfoCell(DataOutputStream ds, LandItem land) throws IOException {
-        ds.writeShort((int)land.getMinutesSincePlanted());
+        long minutes = land.getType() >= 0 ? land.getMinutesSincePlanted() : 0;
+        ds.writeShort((int) Math.min(minutes, Short.MAX_VALUE));
         ds.writeByte(land.getSucKhoe());
-        ds.writeByte(1); //100 la héo
-        ds.writeBoolean(land.isWatered());
-        ds.writeBoolean(land.isFertilized());
-        ds.writeBoolean(land.isHarvestable());
+        int hervestPer = 0;
+        if (land.getType() >= 0) {
+            farmItem itemf = PartManager.getInstance().findFarmitemByID(land.getType());
+            if (itemf != null && itemf.getTime() > 0) {
+                hervestPer = (int) Math.min(100, minutes * 100 / itemf.getTime());
+            }
+        }
+        ds.writeByte(hervestPer);
+        ds.writeBoolean(land.getType() >= 0 && !land.isWatered()); // isArid = chưa tưới
+        ds.writeBoolean(false); // isWorm — model gốc không có trạng thái sâu
+        ds.writeBoolean(false); // isGrass — model gốc không có trạng thái cỏ
     }
 
+    // [PORT] Ghi đúng nghĩa client gốc đọc (FarmMsgHandler.readInfoAnimal):
+    // bornTime (int) · health (byte) · harvestPer (byte) · numEggOne (byte) ·
+    // hunger (bool) · disease[0] (bool) · disease[1] (bool).
+    // Bản fan ghi health(int)/level/resourceCount/... vào đúng vị trí nhưng sai nghĩa toàn bộ.
     private void writeInfoAnimal(DataOutputStream ds, Animal animal) throws IOException {
-        ds.writeInt(animal.getHealth());
-        ds.writeByte(animal.getLevel());
-        ds.writeByte(animal.getResourceCount());
-        ds.writeByte(animal.getNextProductionTime());
-        ds.writeBoolean(animal.isAlive());
-        ds.writeBoolean(animal.isReadyForBreeding());
-        ds.writeBoolean(animal.isHarvestable());
+        ds.writeInt((int) animal.getBornTime());
+        ds.writeByte(Math.min(100, Math.max(0, animal.getHealth())));
+        ds.writeByte(animal.isHarvestable() ? 100 : 0);
+        ds.writeByte(Math.min(255, Math.max(0, animal.getResourceCount())));
+        ds.writeBoolean(false); // hunger — model gốc không mô phỏng đói
+        ds.writeBoolean(false); // disease[0]
+        ds.writeBoolean(false); // disease[1]
     }
 
 
     public void joinFarm(Message ms) throws IOException, SQLException {
         int userId = ms.reader().readInt();
+        // [PORT] Farm khởi tạo lười: người chơi chưa có ô đất nào (farm trống lần đầu) -> cấp ô khởi đầu.
+        // Client gốc (FarmScr.setCellAll) đặt các ô lên vị trí đất của map và chừa vị trí kế tiếp làm
+        // điểm "mở ô", nên số ô khởi đầu chỉ cần nhỏ hơn tổng số vị trí đất trên map farm.
+        // STARTER_CELLS là số tạm — sẽ đối chiếu farm nguyên trạng của server live ở giai đoạn dựng cảnh (GĐ1).
+        if (userId == this.session.user.getId() && this.session.user.landItems.isEmpty()) {
+            final int STARTER_CELLS = 6;
+            for (int i = 0; i < STARTER_CELLS; i++) {
+                this.session.user.landItems.add(new LandItem(0, -1, 100, 0, false, false, false, LocalDateTime.now()));
+            }
+        }
         ms = new Message(Cmd.JOIN);
         DataOutputStream ds = ms.writer();
         ds.writeInt(userId);
@@ -406,8 +581,8 @@ public class FarmService extends Service {
             ds.writeByte(1);  // Trạng thái ô đất
         }
 
-        ds.writeShort(3);//nấu ăn
-        ds.writeShort(5);
+        // [PORT] Bản fan luôn ghi foodID=3 + 5 phút -> client tưởng đang nấu món Cơm mãi mãi.
+        // Không ghi gì thêm: client đọc available()>0 mới lấy foodID, mặc định 0 = không nấu.
         ds.flush();
 
         this.session.sendMessage(ms);

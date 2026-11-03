@@ -165,15 +165,20 @@ public class PartManager {
                 int time = rs.getInt("so_phut_chin");
                 int quantity = rs.getInt("san_luong_khi_chin");
                 int sell = rs.getInt("gia_san_pham");
-                farmItems.add(farmItem
+                farmItem fi = farmItem
                         .builder()
                         .id(id)
                         .name(name)
                         .time(time)
                         .quantity(quantity)
                         .sell(sell)
-                        .build()
-                );
+                        .build();
+                try {
+                    fi.setSellLuong(rs.getInt("gia_hat_luong"));
+                } catch (SQLException ignore) {
+                    fi.setSellLuong(0);
+                }
+                farmItems.add(fi);
             }
         } catch (SQLException e) {
             // TODO Auto-generated catch block

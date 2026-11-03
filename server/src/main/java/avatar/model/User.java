@@ -644,6 +644,7 @@ public class User {
             animalObject.put("isAlive", animal.isAlive());
             animalObject.put("isReadyForBreeding", animal.isReadyForBreeding());
             animalObject.put("isHarvestable", animal.isHarvestable());
+            animalObject.put("bornTime", animal.getBornTime());
             animalData.add(animalObject);
         }
 
@@ -661,7 +662,7 @@ public class User {
             JSONObject phanBonObject = new JSONObject();
             phanBonObject.put("id", phanBon.getId());
             phanBonObject.put("soluong", phanBon.getSoluong());
-            phanbonData.add(phanbonData);
+            phanbonData.add(phanBonObject);
         }
 
         JSONArray nongsanData = new JSONArray();
@@ -669,7 +670,7 @@ public class User {
             JSONObject nongSanObject = new JSONObject();
             nongSanObject.put("id", nongSan.getId());
             nongSanObject.put("soluong", nongSan.getSoluong());
-            nongsanData.add(nongsanData);
+            nongsanData.add(nongSanObject);
         }
 
         JSONArray nongsandacbietData = new JSONArray();
@@ -677,7 +678,7 @@ public class User {
             JSONObject nongsandacbietObject = new JSONObject();
             nongsandacbietObject.put("id", nongsandacbiet.getId());
             nongsandacbietObject.put("soluong", nongsandacbiet.getSoluong());
-            phanbonData.add(phanbonData);
+            nongsandacbietData.add(nongsandacbietObject);
         }
 
 
@@ -747,7 +748,9 @@ public class User {
                         boolean isHarvestable = (Boolean) obj.get("isHarvestable");
 
                         String plantedTimeStr = (String) obj.get("plantedTime");
-                        LocalDateTime plantedTime = LocalDateTime.parse(plantedTimeStr, formatter);
+                        // [PORT] Bản fan ghi "not_planted" khi ô chưa trồng — parse thẳng sẽ văng và hỏng cả lần nạp farm; coi như vừa đặt xuống.
+                        LocalDateTime plantedTime = (plantedTimeStr == null || plantedTimeStr.equals("not_planted"))
+                                ? LocalDateTime.now() : LocalDateTime.parse(plantedTimeStr, formatter);
 
                         LandItem landItem = new LandItem(growthTime, type,suckhoe, resourceCount, isWatered, isFertilized, isHarvestable, plantedTime);
                         landItems.add(landItem);
@@ -771,6 +774,10 @@ public class User {
                         boolean isHarvestable = (Boolean) obj.get("isHarvestable");
 
                         Animal animalObj = new Animal(id, health, level, resourceCount, nextProductionTime, isAlive, isReadyForBreeding, isHarvestable);
+                        Object bt = obj.get("bornTime");
+                        if (bt != null) {
+                            animalObj.setBornTime(((Number) bt).longValue());
+                        }
                         animals.add(animalObj);
                     }
                     // Cập nhật danh sách vật nuôi cho người chơi
@@ -1182,6 +1189,12 @@ public class User {
 
 
 
+                    // [PORT] Bản fan không hề gọi loadFarmData/saveFarmData ở đâu — farm không nạp/không lưu.
+                    try {
+                        loadFarmData(this.id);
+                    } catch (Exception e) {
+                        System.out.println("loadFarmData loi: " + e.getMessage());
+                    }
                     setLoadDataFinish(true);
                     return true;
                 }
@@ -1379,6 +1392,11 @@ public class User {
         DbManager.getInstance().executeUpdate("UPDATE `players` SET `is_online` = ?, `client_id` = ?, `last_online` = ? WHERE `user_id` = ? LIMIT 1;", 0, session.id, timestamp, this.id);
         if (isLoadDataFinish()) {
             saveData();
+            try {
+                saveFarmData(this.id);
+            } catch (Exception e) {
+                System.out.println("saveFarmData loi: " + e.getMessage());
+            }
         }
     }
 

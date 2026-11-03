@@ -10,6 +10,15 @@ Animal {
     private boolean isAlive;         // Trạng thái động vật có còn sống không
     private boolean isReadyForBreeding; // Trạng thái động vật sẵn sàng sinh sản không
     private boolean isHarvestable;   // Trạng thái động vật có thể thu hoạch sản phẩm không
+    private long bornTime;           // [PORT] Giây epoch lúc mua — client gốc đọc bornTime (int) ở đầu gói thông tin vật nuôi; bản fan không có trường này nên client đọc health(int) vào bornTime (lệch nghĩa). Dữ liệu cũ không có -> 0.
+
+    public long getBornTime() {
+        return bornTime;
+    }
+
+    public void setBornTime(long bornTime) {
+        this.bornTime = bornTime;
+    }
 
     // Constructor
     public Animal(int id,int health, int level, int resourceCount, int nextProductionTime, boolean isAlive, boolean isReadyForBreeding, boolean isHarvestable) {
