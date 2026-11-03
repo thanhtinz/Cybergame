@@ -993,6 +993,23 @@ public class ScreenshotMain {
                     case 99:
                         if (frame == 15) {
                             shot("shot-house-buy.png");
+                            world.debugLinkBump();
+                            stage = 101; frame = 0;
+                        }
+                        break;
+                    case 101:
+                        if (frame == 15) {
+                            // sau va cổng LinkMap ở bãi biển phải đang ở
+                            // map 27 (khu đá ven biển)
+                            System.out.println("LINK CHECK map=" + world.debugMapId());
+                            shot("shot-link-27.png");
+                            world.debugCityMapMaze();
+                            stage = 102; frame = 0;
+                        }
+                        break;
+                    case 102:
+                        if (frame == 15) {
+                            shot("shot-citymap-maze.png");
                             System.out.println("SCREENSHOT DONE");
                             Gdx.app.exit();
                         }

@@ -659,8 +659,12 @@ public class WorldScreen extends ScreenAdapter {
     // là Nông trại (client 25).
     private static final String[] REGION_NAMES = {
         "Khu nhà ở", "Khu sinh thái", "Sân bay", "Khu giải trí",
-        "Khu mua sắm", "Công viên", "Khu ngoại ô", "Nông trại"};
-    private static final int[] REGION_DEST = {1, 14, 21, 10, 24, 12, 18, 25};
+        "Khu mua sắm", "Công viên", "Khu ngoại ô", "Nông trại",
+        // [PORT] vùng 9: Mê cung hoa hồng (map 29 của bản chính 3.4.4)
+        // không có cổng LinkMap vào — bản port thêm điểm đến trên bản đồ
+        // thành phố để người chơi tới được; ghim đặt ở góc trái dưới ảnh.
+        "Mê cung hoa hồng"};
+    private static final int[] REGION_DEST = {1, 14, 21, 10, 24, 12, 18, 25, 29};
     private final List<int[]> regionCells = new ArrayList<>(); // {col, row}
     private boolean cityMapOpen = false;
     private Texture minimapTex;
@@ -783,6 +787,8 @@ public class WorldScreen extends ScreenAdapter {
         for (int i = 0; i < 26 && i * 50 < grid.length; i++)
             for (int j = 0; j < 50 && i * 50 + j < grid.length; j++)
                 if (grid[i * 50 + j] == 69) regionCells.add(new int[]{j, i});
+        // [PORT] ghim thứ 9 cho Mê cung hoa hồng (xem REGION_NAMES)
+        if (regionCells.size() == 8) regionCells.add(new int[]{2, 24});
         // Danh sách biểu cảm: mọi part mặt (zOrder 40) dựng được offline —
         // không phải part động do server stream và đủ 15 frame như PaperDoll
         // yêu cầu. Doll xem trước = mặt nền (part 0) + part mặt, đúng cách
@@ -2596,6 +2602,8 @@ public class WorldScreen extends ScreenAdapter {
     }
 
     // ---------- API cho ScreenshotMain / kiểm chứng ----------
+    public int debugMapId() { return mapDef == null ? -1 : mapDef.id; }
+
     public void debugSetMap(int mapId) {
         loadMap(findMap(mapId));
         spawnPlayer();
@@ -3917,6 +3925,15 @@ public class WorldScreen extends ScreenAdapter {
      *  gốc (LoadMap.doJoin, docs/tile-engine-spec.md §9) thì kích hoạt thay
      *  vì chỉ chặn đường — đúng cách gốc gọi doJoin trước khi xét va chạm. */
     private void tryPortal(float mx, float my) {
+        // Cổng LinkMap (bản chính 3.4.4): ô đích nằm trong hình chữ nhật
+        // cổng ở mép map thì chuyển map trước mọi bảng doJoin theo ô.
+        if (!houseIn && !farmIn && mapDef != null && linkArm && !anyModalOpen()) {
+            int ld = linkDestAt(mapDef.id, mx, my);
+            if (ld > 0) {
+                linkTravel(ld);
+                return;
+            }
+        }
         int type = cellTypeAt(mx, my);
         if (type == -999) return;
         if (type == 29) { // CHECK_POINT: danh sách khu/bàn (cơ chế có sẵn)
@@ -8381,6 +8398,7 @@ public class WorldScreen extends ScreenAdapter {
         updateNet(dt);
         updateRemotes(dt);
         updateEdgeTransitions(dt);
+        updateLinkPortals();
         for (NpcFigure f : npcFigures) {
             f.anim.update(dt);
             if (f.bubbleTimer > 0) { f.bubbleTimer -= dt; if (f.bubbleTimer <= 0) f.bubble = null; }
@@ -10060,7 +10078,8 @@ public class WorldScreen extends ScreenAdapter {
         "Chợ và các cửa hàng thời trang.",
         "Tản bộ, hẹn hò bên hồ nước.",
         "Vùng ven yên tĩnh, đường ra nông trại.",
-        "Trồng trọt, chăn nuôi và thu hoạch."};
+        "Trồng trọt, chăn nuôi và thu hoạch.",
+        "Lạc lối giữa vườn hồng mê cung."};
 
     /** Tâm vùng theo không gian ảnh gốc 1600×900 (y tính từ trên xuống). */
     private float[] regionPoint(int r) {
@@ -10266,6 +10285,13 @@ public class WorldScreen extends ScreenAdapter {
                 mapPointer = -1;
                 loadMap(findMap(dest));
                 spawnPlayer();
+                if (dest == 29) {
+                    // [PORT] mê cung: đáp ở hành lang cửa vào (ô data
+                    // (2,1) đứng được) thay cho điểm spawn mặc định giữa
+                    // mê cung.
+                    playerX = 60f;
+                    playerY = 36f;
+                }
                 return;
             }
         }
@@ -10569,6 +10595,95 @@ public class WorldScreen extends ScreenAdapter {
             }
         }
         edgeCd = 1.2f;
+    }
+
+    // ===== Cổng LinkMap của bản chính 3.4.4 (docs/maps-344-audit.md §2.3) =====
+    // Hình chữ nhật ở mép map: bước vào (hoặc va vào ô trong vùng) là
+    // chuyển sang map đích. Toạ độ x1,y1,x2,y2 tính bằng 1/10 ô trong hệ
+    // trên–trái của lưới (nhân 2,4 ra medium). {map nguồn, x1, y1, x2, y2,
+    // map đích} — id đều là id phía client.
+    private static final int[][] LINK_PORTALS = {
+        {10, 70, 15, 90, 25, 30},
+        {18, 80, 0, 100, 10, 21},
+        {18, 310, 0, 340, 10, 23},
+        {18, 510, 0, 540, 10, 27},
+        {21, 120, 60, 140, 70, 18},
+        {21, 0, 50, 10, 70, 28},
+        {23, 120, 70, 160, 80, 18},
+        {27, 110, 70, 140, 80, 18},
+        {28, 270, 70, 280, 90, 21},
+        {30, 120, 190, 140, 200, 10},
+    };
+    // Chống dội cổng: vừa qua cổng thì cổng ở map mới chưa "nạp" — chỉ
+    // nạp lại khi người chơi đã ra hẳn khỏi mọi vùng cổng của map đó.
+    private boolean linkArm = true;
+
+    /** Map đích nếu điểm (mx, my) nằm trong một vùng cổng LinkMap của
+     *  map hiện tại; −1 nếu không. */
+    private int linkDestAt(int mapId, float mx, float my) {
+        for (int[] L : LINK_PORTALS) {
+            if (L[0] != mapId) continue;
+            if (mx >= L[1] * 2.4f && mx <= L[3] * 2.4f
+                && my >= L[2] * 2.4f && my <= L[4] * 2.4f) return L[5];
+        }
+        return -1;
+    }
+
+    /** Qua cổng LinkMap sang map đích: đáp tại tâm cổng ngược (cổng ở
+     *  map đích trỏ về map nguồn), gotoMap tự tìm ô đứng được gần nhất. */
+    private void linkTravel(int dest) {
+        int from = mapDef.id;
+        float ax = -1f, ay = -1f;
+        for (int[] L : LINK_PORTALS) {
+            if (L[0] == dest && L[5] == from) {
+                ax = (L[1] + L[3]) / 2f * 2.4f;
+                ay = (L[2] + L[4]) / 2f * 2.4f;
+                break;
+            }
+        }
+        linkArm = false;
+        if (ax >= 0f) {
+            gotoMap(dest, ax, ay);
+        } else {
+            loadMap(findMap(dest));
+            spawnPlayer();
+            edgeCd = 1.2f;
+        }
+    }
+
+    /** Bước hẳn vào vùng cổng (không cần va) cũng qua cổng; đồng thời
+     *  quản nhịp nạp lại cổng sau mỗi lần qua. */
+    private void updateLinkPortals() {
+        if (mapDef == null || houseIn || farmIn || anyModalOpen()) return;
+        int d = linkDestAt(mapDef.id, playerX, playerY);
+        if (!linkArm) {
+            if (d < 0) linkArm = true;
+            return;
+        }
+        if (d > 0 && edgeCd <= 0f) linkTravel(d);
+    }
+
+    /** Harness: đứng ở bãi biển (map 18) ngay dưới cổng đi khu đá (27)
+     *  rồi va lên vào vùng cổng — kỳ vọng chuyển sang map 27. */
+    public void debugLinkBump() {
+        if (houseIn) exitHouse();
+        houseBuyOpen = false;
+        houseMenuOpen = false;
+        houseSheetOpen = false;
+        loadMap(findMap(18));
+        playerX = 1260f;
+        playerY = 36f;
+        linkArm = true;
+        tryPortal(1260f, 12f);
+    }
+
+    /** Harness: mở bản đồ thành phố với vùng Mê cung đang chọn. */
+    public void debugCityMapMaze() {
+        houseBuyOpen = false;
+        houseMenuOpen = false;
+        houseSheetOpen = false;
+        openCityMap();
+        selRegion = 8;
     }
 
     /** Có panel modal nào đang mở không (đang mở thì không chuyển map). */
