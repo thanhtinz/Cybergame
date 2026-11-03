@@ -368,11 +368,83 @@ public class FarmService extends Service {
 //        this.session.sendMessage(ms);
     }
 
+    // [PORT] Giá vật phẩm farm (phân bón/thức ăn/thuốc, id 111-124) theo
+    // farm_info.dat: {priceXu, priceLuong}; -1/0 = không bán bằng loại tiền đó.
+    private static final java.util.Map<Integer, int[]> FARM_ITEM_PRICES = new java.util.HashMap<>();
+    static {
+        FARM_ITEM_PRICES.put(111, new int[]{7, -1});
+        FARM_ITEM_PRICES.put(112, new int[]{10, -1});
+        FARM_ITEM_PRICES.put(113, new int[]{20, -1});
+        FARM_ITEM_PRICES.put(114, new int[]{30, -1});
+        FARM_ITEM_PRICES.put(115, new int[]{-1, 1});
+        FARM_ITEM_PRICES.put(116, new int[]{1, -1});
+        FARM_ITEM_PRICES.put(117, new int[]{1, -1});
+        FARM_ITEM_PRICES.put(118, new int[]{1, -1});
+        FARM_ITEM_PRICES.put(119, new int[]{1, -1});
+        FARM_ITEM_PRICES.put(120, new int[]{10, -1});
+        FARM_ITEM_PRICES.put(121, new int[]{10, -1});
+        FARM_ITEM_PRICES.put(122, new int[]{25, -1});
+        FARM_ITEM_PRICES.put(123, new int[]{5, -1});
+        FARM_ITEM_PRICES.put(124, new int[]{5, -1});
+    }
+
     public void Buy_item_farm(Message ms) throws IOException {
         short id = ms.reader().readShort();
         byte n = ms.reader().readByte();
         byte type = ms.reader().readByte();
         System.out.println("item farm id "+id+" sl "+n+" type sell"+type);
+
+        // [PORT] Vật phẩm farm (id >= 100): mua vào kho PhanBon, cùng khuôn gói
+        // 62 như mua hạt. Bản fan chỉ tra bảng cây nên mua phân bón luôn báo lỗi.
+        if (id >= 100) {
+            int[] prices = FARM_ITEM_PRICES.get((int) id);
+            if (prices == null) {
+                this.session.user.getAvatarService().serverDialog("Không có vật phẩm này");
+                return;
+            }
+            boolean byXuF = type == 1;
+            int priceF = byXuF ? prices[0] : prices[1];
+            if (priceF <= 0) {
+                this.session.user.getAvatarService().serverDialog(byXuF
+                        ? "Vật phẩm này không bán bằng xu" : "Vật phẩm này không bán bằng lượng");
+                return;
+            }
+            long beforeF = byXuF ? this.session.user.getXu() : this.session.user.getLuong();
+            if (beforeF < (long) priceF * n) {
+                this.session.user.getAvatarService().serverDialog(byXuF ? "bạn không đủ xu" : "bạn không đủ lượng");
+                return;
+            }
+            PhanBon exist = null;
+            for (PhanBon p : this.session.user.PhanBon) {
+                if (p.getId() == id) { exist = p; break; }
+            }
+            if (exist != null && exist.getSoluong() + n > 99) {
+                this.session.user.getAvatarService().serverDialog("số lượng nhiều rồi");
+                return;
+            }
+            if (byXuF) {
+                this.session.user.updateXu(-priceF * n);
+            } else {
+                this.session.user.updateLuong(-priceF * n);
+            }
+            if (exist != null) {
+                exist.setSoluong(exist.getSoluong() + n);
+            } else {
+                this.session.user.PhanBon.add(new PhanBon(id, n));
+            }
+            ms = new Message(62);
+            DataOutputStream ds = ms.writer();
+            ds.writeShort(id);
+            ds.writeByte(n);
+            ds.writeInt((int) beforeF);
+            ds.writeByte(type);
+            ds.writeInt((int) this.session.user.getXu());
+            ds.writeInt((int) this.session.user.getLuong());
+            ds.writeInt(0);
+            ds.flush();
+            this.session.sendMessage(ms);
+            return;
+        }
 
         farmItem itemf = PartManager.getInstance().findFarmitemByID(id);
         if (itemf == null) {

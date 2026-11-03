@@ -58,8 +58,21 @@ public class FarmWorld {
         public float phase;      // lệch pha lang thang cho từng con
     }
 
+    public static class ProductDef {
+        public String name;
+        public int priceXu;
+        public int img = -1; // -1 = dùng icon của cây (sản phẩm cây tĩnh)
+    }
+
+    public static class FarmItemDef {
+        public String name;
+        public int priceXu, priceLuong, img;
+    }
+
     public final Map<Integer, TreeDef> trees = new HashMap<>();
     public final Map<Integer, AnimalDef> animalDefs = new HashMap<>();
+    public final Map<Integer, ProductDef> productDefs = new HashMap<>();
+    public final Map<Integer, FarmItemDef> farmItemDefs = new HashMap<>();
     private final Map<Integer, int[]> imgRects = new HashMap<>(); // id -> {big,x,y,w,h}
 
     public final List<Cell> cells = new ArrayList<>();
@@ -120,6 +133,27 @@ public class FarmWorld {
                 d.idImg = new int[im.size];
                 for (int i = 0; i < im.size; i++) d.idImg[i] = im.getInt(i);
                 animalDefs.put(d.species, d);
+            }
+            JsonValue prods = root.get("products");
+            if (prods != null) {
+                for (JsonValue p : prods) {
+                    ProductDef d = new ProductDef();
+                    d.name = p.getString("name");
+                    d.priceXu = p.getInt("priceXu");
+                    if (p.has("img")) d.img = p.getInt("img");
+                    productDefs.put(Integer.parseInt(p.name), d);
+                }
+            }
+            JsonValue items = root.get("items");
+            if (items != null) {
+                for (JsonValue it : items) {
+                    FarmItemDef d = new FarmItemDef();
+                    d.name = it.getString("des");
+                    d.priceXu = it.getInt("priceXu");
+                    d.priceLuong = it.getInt("priceLuong");
+                    d.img = it.getInt("img");
+                    farmItemDefs.put(it.getInt("id"), d);
+                }
             }
             JsonValue rects = new JsonReader().parse(
                 GameFiles.data("data/farmimgdata.json").readString("UTF-8"));
@@ -455,6 +489,12 @@ public class FarmWorld {
         usableItems.clear();
         usableItems.add(new int[]{113, 2});
         usableItems.add(new int[]{112, 1});
+        products.clear();
+        products.add(new int[]{286, 45});
+        products.add(new int[]{0, 12});
+        products.add(new int[]{200, 8});
+        specials.clear();
+        specials.add(new int[]{215, 3});
         joined = true;
         invLoaded = true;
     }

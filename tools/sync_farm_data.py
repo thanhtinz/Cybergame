@@ -97,7 +97,7 @@ products = {}
 for t in trees:
     products[t["productId"]] = {"name": t["name"], "priceXu": t["productPrice"]}
 for it in dec["items2_notAdded"]:
-    products[it["ID"]] = {"name": it["des"], "priceXu": it["priceXu"]}
+    products[it["ID"]] = {"name": it["des"], "priceXu": it["priceXu"], "img": it["IDImg"]}
 animals = [{
     "species": a["species"], "name": a["name"], "priceXu": a["priceXu"],
     "priceLuong": a["priceLuong"], "harvestHours": a["harvestTime"],

@@ -679,6 +679,20 @@ public class ScreenshotMain {
                     case 59:
                         if (frame == 15) {
                             shot("shot-farm-seeds.png");
+                            world.debugOpenFarmStore();
+                            stage = 60; frame = 0;
+                        }
+                        break;
+                    case 60:
+                        if (frame == 15) {
+                            shot("shot-farm-store.png");
+                            world.debugOpenFarmShop();
+                            stage = 61; frame = 0;
+                        }
+                        break;
+                    case 61:
+                        if (frame == 15) {
+                            shot("shot-farm-shop.png");
                             System.out.println("SCREENSHOT DONE");
                             Gdx.app.exit();
                         }
