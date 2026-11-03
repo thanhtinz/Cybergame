@@ -119,8 +119,25 @@ public class FarmMsgHandler extends MessageHandler {
                     this.service.serverDialog("Mở rộng nuôi cá đang xây dựng");
                     break;
                 }
+                case Cmd.PRICE_ANIMAL: {
+                    this.service.priceAnimal(mss);
+                    break;
+                }
+                case Cmd.SELL_ANIMAL: {
+                    this.service.sellAnimal(mss);
+                    break;
+                }
+                case Cmd.HARVEST_ANIMAL: {
+                    this.service.harvestAnimal(mss);
+                    break;
+                }
                 case Cmd.COOKING: {
-                   // this.service.huy("Hủy Nấu Ăn Nhanh tutu");
+                    // [PORT] Bản fan để trống; bản port nấu thật theo FarmFoodData.
+                    this.service.doCooking(mss);
+                    break;
+                }
+                case Cmd.HARVEST_COOK: {
+                    this.service.harvestCook(mss);
                     break;
                 }
                 case Cmd.COMMUNICATE: {

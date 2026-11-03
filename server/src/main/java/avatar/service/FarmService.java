@@ -270,6 +270,42 @@ public class FarmService extends Service {
         ms.reader().readInt(); // idUser (farm của chính mình)
         int idx = ms.reader().readByte();
         int idItem = ms.reader().readShort();
+        // [PORT] Thức ăn vật nuôi (116-119, action 5 của dat): byte thứ hai là
+        // CHỈ SỐ VẬT NUÔI thay cho chỉ số ô. Khu vực khớp: 116 -> hồ cá (4),
+        // 117 -> gia cầm (1), 118 -> gia súc (2), 119 -> chó (3). Bản fan không
+        // có nhánh này; client gốc cũng không để lại dấu vết giao thức cho ăn
+        // nên bản port quy ước vậy và ghi rõ ở đây.
+        if (idItem >= 116 && idItem <= 119) {
+            if (idx < 0 || idx >= this.session.user.Animal.size()) {
+                return;
+            }
+            Animal pet = this.session.user.Animal.get(idx);
+            int needArea = idItem == 116 ? 4 : idItem == 117 ? 1 : idItem == 118 ? 2 : 3;
+            int petArea = pet.getId() == 50 || pet.getId() == 56 ? 1
+                    : pet.getId() == 53 ? 3
+                    : pet.getId() == 54 || pet.getId() == 59 ? 4 : 2;
+            if (petArea != needArea) {
+                return;
+            }
+            PhanBon food = null;
+            for (PhanBon p : this.session.user.PhanBon) {
+                if (p.getId() == idItem && p.getSoluong() > 0) {
+                    food = p;
+                    break;
+                }
+            }
+            if (food == null) {
+                return;
+            }
+            food.setSoluong(food.getSoluong() - 1);
+            if (food.getSoluong() <= 0) {
+                this.session.user.PhanBon.remove(food);
+            }
+            pet.setLastFeed(System.currentTimeMillis() / 1000L);
+            pet.setHealth(100);
+            sendUseItemEcho(idx, idItem);
+            return;
+        }
         if (idx < 0 || idx >= this.session.user.landItems.size()) {
             return;
         }
@@ -328,6 +364,198 @@ public class FarmService extends Service {
         ds.writeByte(idx);
         ds.writeShort(idItem);
         ds.flush();
+        this.session.sendMessage(ms);
+    }
+
+    // ---- [PORT] Vật nuôi: giá bán (72) / bán (73) / thu hoạch (74) ----
+    // Bản fan không hề có 3 handler này (chỉ có hằng số Cmd). Khuôn gói lấy từ
+    // client gốc: 72 C->S {int idFarm, byte index} -> S->C {byte index, UTF text};
+    // 73 C->S {int idFarm, byte index} -> S->C {int idFarm, byte index, int xu};
+    // 74 C->S {int idFarm, byte index} -> S->C {byte index, short number}.
+
+    private static String animalName(int species) {
+        switch (species) {
+            case 50: return "Gà";
+            case 51: return "Bò";
+            case 52: return "Heo";
+            case 53: return "Chó";
+            case 54: return "Cá chép";
+            case 55: return "Cừu";
+            case 56: return "Vịt";
+            case 58: return "Trâu";
+            case 59: return "Rùa";
+            default: return "Vật nuôi";
+        }
+    }
+
+    public void priceAnimal(Message ms) throws IOException {
+        ms.reader().readInt(); // idFarm
+        int idx = ms.reader().readByte();
+        if (idx < 0 || idx >= this.session.user.Animal.size()) {
+            return;
+        }
+        Animal pet = this.session.user.Animal.get(idx);
+        int[] e = econOf(pet);
+        int sellback = e == null ? 0 : e[2];
+        String text = sellback > 0
+                ? "Bạn có muốn bán " + animalName(pet.getId()) + " với giá "
+                    + String.format("%,d", sellback).replace(',', '.') + " xu không?"
+                : animalName(pet.getId()) + " là chó giữ nhà, không bán được.";
+        ms = new Message(Cmd.PRICE_ANIMAL);
+        DataOutputStream ds = ms.writer();
+        ds.writeByte(idx);
+        ds.writeUTF(text);
+        ds.flush();
+        this.session.sendMessage(ms);
+    }
+
+    public void sellAnimal(Message ms) throws IOException {
+        int idFarm = ms.reader().readInt();
+        int idx = ms.reader().readByte();
+        if (idx < 0 || idx >= this.session.user.Animal.size()) {
+            return;
+        }
+        Animal pet = this.session.user.Animal.get(idx);
+        int[] e = econOf(pet);
+        if (e == null || e[2] <= 0) {
+            this.session.user.getAvatarService().serverDialog("Vật nuôi này không bán được");
+            return;
+        }
+        this.session.user.Animal.remove(idx);
+        this.session.user.updateXu(e[2]);
+        ms = new Message(Cmd.SELL_ANIMAL);
+        DataOutputStream ds = ms.writer();
+        ds.writeInt(idFarm);
+        ds.writeByte(idx);
+        ds.writeInt((int) this.session.user.getXu());
+        ds.flush();
+        this.session.sendMessage(ms);
+    }
+
+    public void harvestAnimal(Message ms) throws IOException {
+        ms.reader().readInt(); // idFarm
+        int idx = ms.reader().readByte();
+        int n = 0;
+        if (idx >= 0 && idx < this.session.user.Animal.size()) {
+            Animal pet = this.session.user.Animal.get(idx);
+            int[] e = econOf(pet);
+            if (e != null && e[0] > 0) {
+                long from = pet.getLastHarvest() > 0 ? pet.getLastHarvest() : pet.getBornTime();
+                long cycles = (System.currentTimeMillis() / 1000L - from) / (e[0] * 60L);
+                if (cycles > 0) {
+                    n = producible(pet);
+                    if (n > 0) {
+                        // sản phẩm vật nuôi mang id = species (client gốc addProductAnimal)
+                        avatar.Farm.NongSan exist = null;
+                        for (avatar.Farm.NongSan p : this.session.user.NongSan) {
+                            if (p.getId() == pet.getId()) {
+                                exist = p;
+                                break;
+                            }
+                        }
+                        if (exist != null) {
+                            exist.setSoluong(exist.getSoluong() + n);
+                        } else {
+                            this.session.user.NongSan.add(new avatar.Farm.NongSan(pet.getId(), n));
+                        }
+                        // Đói chỉ giảm phần thu, chu kỳ vẫn chốt đủ số chu kỳ đã trôi.
+                        pet.setLastHarvest(from + cycles * e[0] * 60L);
+                    }
+                }
+            }
+        }
+        ms = new Message(Cmd.HARVEST_ANIMAL);
+        DataOutputStream ds = ms.writer();
+        ds.writeByte(idx);
+        ds.writeShort(Math.min(32000, n));
+        ds.flush();
+        this.session.sendMessage(ms);
+    }
+
+    // ---- [PORT] Nấu ăn (91 bắt đầu / 92 nhận món) ----
+    // Bản fan để trống cả hai. Công thức từ FarmFoodData (sinh từ dat):
+    // nguyên liệu trừ trong kho nông sản (thường + đặc biệt), món chín sau
+    // cookTime phút, nhận bằng gói 92 -> sản phẩm vào kho (+1).
+
+    public void doCooking(Message ms) throws IOException {
+        short foodId = ms.reader().readShort();
+        avatar.Farm.FarmFoodData.Food food = avatar.Farm.FarmFoodData.FOODS.get((int) foodId);
+        if (food == null) {
+            return;
+        }
+        if (this.session.user.foodId > 0) {
+            this.session.user.getAvatarService().serverDialog("Đang nấu món khác, hãy chờ món đó chín đã");
+            return;
+        }
+        // Kiểm đủ nguyên liệu trước khi trừ (gộp cả kho thường + đặc biệt).
+        for (int[] mat : food.materials) {
+            int have = 0;
+            for (avatar.Farm.NongSan p : this.session.user.NongSan) {
+                if (p.getId() == mat[0]) have += p.getSoluong();
+            }
+            for (avatar.Farm.NongSanDacBiet p : this.session.user.NongSanDacBiet) {
+                if (p.getId() == mat[0]) have += p.getSoluong();
+            }
+            if (have < mat[1]) {
+                this.session.user.getAvatarService().serverDialog("Không đủ nguyên liệu để nấu món này");
+                return;
+            }
+        }
+        for (int[] mat : food.materials) {
+            int need = mat[1];
+            for (java.util.Iterator<avatar.Farm.NongSan> it = this.session.user.NongSan.iterator(); it.hasNext() && need > 0;) {
+                avatar.Farm.NongSan p = it.next();
+                if (p.getId() != mat[0]) continue;
+                int take = Math.min(need, p.getSoluong());
+                p.setSoluong(p.getSoluong() - take);
+                need -= take;
+                if (p.getSoluong() <= 0) it.remove();
+            }
+            for (java.util.Iterator<avatar.Farm.NongSanDacBiet> it = this.session.user.NongSanDacBiet.iterator(); it.hasNext() && need > 0;) {
+                avatar.Farm.NongSanDacBiet p = it.next();
+                if (p.getId() != mat[0]) continue;
+                int take = Math.min(need, p.getSoluong());
+                p.setSoluong(p.getSoluong() - take);
+                need -= take;
+                if (p.getSoluong() <= 0) it.remove();
+            }
+        }
+        this.session.user.foodId = foodId;
+        this.session.user.cookFinish = System.currentTimeMillis() / 1000L + food.cookMinutes * 60L;
+        ms = new Message(Cmd.COOKING);
+        DataOutputStream ds = ms.writer();
+        ds.writeShort(foodId);
+        ds.writeShort(food.cookMinutes);
+        ds.flush();
+        this.session.sendMessage(ms);
+    }
+
+    public void harvestCook(Message ms) throws IOException {
+        if (this.session.user.foodId <= 0) {
+            return;
+        }
+        if (System.currentTimeMillis() / 1000L < this.session.user.cookFinish) {
+            return; // chưa chín — client gốc cũng chỉ chờ, không có phản hồi
+        }
+        avatar.Farm.FarmFoodData.Food food = avatar.Farm.FarmFoodData.FOODS.get(this.session.user.foodId);
+        this.session.user.foodId = 0;
+        this.session.user.cookFinish = 0;
+        if (food != null) {
+            avatar.Farm.NongSan exist = null;
+            for (avatar.Farm.NongSan p : this.session.user.NongSan) {
+                if (p.getId() == food.productId) {
+                    exist = p;
+                    break;
+                }
+            }
+            if (exist != null) {
+                exist.setSoluong(exist.getSoluong() + 1);
+            } else {
+                this.session.user.NongSan.add(new avatar.Farm.NongSan(food.productId, 1));
+            }
+        }
+        ms = new Message(Cmd.HARVEST_COOK);
+        ms.writer().flush();
         this.session.sendMessage(ms);
     }
 
@@ -553,6 +781,8 @@ public class FarmService extends Service {
 
         Animal newAnimal = new Animal(n, 100, 1, 0, 0, true, false, false);
         newAnimal.setBornTime(System.currentTimeMillis() / 1000L);
+        newAnimal.setLastFeed(newAnimal.getBornTime());
+        newAnimal.setLastHarvest(newAnimal.getBornTime());
         this.session.user.Animal.add(newAnimal);
 
         ms = new Message(Cmd.BUY_ANIMAL);
@@ -706,12 +936,68 @@ public class FarmService extends Service {
     // bornTime (int) · health (byte) · harvestPer (byte) · numEggOne (byte) ·
     // hunger (bool) · disease[0] (bool) · disease[1] (bool).
     // Bản fan ghi health(int)/level/resourceCount/... vào đúng vị trí nhưng sai nghĩa toàn bộ.
+    // [PORT] Kinh tế vật nuôi theo farm_info.dat (mục des của AnimalInfo, đã kiểm
+    // chứng từng loài 2026-11-03): species -> {chu kỳ phút, sản lượng/chu kỳ,
+    // giá bán lại (xu)}. Loài không có dòng sản phẩm (heo/chó/cá/trâu/rùa) chỉ
+    // bán lại được. Chó không có giá bán trong dat -> 0 = không bán được.
+    private static final java.util.Map<Integer, int[]> ANIMAL_ECON = new java.util.HashMap<>();
+    static {
+        ANIMAL_ECON.put(50, new int[]{360, 20, 950});    // Gà: 20 trứng / 6 giờ
+        ANIMAL_ECON.put(51, new int[]{360, 30, 2000});   // Bò: 30 sữa / 6 giờ
+        ANIMAL_ECON.put(52, new int[]{0, 0, 2000});      // Heo
+        ANIMAL_ECON.put(53, new int[]{0, 0, 0});         // Chó (giữ nhà)
+        ANIMAL_ECON.put(54, new int[]{0, 0, 10000});     // Cá chép
+        ANIMAL_ECON.put(55, new int[]{720, 20, 1500});   // Cừu: 20 lông / 12 giờ
+        ANIMAL_ECON.put(56, new int[]{360, 20, 1200});   // Vịt: 20 trứng / 6 giờ
+        ANIMAL_ECON.put(58, new int[]{0, 0, 3000});      // Trâu
+        ANIMAL_ECON.put(59, new int[]{0, 0, 5000});      // Rùa
+    }
+
+    private static int[] econOf(Animal a) {
+        return ANIMAL_ECON.get(a.getId());
+    }
+
+    /** Đói: quá 6 giờ chưa cho ăn (mốc ăn gần nhất, mặc định = lúc mua). */
+    private boolean isHungry(Animal a) {
+        long last = a.getLastFeed() > 0 ? a.getLastFeed() : a.getBornTime();
+        return System.currentTimeMillis() / 1000L - last > 6L * 3600L;
+    }
+
+    /** Số sản phẩm đang chờ thu (đói -> chỉ một nửa). */
+    private int producible(Animal a) {
+        int[] e = econOf(a);
+        if (e == null || e[0] <= 0) {
+            return 0;
+        }
+        long from = a.getLastHarvest() > 0 ? a.getLastHarvest() : a.getBornTime();
+        long cycles = (System.currentTimeMillis() / 1000L - from) / (e[0] * 60L);
+        if (cycles <= 0) {
+            return 0;
+        }
+        int n = (int) Math.min(100000, cycles * e[1]);
+        return isHungry(a) ? n / 2 : n;
+    }
+
+    /** % tiến độ tới chu kỳ sản phẩm kế tiếp (cho thanh harvestPer của client). */
+    private int harvestProgress(Animal a) {
+        int[] e = econOf(a);
+        if (e == null || e[0] <= 0) {
+            return 0;
+        }
+        long from = a.getLastHarvest() > 0 ? a.getLastHarvest() : a.getBornTime();
+        long elapsed = System.currentTimeMillis() / 1000L - from;
+        long cycleSec = e[0] * 60L;
+        return (int) Math.min(100, (elapsed % cycleSec) * 100 / cycleSec);
+    }
+
     private void writeInfoAnimal(DataOutputStream ds, Animal animal) throws IOException {
         ds.writeInt((int) animal.getBornTime());
         ds.writeByte(Math.min(100, Math.max(0, animal.getHealth())));
-        ds.writeByte(animal.isHarvestable() ? 100 : 0);
-        ds.writeByte(Math.min(255, Math.max(0, animal.getResourceCount())));
-        ds.writeBoolean(false); // hunger — model gốc không mô phỏng đói
+        // [PORT] harvestPer/numEggOne tính từ chu kỳ dat thay cho cờ lưu sẵn của bản fan.
+        int ready = producible(animal);
+        ds.writeByte(ready > 0 ? 100 : harvestProgress(animal));
+        ds.writeByte(Math.min(255, ready));
+        ds.writeBoolean(isHungry(animal)); // hunger — bản port mô phỏng theo mốc cho ăn
         ds.writeBoolean(false); // disease[0]
         ds.writeBoolean(false); // disease[1]
     }
@@ -770,7 +1056,13 @@ public class FarmService extends Service {
         }
 
         // [PORT] Bản fan luôn ghi foodID=3 + 5 phút -> client tưởng đang nấu món Cơm mãi mãi.
-        // Không ghi gì thêm: client đọc available()>0 mới lấy foodID, mặc định 0 = không nấu.
+        // Bản port: chỉ ghi đuôi foodID + remain(phút) khi THẬT SỰ đang nấu (gói 91);
+        // client đọc available()>0 mới lấy, mặc định 0 = không nấu.
+        if (this.session.user.foodId > 0) {
+            long remainSec = this.session.user.cookFinish - System.currentTimeMillis() / 1000L;
+            ds.writeShort(this.session.user.foodId);
+            ds.writeShort((short) Math.max(0, (remainSec + 59) / 60));
+        }
         ds.flush();
 
         this.session.sendMessage(ms);

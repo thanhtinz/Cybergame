@@ -69,8 +69,10 @@ new_create = """CREATE TABLE `farmitems` (
   `gia_san_pham` int(11) NOT NULL,
   `gia_hat_luong` int(11) NOT NULL DEFAULT 0
 )"""
-assert old_create in dump, "không thấy CREATE TABLE farmitems trong dump"
-dump = dump.replace(old_create, new_create)
+if old_create in dump:
+    dump = dump.replace(old_create, new_create)
+else:
+    assert new_create in dump, "không thấy CREATE TABLE farmitems trong dump"
 
 # INSERT: thay số của từng dòng theo id, giữ nguyên tên trong dump.
 def fix_row(m):
@@ -80,7 +82,7 @@ def fix_row(m):
     return "(%d, '%s', %d, %d, %d, %d)" % (
         row_id, name, t["minutes"], t["quantity"], t["seedXu"], t["seedLuong"])
 
-pat = re.compile(r"\((\d+), '((?:[^'\\]|\\.)*)', \d+, \d+, \d+\)")
+pat = re.compile(r"\((\d+), '((?:[^'\\]|\\.)*)', \d+, \d+, \d+(?:, \d+)?\)")
 # chỉ áp trong đoạn INSERT của farmitems
 start = dump.find("INSERT INTO `farmitems`")
 assert start >= 0
@@ -108,6 +110,13 @@ farm_items = [{
     "id": i["ID"], "img": i["IDImg"], "des": i["des"], "priceXu": i["priceXu"],
     "priceLuong": i["priceLuong"], "type": i.get("type"), "action": i.get("action"),
 } for i in dec["items"]]
+# Sản phẩm vật nuôi: client gốc (FarmScr.addProductAnimal) tạo vật phẩm kho với
+# ID = species, giá = priceProduct, icon = iconProduct. Bổ sung vào bảng sản phẩm
+# để kho/bán/nấu ăn dùng chung một bảng.
+for a in dec["animals"]:
+    if a["priceProduct"] > 0:
+        products[a["species"]] = {"name": a["name"], "priceXu": a["priceProduct"],
+                                  "img": a["iconProduct"]}
 out = {"trees": trees, "animals": animals, "products": products, "items": farm_items,
        "foods": dec["foods"]}
 with open(f"{ROOT}/assets/data/farmtrees.json", "w", encoding="utf-8") as f:
@@ -155,5 +164,44 @@ lines.append("    }")
 lines.append("}")
 open(f"{ROOT}/server/src/main/java/avatar/Farm/FarmProductData.java", "w").write("\n".join(lines) + "\n")
 print("[4] FarmProductData.java:", len(prod_map), "productID,", len(price_map), "giá bán")
+
+# ---------- 5) FarmFoodData.java (công thức nấu ăn) ----------
+flines = []
+flines.append("package avatar.Farm;")
+flines.append("")
+flines.append("import java.util.HashMap;")
+flines.append("import java.util.Map;")
+flines.append("")
+flines.append("/**")
+flines.append(" * [PORT] Sinh tự động bởi tools/sync_farm_data.py từ farm_info.dat (client).")
+flines.append(" * Công thức nấu ăn: id món -> {productID, cookTime(phút), materials[][2]}.")
+flines.append(" * Nguyên liệu là id nông sản trong kho (sản phẩm vật nuôi mang id = species).")
+flines.append(" */")
+flines.append("public final class FarmFoodData {")
+flines.append("    public static final class Food {")
+flines.append("        public final int productId;")
+flines.append("        public final int cookMinutes;")
+flines.append("        public final int[][] materials;")
+flines.append("")
+flines.append("        Food(int productId, int cookMinutes, int[][] materials) {")
+flines.append("            this.productId = productId;")
+flines.append("            this.cookMinutes = cookMinutes;")
+flines.append("            this.materials = materials;")
+flines.append("        }")
+flines.append("    }")
+flines.append("")
+flines.append("    public static final Map<Integer, Food> FOODS = new HashMap<>();")
+flines.append("    static {")
+for fd in dec["foods"]:
+    mats = ", ".join("{ %d, %d }" % (m[0], m[1]) for m in fd["materials"])
+    flines.append("        FOODS.put(%d, new Food(%d, %d, new int[][]{ %s }));"
+                  % (fd["ID"], fd["productID"], fd["cookTime"], mats))
+flines.append("    }")
+flines.append("")
+flines.append("    private FarmFoodData() {")
+flines.append("    }")
+flines.append("}")
+open(f"{ROOT}/server/src/main/java/avatar/Farm/FarmFoodData.java", "w").write("\n".join(flines) + "\n")
+print("[5] FarmFoodData.java:", len(dec["foods"]), "công thức")
 
 print("XONG — chạy SQL vào DB bằng mysql client ở bước riêng.")

@@ -39,6 +39,10 @@ public final class FarmProductData {
         SELL_PRICE_XU.put(8, 3);
         SELL_PRICE_XU.put(9, 3);
         SELL_PRICE_XU.put(10, 3);
+        SELL_PRICE_XU.put(50, 30);
+        SELL_PRICE_XU.put(51, 60);
+        SELL_PRICE_XU.put(55, 90);
+        SELL_PRICE_XU.put(56, 30);
         SELL_PRICE_XU.put(200, 3);
         SELL_PRICE_XU.put(201, 3);
         SELL_PRICE_XU.put(202, 3);

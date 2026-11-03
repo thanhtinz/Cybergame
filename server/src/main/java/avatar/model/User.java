@@ -121,6 +121,10 @@ public class User {
     /// /fam
     public List<LandItem> landItems = new ArrayList<>();
     public List<Animal> Animal = new ArrayList<>();
+    // [PORT] Trạng thái nấu ăn (gói 91/92): foodId đang nấu (0 = không nấu) +
+    // cookFinish = giây epoch khi món chín. Lưu ở farm_data.food_id/cook_finish.
+    public int foodId = 0;
+    public long cookFinish = 0;
     public List<HatGiong> hatgiong = new ArrayList<>();
     public List<NongSan> NongSan = new ArrayList<>();
     public List<PhanBon> PhanBon = new ArrayList<>();
@@ -645,6 +649,8 @@ public class User {
             animalObject.put("isReadyForBreeding", animal.isReadyForBreeding());
             animalObject.put("isHarvestable", animal.isHarvestable());
             animalObject.put("bornTime", animal.getBornTime());
+            animalObject.put("lastFeed", animal.getLastFeed());
+            animalObject.put("lastHarvest", animal.getLastHarvest());
             animalData.add(animalObject);
         }
 
@@ -683,8 +689,8 @@ public class User {
 
 
         // Cập nhật cơ sở dữ liệu với dữ liệu đã tạo
-        String query = "INSERT INTO `farm_data` (user_id, land_data, animal_data,hatgiong,phanbon,nongsan,nongsandacbiet) VALUES (?, ?, ?, ?, ?, ?, ?) " +
-                "ON DUPLICATE KEY UPDATE land_data = ?, animal_data = ?, hatgiong = ?, phanbon = ?, nongsan = ?, nongsandacbiet = ?";
+        String query = "INSERT INTO `farm_data` (user_id, land_data, animal_data,hatgiong,phanbon,nongsan,nongsandacbiet,food_id,cook_finish) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) " +
+                "ON DUPLICATE KEY UPDATE land_data = ?, animal_data = ?, hatgiong = ?, phanbon = ?, nongsan = ?, nongsandacbiet = ?, food_id = ?, cook_finish = ?";
         try (Connection connection = DbManager.getInstance().getConnection();
              PreparedStatement ps = connection.prepareStatement(query)) {
 
@@ -704,19 +710,23 @@ public class User {
             ps.setString(5, phanbonDataString);
             ps.setString(6, nongsanDataString);
             ps.setString(7, nongsandacbietDataString);
-            ps.setString(8, landDataString);
-            ps.setString(9, animalDataString);
-            ps.setString(10, hatgiongDataString);
-            ps.setString(11, phanbonDataString);
-            ps.setString(12, nongsanDataString);
-            ps.setString(13, nongsandacbietDataString);
+            ps.setInt(8, this.session.user.foodId);
+            ps.setLong(9, this.session.user.cookFinish);
+            ps.setString(10, landDataString);
+            ps.setString(11, animalDataString);
+            ps.setString(12, hatgiongDataString);
+            ps.setString(13, phanbonDataString);
+            ps.setString(14, nongsanDataString);
+            ps.setString(15, nongsandacbietDataString);
+            ps.setInt(16, this.session.user.foodId);
+            ps.setLong(17, this.session.user.cookFinish);
             ps.executeUpdate();
         }
     }
 
     public void loadFarmData(int userId) throws SQLException {
 
-        String query = "SELECT land_data, animal_data,hatgiong,phanbon,nongsan,nongsandacbiet FROM `farm_data` WHERE user_id = ?";
+        String query = "SELECT land_data, animal_data,hatgiong,phanbon,nongsan,nongsandacbiet,food_id,cook_finish FROM `farm_data` WHERE user_id = ?";
 
         try (Connection connection = DbManager.getInstance().getConnection();
              PreparedStatement ps = connection.prepareStatement(query)) {
@@ -730,6 +740,14 @@ public class User {
                     String phanbonDataString = res.getString("phanbon");
                     String nongsanDataString = res.getString("nongsan");
                     String nongsandacbietDataString = res.getString("nongsandacbiet");
+                    // [PORT] Trạng thái nấu ăn; DB chưa migrate (thiếu cột) thì bỏ qua.
+                    try {
+                        this.session.user.foodId = res.getInt("food_id");
+                        this.session.user.cookFinish = res.getLong("cook_finish");
+                    } catch (SQLException ignored) {
+                        this.session.user.foodId = 0;
+                        this.session.user.cookFinish = 0;
+                    }
 
                     // Phân tích dữ liệu ô đất (land_data)
                     JSONArray landData = (JSONArray) JSONValue.parse(landDataString);
@@ -778,6 +796,11 @@ public class User {
                         if (bt != null) {
                             animalObj.setBornTime(((Number) bt).longValue());
                         }
+                        // [PORT] Dữ liệu cũ không có 2 mốc này -> mặc định = bornTime.
+                        Object lf = obj.get("lastFeed");
+                        animalObj.setLastFeed(lf != null ? ((Number) lf).longValue() : animalObj.getBornTime());
+                        Object lh = obj.get("lastHarvest");
+                        animalObj.setLastHarvest(lh != null ? ((Number) lh).longValue() : animalObj.getBornTime());
                         animals.add(animalObj);
                     }
                     // Cập nhật danh sách vật nuôi cho người chơi

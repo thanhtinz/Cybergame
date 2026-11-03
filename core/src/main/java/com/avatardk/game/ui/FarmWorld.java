@@ -69,10 +69,20 @@ public class FarmWorld {
         public int priceXu, priceLuong, img;
     }
 
+    public static class FoodDef {
+        public int id;
+        public String name;
+        public int productId, cookMinutes;
+        public int[][] materials = new int[0][];
+    }
+
     public final Map<Integer, TreeDef> trees = new HashMap<>();
     public final Map<Integer, AnimalDef> animalDefs = new HashMap<>();
     public final Map<Integer, ProductDef> productDefs = new HashMap<>();
     public final Map<Integer, FarmItemDef> farmItemDefs = new HashMap<>();
+    public final java.util.List<FoodDef> foods = new java.util.ArrayList<>();
+    /** Mốc epoch (giây) món đang nấu chín — suy từ foodRemain lúc join / gói 91. */
+    public long cookEndEpoch;
     private final Map<Integer, int[]> imgRects = new HashMap<>(); // id -> {big,x,y,w,h}
 
     public final List<Cell> cells = new ArrayList<>();
@@ -153,6 +163,24 @@ public class FarmWorld {
                     d.priceLuong = it.getInt("priceLuong");
                     d.img = it.getInt("img");
                     farmItemDefs.put(it.getInt("id"), d);
+                }
+            }
+            JsonValue foodsJ = root.get("foods");
+            if (foodsJ != null) {
+                foods.clear();
+                for (JsonValue f : foodsJ) {
+                    FoodDef d = new FoodDef();
+                    d.id = f.getInt("ID");
+                    d.name = f.getString("text");
+                    d.productId = f.getInt("productID");
+                    d.cookMinutes = f.getInt("cookTime");
+                    JsonValue mats = f.get("materials");
+                    d.materials = new int[mats.size][2];
+                    for (int i = 0; i < mats.size; i++) {
+                        d.materials[i][0] = mats.get(i).getInt(0);
+                        d.materials[i][1] = mats.get(i).getInt(1);
+                    }
+                    foods.add(d);
                 }
             }
             JsonValue rects = new JsonReader().parse(
@@ -273,6 +301,7 @@ public class FarmWorld {
                 foodId = 0;
                 foodRemain = 0;
             }
+            cookEndEpoch = foodId > 0 ? System.currentTimeMillis() / 1000L + foodRemain : 0;
             joined = true;
         } catch (IOException e) {
             System.out.println("FarmWorld.parseJoin loi: " + e.getMessage());
@@ -473,6 +502,13 @@ public class FarmWorld {
         fish.species = 54;
         fish.health = 100;
         animals.add(fish);
+        Animal chicken = new Animal();
+        chicken.species = 50;
+        chicken.health = 100;
+        chicken.bornTime = (int) (System.currentTimeMillis() / 1000L - 25L * 3600L);
+        chicken.numEggOne = 20;
+        chicken.phase = 1.7f;
+        animals.add(chicken);
         starLv = 10;
         starImg = 43;
         starFruit = 46;
@@ -489,10 +525,13 @@ public class FarmWorld {
         usableItems.clear();
         usableItems.add(new int[]{113, 2});
         usableItems.add(new int[]{112, 1});
+        usableItems.add(new int[]{116, 2});
         products.clear();
         products.add(new int[]{286, 45});
         products.add(new int[]{0, 12});
         products.add(new int[]{200, 8});
+        products.add(new int[]{50, 20});
+        products.add(new int[]{6, 720});
         specials.clear();
         specials.add(new int[]{215, 3});
         joined = true;
