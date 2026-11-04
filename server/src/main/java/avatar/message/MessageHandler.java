@@ -354,6 +354,16 @@ public class MessageHandler implements IMessageHandler {
                         }
                         break;
                     }
+                    // [PORT Hub MiniGame] Phong bì hub mini-game + Tàu
+                    // Chiến (bản chính là handler riêng; bản port đăng ký
+                    // vào handler chính như câu cá).
+                    case Cmd.MINIGAME_HUB: {
+                        if (this.client.user != null) {
+                            new avatar.minigame.MiniGameService(this.client).onMessage(mss);
+                            break;
+                        }
+                        break;
+                    }
                     case -27: {
                         this.client.handshakeMessage();
                         break;

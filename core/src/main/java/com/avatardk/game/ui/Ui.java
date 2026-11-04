@@ -268,6 +268,16 @@ public final class Ui {
     }
 
     private static void fillRounded(Pixmap pm, int x, int y, int w, int h, int r) {
+        // BẪY ĐÃ DÍNH (2026-11-03, tour chụp treo 688s CPU): rect nhỏ
+        // (vd 12×6 của phao câu, vòng sóng cá cắn) làm h - 2r ÂM →
+        // fillRect native chạy loạn. Kẹp r theo cạnh nhỏ nhất và bỏ
+        // qua rect không hợp lệ.
+        if (w <= 0 || h <= 0) return;
+        r = Math.max(0, Math.min(r, Math.min(w, h) / 2));
+        if (r == 0) {
+            pm.fillRectangle(x, y, w, h);
+            return;
+        }
         pm.fillRectangle(x + r, y, w - 2 * r, h);
         pm.fillRectangle(x, y + r, w, h - 2 * r);
         pm.fillCircle(x + r, y + r, r);

@@ -186,6 +186,8 @@ public class Session implements ISession {
     public void close() {
         try {
             if (this.user != null) {
+                // [PORT Hub MiniGame] dọn bàn mini-game của người thoát.
+                avatar.minigame.MiniGameService.leaveRoomStatic(this.user, true);
                 this.user.close();
                 UserManager.getInstance().remove(user);
             }

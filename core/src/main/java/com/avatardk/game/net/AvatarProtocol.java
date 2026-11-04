@@ -574,6 +574,123 @@ public final class AvatarProtocol {
         conn.send(new Msg(FISH_DONE));
     }
 
+    // ===== Hub MiniGame + Tàu Chiến (bản chính 3.4.4; docs/tauchien-hub-spec.md) =====
+    // Phong bì một gói MINIGAME_HUB: {byte gameId, byte sub, ...}.
+    // gameId 0 = hub (danh sách bàn/tạo/vào/mời/khán giả), 4 = Tàu Chiến.
+    // (Bản chính dùng handler MINIGAME = -90; server Pack5 đã dùng -90 cho
+    // nâng cấp rương nhà nên bản port dùng -113 — xem Cmd phía server.)
+    public static final byte MINIGAME_HUB = -113;
+    public static final int MG_GAME_TAUCHIEN = 4;
+    // Hub subs (C→S)
+    public static final int MG_LIST = 0, MG_CREATE = 1, MG_JOIN = 2,
+        MG_JOIN_CODE = 3, MG_INVITE = 4, MG_INVITE_REPLY = 5, MG_LEAVE = 6,
+        MG_WATCH = 7, MG_STOP_WATCH = 8, MG_REMATCH = 15;
+    // Hub subs (S→C)
+    public static final int MG_S_LIST = 0, MG_S_JOINED = 10, MG_S_OPP_JOINED = 11,
+        MG_S_OPP_LEFT = 12, MG_S_REMATCH_OFFER = 16, MG_S_INVITE_IN = 20,
+        MG_S_INVITE_RESULT = 21, MG_S_ERROR = 23;
+    // Tàu Chiến subs (hai chiều, theo số lệnh bản chính)
+    public static final int TC_START_PLACE = 1, TC_PLACE_SHIPS = 2,
+        TC_PLACE_RESULT = 3, TC_READY = 4, TC_START_BATTLE = 6, TC_SHOOT = 7,
+        TC_SHOT_RESULT = 8, TC_CHANGE_TURN = 9, TC_END = 10, TC_KICK = 12,
+        TC_SNAPSHOT = 13, TC_SPEC_COUNT = 14;
+
+    private static Msg mgMsg(int gameId, int sub) throws IOException {
+        Msg m = new Msg(MINIGAME_HUB);
+        DataOutputStream w = m.writer();
+        w.writeByte(gameId);
+        w.writeByte(sub);
+        return m;
+    }
+
+    public static void mgList(GameConnection conn) throws IOException {
+        conn.send(mgMsg(0, MG_LIST));
+    }
+
+    public static void mgCreate(GameConnection conn, int gameId, boolean priv)
+            throws IOException {
+        Msg m = mgMsg(0, MG_CREATE);
+        m.writer().writeByte(gameId);
+        m.writer().writeBoolean(priv);
+        conn.send(m);
+    }
+
+    public static void mgJoin(GameConnection conn, int roomId) throws IOException {
+        Msg m = mgMsg(0, MG_JOIN);
+        m.writer().writeInt(roomId);
+        conn.send(m);
+    }
+
+    public static void mgJoinCode(GameConnection conn, String code) throws IOException {
+        Msg m = mgMsg(0, MG_JOIN_CODE);
+        m.writer().writeUTF(code);
+        conn.send(m);
+    }
+
+    public static void mgInvite(GameConnection conn, int userId, int gameId)
+            throws IOException {
+        Msg m = mgMsg(0, MG_INVITE);
+        m.writer().writeInt(userId);
+        m.writer().writeByte(gameId);
+        conn.send(m);
+    }
+
+    public static void mgInviteReply(GameConnection conn, int fromId, boolean ok)
+            throws IOException {
+        Msg m = mgMsg(0, MG_INVITE_REPLY);
+        m.writer().writeInt(fromId);
+        m.writer().writeBoolean(ok);
+        conn.send(m);
+    }
+
+    public static void mgLeave(GameConnection conn) throws IOException {
+        conn.send(mgMsg(0, MG_LEAVE));
+    }
+
+    public static void mgWatch(GameConnection conn, int roomId) throws IOException {
+        Msg m = mgMsg(0, MG_WATCH);
+        m.writer().writeInt(roomId);
+        conn.send(m);
+    }
+
+    public static void mgStopWatch(GameConnection conn) throws IOException {
+        conn.send(mgMsg(0, MG_STOP_WATCH));
+    }
+
+    public static void mgRematch(GameConnection conn) throws IOException {
+        conn.send(mgMsg(0, MG_REMATCH));
+    }
+
+    /** Gửi đội hình Tàu Chiến: {byte n; n × (len, row, col, vert)}. */
+    public static void tcPlaceShips(GameConnection conn, java.util.List<int[]> fleet)
+            throws IOException {
+        Msg m = mgMsg(MG_GAME_TAUCHIEN, TC_PLACE_SHIPS);
+        DataOutputStream w = m.writer();
+        w.writeByte(fleet.size());
+        for (int[] s : fleet) {
+            w.writeByte(s[0]);
+            w.writeByte(s[1]);
+            w.writeByte(s[2]);
+            w.writeByte(s[3]);
+        }
+        conn.send(m);
+    }
+
+    public static void tcReady(GameConnection conn) throws IOException {
+        conn.send(mgMsg(MG_GAME_TAUCHIEN, TC_READY));
+    }
+
+    public static void tcShoot(GameConnection conn, int row, int col) throws IOException {
+        Msg m = mgMsg(MG_GAME_TAUCHIEN, TC_SHOOT);
+        m.writer().writeByte(row);
+        m.writer().writeByte(col);
+        conn.send(m);
+    }
+
+    public static void tcKick(GameConnection conn) throws IOException {
+        conn.send(mgMsg(MG_GAME_TAUCHIEN, TC_KICK));
+    }
+
     /** Nói chuyện với NPC (gói −61): id truyền = 2.000.000.000 + mã NPC. */
     public static void communicate(GameConnection conn, int npcWireId) throws IOException {
         Msg m = new Msg(COMMUNICATE);

@@ -699,6 +699,11 @@ public class ScreenshotMain {
                         if (frame == 10) world.debugInteract();
                         if (frame == 15) {
                             shot("shot-farm-shop.png");
+                            world.debugShopBillSeed();
+                        }
+                        if (frame == 30) {
+                            shot("shot-farm-bill.png");
+                            world.debugCloseBill();
                             world.debugOpenFarmShopAnimals();
                             stage = 62; frame = 0;
                         }
@@ -1003,6 +1008,18 @@ public class ScreenshotMain {
                             // map 27 (khu đá ven biển)
                             System.out.println("LINK CHECK map=" + world.debugMapId());
                             shot("shot-link-27.png");
+                            world.debugShowMapAt(18, 700f, 100f);
+                        }
+                        if (frame == 30) {
+                            shot("shot-map18.png");
+                            world.debugShowMapAt(28, 330f, 90f);
+                        }
+                        if (frame == 45) {
+                            shot("shot-map28.png");
+                            world.debugShowMapAt(21, 300f, 100f);
+                        }
+                        if (frame == 60) {
+                            shot("shot-map21.png");
                             world.debugCityMapMaze();
                             stage = 102; frame = 0;
                         }
@@ -1033,6 +1050,53 @@ public class ScreenshotMain {
                     case 105:
                         if (frame == 15) {
                             shot("shot-fish-shop.png");
+                            world.debugFishBill();
+                        }
+                        if (frame == 30) {
+                            shot("shot-fish-bill.png");
+                            world.debugCloseBill();
+                            world.debugMgHubSelect();
+                            stage = 107; frame = 0;
+                        }
+                        break;
+                    case 107: // hub mini-game: màn chọn game
+                        if (frame == 15) {
+                            shot("shot-mg-select.png");
+                            world.debugMgLobby();
+                            stage = 108; frame = 0;
+                        }
+                        break;
+                    case 108: // hub mini-game: sảnh Tàu Chiến + danh sách bàn
+                        if (frame == 15) {
+                            shot("shot-mg-lobby.png");
+                            world.debugTcPlacing();
+                            stage = 109; frame = 0;
+                        }
+                        break;
+                    case 109: // Tàu Chiến: pha xếp tàu (đã xếp tự động)
+                        if (frame == 15) {
+                            shot("shot-tc-place.png");
+                            world.debugTcBattle();
+                            stage = 110; frame = 0;
+                        }
+                        break;
+                    case 110: // Tàu Chiến: pha bắn
+                        if (frame == 15) {
+                            shot("shot-tc-battle.png");
+                            world.debugTcSpectate();
+                            stage = 111; frame = 0;
+                        }
+                        break;
+                    case 111: // Tàu Chiến: màn khán giả
+                        if (frame == 15) {
+                            shot("shot-tc-spectate.png");
+                            world.debugMgInvite();
+                            stage = 112; frame = 0;
+                        }
+                        break;
+                    case 112: // hộp lời mời giao hữu
+                        if (frame == 15) {
+                            shot("shot-mg-invite.png");
                             System.out.println("SCREENSHOT DONE");
                             Gdx.app.exit();
                         }

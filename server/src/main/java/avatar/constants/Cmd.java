@@ -7,6 +7,10 @@ public class Cmd {
     public static final byte MAIL_CLAIM = -110;
     public static final byte MAIL_CLAIM_ALL = -111;
     public static final byte MAIL_DELETE_READ = -112;
+    // [PORT Hub MiniGame] Bản chính dùng handler MINIGAME = -90, nhưng ở
+    // server Pack5 mã -90 đã là UPGRADE_CHEST của handler Nhà nên phong bì
+    // hub của bản port dùng -113; số lệnh con bên trong giữ theo bản chính.
+    public static final byte MINIGAME_HUB = -113;
     public static final byte TRANS_ICON_WEDDING = -103;
     public static final byte CHANS_MONEY_XENG = -102;
     public static final byte ADD_MENU = -101;
