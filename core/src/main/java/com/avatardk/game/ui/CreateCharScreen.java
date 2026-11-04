@@ -137,6 +137,8 @@ public class CreateCharScreen extends ScreenAdapter {
 
     @Override
     public void show() {
+        SoftInput.setViewport(viewport);
+        SoftInput.hide();
         if (hairList.isEmpty()) prepare();
         Gdx.input.setInputProcessor(new InputAdapter() {
             @Override
@@ -326,6 +328,7 @@ public class CreateCharScreen extends ScreenAdapter {
         Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT);
         viewport.apply();
         batch.setProjectionMatrix(viewport.getCamera().combined);
+        SoftInput.beginFrame();
         batch.begin();
         drawSky();
         drawBackButton();
@@ -334,6 +337,7 @@ public class CreateCharScreen extends ScreenAdapter {
         drawControls();
         drawButton();
         batch.end();
+        SoftInput.endFrame();
     }
 
     /** Nền trời ban ngày: gradient 3 tông xanh trời. */
@@ -422,6 +426,11 @@ public class CreateCharScreen extends ScreenAdapter {
     }
 
     private void drawNameField() {
+        // bản web: ô nhập DOM phủ lên ô tên (trừ nút xúc xắc bên phải)
+        SoftInput.register("create.name",
+            SoftInput.of(nameField, 16, () -> submit()),
+            false, false, RX, 552, RW - 56, 52, 52);
+        SoftInput.registerKeepAlive("create.dice", RX + RW - 48, 558, 40, 40);
         batch.draw(Ui.roundedRect((int) RW, 52, 12, FIELD_FILL,
             new Color(1f, 0.62f, 0.20f, 1f)), RX, 552);
         Ui.faIcon(batch, Ui.fa20, Ui.FA_USER, RX + 26, 578, ICON_GREY);
@@ -590,5 +599,6 @@ public class CreateCharScreen extends ScreenAdapter {
     @Override
     public void resize(int width, int height) {
         viewport.update(width, height, true);
+        SoftInput.setViewport(viewport);
     }
 }

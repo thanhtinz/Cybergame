@@ -5166,6 +5166,8 @@ public class WorldScreen extends ScreenAdapter {
 
     @Override
     public void show() {
+        SoftInput.setViewport(hudViewport);
+        SoftInput.hide();
         if (!chatSeeded) {
             chatSeeded = true;
             addChatLog(TAB_SYSTEM, null, "Chào mừng bạn đến với AvatarDK!", true);
@@ -7606,6 +7608,9 @@ public class WorldScreen extends ScreenAdapter {
         // ô nhập + nút Gửi (chỉ ở tab chat riêng)
         if (msgTab == 2) {
             float inY = py + 18;
+            SoftInput.register("world.msg",
+                SoftInput.of(msgInput, 200, () -> { SoftInput.hide(); msgSend(); }),
+                false, true, px + 22, inY, MSG_PW - 44 - 128, 46, 14);
             batch.draw(Ui.roundedRect((int) (MSG_PW - 44 - 128), 46, 10,
                 new Color(1f, 1f, 1f, 0.08f), GLASS_RIM), px + 22, inY);
             String shown = msgInput.toString();
@@ -9616,11 +9621,13 @@ public class WorldScreen extends ScreenAdapter {
 
     @Override
     public void resize(int width, int height) {
+        SoftInput.setViewport(hudViewport);
         hudViewport.update(width, height, true);
     }
 
     @Override
     public void render(float dt) {
+        SoftInput.beginFrame();
         update(dt);
         updateFarmFocus();
         // Đặt lại glViewport về đúng backbuffer mỗi frame: FitViewport của HUD ở frame
@@ -9897,6 +9904,7 @@ public class WorldScreen extends ScreenAdapter {
 
         drawSideBars(camX);
         drawHud(playerFeetX, playerFeetY);
+        SoftInput.endFrame();
     }
 
     /** Hai cột ĐEN hai bên khi map hẹp hơn màn hình — cuối paintM của gốc:
@@ -10179,6 +10187,12 @@ public class WorldScreen extends ScreenAdapter {
             focused ? new Color(1f, 0.62f, 0.25f, 0.95f) : GLASS_RIM), rx, inY);
         Ui.faIcon(batch, Ui.fa20, musicTab == 0 ? Ui.FA_MAGNIFYING_GLASS : Ui.FA_LIST, rx + 24, inY + 22, togOff);
         StringBuilder field = musicTab == 0 ? musicQuery : musicLink;
+        SoftInput.register("music.field",
+            SoftInput.of(field, 300, () -> {
+                if (musicFocus == 1) runMusicSearch();
+                else if (musicFocus == 2) runMusicImport();
+            }),
+            false, true, rx, inY, rw - 108, 44, 46);
         String placeholder = musicTab == 0 ? "Tìm bài hát, ca sĩ trên YouTube…"
             : "Dán link playlist YouTube…";
         if (field.length() == 0) {
@@ -10622,6 +10636,9 @@ public class WorldScreen extends ScreenAdapter {
             new Color(1f, 1f, 1f, 0.9f));
         for (int i = 0; i < 3; i++) {
             float by = passBoxY(i);
+            SoftInput.register("world.pass" + i,
+                SoftInput.of(passFields[i], 24, () -> { SoftInput.hide(); submitPassForm(); }),
+                true, true, PF_PX + 26, by, PF_PW - 52, 54, 16);
             Ui.fontSmall.setColor(1f, 1f, 1f, 0.85f);
             Ui.fontSmall.draw(batch, PASS_LABELS[i], PF_PX + 26, by + 80);
             boolean focused = passFocus == i;
@@ -10740,6 +10757,9 @@ public class WorldScreen extends ScreenAdapter {
         batch.draw(Ui.roundedRect((int) GF_PW - 52, 54, 12,
             new Color(0.10f, 0.13f, 0.22f, 0.97f), new Color(1f, 0.62f, 0.25f, 1f)),
             GF_PX + 26, by);
+        SoftInput.register("world.gift",
+            SoftInput.of(giftField, 32, () -> { SoftInput.hide(); submitGiftForm(); }),
+            false, true, GF_PX + 26, by, GF_PW - 52, 54, 16);
         Ui.font.setColor(1f, 1f, 1f, 0.95f);
         Ui.font.draw(batch, giftField.toString(), GF_PX + 42, by + 37);
         if ((System.currentTimeMillis() / 500) % 2 == 0) {
@@ -10847,6 +10867,9 @@ public class WorldScreen extends ScreenAdapter {
         batch.draw(Ui.roundedRect((int) TB_PW - 52, 54, 12,
             new Color(0.10f, 0.13f, 0.22f, 0.97f), new Color(1f, 0.62f, 0.25f, 1f)),
             TB_PX + 26, by);
+        SoftInput.register("world.tb",
+            SoftInput.of(tbField, 24, () -> { SoftInput.hide(); submitTextBox(); }),
+            false, true, TB_PX + 26, by, TB_PW - 52, 54, 16);
         Ui.font.setColor(1f, 1f, 1f, 0.95f);
         Ui.font.draw(batch, tbField.toString(), TB_PX + 42, by + 37);
         if ((System.currentTimeMillis() / 500) % 2 == 0) {
@@ -11021,6 +11044,11 @@ public class WorldScreen extends ScreenAdapter {
         }
         // ô nhập (chừa chỗ cho nút emoji + nút micro + nút Gửi ở cuối)
         float inputW = CHAT_W - 16 - CHAT_SEND_W - 8 - MIC_BTN_W - 6 - EMOJI_BTN_W - 6;
+        if (!recording) {
+            SoftInput.register("world.chat",
+                SoftInput.of(typeBuffer, 60, () -> { SoftInput.hide(); sendChat(); }),
+                false, false, CHAT_X + 8, CHAT_Y + 7, inputW, CHAT_INPUT_H, 12);
+        }
         Color inRim = typing ? new Color(1f, 0.8f, 0.35f, 0.95f) : GLASS_RIM;
         batch.draw(Ui.roundedRect((int) inputW, (int) CHAT_INPUT_H, 10,
             new Color(1f, 1f, 1f, typing ? 0.96f : 0.88f), inRim), CHAT_X + 8, CHAT_Y + 7);

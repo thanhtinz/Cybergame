@@ -60,6 +60,8 @@ public class LoginScreen extends ScreenAdapter {
 
     @Override
     public void show() {
+        SoftInput.setViewport(viewport);
+        SoftInput.hide();
         Gdx.input.setInputProcessor(new InputAdapter() {
             @Override
             public boolean touchDown(int sx, int sy, int pointer, int button) {
@@ -258,6 +260,7 @@ public class LoginScreen extends ScreenAdapter {
     @Override
     public void render(float delta) {
         pollReplies();
+        SoftInput.beginFrame();
         Gdx.gl.glClearColor(0.05f, 0.08f, 0.14f, 1f);
         Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT);
         viewport.apply();
@@ -270,6 +273,7 @@ public class LoginScreen extends ScreenAdapter {
         Ui.centered(batch, Ui.fontSmall, "Chơi thử ngay, không cần tài khoản", Ui.W / 2f, 24,
             new Color(1f, 1f, 1f, 0.75f));
         batch.end();
+        SoftInput.endFrame();
     }
 
     private void drawPanel(SpriteBatch batch) {
@@ -340,6 +344,18 @@ public class LoginScreen extends ScreenAdapter {
 
     private void drawField(SpriteBatch batch, int i, String label, String glyph, String placeholder) {
         float fy = fieldY(i);
+        // bản web: đăng ký ô nhập DOM phủ đúng vị trí này để bấm vào là
+        // trình duyệt mở bàn phím (bản desktop là no-op)
+        if (i == 0) {
+            SoftInput.register("login.user",
+                SoftInput.of(fields[0], 40, () -> submit(tab == 1)),
+                false, false, PX + 32, fy, PW - 64, 48, 48);
+        } else {
+            SoftInput.register("login.pass",
+                SoftInput.of(fields[1], 40, () -> submit(tab == 1)),
+                !showPass, false, PX + 32, fy, PW - 64 - 52, 48, 48);
+            SoftInput.registerKeepAlive("login.eye", PX + PW - 84, fy, 52, 48);
+        }
         Ui.fontSmall.setColor(0.76f, 0.84f, 0.94f, 1f);
         Ui.fontSmall.draw(batch, label, PX + 36, fy + 70);
         Color rim = focus == i ? new Color(1f, 0.67f, 0.24f, 1f) : null;
@@ -369,6 +385,7 @@ public class LoginScreen extends ScreenAdapter {
     @Override
     public void resize(int width, int height) {
         viewport.update(width, height, true);
+        SoftInput.setViewport(viewport);
     }
 
     @Override
