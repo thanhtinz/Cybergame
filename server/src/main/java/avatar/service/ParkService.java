@@ -238,20 +238,48 @@ public class ParkService extends Service {
         }
     }
 
+    /** Cần câu (cả 3 loại của shop gốc đều đeo được, zorder 70). */
+    private static final int[] FISH_RODS = {442, 445, 446};
+    /** Mồi dùng được, theo thứ tự ưu tiên trừ (rẻ trước). */
+    private static final int[] FISH_BAITS = {443, 447, 448};
+    /** Vé theo map server: 14 = cá rô (458), 15 = cá lóc (459),
+     *  16 = cá mập (460). */
+    private static int fishTicketForMap(int mapId) {
+        switch (mapId) {
+            case 14: return 458;
+            case 15: return 459;
+            case 16: return 460;
+            default: return -1;
+        }
+    }
+
     public void handleStartFishing(Message ms) {
         try {
-            // Cần câu VIP phải đang ĐEO (đúng gốc: findItemInWearing).
-            if (this.session.user.findItemInWearing(446) == null) {
-                fishStartReply(false, "bạn phải có cần câu vip");
+            // Cần câu phải đang ĐEO (đúng gốc: findItemInWearing) —
+            // cả 3 loại cần của shop đều được [PORT, fan chỉ nhận 446].
+            boolean hasRod = false;
+            for (int rod : FISH_RODS) {
+                if (this.session.user.findItemInWearing(rod) != null) {
+                    hasRod = true;
+                    break;
+                }
+            }
+            if (!hasRod) {
+                fishStartReply(false, "bạn phải có cần câu");
                 return;
             }
-            // [PORT] Vé cá mập chỉ bắt buộc ở khu cá mập (server map 16).
+            // [PORT] Mỗi bãi câu cần vé riêng của nó trong rương.
             if (this.session.user.getZone() != null
-                    && this.session.user.getZone().getMap() != null
-                    && this.session.user.getZone().getMap().getId() == 16
-                    && this.session.user.findItemInChests(460) == null) {
-                fishStartReply(false, "bạn phải vé câu cá mập");
-                return;
+                    && this.session.user.getZone().getMap() != null) {
+                int mapId = this.session.user.getZone().getMap().getId();
+                int ticket = fishTicketForMap(mapId);
+                if (ticket > 0
+                        && this.session.user.findItemInChests(ticket) == null) {
+                    String name = ticket == 458 ? "vé câu cá rô"
+                        : ticket == 459 ? "vé câu cá lóc" : "vé câu cá mập";
+                    fishStartReply(false, "bạn phải có " + name);
+                    return;
+                }
             }
             fishStartReply(true, "");
         } catch (IOException ex) {
@@ -271,14 +299,19 @@ public class ParkService extends Service {
     public void handleQuangCau(Message ms) {
         try {
             User us = this.session.user;
-            Item bait = us.findItemInChests(448);
+            // Mồi: dùng loại rẻ nhất đang có (443 cơm, 447 trùng,
+            // 448 trứng kiến) — trừ ĐÚNG 1 (removeItemFromChests của
+            // fan xoá CẢ chồng, phải dùng removeItem(id, 1)).
+            Item bait = null;
+            for (int b : FISH_BAITS) {
+                bait = us.findItemInChests(b);
+                if (bait != null) break;
+            }
             if (bait == null) {
                 us.getAvatarService().serverDialog("Hết mồi rồi sếp");
                 return;
             }
-            // Trừ ĐÚNG 1 mồi: removeItemFromChests(item) của fan xoá
-            // CẢ chồng — phải dùng removeItem(id, 1) giảm số lượng.
-            us.removeItem(448, 1);
+            us.removeItem(bait.getId(), 1);
             // Hủy hẹn cắn của lần quăng trước (nếu còn) bằng số thế hệ.
             final int castGen = us.nextFishCastGen();
             us.setIdFish((short) -1);

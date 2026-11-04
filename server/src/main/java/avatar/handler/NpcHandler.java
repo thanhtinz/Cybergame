@@ -605,13 +605,15 @@ public class NpcHandler {
                 case NpcName.THO_CAU: {
                     List<Menu> thocau = new ArrayList<>();
                     Menu thoCau = Menu.builder().name("Câu cá").action(() -> {
+                        // [PORT theo gốc] Shop đồ câu = toàn bộ nhóm
+                        // sell == 10 trong dữ liệu part (9 món: 3 cần
+                        // câu, 3 mồi, 3 vé) — bản fan chỉ bày 3 món.
                         List<Item> Items1 = new ArrayList<>();
-                        Item item = new Item(446, 30, 0);//câu vip
-                        Items1.add(item);
-                        Item item1 = new Item(460, 2, 0);//vé cau
-                        Items1.add(item1);
-                        Item item2 = new Item(448, 30, 1);//mồi
-                        Items1.add(item2);
+                        avatar.item.PartManager.getInstance().getAvatarPart().stream()
+                            .filter(pt -> pt.getSell() == 10)
+                            .sorted(java.util.Comparator.comparingInt(
+                                avatar.item.Part::getId))
+                            .forEach(pt -> Items1.add(new Item(pt.getId())));
                         us.getAvatarService().openUIShop(npcId, "Trùm Câu Cá,", Items1);
                         us.getAvatarService().updateMoney(0);
                     }).build();
@@ -626,7 +628,7 @@ public class NpcHandler {
                     thocau.add(Menu.builder().name("Xem hướng dẫn").action(() -> {
                         // [PORT] Text fan là quảng cáo tool auto của họ
                         // — thay bằng hướng dẫn câu cá thật.
-                        us.getAvatarService().customTab("Hướng dẫn", "Muốn câu cá, trước hết mua Cần câu VIP ở chỗ ta rồi mặc lên người, đừng quên mua thêm Trứng kiến làm mồi — mỗi lần quăng câu tốn 1 mồi. Sau đó ra khu câu cá, đi tới ghế câu và ngồi xuống để bắt đầu. Khi cá cắn câu, trên màn hình sẽ hiện lần lượt các mũi tên: bấm đúng hướng theo thứ tự trước khi hết giờ là giật được cá lên. Câu được cá rồi thì quay lại đây chọn Bán cá để đổi thành xu. Riêng khu trong cùng là nơi cá mập hay lui tới, muốn vào câu ở đó phải có Vé câu cá mập.");
+                        us.getAvatarService().customTab("Hướng dẫn", "Muốn câu cá, trước hết mua một cây Cần câu ở chỗ ta (tre, sắt hay VIP đều được) rồi mặc lên người, đừng quên mua thêm mồi — Mồi cơm, Mồi trùng hay Trứng kiến đều dùng được, mỗi lần quăng câu tốn 1 mồi. Sau đó ra khu câu cá, đi tới ghế câu và ngồi xuống để bắt đầu. Khi cá cắn câu, dưới chỗ cần gạt sẽ hiện 4 nút mũi tên: bấm đúng hướng theo thứ tự trước khi hết giờ là giật được cá lên. Câu được cá rồi thì quay lại đây chọn Bán cá để đổi thành xu. Mỗi bãi câu cần vé riêng: bãi cá rô cần Vé câu cá rô, bãi cá lóc cần Vé câu cá lóc, bãi cá mập cần Vé câu cá mập.");
                     }).build());
                     thocau.add(Menu.builder().name("Thoát").build());
                     us.setMenus(thocau);

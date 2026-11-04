@@ -582,7 +582,13 @@ public final class AvatarProtocol {
     public static final byte MINIGAME_HUB = -113;
     public static final int MG_GAME_TAUCHIEN = 4;
     public static final int MG_GAME_CARO = 3;
-    public static final int MG_GAME_TRUCXANH = 1;
+    public static final int MG_GAME_AINCRAD = 1;
+    public static final int MG_GAME_TRUCXANH = 2;
+    // Aincrad subs [PORT theo tên lệnh bản chính: START/PLAYER_MOVE/
+    // PLAYER_SHOW/PLAYER_REMOVE_GHOST]
+    public static final int AI_START = 1, AI_PICK = 2, AI_MOVE = 3,
+        AI_SHOW = 4, AI_GHOST_OFF = 5, AI_END = 6, AI_POS = 7,
+        AI_SNAPSHOT = 13, AI_SPEC_COUNT = 14;
     // Cờ Caro subs [PORT theo cấu trúc bản chính]
     public static final int CR_START = 1, CR_MOVE = 2, CR_MOVED = 3,
         CR_CHANGE_TURN = 4, CR_END = 5, CR_SNAPSHOT = 13, CR_SPEC_COUNT = 14;
@@ -594,10 +600,11 @@ public final class AvatarProtocol {
     public static final int MG_LIST = 0, MG_CREATE = 1, MG_JOIN = 2,
         MG_JOIN_CODE = 3, MG_INVITE = 4, MG_INVITE_REPLY = 5, MG_LEAVE = 6,
         MG_WATCH = 7, MG_STOP_WATCH = 8, MG_REMATCH = 15;
+    public static final int MG_TOP = 9;
     // Hub subs (S→C)
     public static final int MG_S_LIST = 0, MG_S_JOINED = 10, MG_S_OPP_JOINED = 11,
-        MG_S_OPP_LEFT = 12, MG_S_REMATCH_OFFER = 16, MG_S_INVITE_IN = 20,
-        MG_S_INVITE_RESULT = 21, MG_S_ERROR = 23;
+        MG_S_OPP_LEFT = 12, MG_S_REMATCH_OFFER = 16, MG_S_TOP = 19,
+        MG_S_INVITE_IN = 20, MG_S_INVITE_RESULT = 21, MG_S_ERROR = 23;
     // Tàu Chiến subs (hai chiều, theo số lệnh bản chính)
     public static final int TC_START_PLACE = 1, TC_PLACE_SHIPS = 2,
         TC_PLACE_RESULT = 3, TC_READY = 4, TC_START_BATTLE = 6, TC_SHOOT = 7,
@@ -614,6 +621,13 @@ public final class AvatarProtocol {
 
     public static void mgList(GameConnection conn) throws IOException {
         conn.send(mgMsg(0, MG_LIST));
+    }
+
+    /** Xin bảng xếp hạng thắng nhiều nhất {byte gameId} (0 = tổng). */
+    public static void mgTop(GameConnection conn, int gameId) throws IOException {
+        Msg m = mgMsg(0, MG_TOP);
+        m.writer().writeByte(gameId);
+        conn.send(m);
     }
 
     public static void mgCreate(GameConnection conn, int gameId, boolean priv)
@@ -713,6 +727,20 @@ public final class AvatarProtocol {
     public static void txFlip(GameConnection conn, int idx) throws IOException {
         Msg m = mgMsg(MG_GAME_TRUCXANH, TX_FLIP);
         m.writer().writeByte(idx);
+        conn.send(m);
+    }
+
+    /** Aincrad: mở cửa {byte door} (0..2) ở tầng hiện tại. */
+    public static void mgAiPick(GameConnection conn, int door) throws IOException {
+        Msg m = mgMsg(MG_GAME_AINCRAD, AI_PICK);
+        m.writer().writeByte(door);
+        conn.send(m);
+    }
+
+    /** Aincrad: báo vị trí ngang khi đi bộ {short x}. */
+    public static void mgAiPos(GameConnection conn, int x) throws IOException {
+        Msg m = mgMsg(MG_GAME_AINCRAD, AI_POS);
+        m.writer().writeShort(x);
         conn.send(m);
     }
 

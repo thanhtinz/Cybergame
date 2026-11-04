@@ -550,3 +550,52 @@ SPEC_COUNT=14. [PORT] Lưới 6 cột × 5 hàng = 30 thẻ, 15 cặp; ăn cặp
 được lật tiếp; hết giờ úp thẻ đang mở và đổi lượt; mặt thẻ là icon
 15 nông sản của farm (gốc dùng bộ thẻ riêng chưa trích được danh
 sách). Test sống live_caro_trucxanh_test.py PASS cả hai game.
+
+## §11. Kiểm kê field/method các màn mini game (đào 2026-11-03 22:06 — chuẩn bị cho việc dựng lại giao diện đúng gốc)
+
+Nguồn: `deep/metadata/all_types_full.json`. Tín chê giao diện tự dựng
+không đúng gốc 22:03 — mục này ghi cấu trúc THẬT của từng màn để dựng
+lại (dù bằng ảnh chụp của Tín hay đào tiếp hằng số IL2CPP).
+
+- **MiniGameSelectScr**: có **ZONE_1/ZONE_2 + zoneGames + currentZone**
+  — màn chọn chia 2 vùng/tab game, lưới neo theo ANCHOR_* (anchorX/Y,
+  ANCHOR_SCREEN_MARGIN, ANCHOR_GAP_ABOVE), cellX/cellY/curCellW/H,
+  ANIM_DURATION_MS (có hiệu ứng mở), ICON_LABEL_GAP, LABEL_LINE_H.
+- **MiniGameScr (khung chung trong ván)**: imgBG nền riêng, imgBox,
+  imgReady, **imgWin/imgLose/imgDraw** (banner kết quả bằng ẢNH),
+  **winHistory + paintWinHistory** (lịch sử thắng hiện trong ván),
+  idBoxGift + isBoxWin (hộp quà thắng), khung khán giả riêng
+  (imgViewerBg/imgViewer, paintSpectate, paintViewerBadge — pillX/
+  pillY/badge*/viewer*), khung giao hữu (paintFriendly, fontFriendly),
+  pill người chơi (imgRoomPill, fontRoomPill, pillTextDY), paintBox/
+  paintReady/paintTime (hộp sẵn sàng + đồng hồ lượt), RESULT_SHOW_MS.
+- **TauChienGameScr (245 field!)**: bố cục HAI BÀN CÙNG LÚC
+  (xBoardMain + xBoardEnemy) với panel giữa (imgPanelCenterBg +
+  imgPanelCenterClock + tab Active/Idle — centerTab*), đồng hồ
+  (CLOCK_SCALE/SHRINK, fontClockRed), nhãn cột bằng CHỮ (COL_LETTERS)
+  + nhãn hàng, panel danh sách tàu riêng (xListPanel/wListPanel/
+  hShipRow, imgListShipBg/Focus), chú thích legend dưới
+  (SHOW_BOTTOM_LEGEND, legendIcons/Labels), avatar 2 người chơi
+  (avatarFeetY/avatarNameY/avatar1X/avatar2X), nút hành động
+  (xActionBtn/wActionBtn — Bt_Function_Accept/Move), hằng bố cục theo
+  Ô: BASE_CELL_PX, BORDER_PAD_CELLS, MID_PAD_CELLS, MID_PAD_V_CELLS,
+  OUTER_PAD_CELLS, GAP_BOARDS_CELLS, PANEL_POKE_CELLS + zoom (có
+  phóng/to bàn). Giai đoạn mở màn có đếm ngược
+  (START_COUNTDOWN_STEP_MS, paintStartCountdown), kết ván có lộ diện
+  (END_REVEAL_MS, END_SHIP_BLINK_MS, RESULT_TOTAL_SEC).
+- **TrucXanhGameScr**: lưới theo x/y/w/h + numW/numH, thẻ wCard +
+  wCardScale/hCardScale, **imgScore + imgStrock** (khung điểm bằng
+  ảnh), pointMe/pointPlayer + pointToMe/pointToPlayer (điểm bay?),
+  listOpenDelay (thẻ mở trễ theo hàng đợi), imgBackCard.
+- **CaroGameScr**: bàn có CAMERA cuộn (cam, cShow/rShow + Min/Max,
+  clampCamera, focusCell/focusOpp), configureBoardSize (cỡ bàn cấu
+  hình được — wCell/xBox/yBox/wBox/hBox + sTBox/sBBox/sLBox/sRBox là
+  hộp chọn?), endGame có **pendingGiftBox** (hộp quà cuối ván) và
+  **REASON_TOO_MANY_FORFEIT** (xử thua vì bỏ lượt quá nhiều lần) +
+  REASON_WIN/DRAW/OPPONENT_DROP, END_EFFECT_DELAY_SECONDS = 1.6f.
+- **AincradGameScr**: người chơi ĐI BỘ ngang (setMove, limx_left/
+  limx_right, updCamera, a_xfen1/a_xfen2 vị trí hàng rào, a_yf),
+  cửa nằm dọc đường đi (xmaindoor/ymaindoor, wdoor/hdoor, nDoor +
+  nsubDoor tách riêng), imgFL (ảnh tầng), FLOOR_WINNER, cơ chế ma
+  có timeTest/timeghosttest/isghostTest + tesst() — nghi ma có kiểm
+  tra/giải trừ theo thời gian, chưa rõ luật.

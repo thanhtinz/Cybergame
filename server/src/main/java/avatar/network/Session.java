@@ -1200,25 +1200,42 @@ public void NhanThuongEventXuBoss() throws IOException {
                 user.getAvatarService().serverDialog("ITEM lỗi mua item khác tạm đi bro");
                 return;
             }
-            // [PORT câu cá] Đồ câu của NPC Thợ câu (shop −49 qua
-            // openUIShop) KHÔNG theo luật hoá đơn quần áo: giá niêm
-            // yết thẳng của part, cần câu mua xong ĐEO luôn (như
-            // quần áo), mồi/vé vào rương. 446: 100 lượng, hạn gốc
-            // 30 ngày; 448: 30 xu/mồi; 460: 2 lượng, hạn gốc 2 ngày.
-            if (partID == 446 || partID == 448 || partID == 460) {
-                int fPrice;
-                boolean byLuong;
-                if (partID == 448) {
-                    byLuong = false;
-                    fPrice = part.getCoin();
-                } else {
-                    byLuong = true;
-                    fPrice = part.getGold();
-                }
-                if (fPrice <= 0 || (byLuong && type != 2) || (!byLuong && type != 1)) {
+            // [PORT câu cá] Đồ câu của NPC Thợ câu (toàn bộ nhóm
+            // sell == 10: cần 442/445/446, mồi 443/447/448, vé
+            // 458/459/460). Cần câu mua xong ĐEO luôn (như quần áo),
+            // mồi/vé vào rương. Món có hạn dùng: khi client gửi số
+            // ngày (hoá đơn) thì áp luật mốc như shop quần áo nhưng
+            // cho CẢ Xu lẫn Lượng (user lệnh 2026-11-03 "phải chia
+            // time ra"): quy về giá 30 ngày = giá niêm yết x 30 /
+            // hạn gốc, mốc ngày nhân tỉ lệ, Vĩnh viễn = giá 30 ngày
+            // x 5. Không gửi ngày (luồng cũ) thì giá + hạn gốc.
+            if (partID == 442 || partID == 443 || partID == 445 || partID == 446
+                    || partID == 447 || partID == 448 || partID == 458
+                    || partID == 459 || partID == 460) {
+                int base = type == 1 ? part.getCoin() : part.getGold();
+                if (base <= 0) {
                     return;
                 }
-                if (byLuong) {
+                int fPrice;
+                long fExpired;
+                if (part.getExpiredDay() > 0 && reqDays >= 0) {
+                    int price30 = Math.max(1,
+                        Math.round(base * 30f / part.getExpiredDay()));
+                    if (reqDays == 0) {
+                        fPrice = price30 * 5;
+                        fExpired = -1;
+                    } else {
+                        fPrice = Math.max(1, Math.round(price30 * reqDays / 30f));
+                        fExpired = System.currentTimeMillis()
+                            + (long) reqDays * 86400000L;
+                    }
+                } else {
+                    fPrice = base;
+                    fExpired = part.getExpiredDay() == 0 ? -1
+                        : System.currentTimeMillis()
+                            + (long) part.getExpiredDay() * 86400000L;
+                }
+                if (type == 2) {
                     if (user.getLuong() < fPrice) {
                         this.user.getService().serverMessage("Bạn không đủ lượng!");
                         return;
@@ -1232,10 +1249,8 @@ public void NhanThuongEventXuBoss() throws IOException {
                     this.user.updateXu(-fPrice);
                 }
                 this.getAvatarService().updateMoney(0);
-                long fExpired = part.getExpiredDay() == 0 ? -1
-                        : System.currentTimeMillis() + (long) part.getExpiredDay() * 86400000L;
                 Item fItem = Item.builder().id(partID).expired(fExpired).quantity(1).build();
-                if (partID == 446) {
+                if (partID == 442 || partID == 445 || partID == 446) {
                     Item fw = user.findItemWearingByZOrder(part.getZOrder());
                     if (fw != null) {
                         user.removeItemFromWearing(fw);

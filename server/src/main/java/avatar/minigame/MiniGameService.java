@@ -41,8 +41,15 @@ public class MiniGameService extends Service {
     // ===== Hằng số game =====
     public static final int GAME_TAUCHIEN = 4;
     public static final int GAME_CARO = 3;
-    public static final int GAME_TRUCXANH = 1;
-    public static final int BOARD = 10;                 // ô mỗi chiều/bàn
+    public static final int GAME_AINCRAD = 1;
+    public static final int GAME_TRUCXANH = 2;
+    // Aincrad [PORT theo docs/aincrad-research.md]: tháp 3 tầng, mỗi
+    // tầng 3 cửa (1 chính + 2 phụ), đúng 1 cửa đúng — mở sai hoá ma
+    // 6 giây không mở được cửa; đua đồng thời, tới EXIT tầng 3 trước
+    // là thắng. Cửa đúng ngẫu nhiên riêng từng người/tầng.
+    public static final int AI_FLOORS = 3, AI_DOORS = 3;
+    public static final long AI_GHOST_MS = 6000L;
+    public static final int BOARD = 10;                 // ô mỗi chiều/bàn — ảnh bản chính Tín gửi 2026-11-04: mỗi bàn A-J/1-10 (BOARD_SIZE=20 = tổng 2 bàn)
     /** Số tàu theo độ dài: chỉ số = độ dài (1..5). Tổng 14 tàu. */
     public static final int[] FLEET_QTY = {0, 6, 4, 2, 1, 1};
     public static final long INVITE_LOCK_MS = 4263L;    // [GỐC]
@@ -58,11 +65,11 @@ public class MiniGameService extends Service {
     // ===== Hub: lệnh con (gameId 0) =====
     static final int H_LIST = 0, H_CREATE = 1, H_JOIN = 2, H_JOIN_CODE = 3,
             H_INVITE = 4, H_INVITE_REPLY = 5, H_LEAVE = 6, H_WATCH = 7,
-            H_STOP_WATCH = 8, H_REMATCH = 15;
+            H_STOP_WATCH = 8, H_TOP = 9, H_REMATCH = 15;
     // Hub: S→C
     static final int H_JOINED = 10, H_OPP_JOINED = 11, H_OPP_LEFT = 12,
-            H_SPEC_COUNT = 14, H_REMATCH_OFFER = 16, H_INVITE_IN = 20,
-            H_INVITE_RESULT = 21, H_ERROR = 23;
+            H_SPEC_COUNT = 14, H_REMATCH_OFFER = 16, H_TOP_OUT = 19,
+            H_INVITE_IN = 20, H_INVITE_RESULT = 21, H_ERROR = 23;
 
     // ===== Tàu Chiến: lệnh con (gameId 4), theo bản chính =====
     static final int TC_START_PLACE = 1, TC_PLACE_SHIPS = 2, TC_PLACE_RESULT = 3,
@@ -78,6 +85,12 @@ public class MiniGameService extends Service {
     static final int TX_DEAL = 1, TX_FLIP = 2, TX_FLIP_RESULT = 3,
             TX_MATCH = 4, TX_MISS = 5, TX_CHANGE_TURN = 6, TX_END = 7,
             TX_SNAPSHOT = 13, TX_SPEC_COUNT = 14;
+
+    // ===== Aincrad: lệnh con (gameId 2) [PORT theo tên lệnh bản chính] =====
+    // AI_START ~ AINCRADGAME_START; AI_MOVE ~ PLAYER_MOVE; AI_SHOW ~
+    // PLAYER_SHOW; AI_GHOST_OFF ~ PLAYER_REMOVE_GHOST.
+    static final int AI_START = 1, AI_PICK = 2, AI_MOVE = 3, AI_SHOW = 4,
+            AI_GHOST_OFF = 5, AI_END = 6, AI_POS = 7, AI_SNAPSHOT = 13, AI_SPEC_COUNT = 14;
 
     // Trạng thái bàn
     static final int ST_WAIT = 0, ST_PLACE = 1, ST_BATTLE = 2, ST_END = 3;
@@ -111,11 +124,19 @@ public class MiniGameService extends Service {
         // Cờ Caro: 0 trống, 1 = ghế 0 (X), 2 = ghế 1 (O)
         final byte[] caroBoard = new byte[CARO_N * CARO_N];
         int caroMoves = 0;
+        final int[] crForfeit = new int[2]; // bỏ lượt LIÊN TIẾP mỗi ghế (Caro)
         // Trúc Xanh: deck[i] = giá trị cặp (0..14), txState: 0 úp, 1 đang mở, 2 đã ăn
         final int[] txDeck = new int[TX_CARDS];
         final byte[] txState = new byte[TX_CARDS];
         final int[] txScores = new int[2];
         int txUp1 = -1, txUp2 = -1;
+        // Aincrad: tầng hiện tại (1..3), hạn ma, cửa đúng theo [ghế][tầng]
+        final int[] aiFloor = {1, 1};
+        final long[] aiGhostUntil = new long[2];
+        final int[][] aiCorrect = new int[2][AI_FLOORS + 1];
+        final int[] aiX = {240, 1040}; // vị trí ngang của 2 ghế (bản đi bộ)
+        // Bảng xếp hạng: đã ghi kết quả ván này chưa
+        boolean resultRecorded = false;
     }
 
     static class Invite {
@@ -174,6 +195,14 @@ public class MiniGameService extends Service {
                     case H_WATCH: watch(me, dis.readInt()); break;
                     case H_STOP_WATCH: stopWatch(me); break;
                     case H_REMATCH: rematch(me); break;
+                    case H_TOP: sendTop(me, dis.readByte()); break;
+                    default: break;
+                }
+            } else if (gameId == GAME_AINCRAD) {
+                switch (sub) {
+                    case AI_PICK: aiPick(me, dis.readByte()); break;
+                    case AI_POS: aiPos(me, dis.readShort()); break;
+                    case TC_LEAVE: leaveRoom(me, false); break;
                     default: break;
                 }
             } else if (gameId == GAME_TAUCHIEN) {
@@ -283,7 +312,7 @@ public class MiniGameService extends Service {
 
     private static boolean gamePlayable(int gameId) {
         return gameId == GAME_TAUCHIEN || gameId == GAME_CARO
-            || gameId == GAME_TRUCXANH;
+            || gameId == GAME_TRUCXANH || gameId == GAME_AINCRAD;
     }
 
     private void createRoom(User me, int gameId, boolean priv) throws IOException {
@@ -345,6 +374,7 @@ public class MiniGameService extends Service {
     private void startGame(Room r) throws IOException {
         if (r.gameId == GAME_CARO) { startCaro(r); return; }
         if (r.gameId == GAME_TRUCXANH) { startTrucXanh(r); return; }
+        if (r.gameId == GAME_AINCRAD) { startAincrad(r); return; }
         startPlacing(r);
     }
 
@@ -533,6 +563,7 @@ public class MiniGameService extends Service {
     private void sendSnapshot(User u, Room r) throws IOException {
         if (r.gameId == GAME_CARO) { sendSnapshotCaro(u, r); return; }
         if (r.gameId == GAME_TRUCXANH) { sendSnapshotTx(u, r); return; }
+        if (r.gameId == GAME_AINCRAD) { sendSnapshotAi(u, r); return; }
         Message m = msg(r.gameId, TC_SNAPSHOT);
         DataOutputStream w = m.writer();
         w.writeInt(r.id);
@@ -546,6 +577,13 @@ public class MiniGameService extends Service {
         writeSunkShips(w, r, 1);
         w.writeByte(r.spectators.size());
         send(u, m);
+    }
+
+    /** Gửi một gói cho cả 2 ghế + khán giả của bàn. */
+    private void broadcastAll(Room r, Message m) throws IOException {
+        send(r.seats[0], m);
+        send(r.seats[1], m);
+        for (User s : new ArrayList<>(r.spectators)) send(s, m);
     }
 
     private void broadcastSnapshot(Room r) throws IOException {
@@ -669,8 +707,21 @@ public class MiniGameService extends Service {
         }, TURN_SECONDS, TimeUnit.SECONDS);
     }
 
-    /** Hết giờ một lượt: mất lượt (Trúc Xanh úp lại thẻ đang mở trước). */
+    /** Hết giờ một lượt: mất lượt (Trúc Xanh úp lại thẻ đang mở trước).
+     *  Riêng Caro: bỏ lượt 3 lần LIÊN TIẾP thì xử thua
+     *  (REASON_TOO_MANY_FORFEIT = 3 của CaroGameScr gốc; ngưỡng 3 là
+     *  quy ước port vì bản chính không công bố số). */
     private void onTurnTimeout(Room room) throws IOException {
+        if (room.gameId == GAME_CARO) {
+            int seat = room.turn;
+            room.crForfeit[seat]++;
+            if (room.crForfeit[seat] >= 3) {
+                room.status = ST_END;
+                sendCaroEnd(room, 1 - seat, 3, null);
+                broadcastSnapshot(room);
+                return;
+            }
+        }
         if (room.gameId == GAME_TRUCXANH && room.txUp1 >= 0) {
             Message miss = msg(room.gameId, TX_MISS);
             miss.writer().writeByte(room.txUp1);
@@ -770,6 +821,7 @@ public class MiniGameService extends Service {
     }
 
     private void sendEnd(Room r, int winnerSeat, int reason) throws IOException {
+        recordResult(r, winnerSeat);
         Message m = msg(r.gameId, TC_END);
         DataOutputStream w = m.writer();
         w.writeByte(winnerSeat);
@@ -796,7 +848,235 @@ public class MiniGameService extends Service {
     private void sendEndGame(Room r, int winner, int reason) throws IOException {
         if (r.gameId == GAME_CARO) { sendCaroEnd(r, winner, reason, null); return; }
         if (r.gameId == GAME_TRUCXANH) { sendTxEnd(r, winner); return; }
+        if (r.gameId == GAME_AINCRAD) { sendAiEnd(r, winner, reason); return; }
         sendEnd(r, winner, reason);
+    }
+
+    // ================= Bảng xếp hạng (bảng mg_stats) =================
+
+    private static volatile boolean mgSchemaReady = false;
+
+    private static void ensureMgSchema() {
+        if (mgSchemaReady) return;
+        synchronized (MiniGameService.class) {
+            if (mgSchemaReady) return;
+            try (java.sql.Connection c = avatar.db.DbManager.getInstance().getConnection();
+                 java.sql.Statement st = c.createStatement()) {
+                st.execute("CREATE TABLE IF NOT EXISTS mg_stats ("
+                    + "user_id INT NOT NULL, game_id INT NOT NULL,"
+                    + "wins INT NOT NULL DEFAULT 0, plays INT NOT NULL DEFAULT 0,"
+                    + "PRIMARY KEY (user_id, game_id))");
+                mgSchemaReady = true;
+            } catch (Exception ex) {
+                System.err.println("ensureMgSchema: " + ex);
+            }
+        }
+    }
+
+    /** Ghi kết quả một ván: cả hai ghế +1 ván, người thắng +1 thắng.
+     *  winner = 2 (hoà) thì chỉ tính ván. Gọi một lần mỗi ván. */
+    private void recordResult(Room r, int winner) {
+        if (r.resultRecorded) return;
+        r.resultRecorded = true;
+        ensureMgSchema();
+        if (!mgSchemaReady) return;
+        for (int seat = 0; seat < 2; seat++) {
+            User u = r.seats[seat];
+            if (u == null) continue;
+            int addWin = winner == seat ? 1 : 0;
+            try (java.sql.Connection c = avatar.db.DbManager.getInstance().getConnection();
+                 java.sql.PreparedStatement ps = c.prepareStatement(
+                     "INSERT INTO mg_stats (user_id, game_id, wins, plays)"
+                     + " VALUES (?, ?, ?, 1)"
+                     + " ON DUPLICATE KEY UPDATE wins = wins + ?,"
+                     + " plays = plays + 1")) {
+                ps.setInt(1, u.getId());
+                ps.setInt(2, r.gameId);
+                ps.setInt(3, addWin);
+                ps.setInt(4, addWin);
+                ps.executeUpdate();
+            } catch (Exception ex) {
+                System.err.println("recordResult: " + ex);
+            }
+        }
+    }
+
+    private void sendTop(User me, int gameId) {
+        ensureMgSchema();
+        try {
+            Message m = msg(0, H_TOP_OUT);
+            DataOutputStream w = m.writer();
+            w.writeByte(gameId);
+            List<Object[]> rows = new ArrayList<>();
+            if (mgSchemaReady) {
+                // tên hiện như trong game: tên nhân vật, trống thì
+                // dùng tên tài khoản (khớp User.getDisplayName)
+                String nameExpr = "COALESCE(NULLIF(p.name, ''), u.username)";
+                String sql = gameId == 0
+                    ? "SELECT " + nameExpr + ", SUM(s.wins), SUM(s.plays)"
+                      + " FROM mg_stats s"
+                      + " LEFT JOIN players p ON p.user_id = s.user_id"
+                      + " LEFT JOIN users u ON u.id = s.user_id"
+                      + " GROUP BY s.user_id, p.name HAVING SUM(s.wins) > 0"
+                      + " ORDER BY SUM(s.wins) DESC, SUM(s.plays) DESC LIMIT 10"
+                    : "SELECT " + nameExpr + ", s.wins, s.plays FROM mg_stats s"
+                      + " LEFT JOIN players p ON p.user_id = s.user_id"
+                      + " LEFT JOIN users u ON u.id = s.user_id"
+                      + " WHERE s.game_id = ? AND s.wins > 0"
+                      + " ORDER BY s.wins DESC, s.plays DESC LIMIT 10";
+                try (java.sql.Connection c = avatar.db.DbManager.getInstance().getConnection();
+                     java.sql.PreparedStatement ps = c.prepareStatement(sql)) {
+                    if (gameId != 0) ps.setInt(1, gameId);
+                    try (java.sql.ResultSet rs = ps.executeQuery()) {
+                        while (rs.next()) {
+                            rows.add(new Object[]{rs.getString(1),
+                                rs.getInt(2), rs.getInt(3)});
+                        }
+                    }
+                }
+            }
+            w.writeShort(rows.size());
+            for (Object[] row : rows) {
+                w.writeUTF((String) row[0]);
+                w.writeInt((Integer) row[1]);
+                w.writeInt((Integer) row[2]);
+            }
+            w.flush();
+            send(me, m);
+        } catch (Exception ex) {
+            System.err.println("sendTop: " + ex);
+        }
+    }
+
+    // ================= Aincrad =================
+
+    private void startAincrad(Room r) throws IOException {
+        r.status = ST_BATTLE;
+        r.rematch[0] = r.rematch[1] = false;
+        r.resultRecorded = false;
+        java.util.Random rnd = new java.util.Random();
+        for (int seat = 0; seat < 2; seat++) {
+            r.aiFloor[seat] = 1;
+            r.aiGhostUntil[seat] = 0;
+            r.aiX[seat] = seat == 0 ? 240 : 1040;
+            for (int f = 1; f <= AI_FLOORS; f++) {
+                r.aiCorrect[seat][f] = rnd.nextInt(AI_DOORS);
+            }
+        }
+        Message m = msg(r.gameId, AI_START);
+        m.writer().writeByte(AI_DOORS);
+        m.writer().flush();
+        send(r.seats[0], m);
+        send(r.seats[1], m);
+        broadcastSnapshot(r);
+    }
+
+    /** Vị trí ngang của nhân vật khi đi bộ: lưu + chuyển tiếp cho
+     *  ghế còn lại và khán giả {byte seat, short x, byte floor}. */
+    private void aiPos(User me, int x) throws IOException {
+        Room r = roomOf(me);
+        if (r == null || r.gameId != GAME_AINCRAD || r.status != ST_BATTLE) return;
+        int seat = seatOf(r, me);
+        if (seat < 0) return;
+        if (System.currentTimeMillis() < r.aiGhostUntil[seat]) return; // ma đứng yên
+        r.aiX[seat] = Math.max(60, Math.min(1220, x));
+        Message m = msg(r.gameId, AI_POS);
+        DataOutputStream w = m.writer();
+        w.writeByte(seat);
+        w.writeShort(r.aiX[seat]);
+        w.writeByte(r.aiFloor[seat]);
+        w.flush();
+        send(r.seats[1 - seat], m);
+        for (User s : new ArrayList<>(r.spectators)) send(s, m);
+    }
+
+    private void aiPick(User me, int door) throws IOException {
+        Room r = roomOf(me);
+        if (r == null || r.gameId != GAME_AINCRAD || r.status != ST_BATTLE) return;
+        int seat = seatOf(r, me);
+        if (seat < 0 || door < 0 || door >= AI_DOORS) return;
+        long now = System.currentTimeMillis();
+        if (now < r.aiGhostUntil[seat]) return;   // đang là ma: không mở cửa
+        int floor = r.aiFloor[seat];
+        boolean ok = door == r.aiCorrect[seat][floor];
+        Message m = msg(r.gameId, AI_MOVE);
+        DataOutputStream w = m.writer();
+        w.writeByte(seat);
+        w.writeByte(door);
+        w.writeBoolean(ok);
+        if (ok && floor >= AI_FLOORS) {
+            w.writeByte(floor);
+            w.flush();
+            broadcastAll(r, m);
+            r.status = ST_END;
+            sendAiEnd(r, seat, 0);
+            return;
+        }
+        if (ok) {
+            r.aiFloor[seat] = floor + 1;
+            w.writeByte(r.aiFloor[seat]);
+        } else {
+            r.aiGhostUntil[seat] = now + AI_GHOST_MS;
+            w.writeByte(floor);
+        }
+        w.flush();
+        broadcastAll(r, m);
+        if (!ok) {
+            broadcastAiShow(r, seat);
+            TIMER.schedule(() -> {
+                try {
+                    if (r.status == ST_BATTLE
+                            && System.currentTimeMillis() >= r.aiGhostUntil[seat]) {
+                        Message off = msg(r.gameId, AI_GHOST_OFF);
+                        off.writer().writeByte(seat);
+                        off.writer().flush();
+                        broadcastAll(r, off);
+                        broadcastAiShow(r, seat);
+                    }
+                } catch (Exception ignored) { }
+            }, AI_GHOST_MS + 60, TimeUnit.MILLISECONDS);
+        }
+        broadcastSnapshot(r);
+    }
+
+    private void broadcastAiShow(Room r, int seat) throws IOException {
+        Message m = msg(r.gameId, AI_SHOW);
+        DataOutputStream w = m.writer();
+        w.writeByte(seat);
+        w.writeByte(r.aiFloor[seat]);
+        w.writeBoolean(System.currentTimeMillis() < r.aiGhostUntil[seat]);
+        w.flush();
+        broadcastAll(r, m);
+    }
+
+    private void sendAiEnd(Room r, int winner, int reason) throws IOException {
+        recordResult(r, winner);
+        Message m = msg(r.gameId, AI_END);
+        DataOutputStream w = m.writer();
+        w.writeByte(winner);
+        w.writeByte(reason);
+        w.flush();
+        broadcastAll(r, m);
+        broadcastSnapshot(r);
+    }
+
+    private void sendSnapshotAi(User u, Room r) throws IOException {
+        Message m = msg(r.gameId, AI_SNAPSHOT);
+        DataOutputStream w = m.writer();
+        w.writeInt(r.id);
+        w.writeByte(r.status);
+        w.writeUTF(r.seats[0] == null ? "" : r.seats[0].getDisplayName());
+        w.writeUTF(r.seats[1] == null ? "" : r.seats[1].getDisplayName());
+        long now = System.currentTimeMillis();
+        w.writeByte(r.aiFloor[0]);
+        w.writeByte(r.aiFloor[1]);
+        w.writeBoolean(now < r.aiGhostUntil[0]);
+        w.writeBoolean(now < r.aiGhostUntil[1]);
+        w.writeShort(r.aiX[0]);
+        w.writeShort(r.aiX[1]);
+        w.writeShort(r.spectators.size());
+        w.flush();
+        send(u, m);
     }
 
     // ================= Cờ Caro =================
@@ -805,6 +1085,7 @@ public class MiniGameService extends Service {
         r.status = ST_BATTLE;
         r.turn = 0;
         r.caroMoves = 0;
+        r.crForfeit[0] = r.crForfeit[1] = 0;
         java.util.Arrays.fill(r.caroBoard, (byte) 0);
         r.rematch[0] = r.rematch[1] = false;
         Message m = msg(r.gameId, CR_START);
@@ -826,6 +1107,7 @@ public class MiniGameService extends Service {
         cancelTimer(r);
         r.caroBoard[idx] = (byte) (seat + 1);
         r.caroMoves++;
+        r.crForfeit[seat] = 0;
         Message m = msg(r.gameId, CR_MOVED);
         DataOutputStream w = m.writer();
         w.writeByte(seat);
@@ -856,12 +1138,17 @@ public class MiniGameService extends Service {
         armTurnTimer(r);
     }
 
-    /** Hàng thắng qua ô vừa đánh (mọi hướng), null nếu chưa đủ 5. */
+    /** Hàng thắng qua ô vừa đánh (mọi hướng), null nếu chưa thắng.
+     *  Luật bản chính: "Chặn 2 đầu không thắng" — hàng từ 5 quân trở lên
+     *  mà CẢ HAI đầu đều bị quân đối thủ chặn thì không tính thắng
+     *  (biên bàn không tính là chặn). */
     private List<int[]> caroWinLine(Room r, int row, int col, int mark) {
         int[][] dirs = {{0, 1}, {1, 0}, {1, 1}, {1, -1}};
+        int opp = mark == 1 ? 2 : 1;
         for (int[] d : dirs) {
             List<int[]> line = new ArrayList<>();
             line.add(new int[]{row, col});
+            boolean blockedA = false, blockedB = false;
             for (int s = -1; s <= 1; s += 2) {
                 int rr = row + d[0] * s, cc = col + d[1] * s;
                 while (rr >= 0 && rr < CARO_N && cc >= 0 && cc < CARO_N
@@ -870,18 +1157,24 @@ public class MiniGameService extends Service {
                     rr += d[0] * s;
                     cc += d[1] * s;
                 }
+                // ô dừng lại sau khi đi hết hàng: nếu còn trong bàn và là
+                // quân đối thủ thì đầu này bị chặn
+                boolean blocked = rr >= 0 && rr < CARO_N && cc >= 0 && cc < CARO_N
+                    && r.caroBoard[rr * CARO_N + cc] == opp;
+                if (s < 0) blockedA = blocked; else blockedB = blocked;
             }
-            if (line.size() >= 5) return line;
+            if (line.size() >= 5 && !(blockedA && blockedB)) return line;
         }
         return null;
     }
 
     private void sendCaroEnd(Room r, int winner, int reason, List<int[]> line)
             throws IOException {
+        recordResult(r, winner);
         Message m = msg(r.gameId, CR_END);
         DataOutputStream w = m.writer();
         w.writeByte(winner); // 0/1 ghế thắng, 2 = hoà
-        w.writeByte(reason); // 0 = đủ 5 ô, 1 = đối thủ thoát, 2 = kín bàn
+        w.writeByte(reason); // 0 = đủ 5 ô, 1 = đối thủ thoát, 2 = kín bàn, 3 = bỏ lượt quá nhiều
         w.writeByte(line == null ? 0 : line.size());
         if (line != null) {
             for (int[] c : line) {
@@ -1004,6 +1297,7 @@ public class MiniGameService extends Service {
     }
 
     private void sendTxEnd(Room r, int winner) throws IOException {
+        recordResult(r, winner);
         Message m = msg(r.gameId, TX_END);
         DataOutputStream w = m.writer();
         w.writeByte(winner); // 0/1 ghế thắng, 2 = hoà điểm

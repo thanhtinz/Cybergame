@@ -1059,9 +1059,12 @@ public class ScreenshotMain {
                             stage = 107; frame = 0;
                         }
                         break;
-                    case 107: // hub mini-game: màn chọn game
+                    case 107: // hub mini-game: màn chọn game (2 zone)
                         if (frame == 15) {
                             shot("shot-mg-select.png");
+                            world.debugMgZone(1);
+                        } else if (frame == 30) {
+                            shot("shot-mg-select-zone2.png");
                             world.debugMgLobby();
                             stage = 108; frame = 0;
                         }
@@ -1111,6 +1114,26 @@ public class ScreenshotMain {
                         }
                         if (frame == 15) {
                             shot("shot-trucxanh-battle.png");
+                            stage = 115; frame = 0;
+                        }
+                        break;
+                    case 115: // Hub: Bảng xếp hạng
+                        if (frame == 1) {
+                            world.debugCloseHubGames();
+                            world.debugMgTop();
+                        }
+                        if (frame == 15) {
+                            shot("shot-mg-top.png");
+                            stage = 116; frame = 0;
+                        }
+                        break;
+                    case 116: // Aincrad: đang leo tháp
+                        if (frame == 1) {
+                            world.debugCloseHubGames();
+                            world.debugAiBattle();
+                        }
+                        if (frame == 15) {
+                            shot("shot-aincrad-battle.png");
                             stage = 112; frame = 0;
                         }
                         break;

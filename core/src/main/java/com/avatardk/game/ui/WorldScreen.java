@@ -252,14 +252,21 @@ public class WorldScreen extends ScreenAdapter {
     private static class MgInvite { int fromId; String fromName = ""; int gameId; }
     private MgInvite mgInviteIn;       // lời mời đang chờ trả lời
     private boolean mgRematchOffer;    // đối thủ rủ ván mới
-    private int mgGame = 4;            // game đang chọn ở sảnh (1 TX · 3 Caro · 4 TC)
+    private int mgGame = 4;            // game đang chọn ở sảnh (1 Aincrad · 2 TX · 3 Caro · 4 TC)
+    private int mgTopGame;             // tab BXH: 0 tổng · 1/2/3/4 từng game
+    private static class MgTopRow { String name = ""; int wins, plays; }
+    private final java.util.List<MgTopRow> mgTopRows = new java.util.ArrayList<>();
+    private boolean mgTopLoaded;
     private final java.util.List<MgRoom> mgRoomsShown = new java.util.ArrayList<>();
     private boolean mgGameLeaveAsk;    // hộp hỏi rời bàn (Caro/Trúc Xanh)
     static String mgGameName(int gameId) {
+        // số hiệu theo bản chính: Aincrad 1 · Trúc Xanh 2 · Caro 3 ·
+        // Tàu Chiến 4 · Snake 5 (đường asset /minigame/<n>/ của gốc)
         switch (gameId) {
-            case 1: return "Trúc Xanh";
-            case 2: return "Aincrad";
+            case 1: return "Aincrad";
+            case 2: return "Trúc Xanh";
             case 3: return "Cờ Caro";
+            case 5: return "Snake";
             default: return "Tàu Chiến";
         }
     }
@@ -5236,6 +5243,18 @@ public class WorldScreen extends ScreenAdapter {
             }
             @Override
             public boolean touchDragged(int sx, int sy, int pointer) {
+                if (pointer == tcPanPointer && tcOpen && tcPanBoard >= 0 && tcPhase != 1) {
+                    // kéo trượt bàn đang zoom
+                    Vector3 v = hudViewport.unproject(new Vector3(sx, sy, 0));
+                    float dx = v.x - tcPanLastX, dy = v.y - tcPanLastY;
+                    tcPanLastX = v.x;
+                    tcPanLastY = v.y;
+                    tcPanMoved = Math.max(tcPanMoved, Math.abs(dx) + Math.abs(dy));
+                    if (tcPanBoard == 0) { tcPanX0 -= dx; tcPanY0 += dy; }
+                    else { tcPanX1 -= dx; tcPanY1 += dy; }
+                    tcClampPan();
+                    return true;
+                }
                 if (pointer == tcPointer && tcOpen) {
                     // kéo tàu đang xếp: ghost đi theo tay
                     Vector3 v = hudViewport.unproject(new Vector3(sx, sy, 0));
@@ -5313,6 +5332,11 @@ public class WorldScreen extends ScreenAdapter {
             }
             @Override
             public boolean touchUp(int sx, int sy, int pointer, int button) {
+                if (pointer == aiPointer) {
+                    aiPointer = -1;
+                    aiHoldL = aiHoldR = false;
+                    return true;
+                }
                 if (pointer == tcPointer) {
                     tcPointer = -1;
                     if (tcOpen && tcDragIdx >= 0) {
@@ -5471,6 +5495,7 @@ public class WorldScreen extends ScreenAdapter {
         if (tcTouch(x, y, pointer)) return;
         if (crTouch(x, y, pointer)) return;
         if (txTouch(x, y, pointer)) return;
+        if (aiTouch(x, y, pointer)) return;
         // hub mini-game + hộp nhập mã + lời mời là modal trên cùng
         if (mgTouch(x, y, pointer)) return;
         // hộp hỏi thoát về thành phố (ô cổng 9/12/17) là lớp trên cùng
@@ -6291,13 +6316,31 @@ public class WorldScreen extends ScreenAdapter {
         return true;
     }
 
-    /** Shop −49 của NPC Thợ câu: toàn đồ câu thì mở panel đồ câu riêng. */
+    /** Shop −49 của NPC Thợ câu: toàn đồ câu thì mở panel đồ câu riêng.
+     *  Đồ câu = nhóm sell==10 của gốc (3 cần, 3 mồi, 3 vé). */
     private static boolean isFishShopList(java.util.List<Integer> ids) {
         if (ids == null || ids.isEmpty()) return false;
         for (int id : ids) {
-            if (id != 446 && id != 448 && id != 460) return false;
+            switch (id) {
+                case 442: case 443: case 445: case 446: case 447:
+                case 448: case 458: case 459: case 460:
+                    break;
+                default: return false;
+            }
         }
         return true;
+    }
+
+    /** Mô tả ngắn của một món đồ câu (hiện trong hoá đơn). */
+    private static String fishItemDesc(int id) {
+        switch (id) {
+            case 442: case 445: case 446: return "Cần câu — đeo vào người khi câu";
+            case 443: case 447: case 448: return "Mồi câu — trừ 1 mỗi lần quăng";
+            case 458: return "Vé vào bãi cá rô ở Khu câu cá rô";
+            case 459: return "Vé vào bãi cá lóc ở Khu câu cá lóc";
+            case 460: return "Vé vào bãi cá mập ở Bãi biển Đông";
+            default: return "";
+        }
     }
 
     private void openFishShop(java.util.List<Integer> ids) {
@@ -6314,6 +6357,17 @@ public class WorldScreen extends ScreenAdapter {
 
     private static final float FSHOP_W = 660, FSHOP_H = 470;
 
+    // Lưới thẻ 3 cột cho shop đồ câu (9 món sell==10 của gốc)
+    private static final float FSHOP_CW = 196, FSHOP_CH = 108;
+
+    private float fishCardX(float px, int i) {
+        return px + 24 + (i % 3) * (FSHOP_CW + 12);
+    }
+
+    private float fishCardTop(float top, int i) {
+        return top - 108 - (i / 3) * (FSHOP_CH + 10);
+    }
+
     private void drawFishShopPanel() {
         float pw = FSHOP_W, ph = FSHOP_H, px = (Ui.W - pw) / 2f, py = (Ui.H - ph) / 2f, top = py + ph;
         batch.setColor(0f, 0f, 0f, 0.45f);
@@ -6324,28 +6378,20 @@ public class WorldScreen extends ScreenAdapter {
         drawFarmPanelHeader(px, py, pw, ph, Ui.FA_STORE,
             new Color(0.13f, 0.42f, 0.60f, 1f), "Cửa hàng đồ câu",
             "Bấm Xem ở mỗi món để coi giá rồi mua");
-        // hàng đầu lùi xuống dưới dòng phụ đề header (top-96 đè nửa dưới dòng phụ — ảnh stage 105)
-        float rowY = top - 114;
-        for (int id : fishShopIds) {
+        for (int i = 0; i < fishShopIds.size(); i++) {
+            int id = fishShopIds.get(i);
             com.avatardk.game.data.PartData pd = game.data.part(id);
             if (pd == null) continue;
-            batch.draw(Ui.roundedRect((int) pw - 48, 88, 12,
-                new Color(0.13f, 0.20f, 0.30f, 0.9f), GLASS_RIM), px + 24, rowY - 62);
-            drawPartIcon(id, px + 72, rowY - 18, 52);
-            Ui.font.setColor(1f, 1f, 1f, 0.97f);
-            Ui.font.draw(batch, truncTo(Ui.font, pd.name, 300), px + 112, rowY + 14);
-            // dòng mô tả (không hiện giá ở danh sách — giá coi trong
-            // hoá đơn khi bấm Xem; không hiện số dư trong shop)
-            String info = id == 446 ? "Cần câu xịn — đeo vào người khi câu"
-                : id == 460 ? "Vé vào bãi cá mập ở Bãi biển Đông"
-                : "Mồi câu — trừ 1 mỗi lần quăng";
-            if (pd.expiredDay > 0) info += " · hạn " + pd.expiredDay + " ngày";
-            Ui.fontSmall.setColor(1f, 1f, 1f, 0.62f);
-            Ui.fontSmall.draw(batch, truncTo(Ui.fontSmall, info, 330), px + 112, rowY - 12);
-            batch.draw(Ui.gradientRect(110, 46, 10, EntryUi.ORANGE_TOP, EntryUi.ORANGE_BOT),
-                px + pw - 146, rowY - 40);
-            Ui.centered(batch, Ui.fontSmall, "Xem", px + pw - 91, rowY - 8, Color.WHITE);
-            rowY -= 100;
+            float cx = fishCardX(px, i), cTop = fishCardTop(top, i);
+            batch.draw(Ui.roundedRect((int) FSHOP_CW, (int) FSHOP_CH, 12,
+                new Color(0.13f, 0.20f, 0.30f, 0.9f), GLASS_RIM), cx, cTop - FSHOP_CH);
+            drawPartIcon(id, cx + FSHOP_CW / 2f - 19, cTop - 46, 38);
+            Ui.centered(batch, Ui.fontSmall, truncTo(Ui.fontSmall, pd.name, 180),
+                cx + FSHOP_CW / 2f, cTop - 58, new Color(1f, 1f, 1f, 0.95f));
+            batch.draw(Ui.gradientRect(76, 24, 8, EntryUi.ORANGE_TOP, EntryUi.ORANGE_BOT),
+                cx + FSHOP_CW / 2f - 38, cTop - FSHOP_CH + 4);
+            Ui.centered(batch, Ui.fontSmall, "Xem", cx + FSHOP_CW / 2f,
+                cTop - FSHOP_CH + 21, Color.WHITE);
         }
         // (nút đóng ô vuông đỏ đã nằm trong drawFarmPanelHeader)
     }
@@ -6357,13 +6403,12 @@ public class WorldScreen extends ScreenAdapter {
             fishShopOpen = false;
             return true;
         }
-        float rowY = top - 114;
-        for (int id : fishShopIds) {
-            if (x >= px + pw - 146 && x <= px + pw - 36 && y >= rowY - 40 && y <= rowY + 6) {
-                openShopBill(SB_FISH, id);
+        for (int i = 0; i < fishShopIds.size(); i++) {
+            float cx = fishCardX(px, i), cTop = fishCardTop(top, i);
+            if (x >= cx && x <= cx + FSHOP_CW && y >= cTop - FSHOP_CH && y <= cTop) {
+                openShopBill(SB_FISH, fishShopIds.get(i));
                 return true;
             }
-            rowY -= 100;
         }
         return true; // nuốt mọi chạm khi panel mở
     }
@@ -6391,13 +6436,31 @@ public class WorldScreen extends ScreenAdapter {
     private static final int SB_FISH = 1, SB_SEED = 2, SB_FARM_ITEM = 3, SB_ANIMAL = 4;
     private boolean sbOpen;
     private int sbKind, sbId, sbQty = 1, sbCur = 1;
+    /** Mốc hạn dùng trong hoá đơn đồ câu (0..4 = BILL_DAY_TIERS, 5 = Vĩnh viễn). */
+    private int sbTier = 4;
 
     private void openShopBill(int kind, int id) {
         sbKind = kind;
         sbId = id;
         sbQty = 1;
         sbCur = sbHasCur(1) ? 1 : 2;
+        sbTier = 4;
+        if (kind == SB_FISH) {
+            com.avatardk.game.data.PartData pd = game.data.part(id);
+            if (pd != null && pd.expiredDay > 0) {
+                for (int i = 0; i < BILL_DAY_TIERS.length; i++) {
+                    if (BILL_DAY_TIERS[i] == pd.expiredDay) { sbTier = i; break; }
+                }
+            }
+        }
         sbOpen = true;
+    }
+
+    /** Đồ câu đang chọn có hạn dùng (được chia mốc ngày trong hoá đơn). */
+    private boolean sbFishHasDuration() {
+        if (sbKind != SB_FISH) return false;
+        com.avatardk.game.data.PartData pd = game.data.part(sbId);
+        return pd != null && pd.expiredDay > 0;
     }
 
     private boolean sbHasCur(int cur) {
@@ -6426,7 +6489,15 @@ public class WorldScreen extends ScreenAdapter {
         switch (sbKind) {
             case SB_FISH: {
                 com.avatardk.game.data.PartData pd = game.data.part(sbId);
-                return pd == null ? 0 : (sbCur == 1 ? pd.coin : pd.gold);
+                if (pd == null) return 0;
+                int base = sbCur == 1 ? pd.coin : pd.gold;
+                if (base <= 0) return 0;
+                if (pd.expiredDay <= 0) return base;
+                // luật mốc như hoá đơn quần áo nhưng áp cho cả hai
+                // loại tiền (user lệnh chia time cho shop đồ câu)
+                int price30 = Math.max(1, Math.round(base * 30f / pd.expiredDay));
+                if (sbTier >= BILL_DAY_TIERS.length) return price30 * SHOP_PERM_MULT;
+                return Math.max(1, Math.round(price30 * BILL_DAY_TIERS[sbTier] / 30f));
             }
             case SB_SEED: {
                 FarmWorld.TreeDef d = farm.trees.get(sbId);
@@ -6469,7 +6540,7 @@ public class WorldScreen extends ScreenAdapter {
     /** Số lượng tối đa chọn được trong hoá đơn (vật tiêu hao mới có). */
     private int sbMaxQty() {
         if (sbKind == SB_SEED || sbKind == SB_FARM_ITEM) return 20;
-        if (sbKind == SB_FISH && sbId == 448) return 20;
+        if (sbKind == SB_FISH && (sbId == 443 || sbId == 447 || sbId == 448)) return 20;
         return 1;
     }
 
@@ -6516,7 +6587,13 @@ public class WorldScreen extends ScreenAdapter {
                 }
                 try {
                     for (int i = 0; i < sbQty; i++) {
-                        AvatarProtocol.buyItem(game.connection, sbId, sbCur);
+                        if (sbFishHasDuration()) {
+                            int days = sbTier >= BILL_DAY_TIERS.length
+                                ? 0 : BILL_DAY_TIERS[sbTier];
+                            AvatarProtocol.buyItem(game.connection, sbId, sbCur, days);
+                        } else {
+                            AvatarProtocol.buyItem(game.connection, sbId, sbCur);
+                        }
                     }
                 } catch (IOException ignored) {
                 }
@@ -6562,8 +6639,10 @@ public class WorldScreen extends ScreenAdapter {
         String meta = "";
         if (sbKind == SB_FISH) {
             com.avatardk.game.data.PartData pd = game.data.part(sbId);
-            if (pd != null && pd.expiredDay > 0) meta = "Hạn dùng: " + pd.expiredDay + " ngày";
-            else if (pd != null) meta = "Vật phẩm tiêu hao";
+            meta = fishItemDesc(sbId);
+            if (pd != null && pd.expiredDay > 0) {
+                meta += " · hạn gốc " + pd.expiredDay + " ngày";
+            }
         } else if (sbKind == SB_ANIMAL) meta = "Vật nuôi — thả vào khu của nó ở nông trại";
         else if (sbKind == SB_SEED) meta = "Hạt giống — gieo ở ô đất nông trại";
         else meta = "Vật phẩm nông trại";
@@ -6575,8 +6654,25 @@ public class WorldScreen extends ScreenAdapter {
         Ui.fontSmall.draw(batch, "Thanh toán bằng", px + 28, rowY + 6);
         drawBillPill(px + 196, rowY - 22, 140, 44, "Xu", sbHasCur(1), sbCur == 1);
         drawBillPill(px + 348, rowY - 22, 140, 44, "Lượng", sbHasCur(2), sbCur == 2);
+        // mốc hạn dùng (chỉ đồ câu có hạn — chia time như shop quần áo)
+        if (sbFishHasDuration()) {
+            float tierY = top - 266;
+            String[] tierLabels = {"1 ngày", "3 ngày", "7 ngày", "15 ngày", "30 ngày", "Vĩnh viễn"};
+            for (int i = 0; i <= BILL_DAY_TIERS.length; i++) {
+                float chipX = i < BILL_DAY_TIERS.length
+                    ? px + 18 + i * 80 : px + 418;
+                float chipW = i < BILL_DAY_TIERS.length ? 74 : 104;
+                boolean selTier = sbTier == i;
+                batch.draw(Ui.roundedRect((int) chipW, 40, 10,
+                    selTier ? new Color(0.20f, 0.45f, 0.65f, 1f)
+                        : new Color(0.16f, 0.17f, 0.20f, 0.95f), GLASS_RIM),
+                    chipX, tierY);
+                Ui.centered(batch, Ui.fontSmall, tierLabels[i],
+                    chipX + chipW / 2f, tierY + 27, Color.WHITE);
+            }
+        }
         // đơn giá
-        rowY -= 74;
+        rowY = sbFishHasDuration() ? top - 324 : rowY - 74;
         Ui.fontSmall.setColor(1f, 1f, 1f, 0.8f);
         Ui.fontSmall.draw(batch, "Đơn giá", px + 28, rowY + 6);
         String unit = fmtMoney(sbUnitPrice()) + (sbCur == 1 ? " xu" : " lượng");
@@ -6627,6 +6723,15 @@ public class WorldScreen extends ScreenAdapter {
         if (y >= rowCur - 22 && y <= rowCur + 22) {
             if (x >= px + 196 && x <= px + 336 && sbHasCur(1)) sbCur = 1;
             else if (x >= px + 348 && x <= px + 488 && sbHasCur(2)) sbCur = 2;
+            return true;
+        }
+        if (sbFishHasDuration() && y >= top - 266 && y <= top - 226) {
+            for (int i = 0; i <= BILL_DAY_TIERS.length; i++) {
+                float chipX = i < BILL_DAY_TIERS.length
+                    ? px + 18 + i * 80 : px + 418;
+                float chipW = i < BILL_DAY_TIERS.length ? 74 : 104;
+                if (x >= chipX && x <= chipX + chipW) { sbTier = i; return true; }
+            }
             return true;
         }
         if (sbMaxQty() > 1) {
@@ -9949,6 +10054,7 @@ public class WorldScreen extends ScreenAdapter {
         if (tcOpen) drawTcScreen();
         if (crOpen) drawCaro();
         if (txOpen) drawTx();
+        if (aiOpen) drawAi();
         if (mgCodeOpen) drawMgCodePad();
         if (mgInviteIn != null) drawMgInviteDialog();
         if (housePlaceTypeId >= 0 && !housePayOpen) drawHousePlaceBar();
@@ -11277,7 +11383,18 @@ public class WorldScreen extends ScreenAdapter {
             float pw = tw + 24, ph = 32;
             float lx = MathUtils.clamp(sx - pw / 2f, 8, Ui.W - 8 - pw);
             float ly = sy + 16;
-            if (ly + ph > Ui.H - 8) ly = sy - 16 - ph;
+            boolean labelBelow = false;
+            if (ly + ph > Ui.H - 8) { ly = sy - 16 - ph; labelBelow = true; }
+            // hộp tiêu đề ở góc trên trái (22..22+bw, H-102..H-22):
+            // nhãn nào lọt vào đó (ghim Khu đá) thì lật xuống dưới ghim
+            float titleBw = Math.max(Ui.textWidth(Ui.font, "Bản đồ thị trấn"),
+                Ui.textWidth(Ui.fontTiny,
+                    "Kéo để di chuyển • Chạm vùng để chọn điểm đến")) + 40;
+            if (!labelBelow && lx + pw > 22 && lx < 22 + titleBw
+                    && ly + ph > Ui.H - 102 && ly < Ui.H - 22) {
+                ly = sy - 16 - ph;
+                labelBelow = true;
+            }
             batch.draw(Ui.roundedRect((int) pw, (int) ph, 10,
                 sel ? new Color(0.98f, 0.55f, 0.16f, 0.95f) : new Color(0.05f, 0.09f, 0.14f, 0.82f), GLASS_RIM), lx, ly);
             Ui.centered(batch, Ui.fontSmall, label, lx + pw / 2f, ly + 22, Color.WHITE);
@@ -11295,10 +11412,11 @@ public class WorldScreen extends ScreenAdapter {
                     new Color(0.55f, 1f, 0.62f, 1f));
             }
             if (sel) {
+                float markerY = labelBelow ? ly - 40 : ly + ph + 6;
                 batch.setColor(0.98f, 0.55f, 0.16f, 1f);
-                batch.draw(circleTexture(), sx - 17, ly + ph + 6, 34, 34);
+                batch.draw(circleTexture(), sx - 17, markerY, 34, 34);
                 batch.setColor(Color.WHITE);
-                Ui.faIcon(batch, Ui.fa20, Ui.FA_LOCATION_DOT, sx, ly + ph + 23, Color.WHITE);
+                Ui.faIcon(batch, Ui.fa20, Ui.FA_LOCATION_DOT, sx, markerY + 17, Color.WHITE);
             }
         }
         // khối tiêu đề + gợi ý thao tác ở góc trên trái
@@ -11817,7 +11935,8 @@ public class WorldScreen extends ScreenAdapter {
 
     /** Harness: mở panel shop đồ câu. */
     public void debugFishShop() {
-        openFishShop(new ArrayList<>(java.util.Arrays.asList(446, 460, 448)));
+        openFishShop(new ArrayList<>(java.util.Arrays.asList(
+            442, 443, 445, 446, 447, 448, 458, 459, 460)));
     }
 
     /** Harness: mở hoá đơn của cần câu VIP trong shop đồ câu. */
@@ -11853,7 +11972,7 @@ public class WorldScreen extends ScreenAdapter {
             || farmShopOpen || farmCookOpen || farmAnimalSellOpen
             || houseMenuOpen || houseBuyOpen || houseSheetOpen || housePayOpen
             || chestUpConfirmOpen || housePlaceTypeId >= 0 || fishShopOpen
-            || mgOpen || tcOpen || crOpen || txOpen || mgInviteIn != null || mgCodeOpen || sbOpen
+            || mgOpen || tcOpen || crOpen || txOpen || aiOpen || mgInviteIn != null || mgCodeOpen || sbOpen
             || panelPlayer != null || confirmText != null || exitConfirmOpen || tbOpen;
     }
 
@@ -11885,6 +12004,7 @@ public class WorldScreen extends ScreenAdapter {
         }
         closeOtherPanels();
         mgOpen = true;
+        mgZone = 0;
         mgPage = mgInRoom ? 1 : 0;
         mgScroll = 0f;
         mgStatus = "";
@@ -11925,8 +12045,9 @@ public class WorldScreen extends ScreenAdapter {
     }
 
     private float mgMaxScroll() {
-        int n = mgPage == 2 ? friends.size() : mgRooms.size();
-        return Math.max(0f, n * 62f - 404f);
+        int n = mgPage == 2 ? friends.size()
+            : mgPage == 3 ? mgTopRows.size() : mgRoomsShown.size();
+        return Math.max(0f, n * 62f - (mgPage == 3 ? 352f : 404f));
     }
 
     // ----- Gói hub/Tàu Chiến (cmd −113) -----
@@ -11965,6 +12086,10 @@ public class WorldScreen extends ScreenAdapter {
                         boolean friendly = r.readBoolean();
                         mgRoomId = roomId;
                         mgGame = joinedGame;
+                        mgFriendlyRoom = friendly;
+                        mgRoomCode = code;
+                        mgWinHist.clear();
+                        mgEndBanner = 0;
                         if (joinedGame == AvatarProtocol.MG_GAME_CARO) {
                             crSeat = seat;
                             crPhase = 0;
@@ -12008,6 +12133,29 @@ public class WorldScreen extends ScreenAdapter {
                                     ? "Đã tạo bàn — chờ đối thủ vào chơi."
                                     : "Đã vào bàn Trúc Xanh.";
                             }
+                        } else if (joinedGame == AvatarProtocol.MG_GAME_AINCRAD) {
+                            aiSeat = seat;
+                            aiPhase = 0;
+                            aiSpecCount = 0;
+                            aiWinner = -1;
+                            aiFloor[0] = aiFloor[1] = 1;
+                            aiGhost[0] = aiGhost[1] = false;
+                            aiLastDoor[0] = aiLastDoor[1] = -1;
+                            if (seat == 0) {
+                                aiName0 = myDisplayName(); aiName1 = opp;
+                                mgWaiting = opp.isEmpty();
+                                mgMyCode = priv || friendly ? code : "";
+                            } else if (seat == 1) {
+                                aiName0 = opp; aiName1 = myDisplayName();
+                                mgWaiting = false;
+                            }
+                            if (seat == 2) { mgOpen = false; aiOpen = true; mgWaiting = false; }
+                            else {
+                                mgInRoom = true;
+                                mgStatus = mgWaiting
+                                    ? "Đã tạo bàn — chờ đối thủ vào chơi."
+                                    : "Đã vào bàn Aincrad.";
+                            }
                         } else if (seat == 2) { // khán giả Tàu Chiến: snapshot tới ngay
                             tcSeat = 2;
                             tcPhase = 0;
@@ -12039,16 +12187,18 @@ public class WorldScreen extends ScreenAdapter {
                         tcName1 = joinedName;
                         crName1 = joinedName;
                         txName1 = joinedName;
+                        aiName1 = joinedName;
                         mgWaiting = false;
                         break;
                     }
                     case AvatarProtocol.MG_S_OPP_LEFT: {
-                        if (crOpen || txOpen) {
-                            // Caro/Trúc Xanh: thoát giữa ván đã có gói END
-                            // riêng; OPP_LEFT ở đây = bàn giải tán (khán giả
-                            // đang xem hoặc chủ bàn huỷ khi chưa đấu)
+                        if (crOpen || txOpen || aiOpen) {
+                            // Caro/Trúc Xanh/Aincrad: thoát giữa ván đã có
+                            // gói END riêng; OPP_LEFT ở đây = bàn giải tán
+                            // (khán giả đang xem hoặc chủ bàn huỷ khi chưa đấu)
                             crOpen = false;
                             txOpen = false;
+                            aiOpen = false;
                             mgInRoom = false;
                             mgWaiting = false;
                             mgOpen = true;
@@ -12111,6 +12261,21 @@ public class WorldScreen extends ScreenAdapter {
                         }
                         break;
                     }
+                    case AvatarProtocol.MG_S_TOP: {
+                        r.readByte(); // gameId của bảng
+                        mgTopRows.clear();
+                        int tn = r.readShort();
+                        for (int i = 0; i < tn; i++) {
+                            MgTopRow row = new MgTopRow();
+                            row.name = r.readUTF();
+                            row.wins = r.readInt();
+                            row.plays = r.readInt();
+                            mgTopRows.add(row);
+                        }
+                        mgTopLoaded = true;
+                        mgScroll = MathUtils.clamp(mgScroll, 0f, mgMaxScroll());
+                        break;
+                    }
                     case AvatarProtocol.MG_S_ERROR: {
                         String text = r.readUTF();
                         mgStatus = text;
@@ -12128,6 +12293,8 @@ public class WorldScreen extends ScreenAdapter {
                 handleCrPacket(sub, r);
             } else if (gameId == AvatarProtocol.MG_GAME_TRUCXANH) {
                 handleTxPacket(sub, r);
+            } else if (gameId == AvatarProtocol.MG_GAME_AINCRAD) {
+                handleAiPacket(sub, r);
             }
         } catch (Exception ignored) { }
     }
@@ -12142,11 +12309,13 @@ public class WorldScreen extends ScreenAdapter {
             new Color(0.07f, 0.11f, 0.17f, 0.97f), GLASS_RIM), px, py);
         String sub = mgPage == 0 ? "Chọn một trò chơi"
             : mgPage == 2 ? "Mời bạn bè — ván giao hữu, không nhận quà"
+            : mgPage == 3 ? "Bảng xếp hạng — thắng nhiều nhất"
             : mgGameName(mgGame) + " — bàn đang mở";
         drawFarmPanelHeader(px, py, pw, ph, Ui.FA_TROPHY,
             new Color(0.55f, 0.38f, 0.10f, 1f), "Mini game", sub);
         if (mgPage == 0) drawMgSelect(px, py, top);
         else if (mgPage == 1) drawMgLobby(px, py, top);
+        else if (mgPage == 3) drawMgTop(px, py, top);
         else drawMgFriends(px, py, top);
         if (!mgStatus.isEmpty()) {
             Ui.fontSmall.setColor(1f, 0.85f, 0.38f, 1f);
@@ -12154,32 +12323,81 @@ public class WorldScreen extends ScreenAdapter {
         }
     }
 
+    // ----- Màn chọn game theo MiniGameSelectScr bản chính -----
+    // 2 zone (ZONE_1/ZONE_2); lưới neo: lề trái PADDING_X = 48, tối đa
+    // MAX_PER_ROW = 6 ô/hàng; icon 96, nhãn cách icon ICON_LABEL_GAP = 12,
+    // dòng nhãn LABEL_LINE_H = 32, đệm dưới nhãn LABEL_BOTTOM_PAD = 24,
+    // khoảng từ tab zone xuống lưới ANCHOR_GAP_ABOVE = 28.
+    // Zone 1 = game 1-2 (Aincrad, Trúc Xanh) · Zone 2 = game 3-5
+    // (Cờ Caro, Tàu Chiến, Snake) [phân zone là suy từ ZONE_1=2/ZONE_2=4].
+    private int mgZone; // zone đang xem ở màn chọn (0/1)
+
+    private static int[] mgZoneGames(int zone) {
+        return zone == 0 ? new int[]{1, 2} : new int[]{3, 4, 5};
+    }
+
+    private static String mgSelectIcon(int gameId) {
+        switch (gameId) {
+            case 1: return "Ghost";      // gốc không có icon select Aincrad
+            case 2: return "trucxanh";   // /minigame/select/trucxanh
+            case 3: return "caro";       // /minigame/select/caro
+            case 4: return "tauchien";   // /minigame/select/tauchien
+            default: return null;        // Snake chưa có icon
+        }
+    }
+
+    /** Ô lưới chọn game thứ i của zone hiện tại: {x trái, y đáy, rộng, cao}. */
+    private float[] mgSelectCell(int i, float px, float top) {
+        float cw = 120f, ch = 196f;
+        return new float[]{px + 48 + i * (cw + 20f), top - 216 - ch, cw, ch};
+    }
+
     private void drawMgSelect(float px, float py, float top) {
-        String[] names = {"Trúc Xanh", "Aincrad", "Cờ Caro", "Tàu Chiến"};
-        String[] icons = {"trucxanh", null, "caro", "tauchien"};
-        float cw = 200f, ch = 300f, gap = 16f;
-        float x0 = px + (MG_PW - (4 * cw + 3 * gap)) / 2f;
-        float cy = top - 150 - ch;
-        for (int i = 0; i < 4; i++) {
-            float cx = x0 + i * (cw + gap);
-            boolean live = i != 1; // Aincrad chưa làm
+        // 2 tab zone
+        for (int z = 0; z < 2; z++) {
+            float tx = px + 48 + z * 186;
+            boolean sel = mgZone == z;
+            batch.draw(Ui.roundedRect(170, 44, 11,
+                sel ? new Color(0.20f, 0.45f, 0.65f, 1f)
+                    : new Color(0.16f, 0.17f, 0.20f, 0.95f), GLASS_RIM),
+                tx, top - 188);
+            Ui.centered(batch, Ui.font, "Khu vực " + (z + 1), tx + 85, top - 159,
+                Color.WHITE);
+        }
+        int[] games = mgZoneGames(mgZone);
+        for (int i = 0; i < games.length; i++) {
+            int gid = games[i];
+            boolean live = gid != 5; // Snake (game 5) chưa làm — để sau
+            float[] rc = mgSelectCell(i, px, top);
+            float cx = rc[0], cy = rc[1], cw = rc[2], ch = rc[3];
             batch.setColor(1f, 1f, 1f, live ? 1f : 0.55f);
             batch.draw(Ui.roundedRect((int) cw, (int) ch, 14,
                 new Color(0.13f, 0.20f, 0.30f, 0.95f), GLASS_RIM), cx, cy);
-            Texture icon = icons[i] == null ? null : tcTex(icons[i]);
+            String iconName = mgSelectIcon(gid);
+            Texture icon = iconName == null ? null : tcTex(iconName);
             if (icon != null) {
-                batch.draw(icon, cx + cw / 2f - 48, cy + ch - 140, 96, 96);
+                // vẽ vừa khung 96x96 GIỮ tỉ lệ gốc (Ghost cao 68x160,
+                // ép vuông sẽ bẹt)
+                float iw = icon.getWidth(), ih = icon.getHeight();
+                float sc = Math.min(96f / iw, 96f / ih);
+                float dw = iw * sc, dh = ih * sc;
+                batch.draw(icon, cx + cw / 2f - dw / 2f,
+                    cy + ch - 108 + (96 - dh) / 2f, dw, dh);
             }
-            Ui.centered(batch, Ui.font, names[i], cx + cw / 2f, cy + ch - 170,
+            Ui.centered(batch, Ui.font, mgGameName(gid), cx + cw / 2f, cy + 76,
                 new Color(1f, 1f, 1f, 0.97f));
             Ui.centered(batch, Ui.fontSmall, live ? "Chơi ngay" : "Sắp có",
-                cx + cw / 2f, cy + 64, live
-                    ? new Color(0.45f, 0.95f, 0.55f, 1f) : new Color(1f, 1f, 1f, 0.6f));
+                cx + cw / 2f, cy + 44, live
+                    ? new Color(0.45f, 0.95f, 0.55f, 1f)
+                    : new Color(1f, 1f, 1f, 0.6f));
             batch.setColor(Color.WHITE);
         }
-        Ui.fontSmall.setColor(1f, 1f, 1f, 0.75f);
-        Ui.fontSmall.draw(batch, "Mời bạn bè chơi giao hữu hoặc vào xem các ván đang đấu trực tiếp.",
-            px + 36, cy - 26);
+        // nút Bảng xếp hạng ở đáy panel (Tín thêm 2026-11-03, giữ nguyên)
+        batch.draw(Ui.roundedRect(300, 48, 11,
+            new Color(0.16f, 0.17f, 0.20f, 0.95f), GLASS_RIM),
+            px + (MG_PW - 300) / 2f, py + 70);
+        Ui.centered(batch, Ui.font, "Bảng xếp hạng", px + MG_PW / 2f, py + 104,
+            Color.WHITE);
     }
 
     private void drawMgLobby(float px, float py, float top) {
@@ -12270,6 +12488,64 @@ public class WorldScreen extends ScreenAdapter {
         Ui.fontSmall.draw(batch, "‹ Chọn game khác", px + 28, top - 96);
     }
 
+    private void mgRequestTop() {
+        if (!online() || game.connection == null) {
+            mgTopRows.clear();
+            mgTopLoaded = true;
+            return;
+        }
+        try { AvatarProtocol.mgTop(game.connection, mgTopGame); }
+        catch (Exception ignored) { }
+    }
+
+    private void drawMgTop(float px, float py, float top) {
+        // 5 tab: Tổng + 4 game
+        String[] tabs = {"Tổng", "Aincrad", "Trúc Xanh", "Cờ Caro", "Tàu Chiến"};
+        int[] tabGame = {0, 1, 2, 3, 4};
+        float tw = 160f, th = 44f, tx0 = px + (MG_PW - (5 * tw + 4 * 10)) / 2f;
+        for (int i = 0; i < 5; i++) {
+            float tx = tx0 + i * (tw + 10);
+            boolean sel = mgTopGame == tabGame[i];
+            batch.draw(Ui.roundedRect((int) tw, (int) th, 10,
+                sel ? new Color(0.20f, 0.45f, 0.65f, 1f)
+                    : new Color(0.16f, 0.17f, 0.20f, 0.95f), GLASS_RIM),
+                tx, top - 164);
+            Ui.centered(batch, Ui.fontSmall, tabs[i], tx + tw / 2f, top - 136, Color.WHITE);
+        }
+        float lx = px + 120, lw = MG_PW - 240, ly = py + 58, lh = MG_PH - 58 - 190;
+        if (!mgTopLoaded) {
+            Ui.fontSmall.setColor(1f, 1f, 1f, 0.6f);
+            Ui.fontSmall.draw(batch, online() ? "Đang tải bảng xếp hạng…"
+                : "Bảng xếp hạng cần chơi online.", lx + 4, top - 190);
+        } else if (mgTopRows.isEmpty()) {
+            Ui.fontSmall.setColor(1f, 1f, 1f, 0.6f);
+            Ui.fontSmall.draw(batch, "Chưa có ai thắng ván nào — hãy là người đầu tiên!",
+                lx + 4, top - 190);
+        }
+        pushPanelClip(lx, ly, lw, lh);
+        float rowTop = top - 188 + mgScroll;
+        for (int i = 0; i < mgTopRows.size(); i++) {
+            MgTopRow row = mgTopRows.get(i);
+            float ry = rowTop - (i + 1) * 62f;
+            if (ry + 56 < ly || ry > ly + lh) continue;
+            boolean top3 = i < 3;
+            batch.draw(Ui.roundedRect((int) lw, 56, 12,
+                top3 ? new Color(0.30f, 0.24f, 0.10f, 0.9f)
+                    : new Color(0.13f, 0.20f, 0.30f, 0.9f), GLASS_RIM), lx, ry);
+            Ui.font.setColor(1f, 0.85f, 0.38f, 1f);
+            Ui.font.draw(batch, "#" + (i + 1), lx + 16, ry + 40);
+            Ui.font.setColor(1f, 1f, 1f, 0.97f);
+            Ui.font.draw(batch, truncTo(Ui.font, row.name, 380), lx + 84, ry + 40);
+            String st = row.wins + " thắng · " + row.plays + " ván";
+            layout.setText(Ui.fontSmall, st);
+            Ui.fontSmall.setColor(1f, 1f, 1f, 0.75f);
+            Ui.fontSmall.draw(batch, st, lx + lw - 16 - layout.width, ry + 36);
+        }
+        popPanelClip();
+        Ui.fontSmall.setColor(0.65f, 0.85f, 1f, 1f);
+        Ui.fontSmall.draw(batch, "‹ Quay lại", px + 28, top - 96);
+    }
+
     private void drawMgFriends(float px, float py, float top) {
         float lx = px + 24, lw = MG_PW - 48, ly = py + 58, lh = MG_PH - 58 - 118;
         Ui.fontSmall.setColor(1f, 1f, 1f, 0.85f);
@@ -12314,21 +12590,38 @@ public class WorldScreen extends ScreenAdapter {
         }
         if (x < px || x > px + pw || y < py || y > top) return true; // nuốt chạm ngoài
         if (mgPage == 0) {
-            float cw = 200f, ch = 300f, gap = 16f;
-            float x0 = px + (MG_PW - (4 * cw + 3 * gap)) / 2f;
-            float cy = top - 150 - ch;
-            for (int i = 0; i < 4; i++) {
-                float cx = x0 + i * (cw + gap);
-                if (x >= cx && x <= cx + cw && y >= cy && y <= cy + ch) {
-                    if (i != 1) {
-                        mgGame = new int[]{1, 2, 3, 4}[i];
-                        refreshMgRoomsShown();
-                        mgPage = 1;
-                        mgScroll = 0f;
-                        mgRequestList();
-                    } else {
-                        mgStatus = "Aincrad sắp có — chơi Trúc Xanh, Cờ Caro, Tàu Chiến trước nhé.";
+            // tab zone
+            for (int z = 0; z < 2; z++) {
+                float tx = px + 48 + z * 186;
+                if (x >= tx && x <= tx + 170 && y >= top - 188 && y <= top - 144) {
+                    mgZone = z;
+                    return true;
+                }
+            }
+            // nút Bảng xếp hạng
+            if (x >= px + (MG_PW - 300) / 2f && x <= px + (MG_PW + 300) / 2f
+                    && y >= py + 70 && y <= py + 118) {
+                mgPage = 3;
+                mgTopGame = 0;
+                mgTopLoaded = false;
+                mgRequestTop();
+                return true;
+            }
+            // ô lưới game của zone hiện tại
+            int[] games = mgZoneGames(mgZone);
+            for (int i = 0; i < games.length; i++) {
+                float[] rc = mgSelectCell(i, px, top);
+                if (x >= rc[0] && x <= rc[0] + rc[2]
+                        && y >= rc[1] && y <= rc[1] + rc[3]) {
+                    if (games[i] == 5) {
+                        mgStatus = "Game Snake sắp có.";
+                        return true;
                     }
+                    mgGame = games[i];
+                    refreshMgRoomsShown();
+                    mgPage = 1;
+                    mgScroll = 0f;
+                    mgRequestList();
                     return true;
                 }
             }
@@ -12377,6 +12670,33 @@ public class WorldScreen extends ScreenAdapter {
                     return true;
                 }
             }
+        }
+        if (mgPage == 3) {
+            String[] tabs = {"Tổng", "Aincrad", "Trúc Xanh", "Cờ Caro", "Tàu Chiến"};
+            int[] tabGame = {0, 1, 2, 3, 4};
+            float tw = 160f, tx0 = px + (MG_PW - (5 * tw + 4 * 10)) / 2f;
+            if (y >= top - 164 && y <= top - 120) {
+                for (int i = 0; i < 5; i++) {
+                    float tx = tx0 + i * (tw + 10);
+                    if (x >= tx && x <= tx + tw) {
+                        mgTopGame = tabGame[i];
+                        mgTopLoaded = false;
+                        mgScroll = 0f;
+                        mgRequestTop();
+                        return true;
+                    }
+                }
+            }
+            // vùng danh sách BXH: chỉ kéo cuộn
+            float bx = px + 120, bw = MG_PW - 240;
+            if (x >= bx && x <= bx + bw && y >= ly && y <= ly + lh) {
+                mgPointer = pointer;
+                mgDragStartY = y;
+                mgDragStartScroll = mgScroll;
+                mgDragMoved = 0f;
+                mgPendingRoom = -1;
+            }
+            return true;
         }
         // vùng danh sách: bắt đầu kéo cuộn + ghi nhận chạm hàng (xử lý ở touchUp)
         if (x >= lx && x <= lx + lw && y >= ly && y <= ly + lh) {
@@ -12522,7 +12842,42 @@ public class WorldScreen extends ScreenAdapter {
     }
 
     // ===== TÀU CHIẾN: luật + trạng thái =====
-    private static final float TC_CELL = 30f, TC_BX0 = 76f, TC_BX1 = 904f, TC_BTOP = 600f;
+    // Mỗi bàn 10x10 (ảnh bản chính Tín gửi 2026-11-04: A-J / 1-10;
+    // BOARD_SIZE=20 của metadata là tổng hai bàn). Xếp tàu: 1 bàn
+    // ô 44; đấu/xem: 2 bàn ô 40 — đủ 10x10 trên màn, không cần zoom.
+    private static final int TC_N = 10;
+    private boolean tcZoom2;
+    private float tcPanX0, tcPanY0, tcPanX1, tcPanY1;
+    private int tcPanBoard = -1, tcPanPointer = -1;
+    private float tcPanLastX, tcPanLastY, tcPanMoved;
+
+    private float tcCell() { return tcPhase == 1 ? 44f : 40f; }
+    private float tcView() { return TC_N * tcCell(); }
+    private float tcBx(int board) { return tcPhase == 1 ? 60f : (board == 0 ? 70f : 810f); }
+    private float tcTop() { return tcPhase == 1 ? 600f : 552f; }
+    private float tcPanX(int b) { return 0f; }
+    private float tcPanY(int b) { return 0f; }
+
+    private void tcClampPan() {
+        float max = Math.max(0f, TC_N * tcCell() - tcView());
+        tcPanX0 = MathUtils.clamp(tcPanX0, 0f, max);
+        tcPanX1 = MathUtils.clamp(tcPanX1, 0f, max);
+        tcPanY0 = MathUtils.clamp(tcPanY0, 0f, max);
+        tcPanY1 = MathUtils.clamp(tcPanY1, 0f, max);
+    }
+
+    /** Bàn mà điểm (x,y) đang nằm trên đó (0 trái · 1 phải · -1 ngoài). */
+    private int tcBoardAt(float x, float y) {
+        if (tcPhase == 1) {
+            return (x >= tcBx(0) && x < tcBx(0) + tcView()
+                && y > tcTop() - tcView() && y <= tcTop()) ? 0 : -1;
+        }
+        for (int b = 0; b < 2; b++) {
+            if (x >= tcBx(b) && x < tcBx(b) + tcView()
+                && y > tcTop() - tcView() && y <= tcTop()) return b;
+        }
+        return -1;
+    }
 
     private void tcResetMatch() {
         tcMyFleet.clear();
@@ -12541,6 +12896,9 @@ public class WorldScreen extends ScreenAdapter {
         tcBanner = "Đặt tàu của bạn lên bàn — hai tàu phải cách nhau ít nhất 1 ô nước.";
         tcPlaceError = "";
         tcFx.clear();
+        tcZoom2 = false;
+        tcPanX0 = tcPanY0 = tcPanX1 = tcPanY1 = 0f;
+        tcPanBoard = -1;
         mgRematchOffer = false;
         tcTurnAt = System.currentTimeMillis();
     }
@@ -12550,7 +12908,7 @@ public class WorldScreen extends ScreenAdapter {
     private String tcPlaceCheck(int len, int row, int col, boolean vert, TcShip ignore) {
         for (int i = 0; i < len; i++) {
             int rr = row + (vert ? i : 0), cc = col + (vert ? 0 : i);
-            if (rr < 0 || rr >= 10 || cc < 0 || cc >= 10) return "Có tàu nằm ngoài bàn cờ";
+            if (rr < 0 || rr >= TC_N || cc < 0 || cc >= TC_N) return "Có tàu nằm ngoài bàn cờ";
         }
         for (TcShip s : tcMyFleet) {
             if (!s.placed || s == ignore) continue;
@@ -12602,7 +12960,7 @@ public class WorldScreen extends ScreenAdapter {
         if (++steps[0] > 4000) return false;
         TcShip s = order.get(idx);
         java.util.List<int[]> cand = new java.util.ArrayList<>();
-        for (int r = 0; r < 10; r++) for (int c = 0; c < 10; c++) {
+        for (int r = 0; r < TC_N; r++) for (int c = 0; c < TC_N; c++) {
             cand.add(new int[]{r, c, 0});
             cand.add(new int[]{r, c, 1});
         }
@@ -12633,18 +12991,18 @@ public class WorldScreen extends ScreenAdapter {
     private TcShip tcMarkSunk(byte[] shots, int row, int col, int len) {
         // ngang
         int c0 = col, c1 = col;
-        while (c0 > 0 && shots[row * 10 + c0 - 1] == 2) c0--;
-        while (c1 < 9 && shots[row * 10 + c1 + 1] == 2) c1++;
+        while (c0 > 0 && shots[row * TC_N + c0 - 1] == 2) c0--;
+        while (c1 < TC_N - 1 && shots[row * TC_N + c1 + 1] == 2) c1++;
         if (c1 - c0 + 1 == len) {
-            for (int c = c0; c <= c1; c++) shots[row * 10 + c] = 3;
+            for (int c = c0; c <= c1; c++) shots[row * TC_N + c] = 3;
             TcShip s = new TcShip(len);
             s.row = row; s.col = c0; s.vert = 0; s.placed = true; s.hits = len;
             return s;
         }
         int r0 = row, r1 = row;
-        while (r0 > 0 && shots[(r0 - 1) * 10 + col] == 2) r0--;
-        while (r1 < 9 && shots[(r1 + 1) * 10 + col] == 2) r1++;
-        for (int r = r0; r <= r1; r++) shots[r * 10 + col] = 3;
+        while (r0 > 0 && shots[(r0 - 1) * TC_N + col] == 2) r0--;
+        while (r1 < TC_N - 1 && shots[(r1 + 1) * TC_N + col] == 2) r1++;
+        for (int r = r0; r <= r1; r++) shots[r * TC_N + col] = 3;
         TcShip s = new TcShip(len);
         s.row = r0; s.col = col; s.vert = 1; s.placed = true; s.hits = len;
         return s;
@@ -12679,6 +13037,7 @@ public class WorldScreen extends ScreenAdapter {
                 break;
             }
             case AvatarProtocol.TC_START_BATTLE: {
+                mgOnGameStart();
                 tcPhase = 2;
                 tcTurn = r.readByte();
                 tcSelCell = -1;
@@ -12690,7 +13049,7 @@ public class WorldScreen extends ScreenAdapter {
             case AvatarProtocol.TC_SHOT_RESULT: {
                 int seat = r.readByte(), row = r.readByte(), col = r.readByte();
                 int result = r.readByte(), sunkLen = r.readByte();
-                int cell = row * 10 + col;
+                int cell = row * TC_N + col;
                 tcTurnAt = System.currentTimeMillis();
                 if (tcSeat == 2) { // khán giả: chỉ chạy hiệu ứng, snapshot sẽ cập nhật bàn
                     // cờ bàn trong tcFx: 1 = bàn trái (ghế 0), 0 = bàn phải (ghế 1)
@@ -12758,6 +13117,7 @@ public class WorldScreen extends ScreenAdapter {
                 tcReveal0 = tcReadFleet(r);
                 tcReveal1 = tcReadFleet(r);
                 tcPhase = 3;
+                mgOnGameEnd(tcWinner, tcSeat, false);
                 if (tcSeat == 2) {
                     tcBanner = "Ván đã kết thúc.";
                 } else if (tcWinner == tcSeat) {
@@ -12841,210 +13201,260 @@ public class WorldScreen extends ScreenAdapter {
 
     private void drawTcScreen() {
         batch.setColor(1f, 1f, 1f, 1f);
-        batch.draw(Ui.gradientRect((int) Ui.W, (int) Ui.H, 0,
-            new Color(0.05f, 0.10f, 0.20f, 1f), new Color(0.03f, 0.06f, 0.12f, 1f)), 0, 0);
-        Texture bg1 = tcTex("BG_1"), bg2 = tcTex("BG_2");
-        batch.setColor(1f, 1f, 1f, 0.16f);
-        // hai góc dưới, ngoài hai bàn (bản đầu để BG_1 ở (24,470) đè
-        // góc trên-trái của bàn mình thành một vệt tối khó hiểu)
-        batch.draw(bg1, 24, 40, 150, 150);
-        batch.draw(bg2, Ui.W - 174, 40, 150, 150);
-        batch.setColor(Color.WHITE);
-        Ui.centered(batch, Ui.fontTitle, "Tàu Chiến", Ui.W / 2f, Ui.H - 16,
-            new Color(1f, 0.85f, 0.38f, 1f));
         boolean spec = tcSeat == 2;
-        String leftName = spec ? tcName0 : myDisplayName();
-        String rightName = spec ? tcName1 : tcName1;
-        if (!spec) rightName = tcSeat == 0 ? tcName1 : tcName0;
-        // tên hai phía (phía phải kết thúc ở x=1124 để không chui
-        // dưới nút Rời bàn ở góc trên-phải — ảnh shot-tc-battle)
-        Ui.font.setColor(1f, 1f, 1f, 0.97f);
-        Ui.font.draw(batch, truncTo(Ui.font, leftName, 330), TC_BX0, 668);
-        layout.setText(Ui.font, truncTo(Ui.font, rightName, 300));
-        Ui.font.draw(batch, truncTo(Ui.font, rightName, 300), 1124 - layout.width, 668);
-        Ui.fontSmall.setColor(1f, 1f, 1f, 0.65f);
-        Ui.fontSmall.draw(batch, spec ? "Người chơi 1" : "Tàu của bạn", TC_BX0, 642);
-        layout.setText(Ui.fontSmall, spec ? "Người chơi 2" : "Tàu đối thủ");
-        Ui.fontSmall.draw(batch, spec ? "Người chơi 2" : "Tàu đối thủ",
-            1124 - layout.width, 642);
-        if (tcSpecCount > 0 || spec) {
-            Ui.fontSmall.setColor(0.65f, 0.85f, 1f, 1f);
-            Ui.centered(batch, Ui.fontSmall, tcSpecCount + " khán giả", Ui.W / 2f, 668,
-                new Color(0.65f, 0.85f, 1f, 1f));
-        }
-        // panel giữa: đồng hồ + tab lượt
-        batch.draw(tcTex("Panel_Center_BG"), 509, 395);
-        batch.draw(tcTex("Panel_Center_Clock"), 613, 428);
-        if (tcPhase == 2) {
-            int left = 30 - (int) ((System.currentTimeMillis() - tcTurnAt) / 1000);
-            if (left < 0) left = 0;
-            Ui.centered(batch, Ui.font, String.valueOf(left), Ui.W / 2f, 460,
-                new Color(0.85f, 0.15f, 0.12f, 1f));
-        }
-        boolean myTurnSide = spec ? tcTurn == 0 : tcTurn == tcSeat;
-        batch.setColor(1f, 1f, 1f, myTurnSide ? 1f : 0.4f);
-        batch.draw(tcTex("Panel_Center_Turn_1"), 520, 402);
-        batch.setColor(1f, 1f, 1f, myTurnSide ? 0.4f : 1f);
-        batch.draw(tcTex("Panel_Center_Turn_2"), 649, 402);
-        batch.setColor(Color.WHITE);
-        // banner trạng thái
-        Ui.centered(batch, Ui.font, truncTo(Ui.font, tcBanner, 900), Ui.W / 2f, 366,
-            new Color(1f, 0.92f, 0.70f, 1f));
-        // hai bàn
-        if (spec) {
-            if (tcPhase == 3 && tcReveal0 != null) {
-                drawTcBoard(TC_BX0, tcSpecShots0, tcReveal0, tcSpecSunk0, false, -1);
-                drawTcBoard(TC_BX1, tcSpecShots1, tcReveal1, tcSpecSunk1, false, -1);
-            } else {
-                drawTcBoard(TC_BX0, tcSpecShots0, null, tcSpecSunk0, false, -1);
-                drawTcBoard(TC_BX1, tcSpecShots1, null, tcSpecSunk1, false, -1);
+        boolean placing = tcPhase == 1 && !spec;
+        String title = spec ? "Tàu Chiến"
+            : mgFriendlyRoom ? "Giao hữu"
+            : !mgRoomCode.isEmpty() ? "Bàn " + mgRoomCode : "Tàu Chiến";
+        drawMgLightFrame(placing ? "Đặt tàu" : title);
+        if (placing) {
+            drawTcBoard(0, tcShotsOpp, tcMyFleet, tcSunkMine, false, -1);
+            // tàu đang kéo (ghost xanh/đỏ theo hợp lệ)
+            if (tcDragIdx >= 0 && tcDragIdx < tcMyFleet.size()) {
+                TcShip s = tcMyFleet.get(tcDragIdx);
+                int[] cell = tcCellAt(tcDragX, tcDragY, 0);
+                if (cell != null) {
+                    int nr = cell[0] - tcDragOffR, nc = cell[1] - tcDragOffC;
+                    boolean ok = tcPlaceCheck(s.len, nr, nc, s.vert == 1, s) == null;
+                    TcShip ghost = new TcShip(s.len);
+                    ghost.row = nr; ghost.col = nc; ghost.vert = s.vert; ghost.placed = true;
+                    batch.setColor(ok ? new Color(0.5f, 1f, 0.5f, 0.75f)
+                        : new Color(1f, 0.4f, 0.4f, 0.75f));
+                    drawTcShip(tcTex("Ship_lv" + s.len), tcBx(0), 0, ghost);
+                    batch.setColor(Color.WHITE);
+                }
             }
-        } else if (tcPhase == 3 && tcReveal0 != null) {
-            drawTcBoard(TC_BX0, tcShotsOpp,
-                tcSeat == 0 ? tcReveal0 : tcReveal1, tcSunkMine, false, -1);
-            drawTcBoard(TC_BX1, tcShotsMine,
-                tcSeat == 0 ? tcReveal1 : tcReveal0, tcSunkEnemy, false, -1);
+            drawTcPlacePanel();
+            // chủ bàn: nút đuổi khi đang xếp tàu
+            if (tcSeat == 0 && !tcName1.isEmpty()) {
+                batch.draw(Ui.roundedRect(92, 36, 9,
+                    new Color(0.16f, 0.17f, 0.20f, 0.95f), GLASS_RIM), 1148, 648);
+                Ui.centered(batch, Ui.fontSmall, "Đuổi", 1194, 673, Color.WHITE);
+            }
         } else {
-            drawTcBoard(TC_BX0, tcShotsOpp, tcMyFleet, tcSunkMine, false, -1);
-            drawTcBoard(TC_BX1, tcShotsMine, null, tcSunkEnemy, tcPhase < 2, tcSelCell);
-        }
-        // tàu đang kéo (ghost)
-        if (tcDragIdx >= 0 && tcDragIdx < tcMyFleet.size()) {
-            TcShip s = tcMyFleet.get(tcDragIdx);
-            int[] cell = tcCellAt(tcDragX, tcDragY, TC_BX0);
-            if (cell != null) {
-                int nr = cell[0] - tcDragOffR, nc = cell[1] - tcDragOffC;
-                boolean ok = tcPlaceCheck(s.len, nr, nc, s.vert == 1, s) == null;
-                TcShip ghost = new TcShip(s.len);
-                ghost.row = nr; ghost.col = nc; ghost.vert = s.vert; ghost.placed = true;
-                batch.setColor(ok ? new Color(0.5f, 1f, 0.5f, 0.75f)
-                    : new Color(1f, 0.4f, 0.4f, 0.75f));
-                drawTcShip(tcTex("Ship_lv" + s.len), TC_BX0, ghost);
-                batch.setColor(Color.WHITE);
+            // avatar + tên hai người ở hai góc trên (như ảnh bản chính)
+            String leftName = spec ? tcName0 : myDisplayName();
+            String rightName = spec ? tcName1 : (tcSeat == 0 ? tcName1 : tcName0);
+            com.avatardk.game.data.PaperDoll dL = mgDollFor(spec ? 0 : tcSeat, tcSeat);
+            com.avatardk.game.data.PaperDoll dR = mgDollFor(spec ? 1 : 1 - tcSeat, tcSeat);
+            if (dL != null) game.dollRenderer.draw(batch, dL, 0, 92, 604, 2.6f, false);
+            if (dR != null) game.dollRenderer.draw(batch, dR, 0, 1188, 604, 2.6f, true);
+            Color ink = new Color(0.05f, 0.18f, 0.35f, 1f);
+            Ui.font.setColor(ink);
+            Ui.font.draw(batch, truncTo(Ui.font, leftName, 300), 128, 668);
+            layout.setText(Ui.font, truncTo(Ui.font, rightName, 300));
+            Ui.font.draw(batch, truncTo(Ui.font, rightName, 300), 1152 - layout.width, 668);
+            Ui.fontSmall.setColor(0.10f, 0.28f, 0.48f, 0.9f);
+            Ui.fontSmall.draw(batch, spec ? "Người chơi 1" : "Tàu của bạn", 128, 640);
+            layout.setText(Ui.fontSmall, spec ? "Người chơi 2" : "Tàu đối thủ");
+            Ui.fontSmall.draw(batch, spec ? "Người chơi 2" : "Tàu đối thủ",
+                1152 - layout.width, 640);
+            // panel giữa: gỗ + đồng hồ + tab lượt (asset gốc)
+            batch.setColor(Color.WHITE);
+            batch.draw(tcTex("Panel_Center_BG"), 509, 560);
+            batch.draw(tcTex("Panel_Center_Clock"), 613, 585);
+            if (tcPhase == 2) {
+                int left = 30 - (int) ((System.currentTimeMillis() - tcTurnAt) / 1000);
+                if (left < 0) left = 0;
+                Ui.centered(batch, Ui.font, String.valueOf(left), Ui.W / 2f, 617,
+                    new Color(0.85f, 0.15f, 0.12f, 1f));
+            }
+            boolean myTurnSide = spec ? tcTurn == 0 : tcTurn == tcSeat;
+            batch.setColor(1f, 1f, 1f, myTurnSide ? 1f : 0.4f);
+            batch.draw(tcTex("Panel_Center_Turn_1"), 520, 567);
+            batch.setColor(1f, 1f, 1f, myTurnSide ? 0.4f : 1f);
+            batch.draw(tcTex("Panel_Center_Turn_2"), 649, 567);
+            batch.setColor(Color.WHITE);
+            // banner trạng thái (giữa hai bàn, gói tối đa 2 dòng)
+            {
+                java.util.List<String> lines = wrapText(tcBanner, Ui.font, 330);
+                for (int i = 0; i < Math.min(2, lines.size()); i++) {
+                    Ui.centered(batch, Ui.font, lines.get(i), Ui.W / 2f, 540 - i * 26,
+                        new Color(0.05f, 0.18f, 0.35f, 1f));
+                }
+            }
+            if (tcPhase == 2) drawTcLegend();
+            // hai bàn (khán giả lúc xếp tàu thấy bàn "đóng băng" như gốc)
+            if (spec) {
+                boolean frozen = tcPhase < 2;
+                if (tcPhase == 3 && tcReveal0 != null) {
+                    drawTcBoard(0, tcSpecShots0, tcReveal0, tcSpecSunk0, false, -1);
+                    drawTcBoard(1, tcSpecShots1, tcReveal1, tcSpecSunk1, false, -1);
+                } else {
+                    drawTcBoard(0, tcSpecShots0, null, tcSpecSunk0, frozen, -1);
+                    drawTcBoard(1, tcSpecShots1, null, tcSpecSunk1, frozen, -1);
+                }
+            } else if (tcPhase == 3 && tcReveal0 != null) {
+                drawTcBoard(0, tcShotsOpp,
+                    tcSeat == 0 ? tcReveal0 : tcReveal1, tcSunkMine, false, -1);
+                drawTcBoard(1, tcShotsMine,
+                    tcSeat == 0 ? tcReveal1 : tcReveal0, tcSunkEnemy, false, -1);
+            } else {
+                drawTcBoard(0, tcShotsOpp, tcMyFleet, tcSunkMine, false, -1);
+                drawTcBoard(1, tcShotsMine, null, tcSunkEnemy, false, tcSelCell);
+            }
+            if (tcPhase == 2) drawTcBattleBar(spec);
+            if (tcPhase == 3 && !spec) drawTcEndBar();
+            if (tcPhase == 0) {
+                Ui.centered(batch, Ui.font, "Đang chờ ván bắt đầu…", Ui.W / 2f, 300,
+                    new Color(0.05f, 0.18f, 0.35f, 1f));
             }
         }
-        if (tcPhase == 1 && !spec) drawTcPlaceBar();
-        if (tcPhase == 2) drawTcBattleBar(spec);
-        if (tcPhase == 3 && !spec) drawTcEndBar();
-        if (tcPhase == 0) {
-            Ui.centered(batch, Ui.font, "Đang chờ ván bắt đầu…", Ui.W / 2f, 200, Color.WHITE);
+        if (!placing) drawMgBottomStrip(tcSpecCount, spec);
+        else {
+            // pha xếp: vẫn có nút rời bàn ở dải dưới
+            batch.draw(Ui.roundedRect(136, 48, 10,
+                new Color(0.45f, 0.16f, 0.14f, 0.95f), GLASS_RIM), 1108, 24);
+            Ui.centered(batch, Ui.fontSmall, spec ? "Ngừng xem" : "Rời bàn",
+                1176, 24 + 29, Color.WHITE);
         }
-        // nút rời bàn / ngừng xem
-        batch.draw(Ui.roundedRect(124, 44, 10,
-            new Color(0.45f, 0.16f, 0.14f, 0.95f), GLASS_RIM), Ui.W - 148, Ui.H - 64);
-        Ui.centered(batch, Ui.fontSmall, spec ? "Ngừng xem" : "Rời bàn",
-            Ui.W - 86, Ui.H - 30, Color.WHITE);
-        // chủ bàn: nút đuổi khi đang xếp tàu
-        if (!spec && tcSeat == 0 && tcPhase == 1 && !tcName1.isEmpty()) {
-            batch.draw(Ui.roundedRect(92, 36, 9,
-                new Color(0.16f, 0.17f, 0.20f, 0.95f), GLASS_RIM), 1112, 606);
-            Ui.centered(batch, Ui.fontSmall, "Đuổi", 1158, 631, Color.WHITE);
-        }
+        drawMgReady();
         if (tcLeaveAsk) drawTcLeaveDialog();
+    }
+
+    /** Nút zoom bàn (góc trên-phải của mỗi bàn, chỉ ở bố cục 2 bàn). */
+    private void drawTcZoomBtn(int board) {
+        float bx = tcBx(board) + tcView() - 42, by = tcTop() + 8;
+        batch.draw(Ui.roundedRect(42, 36, 9,
+            new Color(0.13f, 0.20f, 0.30f, 0.92f), GLASS_RIM), bx, by);
+        Ui.centered(batch, Ui.font, tcZoom2 ? "−" : "+", bx + 21, by + 26, Color.WHITE);
+    }
+
+    /** Chú thích trạng thái ô (SHOW_BOTTOM_LEGEND của gốc): icon
+     *  icnStatus_1 = trúng, icnStatus_2 = chìm, chấm = trượt. */
+    private void drawTcLegend() {
+        float y = 446;
+        Texture i1 = tcTex("icnStatus_1"), i2 = tcTex("icnStatus_2");
+        if (i1 != null) batch.draw(i1, 486, y, 67, 29);
+        Ui.fontSmall.setColor(0.05f, 0.18f, 0.35f, 0.9f);
+        Ui.fontSmall.draw(batch, "Trúng", 560, y + 20);
+        if (i2 != null) batch.draw(i2, 640, y - 4, 36, 37);
+        Ui.fontSmall.draw(batch, "Chìm", 684, y + 20);
+        Texture ice = tcTex("Map_Slot_dongbang");
+        if (ice != null) batch.draw(ice, 752, y + 2, 24, 24);
+        Ui.fontSmall.draw(batch, "Trượt", 784, y + 20);
     }
 
     /** Vẽ một bàn: shotsAt = phát bắn rơi vào bàn này; ownFleet = tàu hiện
      *  đầy đủ (bàn mình / lộ diện cuối ván); sunkList = tàu chìm được lộ. */
-    private void drawTcBoard(float bx, byte[] shotsAt, java.util.List<TcShip> ownFleet,
+    private void drawTcBoard(int boardIdx, byte[] shotsAt, java.util.List<TcShip> ownFleet,
             java.util.List<TcShip> sunkList, boolean frozen, int focusCell) {
-        batch.draw(Ui.roundedRect(312, 312, 10,
-            new Color(0.09f, 0.22f, 0.37f, 1f), GLASS_RIM), bx - 6, TC_BTOP - 306);
+        float cell = tcCell(), view = tcView(), bx = tcBx(boardIdx), top = tcTop();
+        float panX = tcPanX(boardIdx), panY = tcPanY(boardIdx);
+        batch.draw(Ui.roundedRect((int) view + 12, (int) view + 12, 10,
+            new Color(0.09f, 0.22f, 0.37f, 1f), GLASS_RIM), bx - 6, top - view - 6);
         Texture slot = tcTex(frozen ? "Map_Slot_dongbang" : "Map_Slot");
-        for (int r = 0; r < 10; r++) {
-            for (int c = 0; c < 10; c++) {
-                batch.draw(slot, bx + c * TC_CELL, TC_BTOP - (r + 1) * TC_CELL, TC_CELL, TC_CELL);
+        boolean clipped = pushPanelClip(bx, top - view, view, view);
+        for (int r = 0; r < TC_N; r++) {
+            for (int c = 0; c < TC_N; c++) {
+                float sx = bx + c * cell - panX, sy = top - (r + 1) * cell + panY;
+                if (sx + cell < bx || sx > bx + view
+                    || sy + cell < top - view || sy > top) continue;
+                batch.draw(slot, sx, sy, cell, cell);
             }
-        }
-        // nhãn cột/hàng
-        Ui.fontSmall.setColor(1f, 1f, 1f, 0.8f);
-        for (int c = 0; c < 10; c++) {
-            Ui.centered(batch, Ui.fontSmall, String.valueOf((char) ('A' + c)),
-                bx + c * TC_CELL + TC_CELL / 2f, TC_BTOP + 24, new Color(1f, 1f, 1f, 0.8f));
-        }
-        for (int r = 0; r < 10; r++) {
-            Ui.centered(batch, Ui.fontSmall, String.valueOf(r + 1),
-                bx - 18, TC_BTOP - r * TC_CELL - 8, new Color(1f, 1f, 1f, 0.8f));
         }
         if (ownFleet != null) {
             for (TcShip s : ownFleet) {
-                if (s.placed) drawTcShip(tcTex("Ship_lv" + s.len), bx, s);
+                // tàu đã chìm thì ẩn sprite: chỉ còn dấu X trên ô như
+                // ảnh bản chính (hết ván lộ diện qua đường reveal riêng)
+                if (s.placed && s.hits < s.len) {
+                    drawTcShip(tcTex("Ship_lv" + s.len), bx, boardIdx, s);
+                }
             }
         }
-        if (sunkList != null) {
-            for (TcShip s : sunkList) {
-                drawTcShip(tcTex("Ship_lv" + s.len), bx, s);
-            }
-        }
+        // sunkList không vẽ sprite: các ô của tàu chìm đã mang dấu X
+        // (shots == 3) ở lớp phát bắn bên dưới.
         long now = System.currentTimeMillis();
         if (tcBurnFrames == null) {
             tcBurnFrames = tcFrames(tcTex("Eff_Burn_0"), 72, 72);
             tcMissFrames = tcFrames(tcTex("Eff_Miss_0"), 116, 70);
         }
-        for (int r = 0; r < 10; r++) {
-            for (int c = 0; c < 10; c++) {
-                int cell = r * 10 + c;
-                int st = shotsAt[cell];
+        int boardFlag = boardIdx == 0 ? 1 : 0; // trái = bàn mình (bị bắn)
+        for (int r = 0; r < TC_N; r++) {
+            for (int c = 0; c < TC_N; c++) {
+                int cellIdx = r * TC_N + c;
+                int st = shotsAt[cellIdx];
                 if (st == 0) continue;
-                float cx = bx + c * TC_CELL, cy = TC_BTOP - (r + 1) * TC_CELL;
-                int boardFlag = bx == TC_BX0 ? 1 : 0; // bàn trái = bàn mình (bị bắn)
-                Long start = tcFx.get(boardFlag * 1000 + cell);
+                float cx = bx + c * cell - panX, cy = top - (r + 1) * cell + panY;
+                if (cx + cell < bx || cx > bx + view
+                    || cy + cell < top - view || cy > top) continue;
+                Long start = tcFx.get(boardFlag * 1000 + cellIdx);
                 boolean anim = start != null && now - start < 700;
-                if (st == 1) { // trượt
+                if (st == 1) { // trượt: ô "đóng băng" như ảnh bản chính
                     if (anim) {
                         int f = Math.min(3, (int) ((now - start) / 175));
-                        batch.draw(tcMissFrames[f], cx - 8, cy - 6, TC_CELL + 16, TC_CELL + 12);
+                        batch.draw(tcMissFrames[f], cx - 8, cy - 6, cell + 16, cell + 12);
                     } else {
-                        batch.draw(Ui.roundedRect(12, 12, 6,
-                            new Color(0.75f, 0.88f, 1f, 0.85f),
-                            new Color(0.75f, 0.88f, 1f, 0.85f)), cx + 9, cy + 9);
+                        Texture ice = tcTex("Map_Slot_dongbang");
+                        if (ice != null) batch.draw(ice, cx + 1, cy + 1, cell - 2, cell - 2);
                     }
                 } else { // trúng / chìm
                     if (anim) {
                         int f = Math.min(3, (int) ((now - start) / 175));
-                        batch.draw(tcBurnFrames[f], cx - 6, cy - 6, TC_CELL + 12, TC_CELL + 12);
+                        batch.draw(tcBurnFrames[f], cx - 6, cy - 6, cell + 12, cell + 12);
                     } else {
                         batch.setColor(1f, 1f, 1f, 0.75f);
-                        batch.draw(tcBurnFrames[3], cx - 4, cy - 4, TC_CELL + 8, TC_CELL + 8);
+                        batch.draw(tcBurnFrames[3], cx - 4, cy - 4, cell + 8, cell + 8);
                         batch.setColor(Color.WHITE);
                     }
                     if (st == 3) {
-                        batch.setColor(0.9f, 0.2f, 0.15f, 0.30f);
-                        batch.draw(whiteTex, cx, cy, TC_CELL, TC_CELL);
+                        // tàu chìm: dấu X đỏ lên ô (như ảnh bản chính)
+                        batch.setColor(0.88f, 0.16f, 0.12f, 0.95f);
+                        com.badlogic.gdx.graphics.g2d.TextureRegion wr =
+                            new com.badlogic.gdx.graphics.g2d.TextureRegion(whiteTex);
+                        float ccx = cx + cell / 2f, ccy = cy + cell / 2f;
+                        batch.draw(wr, ccx - 13, ccy - 2.5f, 13, 2.5f, 26, 5, 1f, 1f, 45f);
+                        batch.draw(wr, ccx - 13, ccy - 2.5f, 13, 2.5f, 26, 5, 1f, 1f, -45f);
                         batch.setColor(Color.WHITE);
                     }
                 }
             }
         }
         if (focusCell >= 0) {
-            int r = focusCell / 10, c = focusCell % 10;
-            batch.draw(tcTex("Map_Focus"), bx + c * TC_CELL - 10, TC_BTOP - (r + 1) * TC_CELL - 10,
-                TC_CELL + 20, TC_CELL + 20);
+            int r = focusCell / TC_N, c = focusCell % TC_N;
+            batch.draw(tcTex("Map_Focus"), bx + c * cell - panX - 10,
+                top - (r + 1) * cell + panY - 10, cell + 20, cell + 20);
         }
         // tàu đang chọn khi xếp: viền sáng
         if (ownFleet == tcMyFleet && tcSelShip >= 0 && tcSelShip < tcMyFleet.size()
             && tcPhase == 1 && !tcPlacedOk) {
             TcShip s = tcMyFleet.get(tcSelShip);
             if (s.placed) {
-                float sx = bx + s.col * TC_CELL;
-                float sy = TC_BTOP - (s.row + (s.vert == 1 ? s.len : 1)) * TC_CELL;
-                float sw = (s.vert == 1 ? 1 : s.len) * TC_CELL;
-                float sh = (s.vert == 1 ? s.len : 1) * TC_CELL;
+                float sx = bx + s.col * cell - panX;
+                float sy = top - (s.row + (s.vert == 1 ? s.len : 1)) * cell + panY;
+                float sw = (s.vert == 1 ? 1 : s.len) * cell;
+                float sh = (s.vert == 1 ? s.len : 1) * cell;
                 batch.setColor(1f, 0.85f, 0.3f, 0.35f);
                 batch.draw(whiteTex, sx, sy, sw, sh);
                 batch.setColor(Color.WHITE);
             }
         }
+        if (clipped) popPanelClip();
+        // nhãn cột/hàng (chỉ phần đang thấy khi zoom)
+        for (int c = 0; c < TC_N; c++) {
+            float cxm = bx + c * cell - panX + cell / 2f;
+            if (cxm < bx || cxm > bx + view) continue;
+            Ui.centered(batch, Ui.fontSmall, String.valueOf((char) ('A' + c)),
+                cxm, top + 24, new Color(0.05f, 0.18f, 0.35f, 0.9f));
+        }
+        for (int r = 0; r < TC_N; r++) {
+            float cym = top - r * cell + panY - cell / 2f;
+            if (cym < top - view || cym > top) continue;
+            Ui.centered(batch, Ui.fontSmall, String.valueOf(r + 1),
+                bx - 18, cym + 8, new Color(0.05f, 0.18f, 0.35f, 0.9f));
+        }
     }
 
-    private void drawTcShip(Texture tex, float bx, TcShip s) {
-        float x = bx + s.col * TC_CELL;
-        float topY = TC_BTOP - s.row * TC_CELL;
+    private void drawTcShip(Texture tex, float bx, int boardIdx, TcShip s) {
+        float cell = tcCell();
+        float x = bx + s.col * cell - tcPanX(boardIdx);
+        float topY = tcTop() - s.row * cell + tcPanY(boardIdx);
         if (s.vert == 0) {
-            batch.draw(tex, x, topY - TC_CELL, s.len * TC_CELL, TC_CELL);
+            batch.draw(tex, x, topY - cell, s.len * cell, cell);
         } else {
-            float cx = x + TC_CELL / 2f, cy = topY - s.len * TC_CELL / 2f;
-            batch.draw(new TextureRegion(tex), cx - s.len * TC_CELL / 2f, cy - TC_CELL / 2f,
-                s.len * TC_CELL / 2f, TC_CELL / 2f, s.len * TC_CELL, TC_CELL, 1f, 1f, 90f);
+            float cx = x + cell / 2f, cy = topY - s.len * cell / 2f;
+            batch.draw(new TextureRegion(tex), cx - s.len * cell / 2f, cy - cell / 2f,
+                s.len * cell / 2f, cell / 2f, s.len * cell, cell, 1f, 1f, 90f);
         }
     }
 
@@ -13062,48 +13472,54 @@ public class WorldScreen extends ScreenAdapter {
             style == 2 ? new Color(1f, 1f, 1f, 0.55f) : Color.WHITE);
     }
 
-    private void drawTcPlaceBar() {
-        Ui.fontSmall.setColor(1f, 1f, 1f, 0.85f);
-        Ui.fontSmall.draw(batch, "Đặt tàu", 76, 262);
+    /** Panel xếp tàu: danh sách tàu ListShip của gốc (nền 5 dải +
+     *  hàng chọn ListShip_Focus) bên phải bàn + hàng nút chức năng. */
+    private void drawTcPlacePanel() {
+        float lx = 600, ly = 190, lw = 460, lh = 425;
+        // (tiêu đề "Đặt tàu" do khung sáng vẽ ở giữa trên)
         if (!tcPlaceError.isEmpty()) {
             Ui.fontSmall.setColor(1f, 0.45f, 0.4f, 1f);
             layout.setText(Ui.fontSmall, tcPlaceError);
-            Ui.fontSmall.draw(batch, tcPlaceError, Ui.W - 76 - layout.width, 262);
+            Ui.fontSmall.draw(batch, tcPlaceError, 1240 - layout.width, 668);
         } else if (tcPlacedOk) {
             String t = tcReadyOpp ? "Đối thủ đã sẵn sàng." : "Đối thủ chưa sẵn sàng";
-            Ui.fontSmall.setColor(0.65f, 0.85f, 1f, 1f);
+            Ui.fontSmall.setColor(0.10f, 0.30f, 0.60f, 1f);
             layout.setText(Ui.fontSmall, t);
-            Ui.fontSmall.draw(batch, t, Ui.W - 76 - layout.width, 262);
+            Ui.fontSmall.draw(batch, t, 1240 - layout.width, 668);
         }
-        // khay chọn loại tàu (theo ListShip của gốc: 5 hàng tàu — bản port
-        // xếp thành 5 ô ngang dưới bàn)
+        Texture bg = tcTex("ListShip_BG");
+        if (bg != null) batch.draw(bg, lx, ly, lw, lh);
         int[] lens = {5, 4, 3, 2, 1};
         for (int i = 0; i < 5; i++) {
             int len = lens[i];
-            float cx = 72 + i * (216 + 14), cy = 96;
+            float rowH = lh / 5f;
+            float rowTop = ly + lh - i * rowH;
             boolean sel = tcSelType == len;
             boolean empty = tcRemaining(len) == 0;
-            batch.draw(Ui.roundedRect(216, 120, 12,
-                new Color(0.13f, 0.20f, 0.30f, empty ? 0.55f : 0.92f), GLASS_RIM), cx, cy);
-            if (sel) batch.draw(tcTex("ListShip_Focus"), cx, cy + 120 - 46, 216, 46);
+            if (sel) {
+                Texture foc = tcTex("ListShip_Focus");
+                if (foc != null) batch.draw(foc, lx, rowTop - rowH + (rowH - 46) / 2f, lw, 46);
+            }
             batch.setColor(1f, 1f, 1f, empty ? 0.4f : 1f);
             Texture ship = tcTex("Ship_lv" + len);
-            float sw = len == 1 ? 30 : Math.min(180, len * 36);
-            batch.draw(ship, cx + 108 - sw / 2f, cy + 66, sw, 30);
+            float sw = len == 1 ? 34 : Math.min(200, len * 40);
+            batch.draw(ship, lx + 130 - sw / 2f, rowTop - rowH / 2f - 17, sw, 34);
             batch.setColor(Color.WHITE);
-            Ui.centered(batch, Ui.fontSmall, TC_SHIP_NAMES[len], cx + 108, cy + 48,
-                new Color(1f, 1f, 1f, empty ? 0.45f : 0.95f));
-            Ui.centered(batch, Ui.fontSmall, "còn " + tcRemaining(len), cx + 108, cy + 24,
-                new Color(1f, 0.85f, 0.38f, empty ? 0.4f : 1f));
+            Ui.centered(batch, Ui.fontSmall, TC_SHIP_NAMES[len], lx + 310,
+                rowTop - rowH / 2f + 16, new Color(1f, 1f, 1f, empty ? 0.45f : 0.95f));
+            Ui.centered(batch, Ui.fontSmall, "còn " + tcRemaining(len), lx + 310,
+                rowTop - rowH / 2f - 12, new Color(1f, 0.85f, 0.38f, empty ? 0.4f : 1f));
         }
-        // hàng nút
+        // nút xoay nhanh của gốc ở góc trên-phải của bàn
         if (!tcPlacedOk) {
-            tcBtn(72, 36, 96, 48, "Xoay", tcSelShip >= 0 || tcSelType > 0 ? 0 : 2);
-            tcBtn(182, 36, 96, 48, "Gỡ", tcSelShip >= 0 ? 0 : 2);
-            tcBtn(292, 36, 200, 48, "Xếp ngẫu nhiên", 0);
-            tcBtn(1008, 36, 200, 48, "Xếp xong", tcAllPlaced() ? 1 : 2);
+            Texture rot = tcTex("Bt_Function_Rotate");
+            if (rot != null) batch.draw(rot, tcBx(0) + tcView() - 64, tcTop() - 64, 64, 64);
+            tcBtn(600, 118, 110, 52, "Xoay", tcSelShip >= 0 || tcSelType > 0 ? 0 : 2);
+            tcBtn(724, 118, 110, 52, "Gỡ", tcSelShip >= 0 ? 0 : 2);
+            tcBtn(848, 118, 190, 52, "Ngẫu nhiên", 0);
+            tcBtn(1052, 118, 188, 52, "Xếp xong", tcAllPlaced() ? 1 : 2);
         } else {
-            tcBtn(1008, 36, 200, 48, tcReadyMe ? "Đã sẵn sàng" : "Sẵn sàng", tcReadyMe ? 2 : 1);
+            tcBtn(1052, 118, 188, 52, tcReadyMe ? "Đã sẵn sàng" : "Sẵn sàng", tcReadyMe ? 2 : 1);
         }
     }
 
@@ -13114,28 +13530,37 @@ public class WorldScreen extends ScreenAdapter {
             : "Tàu địch đã chìm: " + sunkE + "/14";
         String right = tcSeat == 2 ? "Tàu chìm của người chơi 2: " + sunkE + "/14"
             : "Tàu bạn đã chìm: " + sunkM + "/14";
-        Ui.fontSmall.setColor(1f, 1f, 1f, 0.85f);
-        Ui.fontSmall.draw(batch, left, 76, 262);
+        Ui.fontSmall.setColor(0.05f, 0.18f, 0.35f, 0.9f);
+        Ui.fontSmall.draw(batch, left, 70, 124);
         layout.setText(Ui.fontSmall, right);
-        Ui.fontSmall.draw(batch, right, Ui.W - 76 - layout.width, 262);
+        Ui.fontSmall.draw(batch, right, 1210 - layout.width, 124);
         if (!spec && tcTurn == tcSeat) {
-            tcBtn(530, 232 - 56, 220, 56, "Xác nhận bắn", tcSelCell >= 0 ? 1 : 2);
+            tcBtn(530, 36, 220, 56, "Xác nhận bắn", tcSelCell >= 0 ? 1 : 2);
         } else if (!spec) {
-            Ui.centered(batch, Ui.font, "Chờ đến lượt.", Ui.W / 2f, 208,
-                new Color(1f, 1f, 1f, 0.6f));
+            Ui.centered(batch, Ui.font, "Chờ đến lượt.", Ui.W / 2f, 68,
+                new Color(0.05f, 0.18f, 0.35f, 0.55f));
         }
     }
 
     private void drawTcEndBar() {
-        String title = tcWinner == tcSeat ? "Bạn thắng!" : "Bạn thua!";
-        Ui.centered(batch, Ui.fontTitle, title, Ui.W / 2f, 262,
-            tcWinner == tcSeat ? new Color(1f, 0.85f, 0.38f, 1f) : new Color(0.8f, 0.85f, 0.95f, 1f));
-        tcBtn(430, 150, 190, 56, "Ván mới", 1);
-        tcBtn(660, 150, 190, 56, "Về sảnh", 0);
+        // banner kết quả bằng ảnh (khung chung MiniGameScr)
+        Texture bt = mgEndBanner == 1 ? tcTex("tx_Win")
+            : mgEndBanner == 2 ? tcTex("tx_Lose") : null;
+        if (bt != null) {
+            float bw2 = bt.getWidth() * 1.4f, bh2 = bt.getHeight() * 1.4f;
+            batch.draw(bt, Ui.W / 2f - bw2 / 2f, 176, bw2, bh2);
+        } else {
+            String title = tcWinner == tcSeat ? "Bạn thắng!" : "Bạn thua!";
+            Ui.centered(batch, Ui.fontTitle, title, Ui.W / 2f, 190,
+                tcWinner == tcSeat ? new Color(1f, 0.85f, 0.38f, 1f)
+                    : new Color(0.8f, 0.85f, 0.95f, 1f));
+        }
         if (mgRematchOffer) {
             Ui.centered(batch, Ui.fontSmall, "Đối thủ đang chờ bạn nhận ván mới.",
-                Ui.W / 2f, 128, new Color(0.65f, 0.85f, 1f, 1f));
+                Ui.W / 2f, 148, new Color(0.10f, 0.30f, 0.60f, 1f));
         }
+        tcBtn(430, 36, 190, 56, "Ván mới", 1);
+        tcBtn(660, 36, 190, 56, "Về sảnh", 0);
     }
 
     private boolean tcLeaveAsk;
@@ -13163,11 +13588,12 @@ public class WorldScreen extends ScreenAdapter {
     }
 
     // ===== TÀU CHIẾN: chạm =====
-    private int[] tcCellAt(float x, float y, float bx) {
-        if (x < bx || x >= bx + 300 || y <= TC_BTOP - 300 || y > TC_BTOP) return null;
-        int col = (int) ((x - bx) / TC_CELL);
-        int row = (int) ((TC_BTOP - y) / TC_CELL);
-        if (row < 0 || row > 9 || col < 0 || col > 9) return null;
+    private int[] tcCellAt(float x, float y, int boardIdx) {
+        float cell = tcCell(), view = tcView(), bx = tcBx(boardIdx), top = tcTop();
+        if (x < bx || x >= bx + view || y <= top - view || y > top) return null;
+        int col = (int) ((x - bx + tcPanX(boardIdx)) / cell);
+        int row = (int) ((top + tcPanY(boardIdx) - y) / cell);
+        if (row < 0 || row >= TC_N || col < 0 || col >= TC_N) return null;
         return new int[]{row, col};
     }
 
@@ -13187,8 +13613,8 @@ public class WorldScreen extends ScreenAdapter {
             return true;
         }
         boolean spec = tcSeat == 2;
-        // nút rời bàn / ngừng xem
-        if (x >= Ui.W - 148 && x <= Ui.W - 24 && y >= Ui.H - 64 && y <= Ui.H - 20) {
+        // nút rời bàn / ngừng xem (dải dưới trong khung sáng)
+        if (x >= 1108 && x <= 1244 && y >= 24 && y <= 72) {
             if (spec) tcLeaveRoom();
             else tcLeaveAsk = true;
             return true;
@@ -13196,17 +13622,23 @@ public class WorldScreen extends ScreenAdapter {
         if (spec) return true;
         // nút đuổi (chủ bàn, pha xếp)
         if (tcSeat == 0 && tcPhase == 1 && !tcName1.isEmpty()
-            && x >= 1112 && x <= 1204 && y >= 606 && y <= 642) {
+            && x >= 1148 && x <= 1240 && y >= 648 && y <= 684) {
             try { AvatarProtocol.tcKick(game.connection); } catch (Exception ignored) { }
             return true;
         }
         if (tcPhase == 1) {
             if (!tcPlacedOk) {
-                // hàng nút dưới
-                if (y >= 36 && y <= 84) {
-                    if (x >= 72 && x <= 168) { tcRotateAction(); return true; }
-                    if (x >= 182 && x <= 278) { tcRemoveSelected(); return true; }
-                    if (x >= 292 && x <= 492) {
+                // nút xoay nhanh ở góc bàn
+                if (x >= tcBx(0) + tcView() - 64 && x <= tcBx(0) + tcView()
+                    && y >= tcTop() - 64 && y <= tcTop()) {
+                    tcRotateAction();
+                    return true;
+                }
+                // hàng nút dưới panel tàu
+                if (y >= 118 && y <= 170) {
+                    if (x >= 600 && x <= 710) { tcRotateAction(); return true; }
+                    if (x >= 724 && x <= 834) { tcRemoveSelected(); return true; }
+                    if (x >= 848 && x <= 1038) {
                         if (tcAutoPlace()) {
                             tcPlaceError = "";
                             tcSelShip = -1;
@@ -13216,16 +13648,16 @@ public class WorldScreen extends ScreenAdapter {
                         }
                         return true;
                     }
-                    if (x >= 1008 && x <= 1208 && tcAllPlaced()) {
+                    if (x >= 1052 && x <= 1240 && tcAllPlaced()) {
                         tcSendFleet();
                         return true;
                     }
                 }
-                // khay tàu
+                // danh sách tàu ListShip: 5 hàng theo độ dài 5..1
                 int[] lens = {5, 4, 3, 2, 1};
                 for (int i = 0; i < 5; i++) {
-                    float cx = 72 + i * (216 + 14);
-                    if (x >= cx && x <= cx + 216 && y >= 96 && y <= 216) {
+                    float rowTop = 190 + 425 - i * 85f;
+                    if (x >= 600 && x <= 1060 && y >= rowTop - 85 && y <= rowTop) {
                         if (tcRemaining(lens[i]) > 0) {
                             tcSelType = lens[i];
                             tcSelShip = -1;
@@ -13234,7 +13666,7 @@ public class WorldScreen extends ScreenAdapter {
                     }
                 }
                 // bàn của mình: kéo tàu / đặt tàu mới
-                int[] cell = tcCellAt(x, y, TC_BX0);
+                int[] cell = tcCellAt(x, y, 0);
                 if (cell != null) {
                     for (int i = 0; i < tcMyFleet.size(); i++) {
                         TcShip s = tcMyFleet.get(i);
@@ -13276,7 +13708,7 @@ public class WorldScreen extends ScreenAdapter {
                 }
             } else {
                 // đã chốt đội hình: nút Sẵn sàng
-                if (x >= 1008 && x <= 1208 && y >= 36 && y <= 84 && !tcReadyMe) {
+                if (x >= 1052 && x <= 1240 && y >= 118 && y <= 170 && !tcReadyMe) {
                     try { AvatarProtocol.tcReady(game.connection); }
                     catch (Exception ignored) { }
                     return true;
@@ -13286,15 +13718,15 @@ public class WorldScreen extends ScreenAdapter {
         }
         if (tcPhase == 2) {
             if (tcTurn == tcSeat) {
-                int[] cell = tcCellAt(x, y, TC_BX1);
+                int[] cell = tcCellAt(x, y, 1);
                 if (cell != null) {
-                    int idx = cell[0] * 10 + cell[1];
+                    int idx = cell[0] * TC_N + cell[1];
                     if (tcShotsMine[idx] == 0) tcSelCell = idx;
                     return true;
                 }
-                if (x >= 530 && x <= 750 && y >= 176 && y <= 232 && tcSelCell >= 0) {
+                if (x >= 530 && x <= 750 && y >= 36 && y <= 92 && tcSelCell >= 0) {
                     try {
-                        AvatarProtocol.tcShoot(game.connection, tcSelCell / 10, tcSelCell % 10);
+                        AvatarProtocol.tcShoot(game.connection, tcSelCell / TC_N, tcSelCell % TC_N);
                     } catch (Exception ignored) { }
                     return true;
                 }
@@ -13302,12 +13734,12 @@ public class WorldScreen extends ScreenAdapter {
             return true;
         }
         if (tcPhase == 3) {
-            if (x >= 430 && x <= 620 && y >= 150 && y <= 206) {
+            if (x >= 430 && x <= 620 && y >= 36 && y <= 92) {
                 try { AvatarProtocol.mgRematch(game.connection); } catch (Exception ignored) { }
                 tcBanner = "Đã gửi lời rủ ván mới — chờ đối thủ nhận.";
                 return true;
             }
-            if (x >= 660 && x <= 850 && y >= 150 && y <= 206) {
+            if (x >= 660 && x <= 850 && y >= 36 && y <= 92) {
                 tcLeaveRoom();
                 mgOpen = true;
                 mgPage = 1;
@@ -13348,7 +13780,7 @@ public class WorldScreen extends ScreenAdapter {
     private void tcDropShip(float x, float y) {
         if (tcDragIdx < 0 || tcDragIdx >= tcMyFleet.size()) return;
         TcShip s = tcMyFleet.get(tcDragIdx);
-        int[] cell = tcCellAt(x, y, TC_BX0);
+        int[] cell = tcCellAt(x, y, 0);
         if (cell == null) return;
         int nr = cell[0] - tcDragOffR, nc = cell[1] - tcDragOffC;
         if (nr == s.row && nc == s.col) return; // thả lại chỗ cũ (chạm nhẹ = chọn)
@@ -13375,15 +13807,140 @@ public class WorldScreen extends ScreenAdapter {
     // [PORT] Caro: bàn 15x15, 5 ô liên tiếp thắng (kể cả chặn hai đầu),
     // lượt 30s. Trúc Xanh: lưới 6x5 = 15 cặp thẻ nông sản, ăn cặp được
     // lật tiếp, hết giờ úp thẻ đang mở và đổi lượt.
-    private boolean crOpen, txOpen;
+    private boolean crOpen, txOpen, aiOpen;
     private int crSeat, txSeat;              // 0/1 người chơi · 2 khán giả
     private String crName0 = "", crName1 = "", txName0 = "", txName1 = "";
     private int crPhase, txPhase;            // 0 chờ · 1 đang chơi · 2 kết thúc
     private int crTurn, txTurn;
     private long crTurnAt, txTurnAt;
-    private String crBanner = "", txBanner = "";
+    private String crBanner = "", txBanner = "", aiBanner = "";
+    // Aincrad: tầng của 2 ghế, trạng thái ma, cửa vừa mở (hiệu ứng F)
+    private int aiSeat, aiPhase, aiWinner = -1, aiEndReason, aiSpecCount;
+    private String aiName0 = "", aiName1 = "";
+    private final int[] aiFloor = {1, 1};
+    private final boolean[] aiGhost = new boolean[2];
+    private final long[] aiGhostEndAt = new long[2];
+    private final int[] aiLastDoor = {-1, -1};
+    private final boolean[] aiLastDoorOk = new boolean[2];
+    private final long[] aiLastDoorAt = new long[2];
+    // Aincrad bản đi bộ ngang (bản chính): vị trí x của 2 ghế, hướng mặt,
+    // nút giữ đi, doll mẫu cho đối thủ/khán giả
+    private final float[] aiX = {240f, 1040f};
+    private final boolean[] aiFace = {false, true};
+    private boolean aiHoldL, aiHoldR;
+    private int aiPointer = -1;
+    private long aiMoveLast, aiLastPosSend;
+    private com.avatardk.game.data.PaperDoll aiDollA, aiDollB;
+    private com.badlogic.gdx.graphics.g2d.TextureRegion[] aiGhostFrames;
+
+    /** Khung sáng xanh biển của bản chính (ảnh chụp Tín gửi
+     *  2026-11-04): viền xanh đậm + nền xanh nhạt + tiêu đề giữa trên. */
+    private void drawMgLightFrame(String title) {
+        batch.setColor(Color.WHITE);
+        batch.draw(Ui.roundedRect(1248, 688, 20,
+            new Color(0.30f, 0.58f, 0.88f, 1f), new Color(0.30f, 0.58f, 0.88f, 1f)), 16, 16);
+        batch.draw(Ui.roundedRect(1232, 672, 16,
+            new Color(0.66f, 0.84f, 0.96f, 1f), new Color(0.66f, 0.84f, 0.96f, 1f)), 24, 24);
+        if (title != null) {
+            Ui.centered(batch, Ui.fontTitle, title, Ui.W / 2f, Ui.H - 28,
+                new Color(0.05f, 0.18f, 0.35f, 1f));
+        }
+    }
+
+    /** Doll ở góc màn mini game: ghế mình dùng doll thật; ghế kia dùng
+     *  doll mẫu (server không gửi đồ của đối thủ) — cache chung aiDollA/B. */
+    private com.avatardk.game.data.PaperDoll mgDollFor(int seat, int mySeat) {
+        if (seat == mySeat && mySeat != 2 && playerDoll != null) return playerDoll;
+        if (seat == 0) {
+            if (aiDollA == null) aiDollA = game.newDoll(
+                java.util.Arrays.asList(628, 474, 0, 80, 46));
+            return aiDollA;
+        }
+        if (aiDollB == null) aiDollB = game.newDoll(
+            java.util.Arrays.asList(89, 88, 0, 4, 49));
+        return aiDollB;
+    }
+
+    /** Dải dưới trong khung sáng: pill bàn/mã + lịch sử thắng + pill
+     *  khán giả + nút rời bàn (hit rect 1108..1244 x 24..72, từng màn
+     *  tự xử lý chạm). */
+    private void drawMgBottomStrip(int specCount, boolean spec) {
+        float x = 36;
+        if (!mgRoomCode.isEmpty()) {
+            String t = mgFriendlyRoom ? "Giao hữu" : "Bàn " + mgRoomCode;
+            float w = Ui.textWidth(Ui.fontSmall, t) + 22;
+            batch.draw(Ui.roundedRect((int) w, 30, 10,
+                new Color(0.10f, 0.16f, 0.24f, 0.92f), GLASS_RIM), x, 28);
+            Ui.centered(batch, Ui.fontSmall, t, x + w / 2f, 28 + 20, Color.WHITE);
+            x += w + 8;
+        }
+        for (int i = 0; i < mgWinHist.size(); i++) {
+            int v = mgWinHist.get(i);
+            batch.draw(Ui.roundedRect(22, 22, 7,
+                v == 1 ? new Color(0.95f, 0.65f, 0.10f, 0.95f)
+                    : v == 2 ? new Color(0.45f, 0.55f, 0.70f, 0.95f)
+                    : new Color(0.30f, 0.34f, 0.42f, 0.95f), GLASS_RIM), x, 32);
+            Ui.centered(batch, Ui.fontSmall, v == 1 ? "W" : v == 2 ? "D" : "L",
+                x + 11, 32 + 16, Color.WHITE);
+            x += 28;
+        }
+        if (mgFriendlyRoom) {
+            String t = "Ván giao hữu - không nhận quà";
+            float w = Ui.textWidth(Ui.fontSmall, t) + 22;
+            batch.draw(Ui.roundedRect((int) w, 30, 10,
+                new Color(0.85f, 0.62f, 0.10f, 0.95f), GLASS_RIM), x, 28);
+            Ui.centered(batch, Ui.fontSmall, t, x + w / 2f, 28 + 20, Color.WHITE);
+            x += w + 8;
+        }
+        if (specCount > 0) {
+            String t = specCount + " khán giả";
+            float w = Ui.textWidth(Ui.fontSmall, t) + 22;
+            batch.draw(Ui.roundedRect((int) w, 30, 10,
+                new Color(0.10f, 0.16f, 0.24f, 0.92f), GLASS_RIM), 1096 - w, 28);
+            Ui.centered(batch, Ui.fontSmall, t, 1096 - w / 2f, 28 + 20, Color.WHITE);
+        }
+        batch.draw(Ui.roundedRect(136, 48, 10,
+            new Color(0.45f, 0.16f, 0.14f, 0.95f), GLASS_RIM), 1108, 24);
+        Ui.centered(batch, Ui.fontSmall, spec ? "Ngừng xem" : "Rời bàn",
+            1176, 24 + 29, Color.WHITE);
+    }
+
+    private com.avatardk.game.data.PaperDoll aiDollFor(int seat) {
+        return mgDollFor(seat, aiSeat);
+    }
+
+    /** Cửa gần nhân vật nhất (theo tâm cửa), -1 nếu chưa đủ gần. */
+    private int aiNearDoor(int seat) {
+        int best = -1;
+        float bestD = 96f;
+        for (int d = 0; d < 3; d++) {
+            float[] rc = aiDoorRect(d);
+            float dist = Math.abs(aiX[seat] - (rc[0] + rc[2] / 2f));
+            if (dist < bestD) { bestD = dist; best = d; }
+        }
+        return best;
+    }
+
+    /** Cập nhật di chuyển của ghế mình (giữ nút ◀ ▶), gửi vị trí 120ms/lần. */
+    private void aiUpdateMovement(long now) {
+        float dt = Math.min(0.05f, Math.max(0f, (now - aiMoveLast) / 1000f));
+        aiMoveLast = now;
+        if (aiSeat == 2 || aiPhase != 1 || aiGhost[aiSeat]) return;
+        float dx = (aiHoldR ? 1 : 0) - (aiHoldL ? 1 : 0);
+        if (dx == 0) return;
+        aiFace[aiSeat] = dx < 0;
+        aiX[aiSeat] = MathUtils.clamp(aiX[aiSeat] + dx * 270f * dt, 60f, 1220f);
+        if (now - aiLastPosSend >= 120) {
+            aiLastPosSend = now;
+            try { AvatarProtocol.mgAiPos(game.connection, (int) aiX[aiSeat]); }
+            catch (Exception ignored) { }
+        }
+    }
     private int crSpecCount, txSpecCount;
     private int crWinner = -1, txWinner = -1; // 0/1 ghế · 2 hoà · -1 chưa
+    private int crFocus0 = -1, crFocus1 = -1; // nước đi mới nhất mỗi ghế (khung F_X/F_O)
+    private int crPending = -1;               // ô mình vừa đánh, chờ server xác nhận
+    private long crEndAt;                      // mốc nhận END (delay 1.6s của gốc)
     private int crEndReason;
     private final byte[] crBoard = new byte[225];
     private final boolean[] crWinMark = new boolean[225];
@@ -13395,8 +13952,8 @@ public class WorldScreen extends ScreenAdapter {
     private static final int[] TX_PRODUCTS =
         {200, 201, 202, 203, 204, 248, 249, 252, 253, 266, 267, 270, 271, 286, 215};
     private static final int CR_CELL = 38, CR_BX = 355, CR_BTOP = 648;
-    private static final int TX_CW = 80, TX_CH = 96, TX_GAP = 9,
-        TX_X0 = 378, TX_TOP = 612;
+    private static final int TX_CW = 84, TX_CH = 84, TX_GAP = 9,
+        TX_X0 = 365, TX_TOP = 612;
 
     private void txResetCards() {
         java.util.Arrays.fill(txState, (byte) 0);
@@ -13408,10 +13965,12 @@ public class WorldScreen extends ScreenAdapter {
     private void handleCrPacket(int sub, java.io.DataInputStream r) throws Exception {
         switch (sub) {
             case AvatarProtocol.CR_START: {
+                mgOnGameStart();
                 crTurn = r.readByte();
                 crPhase = 1;
                 crWinner = -1;
                 crLastMove = -1;
+                crFocus0 = crFocus1 = -1;
                 java.util.Arrays.fill(crBoard, (byte) 0);
                 java.util.Arrays.fill(crWinMark, false);
                 crTurnAt = System.currentTimeMillis();
@@ -13424,6 +13983,8 @@ public class WorldScreen extends ScreenAdapter {
                 int seat = r.readByte(), row = r.readByte(), col = r.readByte();
                 crBoard[row * 15 + col] = (byte) (seat + 1);
                 crLastMove = row * 15 + col;
+                crPending = -1;
+                if (seat == 0) crFocus0 = crLastMove; else crFocus1 = crLastMove;
                 break;
             }
             case AvatarProtocol.CR_CHANGE_TURN: {
@@ -13442,8 +14003,13 @@ public class WorldScreen extends ScreenAdapter {
                     crWinMark[row * 15 + col] = true;
                 }
                 crPhase = 2;
+                crEndAt = System.currentTimeMillis();
+                mgOnGameEnd(crWinner, crSeat, crWinner == 2 || reason == 2);
                 if (reason == 1) crBanner = "Đối thủ đã thoát — bạn thắng!";
                 else if (reason == 2) crBanner = "Kín bàn — hoà!";
+                else if (reason == 3) crBanner = crWinner == crSeat
+                    ? "Đối thủ bỏ lượt quá nhiều — bạn thắng!"
+                    : "Bạn bỏ lượt quá nhiều — bị xử thua!";
                 break;
             }
             case AvatarProtocol.CR_SNAPSHOT: {
@@ -13473,6 +14039,7 @@ public class WorldScreen extends ScreenAdapter {
     private void handleTxPacket(int sub, java.io.DataInputStream r) throws Exception {
         switch (sub) {
             case AvatarProtocol.TX_DEAL: {
+                mgOnGameStart();
                 r.readByte(); r.readByte(); // cols, rows (cố định 6x5)
                 txTurn = r.readByte();
                 txResetCards();
@@ -13521,6 +14088,7 @@ public class WorldScreen extends ScreenAdapter {
                 txScores[0] = r.readByte();
                 txScores[1] = r.readByte();
                 txPhase = 2;
+                mgOnGameEnd(txWinner, txSeat, txWinner == 2);
                 break;
             }
             case AvatarProtocol.TX_SNAPSHOT: {
@@ -13557,8 +14125,12 @@ public class WorldScreen extends ScreenAdapter {
 
     private void mgGameLeaveRoom(boolean openHub) {
         try { AvatarProtocol.mgLeave(game.connection); } catch (Exception ignored) { }
+        mgEndBanner = 0;
+        mgFriendlyRoom = false;
+        mgReadyUntil = 0;
         crOpen = false;
         txOpen = false;
+        aiOpen = false;
         mgGameLeaveAsk = false;
         mgInRoom = false;
         mgWaiting = false;
@@ -13567,6 +14139,95 @@ public class WorldScreen extends ScreenAdapter {
             mgOpen = true;
             mgPage = 1;
             mgRequestList();
+        }
+    }
+
+    // ----- Khung chung MiniGameScr của bản chính -----
+    // Banner READY bằng ảnh khi ván bắt đầu; kết quả bằng banner ảnh
+    // tx_Win/tx_Lose/tx_Draw; lịch sử thắng trong phiên bàn (winHistory);
+    // hộp quà khi thắng (isBoxWin); pill phòng / pill giao hữu /
+    // pill khán giả (paintSpectate/paintViewerBadge của gốc).
+    private long mgReadyUntil;              // mốc tắt banner READY
+    private int mgEndBanner;                // 0 không · 1 WIN · 2 LOSE · 3 DRAW
+    private final java.util.List<Integer> mgWinHist = new java.util.ArrayList<>();
+    private boolean mgFriendlyRoom;         // ván qua lời mời (giao hữu)
+    private String mgRoomCode = "";         // mã bàn 4 số của bàn hiện tại
+    private TextureRegion mgViewerIcon;     // icon khán giả (giữa của go.png)
+
+    private void mgOnGameStart() {
+        mgReadyUntil = System.currentTimeMillis() + 1300;
+        mgEndBanner = 0;
+    }
+
+    /** Ghi kết quả ván vào lịch sử + chọn banner kết quả (góc nhìn của mình). */
+    private void mgOnGameEnd(int winnerSeat, int mySeat, boolean draw) {
+        if (mySeat == 2) { mgEndBanner = 0; return; } // khán giả hiện chữ
+        if (draw) { mgEndBanner = 3; mgWinHist.add(2); }
+        else if (winnerSeat == mySeat) { mgEndBanner = 1; mgWinHist.add(1); }
+        else { mgEndBanner = 2; mgWinHist.add(0); }
+        while (mgWinHist.size() > 10) mgWinHist.remove(0); // WIN_HISTORY_MAX [PORT=10]
+    }
+
+    private TextureRegion mgViewerIcon() {
+        if (mgViewerIcon == null) {
+            Texture t = tcTex("go");
+            if (t != null) mgViewerIcon = new TextureRegion(t, 0, 48, 48, 48);
+        }
+        return mgViewerIcon;
+    }
+
+    /** Banner READY (ảnh gốc 323x102) giữa màn hình khi ván bắt đầu. */
+    private void drawMgReady() {
+        if (System.currentTimeMillis() >= mgReadyUntil) return;
+        Texture t = tcTex("ready");
+        if (t == null) return;
+        batch.setColor(0f, 0f, 0f, 0.35f);
+        batch.draw(whiteTex, 0, 0, Ui.W, Ui.H);
+        batch.setColor(Color.WHITE);
+        batch.draw(t, Ui.W / 2f - 161, Ui.H / 2f + 9, 323, 102);
+    }
+
+    /** Pill phòng + pill giao hữu + chuỗi thắng + pill khán giả,
+     *  vẽ dưới tiêu đề cho mọi màn game. */
+    private void drawMgFrameExtras(int specCount, boolean spec) {
+        float pillY = Ui.H - 108;
+        String roomTxt = mgFriendlyRoom ? "Giao hữu" : "Bàn " + mgRoomCode;
+        float rw = Ui.textWidth(Ui.fontSmall, roomTxt) + 28;
+        batch.draw(Ui.roundedRect((int) rw, 34, 10,
+            new Color(0.10f, 0.16f, 0.24f, 0.92f), GLASS_RIM), 20, pillY);
+        Ui.centered(batch, Ui.fontSmall, roomTxt, 20 + rw / 2f, pillY + 23,
+            Color.WHITE);
+        if (mgFriendlyRoom) {
+            // chuỗi gốc của ván giao hữu: không nhận quà
+            String f = "Ván giao hữu - không nhận quà";
+            float fw = Ui.textWidth(Ui.fontSmall, f) + 28;
+            batch.draw(Ui.roundedRect((int) fw, 30, 10,
+                new Color(0.35f, 0.28f, 0.08f, 0.92f), GLASS_RIM), 20, pillY - 42);
+            Ui.centered(batch, Ui.fontSmall, f, 20 + fw / 2f, pillY - 42 + 20,
+                new Color(1f, 0.92f, 0.62f, 1f));
+        }
+        // chuỗi kết quả các ván trước trong cùng bàn (winHistory của gốc)
+        float hx = 20 + rw + 12;
+        for (int i = 0; i < mgWinHist.size(); i++) {
+            int r = mgWinHist.get(i);
+            Color bg = r == 1 ? new Color(0.85f, 0.62f, 0.10f, 0.95f)
+                : r == 2 ? new Color(0.20f, 0.45f, 0.65f, 0.95f)
+                : new Color(0.30f, 0.32f, 0.38f, 0.95f);
+            batch.draw(Ui.roundedRect(22, 22, 6, bg, GLASS_RIM), hx + i * 26, pillY + 6);
+            Ui.centered(batch, Ui.fontSmall, r == 1 ? "W" : r == 2 ? "D" : "L",
+                hx + i * 26 + 11, pillY + 21, Color.WHITE);
+        }
+        // pill khán giả: icon người (go.png) + số người đang xem
+        if (specCount > 0 || spec) {
+            String vt = String.valueOf(specCount);
+            float vw = 44 + Ui.textWidth(Ui.fontSmall, vt) + 14;
+            float vx = Ui.W - 168 - vw;
+            batch.draw(Ui.roundedRect((int) vw, 34, 10,
+                new Color(0.10f, 0.16f, 0.24f, 0.92f), GLASS_RIM), vx, pillY);
+            TextureRegion ic = mgViewerIcon();
+            if (ic != null) batch.draw(ic, vx + 7, pillY + 5, 24, 24);
+            Ui.fontSmall.setColor(1f, 1f, 1f, 0.95f);
+            Ui.fontSmall.draw(batch, vt, vx + 38, pillY + 23);
         }
     }
 
@@ -13642,9 +14303,26 @@ public class WorldScreen extends ScreenAdapter {
         float pw = 640f, ph = 300f, px = (Ui.W - pw) / 2f, py = (Ui.H - ph) / 2f;
         batch.draw(Ui.roundedRect((int) pw, (int) ph, 16,
             new Color(0.07f, 0.11f, 0.17f, 0.97f), GLASS_RIM), px, py);
-        Ui.centered(batch, Ui.fontTitle, title, Ui.W / 2f, py + ph - 52, titleColor);
-        Ui.centered(batch, Ui.font, detail, Ui.W / 2f, py + ph - 108,
-            new Color(1f, 1f, 1f, 0.9f));
+        Texture bannerTex = mgEndBanner == 1 ? tcTex("tx_Win")
+            : mgEndBanner == 2 ? tcTex("tx_Lose")
+            : mgEndBanner == 3 ? tcTex("tx_Draw") : null;
+        if (bannerTex != null) {
+            // kết quả bằng BANNER ẢNH như MiniGameScr gốc (imgWin/imgLose/imgDraw)
+            float bw2 = bannerTex.getWidth() * 1.6f, bh2 = bannerTex.getHeight() * 1.6f;
+            batch.draw(bannerTex, Ui.W / 2f - bw2 / 2f, py + ph - 40 - bh2, bw2, bh2);
+            if (mgEndBanner == 1 && !mgFriendlyRoom) {
+                // hộp quà của người thắng (isBoxWin/idBoxGift của gốc);
+                // quà thật phía server chưa nối — chỉ hiện hình hộp quà
+                Texture gift = tcTex("Giftbox_Big");
+                if (gift != null) batch.draw(gift, px + pw - 104, py + ph - 122, 57, 62);
+            }
+            Ui.centered(batch, Ui.font, detail, Ui.W / 2f, py + 138,
+                new Color(1f, 1f, 1f, 0.9f));
+        } else {
+            Ui.centered(batch, Ui.fontTitle, title, Ui.W / 2f, py + ph - 52, titleColor);
+            Ui.centered(batch, Ui.font, detail, Ui.W / 2f, py + ph - 108,
+                new Color(1f, 1f, 1f, 0.9f));
+        }
         tcBtn(430, py + 44, 190, 56, "Ván mới", 1);
         tcBtn(660, py + 44, 190, 56, "Về sảnh", 0);
         if (mgRematchOffer) {
@@ -13666,18 +14344,31 @@ public class WorldScreen extends ScreenAdapter {
 
     private void drawCaro() {
         boolean spec = crSeat == 2;
-        drawMgGameHeader("Cờ Caro");
-        // tên + quân hai phía
-        Ui.font.setColor(1f, 1f, 1f, 0.97f);
-        Ui.font.draw(batch, truncTo(Ui.font, crName0, 300), CR_BX, 700);
-        layout.setText(Ui.font, truncTo(Ui.font, crName1, 300));
-        Ui.font.draw(batch, truncTo(Ui.font, crName1, 300), CR_BX + 570 - layout.width, 700);
-        Ui.fontSmall.setColor(1f, 0.45f, 0.35f, 1f);
-        Ui.fontSmall.draw(batch, "Quân X" + (crSeat == 0 ? " — bạn" : ""), CR_BX, 676);
-        Ui.fontSmall.setColor(0.45f, 0.65f, 1f, 1f);
+        // khung sáng + avatar hai góc + số giây giữa trên (ảnh bản chính)
+        drawMgLightFrame(null);
+        com.avatardk.game.data.PaperDoll dL = mgDollFor(0, crSeat);
+        com.avatardk.game.data.PaperDoll dR = mgDollFor(1, crSeat);
+        if (dL != null) game.dollRenderer.draw(batch, dL, 0, 92, 604, 2.6f, false);
+        if (dR != null) game.dollRenderer.draw(batch, dR, 0, 1188, 604, 2.6f, true);
+        Ui.font.setColor(0.05f, 0.18f, 0.35f, 1f);
+        Ui.font.draw(batch, truncTo(Ui.font, crName0, 260), 128, 668);
+        layout.setText(Ui.font, truncTo(Ui.font, crName1, 260));
+        Ui.font.draw(batch, truncTo(Ui.font, crName1, 260), 1152 - layout.width, 668);
+        Ui.fontSmall.setColor(0.75f, 0.25f, 0.15f, 1f);
+        Ui.fontSmall.draw(batch, "Quân X" + (crSeat == 0 ? " — bạn" : ""), 128, 640);
+        Ui.fontSmall.setColor(0.15f, 0.35f, 0.85f, 1f);
         layout.setText(Ui.fontSmall, "Quân O" + (crSeat == 1 ? " — bạn" : ""));
         Ui.fontSmall.draw(batch, "Quân O" + (crSeat == 1 ? " — bạn" : ""),
-            CR_BX + 570 - layout.width, 676);
+            1152 - layout.width, 640);
+        if (crPhase == 1) {
+            int left = 30 - (int) ((System.currentTimeMillis() - crTurnAt) / 1000);
+            if (left < 0) left = 0;
+            Ui.centered(batch, Ui.fontTitle, String.valueOf(left), Ui.W / 2f, Ui.H - 28,
+                new Color(0.05f, 0.18f, 0.35f, 1f));
+        } else {
+            Ui.centered(batch, Ui.fontTitle, "Cờ Caro", Ui.W / 2f, Ui.H - 28,
+                new Color(0.05f, 0.18f, 0.35f, 1f));
+        }
         // nền bàn: 9 lát BG_Caro2 của gốc ghép 3x3
         for (int i = 0; i < 9; i++) {
             Texture slice = tcTex("BG_Caro2_" + i);
@@ -13709,10 +14400,44 @@ public class WorldScreen extends ScreenAdapter {
                 batch.draw(ringTexture(), cx - 20, cy - 20, 40, 40);
                 batch.setColor(Color.WHITE);
             }
+            if (idx == crPending && crBoard[idx] == 0) {
+                Ui.centered(batch, Ui.font, "o", cx, cy + 8,
+                    new Color(0.15f, 0.35f, 0.90f, 1f));
+            }
             byte v = crBoard[idx];
             if (v == 0) continue;
+            if (crWinMark[idx] && crPhase == 2) {
+                // quân trong hàng thắng: bản phát sáng WIN_X/WIN_O của gốc
+                Texture wt = v == 1 ? tcTex("WIN_X") : tcTex("WIN_O");
+                if (wt != null) {
+                    batch.draw(wt, cx - 15, cy - 18, 30, 36);
+                    continue;
+                }
+            }
             Texture t = v == 1 ? texX : texO;
             if (t != null) batch.draw(t, cx - 14, cy - 16, 28, 32);
+        }
+        // khung focus nước mới nhất của hai bên (F_X/F_O của gốc)
+        if (crPhase == 1) {
+            if (crFocus0 >= 0) {
+                Texture f = tcTex("F_X");
+                if (f != null) batch.draw(f, CR_BX + (crFocus0 % 15) * CR_CELL
+                    + CR_CELL / 2f - 38, CR_BTOP - (crFocus0 / 15) * CR_CELL
+                    - CR_CELL / 2f - 38, 76, 77);
+            }
+            if (crFocus1 >= 0) {
+                Texture f = tcTex("F_O");
+                if (f != null) batch.draw(f, CR_BX + (crFocus1 % 15) * CR_CELL
+                    + CR_CELL / 2f - 38, CR_BTOP - (crFocus1 / 15) * CR_CELL
+                    - CR_CELL / 2f - 38, 76, 77);
+            }
+        }
+        // hộp quà mở nắp trong lúc chờ lớp phủ kết quả (BG_Box của gốc)
+        if (crPhase == 2 && crSeat != 2 && crWinner == crSeat && !mgFriendlyRoom
+            && System.currentTimeMillis() - crEndAt < 1600) {
+            int fr = (int) ((System.currentTimeMillis() - crEndAt) / 130) % 6;
+            Texture box = tcTex("BG_Box_" + fr);
+            if (box != null) batch.draw(box, Ui.W / 2f - 34, 452, 68, 108);
         }
         if (crPhase == 0) {
             Ui.centered(batch, Ui.font, "Đang chờ ván bắt đầu…", Ui.W / 2f, 200, Color.WHITE);
@@ -13721,25 +14446,26 @@ public class WorldScreen extends ScreenAdapter {
                 : crTurn == crSeat ? "Lượt của bạn — chạm một ô trống để đánh."
                 : "Đang chờ đối thủ đánh…";
             if (spec && crSpecCount > 0) st += " · " + crSpecCount + " khán giả";
-            Ui.centered(batch, Ui.font, st + mgTurnClock(crTurnAt), Ui.W / 2f, 46,
-                new Color(1f, 0.92f, 0.70f, 1f));
+            Ui.centered(batch, Ui.font, truncTo(Ui.font, st, 400), Ui.W / 2f, 46,
+                new Color(0.05f, 0.18f, 0.35f, 1f));
         } else if (!crBanner.isEmpty()) {
-            Ui.centered(batch, Ui.font, truncTo(Ui.font, crBanner, 900), Ui.W / 2f, 46,
-                new Color(1f, 0.92f, 0.70f, 1f));
+            Ui.centered(batch, Ui.font, truncTo(Ui.font, crBanner, 400), Ui.W / 2f, 46,
+                new Color(0.05f, 0.18f, 0.35f, 1f));
         }
-        drawMgLeaveBtn(spec);
-        if (crPhase == 2 && !spec) {
+        drawMgBottomStrip(crSpecCount, spec);
+        if (crPhase == 2 && !spec && System.currentTimeMillis() - crEndAt >= 1600) {
             String title = crWinner == 2 ? "Hoà!" : crWinner == crSeat ? "Bạn thắng!" : "Bạn thua!";
-            String detail = crEndReason == 1 ? crBanner
+            String detail = crEndReason == 1 || crEndReason == 3 ? crBanner
                 : crWinner == 2 ? "Hai bên ngang tài ngang sức."
                 : crWinner == crSeat ? "Xếp đủ 5 quân liên tiếp — đẹp lắm!"
                 : "Đối thủ đã xếp đủ 5 quân liên tiếp.";
             drawMgEndOverlay(title, detail, crWinner == crSeat
                 ? new Color(1f, 0.85f, 0.38f, 1f) : new Color(0.8f, 0.85f, 0.95f, 1f));
-        } else if (crPhase == 2 && spec) {
+        } else if (crPhase == 2 && spec && System.currentTimeMillis() - crEndAt >= 1600) {
             String title = crWinner == 2 ? "Hoà!" : "Người chơi " + (crWinner + 1) + " thắng!";
             drawMgEndOverlay(title, "", new Color(1f, 0.85f, 0.38f, 1f));
         }
+        drawMgReady();
         if (mgGameLeaveAsk) drawMgGameLeaveDialog(crPhase == 1);
     }
 
@@ -13747,7 +14473,7 @@ public class WorldScreen extends ScreenAdapter {
         if (!crOpen) return false;
         if (mgGameLeaveAskTouch(x, y)) return true;
         boolean spec = crSeat == 2;
-        if (mgLeaveBtnHit(x, y)) {
+        if (x >= 1108 && x <= 1244 && y >= 24 && y <= 72) {
             if (spec) mgGameLeaveRoom(true);
             else if (crPhase == 2) mgGameLeaveRoom(true);
             else mgGameLeaveAsk = true;
@@ -13770,8 +14496,10 @@ public class WorldScreen extends ScreenAdapter {
             int row = (int) ((CR_BTOP - y) / CR_CELL);
             if (row >= 0 && row < 15 && col >= 0 && col < 15
                     && crBoard[row * 15 + col] == 0) {
-                try { AvatarProtocol.crMove(game.connection, row, col); }
-                catch (Exception ignored) { }
+                try {
+                    AvatarProtocol.crMove(game.connection, row, col);
+                    crPending = row * 15 + col;
+                } catch (Exception ignored) { }
             }
         }
         return true;
@@ -13782,18 +14510,22 @@ public class WorldScreen extends ScreenAdapter {
     private void drawTx() {
         boolean spec = txSeat == 2;
         drawMgGameHeader("Trúc Xanh");
+        drawMgFrameExtras(txSpecCount, spec);
         long now = System.currentTimeMillis();
-        // hai thẻ điểm
+        // hai thẻ điểm: tên + pill điểm bgScore của gốc
         for (int sIdx = 0; sIdx < 2; sIdx++) {
-            float px = sIdx == 0 ? TX_X0 : TX_X0 + 525 - 264;
+            float px = sIdx == 0 ? TX_X0 : TX_X0 + 549 - 264;
             boolean active = txPhase == 1 && txTurn == sIdx;
             batch.draw(Ui.roundedRect(264, 40, 10,
                 new Color(0.13f, 0.20f, 0.30f, 0.95f),
                 active ? new Color(1f, 0.85f, 0.38f, 1f) : GLASS_RIM), px, 626);
             String nm = sIdx == 0 ? txName0 : txName1;
-            String label = truncTo(Ui.fontSmall, nm, 180) + " · " + txScores[sIdx] + " cặp";
-            Ui.centered(batch, Ui.fontSmall, label, px + 132, 653,
-                new Color(1f, 1f, 1f, 0.95f));
+            Ui.fontSmall.setColor(1f, 1f, 1f, 0.95f);
+            Ui.fontSmall.draw(batch, truncTo(Ui.fontSmall, nm, 168), px + 12, 653);
+            Texture pill = tcTex("bgScore");
+            if (pill != null) batch.draw(pill, px + 180, 624, 78, 43);
+            Ui.centered(batch, Ui.fontSmall, txScores[sIdx] + " cặp", px + 219, 653,
+                new Color(1f, 1f, 1f, 0.97f));
         }
         // lưới thẻ
         for (int idx = 0; idx < 30; idx++) {
@@ -13810,16 +14542,21 @@ public class WorldScreen extends ScreenAdapter {
                 int pid = TX_PRODUCTS[txValue[idx]];
                 drawProductIcon(pid, farm.productDefs.get(pid),
                     cx + TX_CW / 2f - 28, cy + TX_CH / 2f - 28, 56);
+                if (txState[idx] == 1) {
+                    // thẻ đang mở: viền phát sáng Stroke của gốc
+                    Texture st = tcTex("Stroke");
+                    if (st != null) batch.draw(st, cx - 5, cy - 5, TX_CW + 10, TX_CH + 10);
+                }
             } else {
-                batch.draw(Ui.gradientRect(TX_CW, TX_CH, 10,
-                    new Color(0.22f, 0.52f, 0.30f, 1f), new Color(0.12f, 0.36f, 0.20f, 1f)),
-                    cx, cy);
-                // ô khắc giữa lưng thẻ + biểu tượng rừng trúc của gốc
-                batch.draw(Ui.roundedRect(TX_CW - 18, TX_CH - 18, 8,
-                    new Color(0.10f, 0.30f, 0.17f, 0.85f),
-                    new Color(0.55f, 0.85f, 0.55f, 0.8f)), cx + 9, cy + 9);
-                Texture logo = tcTex("trucxanh");
-                if (logo != null) batch.draw(logo, cx + TX_CW / 2f - 24, cy + TX_CH / 2f - 24, 48, 48);
+                // mặt sau thẻ: asset Card của gốc (tím, sao vàng, dấu ?)
+                Texture back = tcTex("Card");
+                if (back != null) {
+                    batch.draw(back, cx, cy, TX_CW, TX_CH);
+                } else {
+                    batch.draw(Ui.gradientRect(TX_CW, TX_CH, 10,
+                        new Color(0.22f, 0.52f, 0.30f, 1f), new Color(0.12f, 0.36f, 0.20f, 1f)),
+                        cx, cy);
+                }
             }
         }
         if (txPhase == 0) {
@@ -13850,6 +14587,7 @@ public class WorldScreen extends ScreenAdapter {
                 txWinner == txSeat || spec
                     ? new Color(1f, 0.85f, 0.38f, 1f) : new Color(0.8f, 0.85f, 0.95f, 1f));
         }
+        drawMgReady();
         if (mgGameLeaveAsk) drawMgGameLeaveDialog(txPhase == 1);
     }
 
@@ -13884,6 +14622,309 @@ public class WorldScreen extends ScreenAdapter {
                 if (txState[idx] == 0 && now >= txPeekUntil[idx]) {
                     try { AvatarProtocol.txFlip(game.connection, idx); }
                     catch (Exception ignored) { }
+                }
+                return true;
+            }
+        }
+        return true;
+    }
+
+    // ----- Aincrad: gói + vẽ + chạm -----
+
+    private void handleAiPacket(int sub, java.io.DataInputStream r) throws Exception {
+        long now = System.currentTimeMillis();
+        switch (sub) {
+            case AvatarProtocol.AI_START: {
+                mgOnGameStart();
+                r.readByte(); // số cửa mỗi tầng
+                aiPhase = 1;
+                aiX[0] = 240f; aiX[1] = 1040f;
+                aiFace[0] = false; aiFace[1] = true;
+                aiHoldL = aiHoldR = false;
+                aiFloor[0] = aiFloor[1] = 1;
+                aiGhost[0] = aiGhost[1] = false;
+                aiLastDoor[0] = aiLastDoor[1] = -1;
+                aiBanner = "";
+                break;
+            }
+            case AvatarProtocol.AI_MOVE: {
+                int seat = r.readByte();
+                int door = r.readByte();
+                boolean ok = r.readBoolean();
+                int floorAfter = r.readByte();
+                if (seat >= 0 && seat < 2) {
+                    aiLastDoor[seat] = door;
+                    aiLastDoorOk[seat] = ok;
+                    aiLastDoorAt[seat] = now;
+                    aiFloor[seat] = floorAfter;
+                    if (!ok) {
+                        aiGhost[seat] = true;
+                        aiGhostEndAt[seat] = now + 6000;
+                    }
+                }
+                break;
+            }
+            case AvatarProtocol.AI_SHOW: {
+                int seat = r.readByte();
+                int floor = r.readByte();
+                boolean ghost = r.readBoolean();
+                if (seat >= 0 && seat < 2) {
+                    aiFloor[seat] = floor;
+                    if (ghost && !aiGhost[seat]) aiGhostEndAt[seat] = now + 6000;
+                    aiGhost[seat] = ghost;
+                }
+                break;
+            }
+            case AvatarProtocol.AI_GHOST_OFF: {
+                int seat = r.readByte();
+                if (seat >= 0 && seat < 2) aiGhost[seat] = false;
+                break;
+            }
+            case AvatarProtocol.AI_END: {
+                aiWinner = r.readByte();
+                aiEndReason = r.readByte();
+                aiPhase = 2;
+                mgOnGameEnd(aiWinner, aiSeat, false);
+                aiBanner = aiEndReason == 1 ? "Đối thủ đã thoát."
+                    : aiWinner == aiSeat ? "Bạn tới EXIT tầng 3 trước!"
+                    : "Đối thủ đã tới EXIT tầng 3 trước.";
+                break;
+            }
+            case AvatarProtocol.AI_POS: {
+                int seat = r.readByte();
+                int x = r.readShort();
+                r.readByte(); // tầng của ghế đó (đã có qua AI_SHOW/snapshot)
+                if (seat >= 0 && seat < 2 && seat != aiSeat) aiX[seat] = x;
+                break;
+            }
+            case AvatarProtocol.AI_SNAPSHOT: {
+                r.readInt(); // roomId
+                int status = r.readByte();
+                aiName0 = r.readUTF();
+                aiName1 = r.readUTF();
+                aiFloor[0] = r.readByte();
+                aiFloor[1] = r.readByte();
+                for (int seat = 0; seat < 2; seat++) {
+                    boolean ghost = r.readBoolean();
+                    if (ghost && !aiGhost[seat]) aiGhostEndAt[seat] = now + 6000;
+                    aiGhost[seat] = ghost;
+                }
+                aiX[0] = r.readShort();
+                aiX[1] = r.readShort();
+                aiSpecCount = r.readShort();
+                if (status == 2 && aiPhase == 0) aiPhase = 1;
+                break;
+            }
+            case AvatarProtocol.AI_SPEC_COUNT: {
+                aiSpecCount = r.readShort();
+                break;
+            }
+            default: break;
+        }
+    }
+
+    /** Toạ độ 3 cửa của sân khấu: {x trái, y đáy, rộng, cao} từng cửa
+     *  (0 trái · 1 chính giữa · 2 phải). */
+    // {x, y đáy, w, h} — 3 cửa đứng trên sàn y=150 của tầng
+    private static float[] aiDoorRect(int door) {
+        // {x, y đáy (sàn), w, h}: cửa phụ trái · cửa chính giữa · cửa phụ phải
+        switch (door) {
+            case 1: return new float[]{580, 150, 120, 218};
+            case 0: return new float[]{150, 150, 112, 152};
+            default: return new float[]{1018, 150, 112, 152};
+        }
+    }
+
+    private void drawAi() {
+        boolean spec = aiSeat == 2;
+        int viewSeat = spec ? 0 : aiSeat;
+        long now = System.currentTimeMillis();
+        int viewFloor = aiFloor[viewSeat];
+        aiUpdateMovement(now);
+        // nền tháp đêm của gốc (BG_Aincrad 1040x911): kéo ngang kín màn,
+        // camera dọc theo tầng đang xem — tầng càng cao càng lên gần đỉnh
+        Texture bg = tcTex("BG_Aincrad");
+        if (bg != null) {
+            float camY = viewFloor == 1 ? 0f : viewFloor == 2 ? 200f : 401f;
+            batch.setColor(Color.WHITE);
+            batch.draw(bg, 0, -camY, 1280, 1121);
+            batch.setColor(0.02f, 0.04f, 0.08f, 0.35f);
+            batch.draw(whiteTex, 0, 0, Ui.W, Ui.H);
+            batch.setColor(Color.WHITE);
+        } else {
+            batch.draw(Ui.gradientRect((int) Ui.W, (int) Ui.H, 0,
+                new Color(0.05f, 0.10f, 0.20f, 1f), new Color(0.03f, 0.06f, 0.12f, 1f)), 0, 0);
+        }
+        Ui.centered(batch, Ui.fontTitle, "Aincrad", Ui.W / 2f, Ui.H - 16,
+            new Color(1f, 0.85f, 0.38f, 1f));
+        drawMgFrameExtras(aiSpecCount, spec);
+        // sàn tầng: mặt đất y=150 + vạch sáng
+        batch.setColor(0.02f, 0.03f, 0.06f, 0.55f);
+        batch.draw(whiteTex, 0, 0, Ui.W, 150);
+        batch.setColor(1f, 0.85f, 0.38f, 0.85f);
+        batch.draw(whiteTex, 0, 150, Ui.W, 3);
+        batch.setColor(Color.WHITE);
+        // trang trí theo tầng: hàng rào tầng 2, dãy quạt 3FL_Ex tầng 3
+        if (viewFloor == 2) {
+            Texture fen = tcTex("2FL_Fencing");
+            if (fen != null) {
+                for (int i = 0; i < 13; i++) batch.draw(fen, i * 100, 153, 100, 33);
+            }
+        }
+        if (viewFloor == 3) {
+            Texture ex = tcTex("3FL_Ex");
+            if (ex != null) batch.draw(ex, Ui.W / 2f - 94, 388, 188, 46);
+        }
+        Ui.font.setColor(1f, 0.92f, 0.70f, 0.95f);
+        Ui.font.draw(batch, "Tầng " + viewFloor, 24, 690);
+        // 3 cửa của tầng đang xem
+        int near = (aiPhase == 1 && !spec) ? aiNearDoor(aiSeat) : -1;
+        for (int d = 0; d < 3; d++) {
+            float[] rc = aiDoorRect(d);
+            boolean flash = aiLastDoor[viewSeat] == d && now - aiLastDoorAt[viewSeat] < 900;
+            String base;
+            if (d == 1) base = viewFloor == 1 ? "1FL_Maindoor" : "2FL_Maindoor";
+            else base = "1FL_Subdoor";
+            Texture door = tcTex(flash || d == near ? base + "F" : base);
+            if (door == null) door = tcTex(base);
+            if (door != null) batch.draw(door, rc[0], rc[1], rc[2], rc[3]);
+            Ui.centered(batch, Ui.fontSmall, d == 1 ? "Cửa chính" : "Cửa phụ",
+                rc[0] + rc[2] / 2f, rc[1] - 14, new Color(1f, 1f, 1f, 0.75f));
+        }
+        // nhân vật của 2 ghế đang ở tầng đang xem
+        for (int seat = 0; seat < 2; seat++) {
+            if (aiFloor[seat] != viewFloor) continue;
+            float fx = aiX[seat];
+            if (aiGhost[seat]) {
+                Texture gh = tcTex("Ghost");
+                if (gh != null) {
+                    if (aiGhostFrames == null) {
+                        aiGhostFrames = new com.badlogic.gdx.graphics.g2d.TextureRegion[4];
+                        for (int f = 0; f < 4; f++) {
+                            aiGhostFrames[f] = new com.badlogic.gdx.graphics.g2d.TextureRegion(
+                                gh, 0, f * 40, 68, 40);
+                        }
+                    }
+                    int fr = (int) ((now / 180) % 4);
+                    batch.draw(aiGhostFrames[fr], fx - 51, 205, 102, 60);
+                }
+            } else {
+                com.avatardk.game.data.PaperDoll doll = aiDollFor(seat);
+                if (doll != null) {
+                    game.dollRenderer.draw(batch, doll, 0, fx, 150, 3.6f, aiFace[seat]);
+                }
+            }
+            String nm = seat == 0 ? aiName0 : aiName1;
+            String tag = truncTo(Ui.fontSmall, nm, 140) + (aiGhost[seat] ? " · ma" : "");
+            Ui.centered(batch, Ui.fontSmall, tag, fx, aiGhost[seat] ? 288 : 276,
+                seat == aiSeat && !spec ? new Color(1f, 0.85f, 0.38f, 1f)
+                    : new Color(1f, 1f, 1f, 0.92f));
+        }
+        // pill tầng của 2 ghế (phải, dưới pill khán giả)
+        for (int seat = 0; seat < 2; seat++) {
+            String nm = seat == 0 ? aiName0 : aiName1;
+            String t = truncTo(Ui.fontSmall, nm, 120) + ": Tầng " + aiFloor[seat]
+                + (aiGhost[seat] ? " · ma" : "");
+            // 2 pill cạnh nhau: ghế 0 ở phải nhất, ghế 1 ngay bên trái nó
+            float tw = Ui.textWidth(Ui.fontSmall, t) + 24;
+            float txp = Ui.W - 24 - tw;
+            if (seat == 1) {
+                String t0 = truncTo(Ui.fontSmall, aiName0, 120) + ": Tầng " + aiFloor[0]
+                    + (aiGhost[0] ? " · ma" : "");
+                txp = Ui.W - 24 - (Ui.textWidth(Ui.fontSmall, t0) + 24) - 10 - tw;
+            }
+            batch.draw(Ui.roundedRect((int) tw, 32, 10,
+                new Color(0.10f, 0.16f, 0.24f, 0.92f),
+                seat == aiSeat && !spec ? new Color(1f, 0.85f, 0.38f, 1f) : GLASS_RIM),
+                txp, 566);
+            Ui.centered(batch, Ui.fontSmall, t, txp + tw / 2f, 566 + 21, Color.WHITE);
+        }
+        // dòng trạng thái (trên hàng điều khiển)
+        String st;
+        if (aiPhase == 0) st = "Đang chờ ván bắt đầu…";
+        else if (aiPhase == 2) st = aiBanner;
+        else if (spec) st = "Đang xem " + aiName0 + " và " + aiName1 + " leo tháp";
+        else if (aiGhost[aiSeat]) {
+            int left = (int) Math.max(0, (aiGhostEndAt[aiSeat] - now + 999) / 1000);
+            st = "Bạn đã hoá ma! Chờ " + left + " giây mới đi tiếp được…";
+        } else {
+            st = "Đi tới một cửa rồi bấm Mở cửa — đúng thì lên tầng, sai thì hoá ma 6 giây.";
+        }
+        Ui.centered(batch, Ui.font, truncTo(Ui.font, st, 1100), Ui.W / 2f, 560,
+            new Color(1f, 0.92f, 0.70f, 1f));
+        // điều khiển: giữ ◀ ▶ để đi, nút Mở cửa khi tới gần cửa
+        if (aiPhase == 1 && !spec) {
+            batch.draw(Ui.roundedRect(92, 72, 12,
+                new Color(0.13f, 0.20f, 0.30f, aiHoldL ? 1f : 0.88f), GLASS_RIM), 40, 36);
+            Ui.centered(batch, Ui.fontTitle, "<", 86, 84, Color.WHITE);
+            batch.draw(Ui.roundedRect(92, 72, 12,
+                new Color(0.13f, 0.20f, 0.30f, aiHoldR ? 1f : 0.88f), GLASS_RIM), 148, 36);
+            Ui.centered(batch, Ui.fontTitle, ">", 194, 84, Color.WHITE);
+            boolean canOpen = !aiGhost[aiSeat] && near >= 0;
+            if (canOpen) {
+                batch.draw(Ui.gradientRect(208, 72, 12, EntryUi.ORANGE_TOP, EntryUi.ORANGE_BOT),
+                    1032, 36);
+            } else {
+                batch.draw(Ui.roundedRect(208, 72, 12,
+                    new Color(0.25f, 0.27f, 0.30f, 0.88f), GLASS_RIM), 1032, 36);
+            }
+            Ui.centered(batch, Ui.font, "Mở cửa", 1136, 84,
+                canOpen ? Color.WHITE : new Color(1f, 1f, 1f, 0.55f));
+        }
+        drawMgLeaveBtn(spec);
+        if (aiPhase == 2 && !spec) {
+            String title = aiWinner == aiSeat ? "Bạn thắng!" : "Bạn thua!";
+            drawMgEndOverlay(title, aiBanner, aiWinner == aiSeat
+                ? new Color(1f, 0.85f, 0.38f, 1f) : new Color(0.8f, 0.85f, 0.95f, 1f));
+        } else if (aiPhase == 2 && spec) {
+            drawMgEndOverlay("Người chơi " + (aiWinner + 1) + " thắng!", aiBanner,
+                new Color(1f, 0.85f, 0.38f, 1f));
+        }
+        drawMgReady();
+        if (mgGameLeaveAsk) drawMgGameLeaveDialog(aiPhase == 1);
+    }
+
+    private boolean aiTouch(float x, float y, int pointer) {
+        if (!aiOpen) return false;
+        if (mgGameLeaveAskTouch(x, y)) return true;
+        boolean spec = aiSeat == 2;
+        if (mgLeaveBtnHit(x, y)) {
+            if (spec) mgGameLeaveRoom(true);
+            else if (aiPhase == 2) mgGameLeaveRoom(true);
+            else mgGameLeaveAsk = true;
+            return true;
+        }
+        if (aiPhase == 2) {
+            int hit = mgEndOverlayHit(x, y);
+            if (hit == 0) {
+                try { AvatarProtocol.mgRematch(game.connection); } catch (Exception ignored) { }
+                mgRematchOffer = false;
+                aiBanner = "Đã gửi lời rủ ván mới…";
+            } else if (hit == 1) {
+                mgGameLeaveRoom(true);
+            }
+            return true;
+        }
+        if (spec || aiPhase != 1) return true;
+        // hàng điều khiển dưới: giữ ◀ / ▶ để đi, bấm Mở cửa khi tới gần cửa
+        if (y >= 36 && y <= 108) {
+            if (x >= 40 && x <= 132) {
+                aiHoldL = true;
+                aiPointer = pointer;
+                return true;
+            }
+            if (x >= 148 && x <= 240) {
+                aiHoldR = true;
+                aiPointer = pointer;
+                return true;
+            }
+            if (x >= 1032 && x <= 1240) {
+                if (!aiGhost[aiSeat]) {
+                    int d = aiNearDoor(aiSeat);
+                    if (d >= 0) {
+                        try { AvatarProtocol.mgAiPick(game.connection, d); }
+                        catch (Exception ignored) { }
+                    }
                 }
                 return true;
             }
@@ -13982,11 +15023,20 @@ public class WorldScreen extends ScreenAdapter {
         tcBanner = "Đang xem trực tiếp";
     }
 
-    /** Harness: ván Cờ Caro đang đấu (X sắp thắng hàng ngang). */
+    /** Harness: ván Cờ Caro VỪA KẾT THÚC (mình thắng) — kiểm lớp phủ
+     *  kết quả bằng banner ảnh + hộp quà của khung chung. */
     public void debugCrBattle() {
         crOpen = true;
         crSeat = 0;
-        crPhase = 1;
+        crPhase = 2;
+        crWinner = 0;
+        crEndAt = System.currentTimeMillis() - 2000;
+        mgRoomCode = "1357";
+        mgFriendlyRoom = false;
+        mgOnGameEnd(0, 0, false);
+        mgOnGameEnd(1, 0, false);
+        mgOnGameEnd(0, 0, false);
+        crSpecCount = 3;
         crName0 = "Sơn";
         crName1 = "Linh Chi";
         crTurn = 0;
@@ -14001,7 +15051,7 @@ public class WorldScreen extends ScreenAdapter {
         crBoard[11 * 15 + 10] = 1;
         crBoard[10 * 15 + 4] = 2;
         crLastMove = 7 * 15 + 6;
-        crBanner = "";
+        crBanner = "Bạn thắng!";
         System.out.println("CARO CHECK turn=" + crTurn);
     }
 
@@ -14027,6 +15077,10 @@ public class WorldScreen extends ScreenAdapter {
         txState[1] = 1;
         txPeekUntil[1] = Long.MAX_VALUE;
         txBanner = "";
+        mgRoomCode = "2468";
+        mgWinHist.clear();
+        mgWinHist.add(1); mgWinHist.add(1); mgWinHist.add(0);
+        txSpecCount = 5;
         System.out.println("TX CHECK up=" + txValue[1]);
     }
 
@@ -14034,7 +15088,63 @@ public class WorldScreen extends ScreenAdapter {
     public void debugCloseHubGames() {
         mgOpen = false;
         tcOpen = false;
+        crOpen = false;
+        txOpen = false;
+        aiOpen = false;
         mgInviteIn = null;
+    }
+
+    /** Harness: mở màn chọn mini game ở zone chỉ định (0/1). */
+    public void debugMgZone(int z) {
+        mgOpen = true;
+        mgPage = 0;
+        mgZone = z;
+    }
+
+    /** Harness: trang Bảng xếp hạng của hub với 10 dòng mẫu. */
+    public void debugMgTop() {
+        mgOpen = true;
+        mgPage = 3;
+        mgTopGame = 0;
+        mgTopLoaded = true;
+        mgScroll = 0f;
+        mgTopRows.clear();
+        String[] names = {"Sơn", "Linh Chi", "Bé Na", "Tuấn Anh", "Mít Ướt",
+            "Cá Mập Con", "Ngọc Trâm", "Hải Đăng", "Khánh Ly", "Đức Bo"};
+        for (int i = 0; i < names.length; i++) {
+            MgTopRow row = new MgTopRow();
+            row.name = names[i];
+            row.wins = 42 - i * 4;
+            row.plays = 60 - i * 4;
+            mgTopRows.add(row);
+        }
+        System.out.println("BXH CHECK rows=" + mgTopRows.size());
+    }
+
+    /** Harness: Aincrad đang leo — mình tầng 2, đối thủ tầng 3 đang ma. */
+    public void debugAiBattle() {
+        aiOpen = true;
+        aiSeat = 0;
+        aiPhase = 1;
+        aiName0 = "Sơn";
+        aiName1 = "Linh Chi";
+        aiFloor[0] = 2;
+        aiFloor[1] = 2;
+        aiX[0] = 430f;
+        aiX[1] = 880f;
+        aiFace[0] = false;
+        aiFace[1] = true;
+        aiGhost[0] = false;
+        aiGhost[1] = true;
+        aiGhostEndAt[1] = System.currentTimeMillis() + 5000;
+        aiLastDoor[0] = -1;
+        aiBanner = "";
+        mgRoomCode = "8642";
+        mgWinHist.clear();
+        mgWinHist.add(1);
+        aiSpecCount = 3;
+        mgReadyUntil = System.currentTimeMillis() + 600000; // ghim banner READY để chụp
+        System.out.println("AI CHECK floor=" + aiFloor[0] + "/" + aiFloor[1]);
     }
 
     /** Harness: đóng màn Caro trước mock Trúc Xanh. */

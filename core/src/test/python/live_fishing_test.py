@@ -94,7 +94,7 @@ def main():
 
     # --- betest01: đặt tiền + dọn đồ câu cũ qua DB (server lưu khi thoát,
     # nên đặt TRƯỚC khi đăng nhập)
-    db("UPDATE players SET xu=920000, luong=200 WHERE user_id=1000")
+    db("UPDATE players SET xu=920000, luong=200, chests='[]' WHERE user_id=1000")
 
     c, uid = login('betest01', 'abcd1234')
     assert uid == 1000, uid
@@ -114,10 +114,11 @@ def main():
     o += 2
     ids = [s16(body, o + 2 * i) for i in range(n)]
     print('shop -49 id byte=%d name=%r items=%s' % (shop_id, name, ids))
-    assert ids == [446, 460, 448], ids
+    assert ids == [442, 443, 445, 446, 447, 448, 458, 459, 460], ids
 
-    # --- Mua cần 446 bằng Lượng (type 2), mồi 448 x3 bằng Xu (type 1)
-    for pid, typ, want_price in [(446, 2, 100), (448, 1, 30), (448, 1, 30), (448, 1, 30)]:
+    # --- Mua cần 446 bằng Lượng (type 2), mồi 448 x3 bằng Xu (type 1),
+    # vé cá rô 458 (bãi server 14 nay cần vé riêng — đợt shop 9 món)
+    for pid, typ, want_price in [(446, 2, 100), (448, 1, 30), (448, 1, 30), (448, 1, 30), (458, 1, 1000)]:
         c.send(-24, struct.pack('>hb', pid, typ))
         body, _ = wait_cmd(c, -24, 20)
         assert s16(body, 0) == pid, body[:8]
@@ -171,7 +172,7 @@ def main():
     # server da gui -24 kem xu con lai) — đơn giản nhất: đọc DB sau khi
     # đóng phiên trước (server lưu khi ngắt) không tiện giữa phiên, nên
     # kiểm bằng DB sau khi bán + thoát: tổng xu phải khớp phép tính:
-    # 920000 - 3*30 (mồi) + giá cá; lượng 200 - 100 (cần) = 100.
+    # 920000 - 3*30 (mồi) - 1000 (vé rô) + giá cá; lượng 200 - 100 (cần) = 100.
     join(c, 13)
     move(c, 320, 62)
     mid, items = talk_menu(c, WIRE_430)
@@ -189,7 +190,7 @@ def main():
     assert not left, ('ca van con trong ruong', left)
     bait = [e for e in chests if e['id'] == 448]
     assert bait and bait[0].get('quantity') == 2, ('moi phai con 2 (mua 3, quang 1)', bait)
-    want_xu = 920000 - 90 + FISH_PRICE[idfish]
+    want_xu = 920000 - 90 - 1000 + FISH_PRICE[idfish]
     print('DB: xu=%d (muon %d) luong=%d (muon 100) ruong=%s'
           % (xu_after, want_xu, luong_after, parts[2]))
     assert xu_after == want_xu, (xu_after, want_xu)

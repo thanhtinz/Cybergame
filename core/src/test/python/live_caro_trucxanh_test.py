@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Test sống Cờ Caro (game 3) + Trúc Xanh (game 1) qua hub −113:
+"""Test sống Cờ Caro (game 3) + Trúc Xanh (game 2) qua hub −113:
 CARO: P1 tạo bàn → P2 vào → CR_START → hai bên đánh xen kẽ, P1 đủ 5 ô
 hàng ngang → CR_END winner 0 + hàng thắng 5 ô.
 TRÚC XANH: tạo bàn mới → TX_DEAL → lật thẻ theo trí nhớ từ
@@ -13,7 +13,7 @@ sys.path.insert(0, '.')
 from live_tauchien_test import login, mg, wait_mg, Rd
 
 CARO = 3
-TX = 1
+TX = 2
 
 
 def pump_until(c, game, sub, timeout=10.0, label=""):
@@ -227,7 +227,49 @@ def test_trucxanh():
     time.sleep(2)
 
 
+def test_caro_blocked():
+    """Luật bản chính: hàng 5 bị chặn 2 đầu KHÔNG thắng — sau nước đi
+    đủ 5 mà hai đầu là quân đối thủ, server phải đổi lượt (CHANGE_TURN)
+    chứ không kết thúc ván (END)."""
+    p1, _ = login("betest01", "abcd1234")
+    time.sleep(2)
+    mg(p1, 0, 1, bytes([CARO, 0]))
+    r = pump_until(p1, 0, 10, label="caro2 JOINED p1")
+    room = r.i32()
+    assert r.u8() == 0 and r.u8() == CARO
+    time.sleep(2)
+    p2, _ = login("betest02", "abcd1234")
+    mg(p2, 0, 2, room.to_bytes(4, "big", signed=True))
+    pump_until(p2, 0, 10, label="caro2 JOINED p2")
+    pump_until(p1, CARO, 1, label="caro2 START p1")
+    pump_until(p2, CARO, 1, label="caro2 START p2")
+
+    def move(c, row, col):
+        mg(c, CARO, 2, bytes([row, col]))
+        for cc in (p1, p2):
+            rr = pump_until(cc, CARO, 3, label="caro2 MOVED")
+            st, rw, cl = rr.u8(), rr.u8(), rr.u8()
+            assert (rw, cl) == (row, col), (rw, cl, row, col)
+
+    # X xây hàng 7 cột 3..7; O chặn sẵn cả hai đầu (7,2) và (7,8)
+    seq = [(p1, 7, 3), (p2, 7, 2), (p1, 7, 4), (p2, 7, 8),
+           (p1, 7, 5), (p2, 0, 0), (p1, 7, 6), (p2, 0, 1)]
+    for (c, rw, cl) in seq:
+        move(c, rw, cl)
+    move(p1, 7, 7)  # đủ 5 nhưng bị chặn 2 đầu
+    # phải nhận CHANGE_TURN (lượt về p2), không phải END
+    rr = pump_until(p2, CARO, 4, timeout=6, label="caro2 CHANGE_TURN")
+    assert rr.u8() == 1
+    print("CARO BLOCKED PASS: hàng 5 bị chặn 2 đầu không thắng")
+    mg(p1, 0, 6)
+    mg(p2, 0, 6)
+    p1.sock.close()
+    p2.sock.close()
+    time.sleep(2)
+
+
 if __name__ == "__main__":
     test_caro()
+    test_caro_blocked()
     test_trucxanh()
     print("ALL PASS")
