@@ -15,7 +15,7 @@ d:data:data:0:application/unknown:1
 t:data/items.json:data/items-e5b9dee36cd13570cc76d59822b9c0de.json:2096745:application/json:1
 t:data/imgdata.json:data/imgdata-9638017536656b14edf5575dc24ec460.json:91232:application/json:1
 t:data/npcs.json:data/npcs-e147b79df5339b2435de44bad95fcb73.json:4036:application/json:1
-t:data/maps.json:data/maps-4c318ffb07beaddd31a4119fec7cd6c4.json:5466:application/json:1
+t:data/maps.json:data/maps-362352e0ca4574fbe5218222d30c11f4.json:5485:application/json:1
 b:data/citymap.bin:data/citymap-82b4d5eee3e5bbd7b596fcd31dccdaa7.bin:1300:application/octet-stream:1
 t:data/mapgrids.json:data/mapgrids-24afc4b330ff0ec73fe85594ed9f5375.json:78418:application/json:1
 t:data/icondata.json:data/icondata-1f8d67895acccf19117559bbc4c94c73.json:945602:application/json:1
