@@ -239,6 +239,22 @@ public class FarmWorld {
         return t;
     }
 
+    private final Map<Integer, Texture> animalCache = new HashMap<>();
+
+    /** Hình THÂN vật nuôi: idImg của dat KHÔNG nằm trong không gian
+     *  farm/img (id 330 ở đó là quả bí ngô của cây động — bản cũ tra
+     *  nhầm nên cá chép hiện thành bí ngô, rà soát 2026-11-04). Hình
+     *  thân thật chỉ có từ gói server live, để riêng ở farm/animal/;
+     *  chưa có file thì trả null (không vẽ con vật). */
+    public Texture animalTexture(int imgId) {
+        if (animalCache.containsKey(imgId)) return animalCache.get(imgId);
+        Texture t = null;
+        String path = "farm/animal/" + imgId + ".png";
+        if (GameFiles.data(path).exists()) t = game.texture(path);
+        animalCache.put(imgId, t);
+        return t;
+    }
+
     /** File hình động (cây động/vật nuôi/sản phẩm) — null nếu Pack5 không có file này. */
     public Texture dynTexture(int imgId) {
         if (dynCache.containsKey(imgId)) return dynCache.get(imgId);

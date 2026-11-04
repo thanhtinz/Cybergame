@@ -219,6 +219,9 @@ public class WorldScreen extends ScreenAdapter {
     private int houseGhostCx = -1, houseGhostCy = -1;
     private boolean housePayOpen;    // sheet chọn Xu/Lượng khi mua món có cả 2 giá
     private int housePayTypeId = -1, housePayCx, housePayCy;
+    /** Loại tiền đã chốt ở hoá đơn chung khi mua nội thất (1 Xu, 2
+     *  Lượng; 0 = chưa chốt, hỏi ở sheet như cũ). */
+    private int housePlacePayPreset = 0;
     private boolean chestUpConfirmOpen; // hộp xác nhận nâng cấp rương (−90)
     private String chestUpText = "";
     // ---- Câu cá (đợt mini-game, docs/minigame-spec.md §1) ----
@@ -846,9 +849,11 @@ public class WorldScreen extends ScreenAdapter {
     // --- Hub theo spec của chủ dự án (2026-10-31) ---
     // Trái trên: card glass (avatar + tên, dưới là tiền tệ). Phải trên: nút burger.
     // Trái dưới: joystick. Phải dưới: nút tương tác (ngữ cảnh theo NPC gần nhất).
-    private static final Color GLASS_FILL = new Color(0.05f, 0.11f, 0.18f, 0.62f);
+    // Độ đục nâng lên sau rà soát 2026-11-04: 0.62/0.78 để cảnh nền
+    // xuyên qua quá rõ, chữ trên panel khó đọc khi panel đè cảnh sáng.
+    private static final Color GLASS_FILL = new Color(0.05f, 0.11f, 0.18f, 0.85f);
     private static final Color GLASS_RIM = new Color(0.62f, 0.82f, 1f, 0.38f);
-    private static final Color GLASS_FILL_DARK = new Color(0.04f, 0.08f, 0.14f, 0.78f);
+    private static final Color GLASS_FILL_DARK = new Color(0.04f, 0.08f, 0.14f, 0.92f);
     private static final float CARD_X = 14f, CARD_W = 300f, CARD_H = 104f;
     private static final float BURGER_X = Ui.W - 70f, BURGER_Y = Ui.H - 70f, BURGER_S = 56f;
     private static final float ACT_CX = Ui.W - 84f, ACT_CY = 92f, ACT_R = 46f;
@@ -1155,8 +1160,8 @@ public class WorldScreen extends ScreenAdapter {
             long ageH = a.bornTime > 0
                 ? (System.currentTimeMillis() / 1000L - a.bornTime) / 3600L : 9999;
             int stage = ageH >= def.harvestHours ? 2 : (ageH >= def.harvestHours / 2 ? 1 : 0);
-            Texture t = farm.dynTexture(def.idImg[Math.min(stage, def.idImg.length - 1)]);
-            if (t == null) continue; // loài chưa có file hình trong Pack5 (chờ đào từ server live)
+            Texture t = farm.animalTexture(def.idImg[Math.min(stage, def.idImg.length - 1)]);
+            if (t == null) continue; // hình thân vật nuôi chưa có trong Pack5 (chờ đào từ server live)
             float[] anchor = FarmWorld.animalAnchor(def.area, i);
             float wx = anchor[0] + (float) Math.sin(netTime * 0.25f + a.phase) * 10f;
             DrawItem it = new DrawItem();
@@ -2795,7 +2800,7 @@ public class WorldScreen extends ScreenAdapter {
     private float feelMaxScroll() {
         float[] fg = feelSheetGeom();
         int rows = (feelIds.size() + 6) / 7;
-        return Math.max(0f, rows * fg[4] - (fg[3] - 44f));
+        return Math.max(0f, rows * fg[4] - (fg[3] - 52f));
     }
 
     /** Ô thứ idx trong lưới sheet: {trái, dưới}; hàng 0 ở trên cùng, vị trí
@@ -2803,7 +2808,10 @@ public class WorldScreen extends ScreenAdapter {
     private float[] feelCellXY(float[] fg, int idx) {
         float px = fg[0], py = fg[1], ph = fg[3], cell = fg[4], pad = fg[5];
         int col = idx % 7, row = idx / 7;
-        float gridTop = py + ph - 34f;
+        // gridTop hạ xuống 44 (bằng mép trên vùng cắt): trước đây 34 làm
+        // hàng mặt đầu tiên nhô lên trên vùng cắt, bị cắt mất nửa trên
+        // (rà soát 2026-11-04, ảnh shot-feel-big).
+        float gridTop = py + ph - 44f;
         return new float[]{px + pad + col * cell, gridTop - (row + 1) * cell + feelScroll};
     }
 
@@ -4584,17 +4592,24 @@ public class WorldScreen extends ScreenAdapter {
         java.util.List<String> out = new ArrayList<>();
         for (Map.Entry<String, java.util.List<HouseWorld.ItemDef>> e : house.groups.entrySet()) {
             for (HouseWorld.ItemDef d : e.getValue()) {
-                if (d.buy != 0) { out.add(e.getKey()); break; }
+                if (houseSellable(d)) { out.add(e.getKey()); break; }
             }
         }
         return out;
+    }
+
+    /** Món bán được ở shop nhà: có kiểu đặt (buy != 0) VÀ có giá —
+     *  món giá 0/0 là placeholder/sự kiện của dataset gốc (id 47 tên
+     *  "Emty" lẫn vào shop, rà soát 2026-11-04), không bán ở shop. */
+    private boolean houseSellable(HouseWorld.ItemDef d) {
+        return d.buy != 0 && (d.priceXu > 0 || d.priceLuong > 0);
     }
 
     private java.util.List<HouseWorld.ItemDef> houseBuyList(String group) {
         java.util.List<HouseWorld.ItemDef> out = new ArrayList<>();
         java.util.List<HouseWorld.ItemDef> all = house.groups.get(group);
         if (all != null) {
-            for (HouseWorld.ItemDef d : all) if (d.buy != 0) out.add(d);
+            for (HouseWorld.ItemDef d : all) if (houseSellable(d)) out.add(d);
         }
         return out;
     }
@@ -4654,16 +4669,9 @@ public class WorldScreen extends ScreenAdapter {
             }
             Ui.centered(batch, Ui.fontSmall, truncTo(Ui.fontSmall, d.name, HB_CELL_W - 16),
                 cx + HB_CELL_W / 2f, cy + 52, Color.WHITE);
-            String price;
-            if (d.priceXu > 0 && d.priceLuong > 0) {
-                price = fmtMoney(d.priceXu) + " xu · " + d.priceLuong + " lượng";
-            } else if (d.priceXu > 0) {
-                price = fmtMoney(d.priceXu) + " xu";
-            } else {
-                price = d.priceLuong + " lượng";
-            }
-            Ui.centered(batch, Ui.fontTiny, truncTo(Ui.fontTiny, price, HB_CELL_W - 12),
-                cx + HB_CELL_W / 2f, cy + 26, new Color(1f, 0.9f, 0.55f, 1f));
+            // KHÔNG hiện giá trên thẻ (luật shop toàn game của chủ dự
+            // án): nút Xem → hoá đơn chung mới thấy giá → mua ở hoá đơn.
+            drawFarmXemPill(cx + HB_CELL_W / 2f, cy + 12);
         }
         // phân trang + tiền của mình ở đáy panel
         if (pages > 1) {
@@ -4707,8 +4715,7 @@ public class WorldScreen extends ScreenAdapter {
                 float cx = gx + col * (HB_CELL_W + HB_GAP);
                 float cy = gt - (row + 1) * HB_CELL_H - row * HB_GAP;
                 if (x >= cx && x <= cx + HB_CELL_W && y >= cy && y <= cy + HB_CELL_H) {
-                    houseBuyOpen = false;
-                    houseBeginPlace(list.get(idx).id, null);
+                    openShopBill(SB_HOUSE, list.get(idx).id);
                     return true;
                 }
             }
@@ -4742,6 +4749,7 @@ public class WorldScreen extends ScreenAdapter {
         housePlaceTypeId = -1;
         housePlaceMove = null;
         housePayOpen = false;
+        housePlacePayPreset = 0;
     }
 
     private boolean houseGhostValid() {
@@ -4775,6 +4783,7 @@ public class WorldScreen extends ScreenAdapter {
         }
         HouseWorld.ItemDef d = house.defs.get(housePlaceTypeId);
         if (d == null) { houseCancelPlace(); return; }
+        if (housePlacePayPreset > 0) { houseDoBuy(housePlacePayPreset); return; }
         if (d.priceXu > 0 && d.priceLuong > 0) {
             housePayTypeId = d.id;
             housePayCx = houseGhostCx;
@@ -5504,6 +5513,12 @@ public class WorldScreen extends ScreenAdapter {
         if (exitConfirmTouch(x, y)) return;
         // hộp xác nhận nâng cấp rương (−90) là modal trên cùng
         if (chestUpTouch(x, y)) return;
+        // hoá đơn mua chung là lớp trên cùng (mở đè cả panel nhà —
+        // SB_HOUSE — nên phải xét trước các lớp nhà)
+        if (sbOpen) {
+            sbTouch(x, y);
+            return;
+        }
         // các lớp nhà: sheet chọn tiền / menu nhà / panel mua / sheet món /
         // thanh đặt đồ — đều modal khi đang mở
         if (housePayTouch(x, y)) return;
@@ -5542,11 +5557,6 @@ public class WorldScreen extends ScreenAdapter {
         }
         if (farmLandOpen) {
             farmLandTouch(x, y);
-            return;
-        }
-        // hoá đơn mua (shop farm/đồ câu) là lớp trên cùng
-        if (sbOpen) {
-            sbTouch(x, y);
             return;
         }
         if (farmAnimalSellOpen) {
@@ -6387,9 +6397,11 @@ public class WorldScreen extends ScreenAdapter {
             float cx = fishCardX(px, i), cTop = fishCardTop(top, i);
             batch.draw(Ui.roundedRect((int) FSHOP_CW, (int) FSHOP_CH, 12,
                 new Color(0.13f, 0.20f, 0.30f, 0.9f), GLASS_RIM), cx, cTop - FSHOP_CH);
-            drawPartIcon(id, cx + FSHOP_CW / 2f - 19, cTop - 46, 38);
+            // icon 46px (bản cũ 38 làm cần câu tre mảnh gần như vô
+            // hình — rà soát 2026-11-04)
+            drawPartIcon(id, cx + FSHOP_CW / 2f - 23, cTop - 50, 46);
             Ui.centered(batch, Ui.fontSmall, truncTo(Ui.fontSmall, pd.name, 180),
-                cx + FSHOP_CW / 2f, cTop - 58, new Color(1f, 1f, 1f, 0.95f));
+                cx + FSHOP_CW / 2f, cTop - 60, new Color(1f, 1f, 1f, 0.95f));
             batch.draw(Ui.gradientRect(76, 24, 8, EntryUi.ORANGE_TOP, EntryUi.ORANGE_BOT),
                 cx + FSHOP_CW / 2f - 38, cTop - FSHOP_CH + 4);
             Ui.centered(batch, Ui.fontSmall, "Xem", cx + FSHOP_CW / 2f,
@@ -6435,7 +6447,8 @@ public class WorldScreen extends ScreenAdapter {
     // danh sách chỉ có nút "Xem" → mở hoá đơn này coi giá (đơn giá,
     // hạn dùng, chọn loại tiền, số lượng, tổng) → bấm Mua ngay.
     // Trong shop KHÔNG hiện số dư Xu/Lượng của người chơi.
-    private static final int SB_FISH = 1, SB_SEED = 2, SB_FARM_ITEM = 3, SB_ANIMAL = 4;
+    private static final int SB_FISH = 1, SB_SEED = 2, SB_FARM_ITEM = 3, SB_ANIMAL = 4,
+        SB_HOUSE = 5;
     private boolean sbOpen;
     private int sbKind, sbId, sbQty = 1, sbCur = 1;
     /** Mốc hạn dùng trong hoá đơn đồ câu (0..4 = BILL_DAY_TIERS, 5 = Vĩnh viễn). */
@@ -6483,6 +6496,10 @@ public class WorldScreen extends ScreenAdapter {
                 FarmWorld.AnimalDef d = farm.animalDefs.get(sbId);
                 return d != null && (cur == 1 ? d.priceXu > 0 : d.priceLuong > 0);
             }
+            case SB_HOUSE: {
+                HouseWorld.ItemDef d = house.defs.get(sbId);
+                return d != null && (cur == 1 ? d.priceXu > 0 : d.priceLuong > 0);
+            }
             default: return false;
         }
     }
@@ -6513,6 +6530,10 @@ public class WorldScreen extends ScreenAdapter {
                 FarmWorld.AnimalDef d = farm.animalDefs.get(sbId);
                 return d == null ? 0 : (sbCur == 1 ? d.priceXu : d.priceLuong);
             }
+            case SB_HOUSE: {
+                HouseWorld.ItemDef d = house.defs.get(sbId);
+                return d == null ? 0 : (sbCur == 1 ? d.priceXu : d.priceLuong);
+            }
             default: return 0;
         }
     }
@@ -6533,6 +6554,10 @@ public class WorldScreen extends ScreenAdapter {
             }
             case SB_ANIMAL: {
                 FarmWorld.AnimalDef d = farm.animalDefs.get(sbId);
+                return d == null ? "" : d.name;
+            }
+            case SB_HOUSE: {
+                HouseWorld.ItemDef d = house.defs.get(sbId);
                 return d == null ? "" : d.name;
             }
             default: return "";
@@ -6569,6 +6594,16 @@ public class WorldScreen extends ScreenAdapter {
                 else if (d != null) {
                     Ui.centered(batch, Ui.font, d.name.substring(0, 1), cx, cy + 8,
                         new Color(1f, 0.95f, 0.55f, 1f));
+                }
+                break;
+            }
+            case SB_HOUSE: {
+                HouseWorld.ItemDef d = house.defs.get(sbId);
+                Texture tx = d == null ? null : house.imgTexture(d.img);
+                if (tx != null) {
+                    float sc = Math.min(size / tx.getWidth(), size / tx.getHeight());
+                    float dw = tx.getWidth() * sc, dh = tx.getHeight() * sc;
+                    batch.draw(tx, cx - dw / 2f, cy - dh / 2f, dw, dh);
                 }
                 break;
             }
@@ -6613,6 +6648,16 @@ public class WorldScreen extends ScreenAdapter {
                 farmSend(m);
                 break;
             }
+            case SB_HOUSE: {
+                // Mua nội thất = chốt giá ở hoá đơn rồi cầm món đi đặt;
+                // tiền trừ ở bước đặt (gói −74) bằng đúng loại tiền đã
+                // chọn ở hoá đơn (housePlacePayPreset), không hỏi lại.
+                sbOpen = false;
+                houseBuyOpen = false;
+                houseBeginPlace(sbId, null);
+                housePlacePayPreset = sbCur;
+                return;
+            }
             default: return;
         }
         sbOpen = false;
@@ -6632,7 +6677,8 @@ public class WorldScreen extends ScreenAdapter {
             new Color(0.07f, 0.11f, 0.17f, 0.98f), GLASS_RIM), px, py);
         drawFarmPanelHeader(px, py, pw, ph, Ui.FA_STORE,
             new Color(0.85f, 0.50f, 0.12f, 1f), "Hoá đơn",
-            sbKind == SB_FISH ? "Cửa hàng đồ câu" : "Cửa hàng nông trại");
+            sbKind == SB_FISH ? "Cửa hàng đồ câu"
+                : sbKind == SB_HOUSE ? "Cửa hàng nội thất" : "Cửa hàng nông trại");
         // món: medallion + icon + tên + hạn dùng (nếu có)
         drawFarmMedallion(px + 28, top - 168, 64);
         sbDrawIcon(px + 60, top - 136, 52);
@@ -6646,6 +6692,7 @@ public class WorldScreen extends ScreenAdapter {
                 meta += " · hạn gốc " + pd.expiredDay + " ngày";
             }
         } else if (sbKind == SB_ANIMAL) meta = "Vật nuôi — thả vào khu của nó ở nông trại";
+        else if (sbKind == SB_HOUSE) meta = "Nội thất — mua xong cầm đi đặt trong nhà";
         else if (sbKind == SB_SEED) meta = "Hạt giống — gieo ở ô đất nông trại";
         else meta = "Vật phẩm nông trại";
         Ui.fontSmall.setColor(1f, 1f, 1f, 0.65f);
@@ -6996,6 +7043,19 @@ public class WorldScreen extends ScreenAdapter {
         return ringTex;
     }
 
+    /** Part mặt của doll (zOrder 40 — mắt/mặt theo hệ part của gốc);
+     *  không có thì lấy part có tâm cao nhất (vùng đầu). Trả null khi
+     *  doll không có part nào ở frame này. */
+    private com.avatardk.game.data.PaperDoll.DrawPart facePartOf(
+            com.avatardk.game.data.PaperDoll doll, int frame) {
+        com.avatardk.game.data.PaperDoll.DrawPart best = null;
+        for (com.avatardk.game.data.PaperDoll.DrawPart d : doll.frame(frame)) {
+            if (d.zorder == 40) return d;
+            if (best == null || d.dy + d.hMed() / 2f < best.dy + best.hMed() / 2f) best = d;
+        }
+        return best;
+    }
+
     private String remoteName(int id) {
         RemoteFigure f = remotes.get(id);
         return f != null ? f.info.name : ("Người chơi " + id);
@@ -7189,10 +7249,22 @@ public class WorldScreen extends ScreenAdapter {
         batch.setColor(0.35f, 0.55f, 0.75f, 0.55f);
         batch.draw(circleTexture(), avCx - 30, avCy - 30, 60, 60);
         batch.setColor(Color.WHITE);
-        int[] b = f.doll.bounds(f.anim.frameIndex());
+        // Căn theo TÂM MẶT (part zOrder 40), không theo bounds toàn
+        // doll: doll có cánh/phụ kiện rộng hoặc bất đối xứng thì tâm
+        // bounds lệch hẳn khỏi đầu, avatar chỉ còn một mảnh cánh
+        // (rà soát 2026-11-04, ảnh shot-player-panel).
         float unit = 4f;
-        float feetX = avX + avS / 2f - ((b[0] + b[2]) / 2f) * unit;
-        float feetY = avY + avS + b[1] * unit;
+        float feetX, feetY;
+        com.avatardk.game.data.PaperDoll.DrawPart fp = facePartOf(f.doll, f.anim.frameIndex());
+        if (fp != null) {
+            float fcx = fp.dx + fp.wMed() / 2f, fcy = fp.dy + fp.hMed() / 2f;
+            feetX = f.anim.facingLeft ? avCx + fcx * unit : avCx - fcx * unit;
+            feetY = avCy + fcy * unit;
+        } else {
+            int[] b = f.doll.bounds(f.anim.frameIndex());
+            feetX = avX + avS / 2f - ((b[0] + b[2]) / 2f) * unit;
+            feetY = avY + avS + b[1] * unit;
+        }
         Rectangle clip = new Rectangle(avX + 2, avY + 2, avS - 4, avS - 4);
         Rectangle scissors = new Rectangle();
         batch.flush();
@@ -10057,7 +10129,6 @@ public class WorldScreen extends ScreenAdapter {
         if (tbOpen) drawTextBoxPanel();
         drawFishingBar();
         if (fishShopOpen) drawFishShopPanel();
-        if (sbOpen) drawShopBillCommon();
         if (mgOpen) drawMgHub();
         if (tcOpen) drawTcScreen();
         if (crOpen) drawCaro();
@@ -10070,6 +10141,9 @@ public class WorldScreen extends ScreenAdapter {
         if (houseMenuOpen) drawHouseMenu();
         if (houseBuyOpen) drawHouseBuyPanel();
         if (housePayOpen) drawHousePaySheet();
+        // hoá đơn vẽ SAU các panel shop (nó mở đè lên trên, gồm cả
+        // panel mua nội thất ở SB_HOUSE)
+        if (sbOpen) drawShopBillCommon();
         if (chestUpConfirmOpen) drawChestUpConfirm();
         batch.end();
     }
@@ -12411,6 +12485,15 @@ public class WorldScreen extends ScreenAdapter {
                 float dw = iw * sc, dh = ih * sc;
                 batch.draw(icon, cx + cw / 2f - dw / 2f,
                     cy + ch - 108 + (96 - dh) / 2f, dw, dh);
+            } else {
+                // Snake chưa có icon select trong dữ liệu gốc: giữ chỗ
+                // bằng chữ S trong khung xanh để thẻ không trống hẳn
+                // (rà soát 2026-11-04).
+                batch.draw(Ui.roundedRect(72, 72, 14,
+                    new Color(0.25f, 0.55f, 0.30f, 1f), GLASS_RIM),
+                    cx + cw / 2f - 36, cy + ch - 96);
+                Ui.centered(batch, Ui.fontTitle, "S", cx + cw / 2f, cy + ch - 46,
+                    Color.WHITE);
             }
             Ui.centered(batch, Ui.font, mgGameName(gid), cx + cw / 2f, cy + 76,
                 new Color(1f, 1f, 1f, 0.97f));
@@ -13295,7 +13378,7 @@ public class WorldScreen extends ScreenAdapter {
             batch.setColor(Color.WHITE);
             // banner trạng thái (giữa hai bàn, gói tối đa 2 dòng)
             {
-                java.util.List<String> lines = wrapText(tcBanner, Ui.font, 330);
+                java.util.List<String> lines = wrapText(tcBanner, Ui.font, 300);
                 for (int i = 0; i < Math.min(2, lines.size()); i++) {
                     Ui.centered(batch, Ui.font, lines.get(i), Ui.W / 2f, 540 - i * 26,
                         new Color(0.05f, 0.18f, 0.35f, 1f));
@@ -13351,16 +13434,19 @@ public class WorldScreen extends ScreenAdapter {
     /** Chú thích trạng thái ô (SHOW_BOTTOM_LEGEND của gốc): icon
      *  icnStatus_1 = trúng, icnStatus_2 = chìm, chấm = trượt. */
     private void drawTcLegend() {
+        // Toàn bộ chú thích phải nằm gọn trong panel giữa (450..810):
+        // bản cũ chữ "Trượt" chạy tới ~834, chui dưới mép bàn địch và
+        // bị cột nhãn hàng của bàn che mất (rà soát 2026-11-04).
         float y = 446;
         Texture i1 = tcTex("icnStatus_1"), i2 = tcTex("icnStatus_2");
-        if (i1 != null) batch.draw(i1, 486, y, 67, 29);
+        if (i1 != null) batch.draw(i1, 462, y, 67, 29);
         Ui.fontSmall.setColor(0.05f, 0.18f, 0.35f, 0.9f);
-        Ui.fontSmall.draw(batch, "Trúng", 560, y + 20);
-        if (i2 != null) batch.draw(i2, 640, y - 4, 36, 37);
-        Ui.fontSmall.draw(batch, "Chìm", 684, y + 20);
+        Ui.fontSmall.draw(batch, "Trúng", 536, y + 20);
+        if (i2 != null) batch.draw(i2, 606, y - 4, 36, 37);
+        Ui.fontSmall.draw(batch, "Chìm", 650, y + 20);
         Texture ice = tcTex("Map_Slot_dongbang");
-        if (ice != null) batch.draw(ice, 752, y + 2, 24, 24);
-        Ui.fontSmall.draw(batch, "Trượt", 784, y + 20);
+        if (ice != null) batch.draw(ice, 716, y + 2, 24, 24);
+        Ui.fontSmall.draw(batch, "Trượt", 748, y + 20);
     }
 
     /** Vẽ một bàn: shotsAt = phát bắn rơi vào bàn này; ownFleet = tàu hiện
@@ -13528,15 +13614,18 @@ public class WorldScreen extends ScreenAdapter {
                 Texture foc = tcTex("ListShip_Focus");
                 if (foc != null) batch.draw(foc, lx, rowTop - rowH + (rowH - 46) / 2f, lw, 46);
             }
-            batch.setColor(1f, 1f, 1f, empty ? 0.4f : 1f);
+            // Hàng hết tàu chỉ mờ nhẹ (0.75) — bản cũ 0.4 làm cả danh
+            // sách gần như không đọc được khi đã xếp hết (rà soát
+            // 2026-11-04, ảnh shot-tc-place).
+            batch.setColor(1f, 1f, 1f, empty ? 0.75f : 1f);
             Texture ship = tcTex("Ship_lv" + len);
             float sw = len == 1 ? 34 : Math.min(200, len * 40);
             batch.draw(ship, lx + 130 - sw / 2f, rowTop - rowH / 2f - 17, sw, 34);
             batch.setColor(Color.WHITE);
             Ui.centered(batch, Ui.fontSmall, TC_SHIP_NAMES[len], lx + 310,
-                rowTop - rowH / 2f + 16, new Color(1f, 1f, 1f, empty ? 0.45f : 0.95f));
+                rowTop - rowH / 2f + 16, new Color(1f, 1f, 1f, empty ? 0.8f : 0.95f));
             Ui.centered(batch, Ui.fontSmall, "còn " + tcRemaining(len), lx + 310,
-                rowTop - rowH / 2f - 12, new Color(1f, 0.85f, 0.38f, empty ? 0.4f : 1f));
+                rowTop - rowH / 2f - 12, new Color(1f, 0.85f, 0.38f, empty ? 0.75f : 1f));
         }
         // nút xoay nhanh của gốc ở góc trên-phải của bàn
         if (!tcPlacedOk) {
@@ -15876,7 +15965,7 @@ public class WorldScreen extends ScreenAdapter {
                 // mặt xem trước: doll chỉ gồm mặt nền + part mặt, căn giữa ô theo bounds
                 PaperDoll fd = feelDolls.get(i);
                 int[] b = fd.bounds(0);
-                float u = Math.min(2.2f, 44f / Math.max(1, b[3] - b[1]));
+                float u = Math.min(2.0f, 44f / Math.max(1, b[3] - b[1]));
                 float fx = cx + cell / 2f - (b[0] + b[2]) / 2f * u;
                 float fy = cy + cell / 2f + (b[1] + b[3]) / 2f * u;
                 game.dollRenderer.draw(batch, fd, 0, fx, fy, u, false);
