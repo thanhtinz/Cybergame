@@ -581,6 +581,15 @@ public final class AvatarProtocol {
     // nâng cấp rương nhà nên bản port dùng -113 — xem Cmd phía server.)
     public static final byte MINIGAME_HUB = -113;
     public static final int MG_GAME_TAUCHIEN = 4;
+    public static final int MG_GAME_CARO = 3;
+    public static final int MG_GAME_TRUCXANH = 1;
+    // Cờ Caro subs [PORT theo cấu trúc bản chính]
+    public static final int CR_START = 1, CR_MOVE = 2, CR_MOVED = 3,
+        CR_CHANGE_TURN = 4, CR_END = 5, CR_SNAPSHOT = 13, CR_SPEC_COUNT = 14;
+    // Trúc Xanh subs [PORT theo cấu trúc bản chính]
+    public static final int TX_DEAL = 1, TX_FLIP = 2, TX_FLIP_RESULT = 3,
+        TX_MATCH = 4, TX_MISS = 5, TX_CHANGE_TURN = 6, TX_END = 7,
+        TX_SNAPSHOT = 13, TX_SPEC_COUNT = 14;
     // Hub subs (C→S)
     public static final int MG_LIST = 0, MG_CREATE = 1, MG_JOIN = 2,
         MG_JOIN_CODE = 3, MG_INVITE = 4, MG_INVITE_REPLY = 5, MG_LEAVE = 6,
@@ -689,6 +698,22 @@ public final class AvatarProtocol {
 
     public static void tcKick(GameConnection conn) throws IOException {
         conn.send(mgMsg(MG_GAME_TAUCHIEN, TC_KICK));
+    }
+
+    /** Cờ Caro: đánh một ô {byte row, byte col} trên bàn 15x15. */
+    public static void crMove(GameConnection conn, int row, int col)
+            throws IOException {
+        Msg m = mgMsg(MG_GAME_CARO, CR_MOVE);
+        m.writer().writeByte(row);
+        m.writer().writeByte(col);
+        conn.send(m);
+    }
+
+    /** Trúc Xanh: lật thẻ {byte idx} (0..29). */
+    public static void txFlip(GameConnection conn, int idx) throws IOException {
+        Msg m = mgMsg(MG_GAME_TRUCXANH, TX_FLIP);
+        m.writer().writeByte(idx);
+        conn.send(m);
     }
 
     /** Nói chuyện với NPC (gói −61): id truyền = 2.000.000.000 + mã NPC. */

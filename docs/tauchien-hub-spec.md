@@ -531,3 +531,22 @@ một chỗ duy nhất nếu sau này bắt được gói live 3.4.4):
 9. Kiểm chứng: `core/src/test/python/live_tauchien_test.py` PASS
    toàn bộ (tạo/vào/xem/bắn/đổi lượt/END/mời giao hữu/giải tán) +
    harness stage 107–112.
+
+## 10. Trúc Xanh + Cờ Caro (làm 2026-11-03, theo docs/trucxanh-caro-research.md)
+
+Chung hub với Tàu Chiến: sảnh lọc bàn theo game đang chọn, tạo bàn/mời/
+khán giả/mã bàn dùng lại nguyên khung. Phong bì −113, gameId 1/3.
+
+**Cờ Caro (gameId 3)** — lệnh con [PORT theo cấu trúc gốc]: START=1,
+MOVE=2 (C→S), MOVED=3, CHANGE_TURN=4, END=5 {winner, reason, số ô
+thắng, các ô}, SNAPSHOT=13, SPEC_COUNT=14. [PORT] Bàn 15×15 (gốc có
+configureBoardSize, chưa đọc được cỡ mặc định), 5 ô liên tiếp thắng
+kể cả bị chặn hai đầu, hoà khi kín bàn, lượt 30s (hết giờ mất lượt).
+Client: nền bàn ghép 9 lát BG_Caro2 của gốc, quân X/O là asset gốc.
+
+**Trúc Xanh (gameId 1)** — lệnh con: DEAL=1, FLIP=2 (C→S),
+FLIP_RESULT=3, MATCH=4, MISS=5, CHANGE_TURN=6, END=7, SNAPSHOT=13,
+SPEC_COUNT=14. [PORT] Lưới 6 cột × 5 hàng = 30 thẻ, 15 cặp; ăn cặp
+được lật tiếp; hết giờ úp thẻ đang mở và đổi lượt; mặt thẻ là icon
+15 nông sản của farm (gốc dùng bộ thẻ riêng chưa trích được danh
+sách). Test sống live_caro_trucxanh_test.py PASS cả hai game.

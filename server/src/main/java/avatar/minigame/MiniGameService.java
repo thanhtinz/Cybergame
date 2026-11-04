@@ -40,12 +40,20 @@ public class MiniGameService extends Service {
 
     // ===== Hằng số game =====
     public static final int GAME_TAUCHIEN = 4;
+    public static final int GAME_CARO = 3;
+    public static final int GAME_TRUCXANH = 1;
     public static final int BOARD = 10;                 // ô mỗi chiều/bàn
     /** Số tàu theo độ dài: chỉ số = độ dài (1..5). Tổng 14 tàu. */
     public static final int[] FLEET_QTY = {0, 6, 4, 2, 1, 1};
     public static final long INVITE_LOCK_MS = 4263L;    // [GỐC]
     public static final long INVITE_TTL_MS = 60000L;    // [PORT]
     public static final int TURN_SECONDS = 30;          // [PORT]
+    // Cờ Caro [PORT]: bàn 15x15, 5 ô liên tiếp là thắng (kể cả bị
+    // chặn hai đầu), hoà khi kín bàn. Bản chính có configureBoardSize
+    // (cỡ bàn cấu hình được) — chưa đọc được cỡ mặc định của server gốc.
+    public static final int CARO_N = 15;
+    // Trúc Xanh [PORT]: lưới 6x5 = 30 thẻ, 15 cặp (docs/trucxanh-caro-research.md)
+    public static final int TX_COLS = 6, TX_ROWS = 5, TX_CARDS = TX_COLS * TX_ROWS;
 
     // ===== Hub: lệnh con (gameId 0) =====
     static final int H_LIST = 0, H_CREATE = 1, H_JOIN = 2, H_JOIN_CODE = 3,
@@ -61,6 +69,15 @@ public class MiniGameService extends Service {
             TC_READY = 4, TC_START_BATTLE = 6, TC_SHOOT = 7, TC_SHOT_RESULT = 8,
             TC_CHANGE_TURN = 9, TC_END = 10, TC_LEAVE = 11, TC_KICK = 12,
             TC_SNAPSHOT = 13, TC_SPEC_COUNT = 14;
+
+    // ===== Cờ Caro: lệnh con (gameId 3) [PORT theo cấu trúc bản chính] =====
+    static final int CR_START = 1, CR_MOVE = 2, CR_MOVED = 3,
+            CR_CHANGE_TURN = 4, CR_END = 5, CR_SNAPSHOT = 13, CR_SPEC_COUNT = 14;
+
+    // ===== Trúc Xanh: lệnh con (gameId 1) [PORT theo cấu trúc bản chính] =====
+    static final int TX_DEAL = 1, TX_FLIP = 2, TX_FLIP_RESULT = 3,
+            TX_MATCH = 4, TX_MISS = 5, TX_CHANGE_TURN = 6, TX_END = 7,
+            TX_SNAPSHOT = 13, TX_SPEC_COUNT = 14;
 
     // Trạng thái bàn
     static final int ST_WAIT = 0, ST_PLACE = 1, ST_BATTLE = 2, ST_END = 3;
@@ -91,6 +108,14 @@ public class MiniGameService extends Service {
         int turn = 0;
         final boolean[] rematch = new boolean[2];
         ScheduledFuture<?> turnTimer;
+        // Cờ Caro: 0 trống, 1 = ghế 0 (X), 2 = ghế 1 (O)
+        final byte[] caroBoard = new byte[CARO_N * CARO_N];
+        int caroMoves = 0;
+        // Trúc Xanh: deck[i] = giá trị cặp (0..14), txState: 0 úp, 1 đang mở, 2 đã ăn
+        final int[] txDeck = new int[TX_CARDS];
+        final byte[] txState = new byte[TX_CARDS];
+        final int[] txScores = new int[2];
+        int txUp1 = -1, txUp2 = -1;
     }
 
     static class Invite {
@@ -162,6 +187,22 @@ public class MiniGameService extends Service {
                     }
                     case TC_LEAVE: leaveRoom(me, false); break;
                     case TC_KICK: kick(me); break;
+                    default: break;
+                }
+            } else if (gameId == GAME_CARO) {
+                switch (sub) {
+                    case CR_MOVE: {
+                        int row = dis.readByte(), col = dis.readByte();
+                        caroMove(me, row, col);
+                        break;
+                    }
+                    case TC_LEAVE: leaveRoom(me, false); break;
+                    default: break;
+                }
+            } else if (gameId == GAME_TRUCXANH) {
+                switch (sub) {
+                    case TX_FLIP: txFlip(me, dis.readByte()); break;
+                    case TC_LEAVE: leaveRoom(me, false); break;
                     default: break;
                 }
             }
@@ -240,8 +281,13 @@ public class MiniGameService extends Service {
         return r;
     }
 
+    private static boolean gamePlayable(int gameId) {
+        return gameId == GAME_TAUCHIEN || gameId == GAME_CARO
+            || gameId == GAME_TRUCXANH;
+    }
+
     private void createRoom(User me, int gameId, boolean priv) throws IOException {
-        if (gameId != GAME_TAUCHIEN) { error(me, "Game này sắp có."); return; }
+        if (!gamePlayable(gameId)) { error(me, "Game này sắp có."); return; }
         if (roomOf(me) != null || isSpectator(me)) {
             error(me, "Bạn đang ở trong một bàn khác."); return;
         }
@@ -292,6 +338,13 @@ public class MiniGameService extends Service {
         Message m = msg(0, H_OPP_JOINED);
         m.writer().writeUTF(me.getDisplayName());
         send(r.seats[0], m);
+        startGame(r);
+    }
+
+    /** Bắt đầu (hoặc bắt đầu lại) một ván theo game của bàn. */
+    private void startGame(Room r) throws IOException {
+        if (r.gameId == GAME_CARO) { startCaro(r); return; }
+        if (r.gameId == GAME_TRUCXANH) { startTrucXanh(r); return; }
         startPlacing(r);
     }
 
@@ -319,7 +372,7 @@ public class MiniGameService extends Service {
             error(me, "Bạn vừa gửi lời mời, vui lòng chờ vài giây");
             return;
         }
-        if (gameId != GAME_TAUCHIEN) { error(me, "Game này sắp có."); return; }
+        if (!gamePlayable(gameId)) { error(me, "Game này sắp có."); return; }
         if (roomOf(me) != null || isSpectator(me)) {
             error(me, "Bạn đang ở trong một bàn khác."); return;
         }
@@ -363,7 +416,7 @@ public class MiniGameService extends Service {
         r.seats[1] = me;
         sendJoined(from, r, 0);
         sendJoined(me, r, 1);
-        startPlacing(r);
+        startGame(r);
     }
 
     // ================= Rời bàn / đuổi / ngắt kết nối =================
@@ -392,7 +445,7 @@ public class MiniGameService extends Service {
             // xử thua: đối thủ thắng (đúng chuỗi gốc "Đối thủ thoát. Bạn thắng")
             int winner = 1 - seat;
             r.status = ST_END;
-            sendEnd(r, winner, 1);
+            sendEndGame(r, winner, 1);
             r.seats[seat] = null;
             broadcastSnapshot(r);
             dissolveIfEmpty(r);
@@ -478,6 +531,8 @@ public class MiniGameService extends Service {
     }
 
     private void sendSnapshot(User u, Room r) throws IOException {
+        if (r.gameId == GAME_CARO) { sendSnapshotCaro(u, r); return; }
+        if (r.gameId == GAME_TRUCXANH) { sendSnapshotTx(u, r); return; }
         Message m = msg(r.gameId, TC_SNAPSHOT);
         DataOutputStream w = m.writer();
         w.writeInt(r.id);
@@ -608,17 +663,34 @@ public class MiniGameService extends Service {
             try {
                 Room room = ROOMS.get(roomId);
                 if (room == null || room.status != ST_BATTLE || room.turn != turnSeat) return;
-                // hết giờ: mất lượt
-                room.turn = 1 - room.turn;
-                Message m = msg(room.gameId, TC_CHANGE_TURN);
-                m.writer().writeByte(room.turn);
-                send(room.seats[0], m);
-                send(room.seats[1], m);
-                broadcastSnapshot(room);
-                armTurnTimer(room);
+                onTurnTimeout(room);
             } catch (Exception ignored) {
             }
         }, TURN_SECONDS, TimeUnit.SECONDS);
+    }
+
+    /** Hết giờ một lượt: mất lượt (Trúc Xanh úp lại thẻ đang mở trước). */
+    private void onTurnTimeout(Room room) throws IOException {
+        if (room.gameId == GAME_TRUCXANH && room.txUp1 >= 0) {
+            Message miss = msg(room.gameId, TX_MISS);
+            miss.writer().writeByte(room.txUp1);
+            miss.writer().writeByte(room.txUp2);
+            room.txState[room.txUp1] = 0;
+            if (room.txUp2 >= 0) room.txState[room.txUp2] = 0;
+            room.txUp1 = room.txUp2 = -1;
+            send(room.seats[0], miss);
+            send(room.seats[1], miss);
+            for (User s : new ArrayList<>(room.spectators)) send(s, miss);
+        }
+        room.turn = 1 - room.turn;
+        int sub = room.gameId == GAME_CARO ? CR_CHANGE_TURN
+            : room.gameId == GAME_TRUCXANH ? TX_CHANGE_TURN : TC_CHANGE_TURN;
+        Message m = msg(room.gameId, sub);
+        m.writer().writeByte(room.turn);
+        send(room.seats[0], m);
+        send(room.seats[1], m);
+        broadcastSnapshot(room);
+        armTurnTimer(room);
     }
 
     private void cancelTimer(Room r) {
@@ -719,6 +791,247 @@ public class MiniGameService extends Service {
         }
     }
 
+    // ================= Kết thúc theo game =================
+
+    private void sendEndGame(Room r, int winner, int reason) throws IOException {
+        if (r.gameId == GAME_CARO) { sendCaroEnd(r, winner, reason, null); return; }
+        if (r.gameId == GAME_TRUCXANH) { sendTxEnd(r, winner); return; }
+        sendEnd(r, winner, reason);
+    }
+
+    // ================= Cờ Caro =================
+
+    private void startCaro(Room r) throws IOException {
+        r.status = ST_BATTLE;
+        r.turn = 0;
+        r.caroMoves = 0;
+        java.util.Arrays.fill(r.caroBoard, (byte) 0);
+        r.rematch[0] = r.rematch[1] = false;
+        Message m = msg(r.gameId, CR_START);
+        m.writer().writeByte(0);
+        send(r.seats[0], m);
+        send(r.seats[1], m);
+        broadcastSnapshot(r);
+        armTurnTimer(r);
+    }
+
+    private void caroMove(User me, int row, int col) throws IOException {
+        Room r = roomOf(me);
+        if (r == null || r.gameId != GAME_CARO || r.status != ST_BATTLE) return;
+        int seat = seatOf(r, me);
+        if (seat != r.turn) return;
+        if (row < 0 || row >= CARO_N || col < 0 || col >= CARO_N) return;
+        int idx = row * CARO_N + col;
+        if (r.caroBoard[idx] != 0) return;
+        cancelTimer(r);
+        r.caroBoard[idx] = (byte) (seat + 1);
+        r.caroMoves++;
+        Message m = msg(r.gameId, CR_MOVED);
+        DataOutputStream w = m.writer();
+        w.writeByte(seat);
+        w.writeByte(row);
+        w.writeByte(col);
+        send(r.seats[0], m);
+        send(r.seats[1], m);
+        for (User s : new ArrayList<>(r.spectators)) send(s, m);
+        List<int[]> line = caroWinLine(r, row, col, seat + 1);
+        if (line != null) {
+            r.status = ST_END;
+            sendCaroEnd(r, seat, 0, line);
+            broadcastSnapshot(r);
+            return;
+        }
+        if (r.caroMoves >= CARO_N * CARO_N) {
+            r.status = ST_END;
+            sendCaroEnd(r, 2, 2, null);
+            broadcastSnapshot(r);
+            return;
+        }
+        r.turn = 1 - seat;
+        Message t = msg(r.gameId, CR_CHANGE_TURN);
+        t.writer().writeByte(r.turn);
+        send(r.seats[0], t);
+        send(r.seats[1], t);
+        broadcastSnapshot(r);
+        armTurnTimer(r);
+    }
+
+    /** Hàng thắng qua ô vừa đánh (mọi hướng), null nếu chưa đủ 5. */
+    private List<int[]> caroWinLine(Room r, int row, int col, int mark) {
+        int[][] dirs = {{0, 1}, {1, 0}, {1, 1}, {1, -1}};
+        for (int[] d : dirs) {
+            List<int[]> line = new ArrayList<>();
+            line.add(new int[]{row, col});
+            for (int s = -1; s <= 1; s += 2) {
+                int rr = row + d[0] * s, cc = col + d[1] * s;
+                while (rr >= 0 && rr < CARO_N && cc >= 0 && cc < CARO_N
+                        && r.caroBoard[rr * CARO_N + cc] == mark) {
+                    line.add(new int[]{rr, cc});
+                    rr += d[0] * s;
+                    cc += d[1] * s;
+                }
+            }
+            if (line.size() >= 5) return line;
+        }
+        return null;
+    }
+
+    private void sendCaroEnd(Room r, int winner, int reason, List<int[]> line)
+            throws IOException {
+        Message m = msg(r.gameId, CR_END);
+        DataOutputStream w = m.writer();
+        w.writeByte(winner); // 0/1 ghế thắng, 2 = hoà
+        w.writeByte(reason); // 0 = đủ 5 ô, 1 = đối thủ thoát, 2 = kín bàn
+        w.writeByte(line == null ? 0 : line.size());
+        if (line != null) {
+            for (int[] c : line) {
+                w.writeByte(c[0]);
+                w.writeByte(c[1]);
+            }
+        }
+        send(r.seats[0], m);
+        send(r.seats[1], m);
+        for (User s : new ArrayList<>(r.spectators)) send(s, m);
+    }
+
+    private void sendSnapshotCaro(User u, Room r) throws IOException {
+        Message m = msg(r.gameId, CR_SNAPSHOT);
+        DataOutputStream w = m.writer();
+        w.writeInt(r.id);
+        w.writeByte(r.status);
+        w.writeUTF(r.seats[0] == null ? "" : r.seats[0].getDisplayName());
+        w.writeUTF(r.seats[1] == null ? "" : r.seats[1].getDisplayName());
+        w.writeByte(r.turn);
+        w.write(r.caroBoard);
+        w.writeByte(r.spectators.size());
+        send(u, m);
+    }
+
+    // ================= Trúc Xanh =================
+
+    private void startTrucXanh(Room r) throws IOException {
+        r.status = ST_BATTLE;
+        r.turn = 0;
+        r.txScores[0] = r.txScores[1] = 0;
+        r.txUp1 = r.txUp2 = -1;
+        r.rematch[0] = r.rematch[1] = false;
+        List<Integer> vals = new ArrayList<>();
+        for (int v = 0; v < TX_CARDS / 2; v++) {
+            vals.add(v);
+            vals.add(v);
+        }
+        java.util.Collections.shuffle(vals);
+        for (int i = 0; i < TX_CARDS; i++) {
+            r.txDeck[i] = vals.get(i);
+            r.txState[i] = 0;
+        }
+        Message m = msg(r.gameId, TX_DEAL);
+        DataOutputStream w = m.writer();
+        w.writeByte(TX_COLS);
+        w.writeByte(TX_ROWS);
+        w.writeByte(0);
+        send(r.seats[0], m);
+        send(r.seats[1], m);
+        broadcastSnapshot(r);
+        armTurnTimer(r);
+    }
+
+    private void txFlip(User me, int idx) throws IOException {
+        Room r = roomOf(me);
+        if (r == null || r.gameId != GAME_TRUCXANH || r.status != ST_BATTLE) return;
+        int seat = seatOf(r, me);
+        if (seat != r.turn) return;
+        if (idx < 0 || idx >= TX_CARDS) return;
+        if (r.txState[idx] != 0) return;
+        cancelTimer(r);
+        r.txState[idx] = 1;
+        Message m = msg(r.gameId, TX_FLIP_RESULT);
+        DataOutputStream w = m.writer();
+        w.writeByte(seat);
+        w.writeByte(idx);
+        w.writeByte(r.txDeck[idx]);
+        send(r.seats[0], m);
+        send(r.seats[1], m);
+        for (User s : new ArrayList<>(r.spectators)) send(s, m);
+        if (r.txUp1 < 0) {
+            r.txUp1 = idx;
+            armTurnTimer(r);
+            return;
+        }
+        int first = r.txUp1;
+        r.txUp1 = -1;
+        if (r.txDeck[first] == r.txDeck[idx]) {
+            r.txState[first] = 2;
+            r.txState[idx] = 2;
+            r.txScores[seat]++;
+            Message mm = msg(r.gameId, TX_MATCH);
+            DataOutputStream mw = mm.writer();
+            mw.writeByte(seat);
+            mw.writeByte(first);
+            mw.writeByte(idx);
+            mw.writeByte(r.txScores[0]);
+            mw.writeByte(r.txScores[1]);
+            send(r.seats[0], mm);
+            send(r.seats[1], mm);
+            for (User s : new ArrayList<>(r.spectators)) send(s, mm);
+            boolean allMatched = true;
+            for (byte st : r.txState) if (st != 2) { allMatched = false; break; }
+            if (allMatched) {
+                r.status = ST_END;
+                int winner = r.txScores[0] > r.txScores[1] ? 0
+                    : r.txScores[1] > r.txScores[0] ? 1 : 2;
+                sendTxEnd(r, winner);
+            }
+            broadcastSnapshot(r);
+            if (r.status == ST_BATTLE) armTurnTimer(r);
+        } else {
+            r.txState[first] = 0;
+            r.txState[idx] = 0;
+            Message mm = msg(r.gameId, TX_MISS);
+            mm.writer().writeByte(first);
+            mm.writer().writeByte(idx);
+            send(r.seats[0], mm);
+            send(r.seats[1], mm);
+            for (User s : new ArrayList<>(r.spectators)) send(s, mm);
+            r.turn = 1 - seat;
+            Message t = msg(r.gameId, TX_CHANGE_TURN);
+            t.writer().writeByte(r.turn);
+            send(r.seats[0], t);
+            send(r.seats[1], t);
+            broadcastSnapshot(r);
+            armTurnTimer(r);
+        }
+    }
+
+    private void sendTxEnd(Room r, int winner) throws IOException {
+        Message m = msg(r.gameId, TX_END);
+        DataOutputStream w = m.writer();
+        w.writeByte(winner); // 0/1 ghế thắng, 2 = hoà điểm
+        w.writeByte(r.txScores[0]);
+        w.writeByte(r.txScores[1]);
+        send(r.seats[0], m);
+        send(r.seats[1], m);
+        for (User s : new ArrayList<>(r.spectators)) send(s, m);
+    }
+
+    private void sendSnapshotTx(User u, Room r) throws IOException {
+        Message m = msg(r.gameId, TX_SNAPSHOT);
+        DataOutputStream w = m.writer();
+        w.writeInt(r.id);
+        w.writeByte(r.status);
+        w.writeUTF(r.seats[0] == null ? "" : r.seats[0].getDisplayName());
+        w.writeUTF(r.seats[1] == null ? "" : r.seats[1].getDisplayName());
+        w.writeByte(r.turn);
+        w.writeByte(r.txScores[0]);
+        w.writeByte(r.txScores[1]);
+        w.write(r.txState);
+        for (int i = 0; i < TX_CARDS; i++) {
+            w.writeByte(r.txState[i] > 0 ? r.txDeck[i] : -1);
+        }
+        w.writeByte(r.spectators.size());
+        send(u, m);
+    }
+
     // ================= Ván mới (rematch) =================
 
     private void rematch(User me) throws IOException {
@@ -728,7 +1041,7 @@ public class MiniGameService extends Service {
         if (r.seats[1 - seat] == null) return;
         r.rematch[seat] = true;
         if (r.rematch[0] && r.rematch[1]) {
-            startPlacing(r);
+            startGame(r);
         } else {
             Message m = msg(0, H_REMATCH_OFFER);
             m.writer().writeByte(seat);

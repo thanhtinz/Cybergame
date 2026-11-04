@@ -252,6 +252,21 @@ public class WorldScreen extends ScreenAdapter {
     private static class MgInvite { int fromId; String fromName = ""; int gameId; }
     private MgInvite mgInviteIn;       // lời mời đang chờ trả lời
     private boolean mgRematchOffer;    // đối thủ rủ ván mới
+    private int mgGame = 4;            // game đang chọn ở sảnh (1 TX · 3 Caro · 4 TC)
+    private final java.util.List<MgRoom> mgRoomsShown = new java.util.ArrayList<>();
+    private boolean mgGameLeaveAsk;    // hộp hỏi rời bàn (Caro/Trúc Xanh)
+    static String mgGameName(int gameId) {
+        switch (gameId) {
+            case 1: return "Trúc Xanh";
+            case 2: return "Aincrad";
+            case 3: return "Cờ Caro";
+            default: return "Tàu Chiến";
+        }
+    }
+    private void refreshMgRoomsShown() {
+        mgRoomsShown.clear();
+        for (MgRoom r : mgRooms) if (r.gameId == mgGame) mgRoomsShown.add(r);
+    }
     // Tàu Chiến
     private boolean tcOpen;
     private int tcSeat;                // 0/1 người chơi · 2 khán giả
@@ -5454,6 +5469,8 @@ public class WorldScreen extends ScreenAdapter {
     private void onTouch(float x, float y, int pointer) {
         // màn Tàu Chiến là lớp trên cùng khi đang chơi/xem
         if (tcTouch(x, y, pointer)) return;
+        if (crTouch(x, y, pointer)) return;
+        if (txTouch(x, y, pointer)) return;
         // hub mini-game + hộp nhập mã + lời mời là modal trên cùng
         if (mgTouch(x, y, pointer)) return;
         // hộp hỏi thoát về thành phố (ô cổng 9/12/17) là lớp trên cùng
@@ -9930,6 +9947,8 @@ public class WorldScreen extends ScreenAdapter {
         if (sbOpen) drawShopBillCommon();
         if (mgOpen) drawMgHub();
         if (tcOpen) drawTcScreen();
+        if (crOpen) drawCaro();
+        if (txOpen) drawTx();
         if (mgCodeOpen) drawMgCodePad();
         if (mgInviteIn != null) drawMgInviteDialog();
         if (housePlaceTypeId >= 0 && !housePayOpen) drawHousePlaceBar();
@@ -11834,7 +11853,7 @@ public class WorldScreen extends ScreenAdapter {
             || farmShopOpen || farmCookOpen || farmAnimalSellOpen
             || houseMenuOpen || houseBuyOpen || houseSheetOpen || housePayOpen
             || chestUpConfirmOpen || housePlaceTypeId >= 0 || fishShopOpen
-            || mgOpen || tcOpen || mgInviteIn != null || mgCodeOpen || sbOpen
+            || mgOpen || tcOpen || crOpen || txOpen || mgInviteIn != null || mgCodeOpen || sbOpen
             || panelPlayer != null || confirmText != null || exitConfirmOpen || tbOpen;
     }
 
@@ -11899,7 +11918,7 @@ public class WorldScreen extends ScreenAdapter {
     private void mgInviteFriend(FriendEntry f) {
         if (f == null) return;
         try {
-            AvatarProtocol.mgInvite(game.connection, f.id, AvatarProtocol.MG_GAME_TAUCHIEN);
+            AvatarProtocol.mgInvite(game.connection, f.id, mgGame);
             mgStatus = "Đã gửi lời mời tới " + f.name + " — chờ bạn ấy trả lời.";
             mgPage = 1;
         } catch (Exception ignored) { }
@@ -11932,19 +11951,64 @@ public class WorldScreen extends ScreenAdapter {
                             room.status = r.readByte();
                             mgRooms.add(room);
                         }
+                        refreshMgRoomsShown();
                         mgScroll = MathUtils.clamp(mgScroll, 0f, mgMaxScroll());
                         break;
                     }
                     case AvatarProtocol.MG_S_JOINED: {
                         int roomId = r.readInt();
                         int seat = r.readByte();
-                        r.readByte(); // gameId
+                        int joinedGame = r.readByte();
                         String opp = r.readUTF();
                         boolean priv = r.readBoolean();
                         String code = r.readUTF();
                         boolean friendly = r.readBoolean();
                         mgRoomId = roomId;
-                        if (seat == 2) { // khán giả: snapshot sẽ tới ngay sau
+                        mgGame = joinedGame;
+                        if (joinedGame == AvatarProtocol.MG_GAME_CARO) {
+                            crSeat = seat;
+                            crPhase = 0;
+                            crSpecCount = 0;
+                            crWinner = -1;
+                            java.util.Arrays.fill(crBoard, (byte) 0);
+                            java.util.Arrays.fill(crWinMark, false);
+                            if (seat == 0) {
+                                crName0 = myDisplayName(); crName1 = opp;
+                                mgWaiting = opp.isEmpty();
+                                mgMyCode = priv || friendly ? code : "";
+                            } else if (seat == 1) {
+                                crName0 = opp; crName1 = myDisplayName();
+                                mgWaiting = false;
+                            }
+                            if (seat == 2) { mgOpen = false; crOpen = true; mgWaiting = false; }
+                            else {
+                                mgInRoom = true;
+                                mgStatus = mgWaiting
+                                    ? "Đã tạo bàn — chờ đối thủ vào chơi."
+                                    : "Đã vào bàn Cờ Caro.";
+                            }
+                        } else if (joinedGame == AvatarProtocol.MG_GAME_TRUCXANH) {
+                            txSeat = seat;
+                            txPhase = 0;
+                            txSpecCount = 0;
+                            txWinner = -1;
+                            txResetCards();
+                            if (seat == 0) {
+                                txName0 = myDisplayName(); txName1 = opp;
+                                mgWaiting = opp.isEmpty();
+                                mgMyCode = priv || friendly ? code : "";
+                            } else if (seat == 1) {
+                                txName0 = opp; txName1 = myDisplayName();
+                                mgWaiting = false;
+                            }
+                            if (seat == 2) { mgOpen = false; txOpen = true; mgWaiting = false; }
+                            else {
+                                mgInRoom = true;
+                                mgStatus = mgWaiting
+                                    ? "Đã tạo bàn — chờ đối thủ vào chơi."
+                                    : "Đã vào bàn Trúc Xanh.";
+                            }
+                        } else if (seat == 2) { // khán giả Tàu Chiến: snapshot tới ngay
                             tcSeat = 2;
                             tcPhase = 0;
                             tcSpecCount = 0;
@@ -11971,12 +12035,27 @@ public class WorldScreen extends ScreenAdapter {
                         break;
                     }
                     case AvatarProtocol.MG_S_OPP_JOINED: {
-                        tcName1 = r.readUTF();
+                        String joinedName = r.readUTF();
+                        tcName1 = joinedName;
+                        crName1 = joinedName;
+                        txName1 = joinedName;
                         mgWaiting = false;
                         break;
                     }
                     case AvatarProtocol.MG_S_OPP_LEFT: {
-                        if (tcOpen && tcPhase == 3) {
+                        if (crOpen || txOpen) {
+                            // Caro/Trúc Xanh: thoát giữa ván đã có gói END
+                            // riêng; OPP_LEFT ở đây = bàn giải tán (khán giả
+                            // đang xem hoặc chủ bàn huỷ khi chưa đấu)
+                            crOpen = false;
+                            txOpen = false;
+                            mgInRoom = false;
+                            mgWaiting = false;
+                            mgOpen = true;
+                            mgPage = 1;
+                            mgStatus = "Bàn đã giải tán.";
+                            mgRequestList();
+                        } else if (tcOpen && tcPhase == 3) {
                             tcBanner = "Đối thủ đã rời bàn.";
                             mgRematchOffer = false;
                         } else if (tcSeat == 2) { // đang xem mà bàn giải tán
@@ -12011,6 +12090,8 @@ public class WorldScreen extends ScreenAdapter {
                         r.readByte();
                         mgRematchOffer = true;
                         tcBanner = "Đối thủ rủ chơi ván mới — bấm «Ván mới» để nhận.";
+                        crBanner = tcBanner;
+                        txBanner = tcBanner;
                         break;
                     }
                     case AvatarProtocol.MG_S_INVITE_IN: {
@@ -12034,6 +12115,8 @@ public class WorldScreen extends ScreenAdapter {
                         String text = r.readUTF();
                         mgStatus = text;
                         if (tcOpen) tcBanner = text;
+                        if (crOpen) crBanner = text;
+                        if (txOpen) txBanner = text;
                         addChatLog(TAB_SYSTEM, null, text, true);
                         break;
                     }
@@ -12041,6 +12124,10 @@ public class WorldScreen extends ScreenAdapter {
                 }
             } else if (gameId == AvatarProtocol.MG_GAME_TAUCHIEN) {
                 handleTcPacket(sub, r);
+            } else if (gameId == AvatarProtocol.MG_GAME_CARO) {
+                handleCrPacket(sub, r);
+            } else if (gameId == AvatarProtocol.MG_GAME_TRUCXANH) {
+                handleTxPacket(sub, r);
             }
         } catch (Exception ignored) { }
     }
@@ -12055,7 +12142,7 @@ public class WorldScreen extends ScreenAdapter {
             new Color(0.07f, 0.11f, 0.17f, 0.97f), GLASS_RIM), px, py);
         String sub = mgPage == 0 ? "Chọn một trò chơi"
             : mgPage == 2 ? "Mời bạn bè — ván giao hữu, không nhận quà"
-            : "Tàu Chiến — bàn đang mở";
+            : mgGameName(mgGame) + " — bàn đang mở";
         drawFarmPanelHeader(px, py, pw, ph, Ui.FA_TROPHY,
             new Color(0.55f, 0.38f, 0.10f, 1f), "Mini game", sub);
         if (mgPage == 0) drawMgSelect(px, py, top);
@@ -12075,7 +12162,7 @@ public class WorldScreen extends ScreenAdapter {
         float cy = top - 150 - ch;
         for (int i = 0; i < 4; i++) {
             float cx = x0 + i * (cw + gap);
-            boolean live = i == 3;
+            boolean live = i != 1; // Aincrad chưa làm
             batch.setColor(1f, 1f, 1f, live ? 1f : 0.55f);
             batch.draw(Ui.roundedRect((int) cw, (int) ch, 14,
                 new Color(0.13f, 0.20f, 0.30f, 0.95f), GLASS_RIM), cx, cy);
@@ -12102,8 +12189,8 @@ public class WorldScreen extends ScreenAdapter {
         Ui.fontSmall.draw(batch, "Danh sách bàn", lx + 196, top - 96);
         pushPanelClip(lx, ly, lw, lh);
         float rowTop = top - 118 + mgScroll;
-        for (int i = 0; i < mgRooms.size(); i++) {
-            MgRoom room = mgRooms.get(i);
+        for (int i = 0; i < mgRoomsShown.size(); i++) {
+            MgRoom room = mgRoomsShown.get(i);
             float ry = rowTop - (i + 1) * 62f;
             if (ry + 56 < ly || ry > ly + lh) continue;
             batch.draw(Ui.roundedRect((int) lw, 56, 12,
@@ -12115,7 +12202,7 @@ public class WorldScreen extends ScreenAdapter {
             Ui.font.draw(batch, title, lx + 16, ry + 40);
             String st = room.priv ? "Bàn riêng"
                 : room.status == 0 ? "Đang chờ"
-                : room.status == 1 ? "Đang xếp tàu"
+                : room.status == 1 ? (room.gameId == 4 ? "Đang xếp tàu" : "Đang chuẩn bị")
                 : room.status == 2 ? "Đang đấu" : "Đã xong";
             if (room.specs > 0) st += " · " + room.specs + " khán giả";
             Ui.fontSmall.setColor(1f, 1f, 1f, 0.7f);
@@ -12130,7 +12217,7 @@ public class WorldScreen extends ScreenAdapter {
             }
         }
         popPanelClip();
-        if (mgRooms.isEmpty()) {
+        if (mgRoomsShown.isEmpty()) {
             Ui.fontSmall.setColor(1f, 1f, 1f, 0.6f);
             Ui.fontSmall.draw(batch, "Chưa có bàn nào — hãy tạo bàn mới.", lx + 4, top - 150);
         }
@@ -12186,7 +12273,7 @@ public class WorldScreen extends ScreenAdapter {
     private void drawMgFriends(float px, float py, float top) {
         float lx = px + 24, lw = MG_PW - 48, ly = py + 58, lh = MG_PH - 58 - 118;
         Ui.fontSmall.setColor(1f, 1f, 1f, 0.85f);
-        Ui.fontSmall.draw(batch, "Bạn bè — bấm Mời để gửi lời mời chơi Tàu Chiến", lx + 196, top - 96);
+        Ui.fontSmall.draw(batch, "Bạn bè — bấm Mời để gửi lời mời chơi " + mgGameName(mgGame), lx + 196, top - 96);
         if (friends.isEmpty()) {
             Ui.fontSmall.setColor(1f, 1f, 1f, 0.6f);
             Ui.fontSmall.draw(batch, "Chưa có bạn bè nào trong danh sách.", lx + 4, top - 150);
@@ -12233,12 +12320,14 @@ public class WorldScreen extends ScreenAdapter {
             for (int i = 0; i < 4; i++) {
                 float cx = x0 + i * (cw + gap);
                 if (x >= cx && x <= cx + cw && y >= cy && y <= cy + ch) {
-                    if (i == 3) {
+                    if (i != 1) {
+                        mgGame = new int[]{1, 2, 3, 4}[i];
+                        refreshMgRoomsShown();
                         mgPage = 1;
                         mgScroll = 0f;
                         mgRequestList();
                     } else {
-                        mgStatus = "Game này sắp có — hiện chơi được Tàu Chiến.";
+                        mgStatus = "Aincrad sắp có — chơi Trúc Xanh, Cờ Caro, Tàu Chiến trước nhé.";
                     }
                     return true;
                 }
@@ -12264,8 +12353,7 @@ public class WorldScreen extends ScreenAdapter {
             } else if (!mgInRoom) {
                 if (x >= rx && x <= rx + rw && y >= top - 148 && y <= top - 96) {
                     try {
-                        AvatarProtocol.mgCreate(game.connection,
-                            AvatarProtocol.MG_GAME_TAUCHIEN, mgPriv);
+                        AvatarProtocol.mgCreate(game.connection, mgGame, mgPriv);
                     } catch (Exception ignored) { }
                     return true;
                 }
@@ -12298,7 +12386,7 @@ public class WorldScreen extends ScreenAdapter {
             mgDragMoved = 0f;
             mgPendingRoom = -1;
             float rowTop = top - 118 + mgScroll;
-            int n = mgPage == 2 ? friends.size() : mgRooms.size();
+            int n = mgPage == 2 ? friends.size() : mgRoomsShown.size();
             for (int i = 0; i < n; i++) {
                 float ry = rowTop - (i + 1) * 62f;
                 if (y >= ry && y <= ry + 56 && x >= lx + lw - 96 && x <= lx + lw - 16) {
@@ -12306,7 +12394,7 @@ public class WorldScreen extends ScreenAdapter {
                         mgPendingRoom = i;
                         mgPendingKind = 2;
                     } else {
-                        MgRoom room = mgRooms.get(i);
+                        MgRoom room = mgRoomsShown.get(i);
                         boolean canJoin = room.status == 0 && room.n2.isEmpty() && !mgInRoom;
                         boolean canWatch = !room.priv && room.status >= 1 && room.status <= 2 && !mgInRoom;
                         if (canJoin) { mgPendingRoom = i; mgPendingKind = 0; }
@@ -12397,7 +12485,7 @@ public class WorldScreen extends ScreenAdapter {
         Ui.centered(batch, Ui.font, "Lời mời chơi Tàu Chiến", Ui.W / 2f, top - 34,
             new Color(1f, 0.85f, 0.38f, 1f));
         java.util.List<String> lines = wrapText(
-            mgInviteIn.fromName + " mời bạn chơi Tàu Chiến.\nVán giao hữu - không nhận quà.",
+            mgInviteIn.fromName + " mời bạn chơi " + mgGameName(mgInviteIn.gameId) + ".\nVán giao hữu - không nhận quà.",
             Ui.font, pw - 80);
         float ly = top - 96;
         for (String line : lines) {
@@ -13283,6 +13371,526 @@ public class WorldScreen extends ScreenAdapter {
         tcDragIdx = -1;
     }
 
+    // ===== CỜ CARO + TRÚC XANH (bản chính 3.4.4, docs/trucxanh-caro-research.md) =====
+    // [PORT] Caro: bàn 15x15, 5 ô liên tiếp thắng (kể cả chặn hai đầu),
+    // lượt 30s. Trúc Xanh: lưới 6x5 = 15 cặp thẻ nông sản, ăn cặp được
+    // lật tiếp, hết giờ úp thẻ đang mở và đổi lượt.
+    private boolean crOpen, txOpen;
+    private int crSeat, txSeat;              // 0/1 người chơi · 2 khán giả
+    private String crName0 = "", crName1 = "", txName0 = "", txName1 = "";
+    private int crPhase, txPhase;            // 0 chờ · 1 đang chơi · 2 kết thúc
+    private int crTurn, txTurn;
+    private long crTurnAt, txTurnAt;
+    private String crBanner = "", txBanner = "";
+    private int crSpecCount, txSpecCount;
+    private int crWinner = -1, txWinner = -1; // 0/1 ghế · 2 hoà · -1 chưa
+    private int crEndReason;
+    private final byte[] crBoard = new byte[225];
+    private final boolean[] crWinMark = new boolean[225];
+    private int crLastMove = -1;
+    private final byte[] txState = new byte[30];       // 0 úp · 1 mở · 2 đã ăn
+    private final int[] txValue = new int[30];
+    private final int[] txScores = new int[2];
+    private final long[] txPeekUntil = new long[30];
+    private static final int[] TX_PRODUCTS =
+        {200, 201, 202, 203, 204, 248, 249, 252, 253, 266, 267, 270, 271, 286, 215};
+    private static final int CR_CELL = 38, CR_BX = 355, CR_BTOP = 648;
+    private static final int TX_CW = 80, TX_CH = 96, TX_GAP = 9,
+        TX_X0 = 378, TX_TOP = 612;
+
+    private void txResetCards() {
+        java.util.Arrays.fill(txState, (byte) 0);
+        java.util.Arrays.fill(txPeekUntil, 0L);
+        for (int i = 0; i < 30; i++) txValue[i] = -1;
+        txScores[0] = txScores[1] = 0;
+    }
+
+    private void handleCrPacket(int sub, java.io.DataInputStream r) throws Exception {
+        switch (sub) {
+            case AvatarProtocol.CR_START: {
+                crTurn = r.readByte();
+                crPhase = 1;
+                crWinner = -1;
+                crLastMove = -1;
+                java.util.Arrays.fill(crBoard, (byte) 0);
+                java.util.Arrays.fill(crWinMark, false);
+                crTurnAt = System.currentTimeMillis();
+                crBanner = crSeat == 2 ? "Ván bắt đầu!"
+                    : crTurn == crSeat ? "Ván bắt đầu — bạn đi trước (X)."
+                    : "Ván bắt đầu — đối thủ đi trước.";
+                break;
+            }
+            case AvatarProtocol.CR_MOVED: {
+                int seat = r.readByte(), row = r.readByte(), col = r.readByte();
+                crBoard[row * 15 + col] = (byte) (seat + 1);
+                crLastMove = row * 15 + col;
+                break;
+            }
+            case AvatarProtocol.CR_CHANGE_TURN: {
+                crTurn = r.readByte();
+                crTurnAt = System.currentTimeMillis();
+                break;
+            }
+            case AvatarProtocol.CR_END: {
+                crWinner = r.readByte();
+                int reason = r.readByte();
+                crEndReason = reason;
+                int n = r.readByte();
+                java.util.Arrays.fill(crWinMark, false);
+                for (int i = 0; i < n; i++) {
+                    int row = r.readByte(), col = r.readByte();
+                    crWinMark[row * 15 + col] = true;
+                }
+                crPhase = 2;
+                if (reason == 1) crBanner = "Đối thủ đã thoát — bạn thắng!";
+                else if (reason == 2) crBanner = "Kín bàn — hoà!";
+                break;
+            }
+            case AvatarProtocol.CR_SNAPSHOT: {
+                r.readInt();
+                int status = r.readByte();
+                crName0 = r.readUTF();
+                crName1 = r.readUTF();
+                crTurn = r.readByte();
+                r.readFully(crBoard);
+                crSpecCount = r.readByte();
+                if (status == 2 && crPhase != 2) {
+                    crPhase = 1;
+                    crTurnAt = System.currentTimeMillis();
+                } else if (status == 3) {
+                    crPhase = 2;
+                }
+                break;
+            }
+            case AvatarProtocol.CR_SPEC_COUNT: {
+                crSpecCount = r.readByte();
+                break;
+            }
+            default: break;
+        }
+    }
+
+    private void handleTxPacket(int sub, java.io.DataInputStream r) throws Exception {
+        switch (sub) {
+            case AvatarProtocol.TX_DEAL: {
+                r.readByte(); r.readByte(); // cols, rows (cố định 6x5)
+                txTurn = r.readByte();
+                txResetCards();
+                txPhase = 1;
+                txWinner = -1;
+                txTurnAt = System.currentTimeMillis();
+                txBanner = txSeat == 2 ? "Ván bắt đầu!"
+                    : txTurn == txSeat ? "Ván bắt đầu — bạn lật trước."
+                    : "Ván bắt đầu — đối thủ lật trước.";
+                break;
+            }
+            case AvatarProtocol.TX_FLIP_RESULT: {
+                r.readByte(); // seat
+                int idx = r.readByte();
+                txValue[idx] = r.readByte();
+                txState[idx] = 1;
+                txPeekUntil[idx] = Long.MAX_VALUE;
+                break;
+            }
+            case AvatarProtocol.TX_MATCH: {
+                r.readByte(); // seat
+                int i1 = r.readByte(), i2 = r.readByte();
+                txScores[0] = r.readByte();
+                txScores[1] = r.readByte();
+                txState[i1] = 2;
+                txState[i2] = 2;
+                txPeekUntil[i1] = 0;
+                txPeekUntil[i2] = 0;
+                txTurnAt = System.currentTimeMillis(); // ăn cặp: lật tiếp
+                break;
+            }
+            case AvatarProtocol.TX_MISS: {
+                int i1 = r.readByte(), i2 = r.readByte();
+                long until = System.currentTimeMillis() + 900;
+                if (i1 >= 0) { txState[i1] = 0; txPeekUntil[i1] = until; }
+                if (i2 >= 0) { txState[i2] = 0; txPeekUntil[i2] = until; }
+                break;
+            }
+            case AvatarProtocol.TX_CHANGE_TURN: {
+                txTurn = r.readByte();
+                txTurnAt = System.currentTimeMillis();
+                break;
+            }
+            case AvatarProtocol.TX_END: {
+                txWinner = r.readByte();
+                txScores[0] = r.readByte();
+                txScores[1] = r.readByte();
+                txPhase = 2;
+                break;
+            }
+            case AvatarProtocol.TX_SNAPSHOT: {
+                r.readInt();
+                int status = r.readByte();
+                txName0 = r.readUTF();
+                txName1 = r.readUTF();
+                txTurn = r.readByte();
+                txScores[0] = r.readByte();
+                txScores[1] = r.readByte();
+                r.readFully(txState);
+                for (int i = 0; i < 30; i++) {
+                    int v = r.readByte();
+                    if (v >= 0) txValue[i] = v;
+                }
+                txSpecCount = r.readByte();
+                if (status == 2 && txPhase != 2) {
+                    txPhase = 1;
+                    txTurnAt = System.currentTimeMillis();
+                } else if (status == 3) {
+                    txPhase = 2;
+                }
+                break;
+            }
+            case AvatarProtocol.TX_SPEC_COUNT: {
+                txSpecCount = r.readByte();
+                break;
+            }
+            default: break;
+        }
+    }
+
+    // ----- Vẽ + chạm dùng chung cho Caro / Trúc Xanh -----
+
+    private void mgGameLeaveRoom(boolean openHub) {
+        try { AvatarProtocol.mgLeave(game.connection); } catch (Exception ignored) { }
+        crOpen = false;
+        txOpen = false;
+        mgGameLeaveAsk = false;
+        mgInRoom = false;
+        mgWaiting = false;
+        mgRoomId = -1;
+        if (openHub) {
+            mgOpen = true;
+            mgPage = 1;
+            mgRequestList();
+        }
+    }
+
+    /** Đầu trang của màn game: nền + tiêu đề vàng. */
+    private void drawMgGameHeader(String title) {
+        batch.setColor(1f, 1f, 1f, 1f);
+        batch.draw(Ui.gradientRect((int) Ui.W, (int) Ui.H, 0,
+            new Color(0.05f, 0.10f, 0.20f, 1f), new Color(0.03f, 0.06f, 0.12f, 1f)), 0, 0);
+        Ui.centered(batch, Ui.fontTitle, title, Ui.W / 2f, Ui.H - 16,
+            new Color(1f, 0.85f, 0.38f, 1f));
+    }
+
+    /** Giây còn lại của lượt hiện tại (đếm ngược 30s như bản port Tàu Chiến). */
+    private String mgTurnClock(long turnAt) {
+        int left = 30 - (int) ((System.currentTimeMillis() - turnAt) / 1000);
+        if (left < 0) left = 0;
+        return " · " + left + "s";
+    }
+
+    private void drawMgLeaveBtn(boolean spec) {
+        batch.draw(Ui.roundedRect(124, 44, 10,
+            new Color(0.45f, 0.16f, 0.14f, 0.95f), GLASS_RIM), Ui.W - 148, Ui.H - 64);
+        Ui.centered(batch, Ui.fontSmall, spec ? "Ngừng xem" : "Rời bàn",
+            Ui.W - 86, Ui.H - 30, Color.WHITE);
+    }
+
+    private boolean mgLeaveBtnHit(float x, float y) {
+        return x >= Ui.W - 148 && x <= Ui.W - 24 && y >= Ui.H - 64 && y <= Ui.H - 20;
+    }
+
+    private void drawMgGameLeaveDialog(boolean battle) {
+        float pw = 560f, ph = 260f, px = (Ui.W - pw) / 2f, py = (Ui.H - ph) / 2f, top = py + ph;
+        batch.setColor(0f, 0f, 0f, 0.5f);
+        batch.draw(whiteTex, 0, 0, Ui.W, Ui.H);
+        batch.setColor(Color.WHITE);
+        batch.draw(Ui.roundedRect((int) pw, (int) ph, 16,
+            new Color(0.07f, 0.11f, 0.17f, 0.98f), GLASS_RIM), px, py);
+        String text = battle
+            ? "Nếu thoát bạn sẽ bị xử thua.\nBạn có muốn thoát?"
+            : "Bạn có muốn rời bàn?";
+        java.util.List<String> lines = wrapText(text, Ui.font, pw - 80);
+        float ly = top - 60;
+        for (String line : lines) {
+            Ui.centered(batch, Ui.font, line, Ui.W / 2f, ly, Color.WHITE);
+            ly -= 34;
+        }
+        tcBtn(px + 60, py + 36, 160, 54, "Ở lại", 0);
+        batch.draw(Ui.gradientRect(160, 54, 11, EntryUi.ORANGE_TOP, EntryUi.ORANGE_BOT),
+            px + pw - 220, py + 36);
+        Ui.centered(batch, Ui.font, "Thoát", px + pw - 140, py + 70, Color.WHITE);
+    }
+
+    /** Xử lý chạm trong hộp hỏi rời bàn; true = đã nuốt chạm. */
+    private boolean mgGameLeaveAskTouch(float x, float y) {
+        if (!mgGameLeaveAsk) return false;
+        float pw = 560f, ph = 260f, px = (Ui.W - pw) / 2f, py = (Ui.H - ph) / 2f;
+        if (x >= px + 60 && x <= px + 220 && y >= py + 36 && y <= py + 90) {
+            mgGameLeaveAsk = false;
+            return true;
+        }
+        if (x >= px + pw - 220 && x <= px + pw - 60 && y >= py + 36 && y <= py + 90) {
+            mgGameLeaveRoom(true);
+            return true;
+        }
+        return true;
+    }
+
+    /** Lớp phủ kết thúc ván: thông báo + Ván mới / Về sảnh. */
+    private void drawMgEndOverlay(String title, String detail, Color titleColor) {
+        batch.setColor(0f, 0f, 0f, 0.45f);
+        batch.draw(whiteTex, 0, 0, Ui.W, Ui.H);
+        batch.setColor(Color.WHITE);
+        float pw = 640f, ph = 300f, px = (Ui.W - pw) / 2f, py = (Ui.H - ph) / 2f;
+        batch.draw(Ui.roundedRect((int) pw, (int) ph, 16,
+            new Color(0.07f, 0.11f, 0.17f, 0.97f), GLASS_RIM), px, py);
+        Ui.centered(batch, Ui.fontTitle, title, Ui.W / 2f, py + ph - 52, titleColor);
+        Ui.centered(batch, Ui.font, detail, Ui.W / 2f, py + ph - 108,
+            new Color(1f, 1f, 1f, 0.9f));
+        tcBtn(430, py + 44, 190, 56, "Ván mới", 1);
+        tcBtn(660, py + 44, 190, 56, "Về sảnh", 0);
+        if (mgRematchOffer) {
+            Ui.centered(batch, Ui.fontSmall, "Đối thủ đang chờ bạn nhận ván mới.",
+                Ui.W / 2f, py + 24, new Color(0.65f, 0.85f, 1f, 1f));
+        }
+    }
+
+    /** Nút của lớp phủ kết thúc: 0 = Ván mới, 1 = Về sảnh, -1 = không trúng. */
+    private int mgEndOverlayHit(float x, float y) {
+        float py = (Ui.H - 300f) / 2f;
+        if (y < py + 44 || y > py + 100) return -1;
+        if (x >= 430 && x <= 620) return 0;
+        if (x >= 660 && x <= 850) return 1;
+        return -1;
+    }
+
+    // ----- Cờ Caro: vẽ + chạm -----
+
+    private void drawCaro() {
+        boolean spec = crSeat == 2;
+        drawMgGameHeader("Cờ Caro");
+        // tên + quân hai phía
+        Ui.font.setColor(1f, 1f, 1f, 0.97f);
+        Ui.font.draw(batch, truncTo(Ui.font, crName0, 300), CR_BX, 700);
+        layout.setText(Ui.font, truncTo(Ui.font, crName1, 300));
+        Ui.font.draw(batch, truncTo(Ui.font, crName1, 300), CR_BX + 570 - layout.width, 700);
+        Ui.fontSmall.setColor(1f, 0.45f, 0.35f, 1f);
+        Ui.fontSmall.draw(batch, "Quân X" + (crSeat == 0 ? " — bạn" : ""), CR_BX, 676);
+        Ui.fontSmall.setColor(0.45f, 0.65f, 1f, 1f);
+        layout.setText(Ui.fontSmall, "Quân O" + (crSeat == 1 ? " — bạn" : ""));
+        Ui.fontSmall.draw(batch, "Quân O" + (crSeat == 1 ? " — bạn" : ""),
+            CR_BX + 570 - layout.width, 676);
+        // nền bàn: 9 lát BG_Caro2 của gốc ghép 3x3
+        for (int i = 0; i < 9; i++) {
+            Texture slice = tcTex("BG_Caro2_" + i);
+            if (slice != null) {
+                batch.draw(slice, CR_BX + (i % 3) * 190f,
+                    CR_BTOP - 190f - (i / 3) * 190f, 190, 190);
+            }
+        }
+        // lưới ô
+        batch.setColor(0.55f, 0.42f, 0.22f, 0.5f);
+        for (int i = 1; i < 15; i++) {
+            batch.draw(whiteTex, CR_BX + i * CR_CELL - 1, CR_BTOP - 570, 2, 570);
+            batch.draw(whiteTex, CR_BX, CR_BTOP - i * CR_CELL - 1, 570, 2);
+        }
+        batch.setColor(Color.WHITE);
+        // quân + điểm nhấn
+        Texture texX = tcTex("X"), texO = tcTex("O");
+        for (int idx = 0; idx < 225; idx++) {
+            int row = idx / 15, col = idx % 15;
+            float cx = CR_BX + col * CR_CELL + CR_CELL / 2f;
+            float cy = CR_BTOP - row * CR_CELL - CR_CELL / 2f;
+            if (crWinMark[idx]) {
+                batch.setColor(1f, 0.80f, 0.25f, 0.35f);
+                batch.draw(whiteTex, cx - 18, cy - 18, 36, 36);
+                batch.setColor(Color.WHITE);
+            }
+            if (idx == crLastMove && crPhase == 1) {
+                batch.setColor(1f, 0.85f, 0.38f, 0.9f);
+                batch.draw(ringTexture(), cx - 20, cy - 20, 40, 40);
+                batch.setColor(Color.WHITE);
+            }
+            byte v = crBoard[idx];
+            if (v == 0) continue;
+            Texture t = v == 1 ? texX : texO;
+            if (t != null) batch.draw(t, cx - 14, cy - 16, 28, 32);
+        }
+        if (crPhase == 0) {
+            Ui.centered(batch, Ui.font, "Đang chờ ván bắt đầu…", Ui.W / 2f, 200, Color.WHITE);
+        } else if (crPhase == 1) {
+            String st = spec ? (crTurn == 0 ? "Lượt của " + crName0 : "Lượt của " + crName1)
+                : crTurn == crSeat ? "Lượt của bạn — chạm một ô trống để đánh."
+                : "Đang chờ đối thủ đánh…";
+            if (spec && crSpecCount > 0) st += " · " + crSpecCount + " khán giả";
+            Ui.centered(batch, Ui.font, st + mgTurnClock(crTurnAt), Ui.W / 2f, 46,
+                new Color(1f, 0.92f, 0.70f, 1f));
+        } else if (!crBanner.isEmpty()) {
+            Ui.centered(batch, Ui.font, truncTo(Ui.font, crBanner, 900), Ui.W / 2f, 46,
+                new Color(1f, 0.92f, 0.70f, 1f));
+        }
+        drawMgLeaveBtn(spec);
+        if (crPhase == 2 && !spec) {
+            String title = crWinner == 2 ? "Hoà!" : crWinner == crSeat ? "Bạn thắng!" : "Bạn thua!";
+            String detail = crEndReason == 1 ? crBanner
+                : crWinner == 2 ? "Hai bên ngang tài ngang sức."
+                : crWinner == crSeat ? "Xếp đủ 5 quân liên tiếp — đẹp lắm!"
+                : "Đối thủ đã xếp đủ 5 quân liên tiếp.";
+            drawMgEndOverlay(title, detail, crWinner == crSeat
+                ? new Color(1f, 0.85f, 0.38f, 1f) : new Color(0.8f, 0.85f, 0.95f, 1f));
+        } else if (crPhase == 2 && spec) {
+            String title = crWinner == 2 ? "Hoà!" : "Người chơi " + (crWinner + 1) + " thắng!";
+            drawMgEndOverlay(title, "", new Color(1f, 0.85f, 0.38f, 1f));
+        }
+        if (mgGameLeaveAsk) drawMgGameLeaveDialog(crPhase == 1);
+    }
+
+    private boolean crTouch(float x, float y, int pointer) {
+        if (!crOpen) return false;
+        if (mgGameLeaveAskTouch(x, y)) return true;
+        boolean spec = crSeat == 2;
+        if (mgLeaveBtnHit(x, y)) {
+            if (spec) mgGameLeaveRoom(true);
+            else if (crPhase == 2) mgGameLeaveRoom(true);
+            else mgGameLeaveAsk = true;
+            return true;
+        }
+        if (crPhase == 2) {
+            int hit = mgEndOverlayHit(x, y);
+            if (hit == 0) {
+                try { AvatarProtocol.mgRematch(game.connection); } catch (Exception ignored) { }
+                mgRematchOffer = false;
+                crBanner = "Đã gửi lời rủ ván mới…";
+            } else if (hit == 1) {
+                mgGameLeaveRoom(true);
+            }
+            return true;
+        }
+        if (spec || crPhase != 1 || crTurn != crSeat) return true;
+        if (x >= CR_BX && x < CR_BX + 570 && y <= CR_BTOP && y > CR_BTOP - 570) {
+            int col = (int) ((x - CR_BX) / CR_CELL);
+            int row = (int) ((CR_BTOP - y) / CR_CELL);
+            if (row >= 0 && row < 15 && col >= 0 && col < 15
+                    && crBoard[row * 15 + col] == 0) {
+                try { AvatarProtocol.crMove(game.connection, row, col); }
+                catch (Exception ignored) { }
+            }
+        }
+        return true;
+    }
+
+    // ----- Trúc Xanh: vẽ + chạm -----
+
+    private void drawTx() {
+        boolean spec = txSeat == 2;
+        drawMgGameHeader("Trúc Xanh");
+        long now = System.currentTimeMillis();
+        // hai thẻ điểm
+        for (int sIdx = 0; sIdx < 2; sIdx++) {
+            float px = sIdx == 0 ? TX_X0 : TX_X0 + 525 - 264;
+            boolean active = txPhase == 1 && txTurn == sIdx;
+            batch.draw(Ui.roundedRect(264, 40, 10,
+                new Color(0.13f, 0.20f, 0.30f, 0.95f),
+                active ? new Color(1f, 0.85f, 0.38f, 1f) : GLASS_RIM), px, 626);
+            String nm = sIdx == 0 ? txName0 : txName1;
+            String label = truncTo(Ui.fontSmall, nm, 180) + " · " + txScores[sIdx] + " cặp";
+            Ui.centered(batch, Ui.fontSmall, label, px + 132, 653,
+                new Color(1f, 1f, 1f, 0.95f));
+        }
+        // lưới thẻ
+        for (int idx = 0; idx < 30; idx++) {
+            int row = idx / 6, col = idx % 6;
+            float cx = TX_X0 + col * (TX_CW + TX_GAP);
+            float cy = TX_TOP - (row + 1) * TX_CH - row * TX_GAP;
+            boolean peek = now < txPeekUntil[idx];
+            boolean face = txState[idx] > 0 || peek;
+            if (face && txValue[idx] >= 0) {
+                batch.draw(Ui.roundedRect(TX_CW, TX_CH, 10,
+                    new Color(0.96f, 0.93f, 0.84f, 1f),
+                    txState[idx] == 2 ? new Color(1f, 0.80f, 0.25f, 1f) : GLASS_RIM),
+                    cx, cy);
+                int pid = TX_PRODUCTS[txValue[idx]];
+                drawProductIcon(pid, farm.productDefs.get(pid),
+                    cx + TX_CW / 2f - 28, cy + TX_CH / 2f - 28, 56);
+            } else {
+                batch.draw(Ui.gradientRect(TX_CW, TX_CH, 10,
+                    new Color(0.22f, 0.52f, 0.30f, 1f), new Color(0.12f, 0.36f, 0.20f, 1f)),
+                    cx, cy);
+                // ô khắc giữa lưng thẻ + biểu tượng rừng trúc của gốc
+                batch.draw(Ui.roundedRect(TX_CW - 18, TX_CH - 18, 8,
+                    new Color(0.10f, 0.30f, 0.17f, 0.85f),
+                    new Color(0.55f, 0.85f, 0.55f, 0.8f)), cx + 9, cy + 9);
+                Texture logo = tcTex("trucxanh");
+                if (logo != null) batch.draw(logo, cx + TX_CW / 2f - 24, cy + TX_CH / 2f - 24, 48, 48);
+            }
+        }
+        if (txPhase == 0) {
+            Ui.centered(batch, Ui.font, "Đang chờ ván bắt đầu…", Ui.W / 2f, 200, Color.WHITE);
+        } else if (txPhase == 1) {
+            String st = spec ? (txTurn == 0 ? "Lượt của " + txName0 : "Lượt của " + txName1)
+                : txTurn == txSeat ? "Lượt của bạn — lật hai thẻ giống nhau."
+                : "Đang chờ đối thủ lật thẻ…";
+            if (spec && txSpecCount > 0) st += " · " + txSpecCount + " khán giả";
+            Ui.centered(batch, Ui.font, st + mgTurnClock(txTurnAt), Ui.W / 2f, 40,
+                new Color(1f, 0.92f, 0.70f, 1f));
+        } else if (!txBanner.isEmpty()) {
+            Ui.centered(batch, Ui.font, truncTo(Ui.font, txBanner, 900), Ui.W / 2f, 40,
+                new Color(1f, 0.92f, 0.70f, 1f));
+        }
+        drawMgLeaveBtn(spec);
+        if (txPhase == 2) {
+            String myName = txSeat == 0 ? txName0 : txName1;
+            String opName = txSeat == 0 ? txName1 : txName0;
+            String title = spec
+                ? (txWinner == 2 ? "Hoà điểm!" : "Người chơi " + (txWinner + 1) + " thắng!")
+                : txWinner == 2 ? "Hoà điểm!" : txWinner == txSeat ? "Bạn thắng!" : "Bạn thua!";
+            String detail = spec
+                ? "Tỉ số cặp thẻ: " + txScores[0] + " — " + txScores[1]
+                : "Bạn ăn " + txScores[txSeat == 2 ? 0 : txSeat] + " cặp · "
+                    + opName + " ăn " + txScores[txSeat == 0 ? 1 : 0] + " cặp";
+            drawMgEndOverlay(title, spec ? detail : detail,
+                txWinner == txSeat || spec
+                    ? new Color(1f, 0.85f, 0.38f, 1f) : new Color(0.8f, 0.85f, 0.95f, 1f));
+        }
+        if (mgGameLeaveAsk) drawMgGameLeaveDialog(txPhase == 1);
+    }
+
+    private boolean txTouch(float x, float y, int pointer) {
+        if (!txOpen) return false;
+        if (mgGameLeaveAskTouch(x, y)) return true;
+        boolean spec = txSeat == 2;
+        if (mgLeaveBtnHit(x, y)) {
+            if (spec) mgGameLeaveRoom(true);
+            else if (txPhase == 2) mgGameLeaveRoom(true);
+            else mgGameLeaveAsk = true;
+            return true;
+        }
+        if (txPhase == 2) {
+            int hit = mgEndOverlayHit(x, y);
+            if (hit == 0) {
+                try { AvatarProtocol.mgRematch(game.connection); } catch (Exception ignored) { }
+                mgRematchOffer = false;
+                txBanner = "Đã gửi lời rủ ván mới…";
+            } else if (hit == 1) {
+                mgGameLeaveRoom(true);
+            }
+            return true;
+        }
+        if (spec || txPhase != 1 || txTurn != txSeat) return true;
+        long now = System.currentTimeMillis();
+        for (int idx = 0; idx < 30; idx++) {
+            int row = idx / 6, col = idx % 6;
+            float cx = TX_X0 + col * (TX_CW + TX_GAP);
+            float cy = TX_TOP - (row + 1) * TX_CH - row * TX_GAP;
+            if (x >= cx && x <= cx + TX_CW && y >= cy && y <= cy + TX_CH) {
+                if (txState[idx] == 0 && now >= txPeekUntil[idx]) {
+                    try { AvatarProtocol.txFlip(game.connection, idx); }
+                    catch (Exception ignored) { }
+                }
+                return true;
+            }
+        }
+        return true;
+    }
+
     // ===== Debug cho harness chụp (giữ vĩnh viễn như LINK CHECK/FISH CHECK) =====
     public void debugMgHubSelect() {
         mgOpen = true;
@@ -13372,6 +13980,66 @@ public class WorldScreen extends ScreenAdapter {
         tcSpecShots1[6 * 10 + 6] = 3;
         tcSpecCount = 5;
         tcBanner = "Đang xem trực tiếp";
+    }
+
+    /** Harness: ván Cờ Caro đang đấu (X sắp thắng hàng ngang). */
+    public void debugCrBattle() {
+        crOpen = true;
+        crSeat = 0;
+        crPhase = 1;
+        crName0 = "Sơn";
+        crName1 = "Linh Chi";
+        crTurn = 0;
+        crTurnAt = System.currentTimeMillis();
+        java.util.Arrays.fill(crBoard, (byte) 0);
+        java.util.Arrays.fill(crWinMark, false);
+        // X: hàng 7 cột 3-6; O: hàng 9 cột 3-5 + vài quân rải rác
+        for (int c = 3; c <= 6; c++) crBoard[7 * 15 + c] = 1;
+        for (int c = 3; c <= 5; c++) crBoard[9 * 15 + c] = 2;
+        crBoard[5 * 15 + 7] = 1;
+        crBoard[4 * 15 + 8] = 2;
+        crBoard[11 * 15 + 10] = 1;
+        crBoard[10 * 15 + 4] = 2;
+        crLastMove = 7 * 15 + 6;
+        crBanner = "";
+        System.out.println("CARO CHECK turn=" + crTurn);
+    }
+
+    /** Harness: ván Trúc Xanh giữa chừng — vài cặp đã ăn, hai thẻ đang mở. */
+    public void debugTxBattle() {
+        txOpen = true;
+        txSeat = 0;
+        txPhase = 1;
+        txName0 = "Sơn";
+        txName1 = "Linh Chi";
+        txTurn = 0;
+        txTurnAt = System.currentTimeMillis();
+        txResetCards();
+        int[] deck = {0, 5, 2, 5, 1, 3, 4, 0, 6, 2, 7, 8,
+                      1, 9, 10, 3, 11, 4, 12, 6, 13, 7, 14, 8,
+                      9, 10, 11, 12, 13, 14};
+        for (int i = 0; i < 30; i++) txValue[i] = deck[i];
+        // đã ăn: cặp 0 (idx 0,7) và cặp 1 (idx 4,12)
+        txState[0] = 2; txState[7] = 2;
+        txState[4] = 2; txState[12] = 2;
+        txScores[0] = 1; txScores[1] = 1;
+        // đang mở: idx 1 (giá trị 5)
+        txState[1] = 1;
+        txPeekUntil[1] = Long.MAX_VALUE;
+        txBanner = "";
+        System.out.println("TX CHECK up=" + txValue[1]);
+    }
+
+    /** Harness: đóng mọi màn mini-game trước khi mở mock mới. */
+    public void debugCloseHubGames() {
+        mgOpen = false;
+        tcOpen = false;
+        mgInviteIn = null;
+    }
+
+    /** Harness: đóng màn Caro trước mock Trúc Xanh. */
+    public void debugCloseCaro() {
+        crOpen = false;
     }
 
     public void debugMgInvite() {

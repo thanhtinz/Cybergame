@@ -1091,6 +1091,26 @@ public class ScreenshotMain {
                         if (frame == 15) {
                             shot("shot-tc-spectate.png");
                             world.debugMgInvite();
+                            stage = 113; frame = 0;
+                        }
+                        break;
+                    case 113: // Cờ Caro: ván đang đấu
+                        if (frame == 1) {
+                            world.debugCloseHubGames();
+                            world.debugCrBattle();
+                        }
+                        if (frame == 15) {
+                            shot("shot-caro-battle.png");
+                            stage = 114; frame = 0;
+                        }
+                        break;
+                    case 114: // Trúc Xanh: ván đang đấu
+                        if (frame == 1) {
+                            world.debugCloseCaro();
+                            world.debugTxBattle();
+                        }
+                        if (frame == 15) {
+                            shot("shot-trucxanh-battle.png");
                             stage = 112; frame = 0;
                         }
                         break;
