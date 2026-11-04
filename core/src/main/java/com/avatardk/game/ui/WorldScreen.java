@@ -126,6 +126,9 @@ public class WorldScreen extends ScreenAdapter {
     private Texture bgSkyTex, bgLineTex;
     /** Nền gộp một ảnh của bản chính 3.4.4 (BGMap) — khác null thì vẽ một lớp. */
     private Texture bgFullTex;
+    /** Chiều cao vẽ của nền gộp BGMap (kéo phủ tới đỉnh dải cảnh — xem
+     *  loadBackground; KHÁC chiều cao thật của ảnh). */
+    private float bgFullDrawH = 720f;
     private final Texture[] cloudTex = new Texture[2];
     private static class Cloud { float x100, yW, speed; int anchor; }
     private final List<Cloud> clouds = new ArrayList<>();
@@ -2700,6 +2703,18 @@ public class WorldScreen extends ScreenAdapter {
             bgFullTex = game.texture(fullPath);
             bgSkyTex = null;
             bgLineTex = null;
+            // Chiều cao VẼ của nền: ảnh BGMap gốc thấp hơn dải imagemap
+            // (465 so với 820 ở map 10) — neo đáy ở đáy map mà giữ chiều
+            // cao thật thì đỉnh nền dừng giữa màn hình, bầu trời phía
+            // trên thành màu phẳng rời rạc và silhouette không bao giờ
+            // ló ra sau nhà (Tín chê "có background, trời là riêng"
+            // 2026-11-04). Nền phải phủ kín tới đỉnh dải cảnh: kéo chiều
+            // cao vẽ bằng chiều cao dải cao nhất (tối thiểu phủ hết
+            // phần trời camera thấy khi map thấp hơn màn hình).
+            bgFullDrawH = Math.max(mapBottomPx, mapBottomPx / 2f + Ui.H / 2f + 40f);
+            for (Texture t : strips) {
+                bgFullDrawH = Math.max(bgFullDrawH, t.getHeight());
+            }
         } else {
             bgFullTex = null;
             bgSkyTex = game.texture("bghd/may" + def.bgNum() + bgStatus + ".png");
@@ -3317,6 +3332,12 @@ public class WorldScreen extends ScreenAdapter {
      *  ScreenshotMain bơm gói giả để kiểm chứng hình (debugInjectNet). */
     public void handleNetMsg(Msg m) {
         try {
+            // Luồng casino (handler 3): các lệnh 6..100 trùng số với park
+            // (51, 60, 61...) nên phải rẽ TRƯỚC khi đang ở casino.
+            if ((casinoIn || csPending) && isCasinoCmd(m.command)) {
+                handleCasinoMsg(m);
+                return;
+            }
             switch (m.command) {
                 case AvatarProtocol.AVATAR_JOIN_PARK: {
                     ZonePlayers.JoinResult jr = ZonePlayers.parseJoin(m);
@@ -4265,6 +4286,21 @@ public class WorldScreen extends ScreenAdapter {
             case 68: case 69: case 70: // T_HOUSE_1/2/3: vào nhà mình
                 startEnterHouse();
                 break;
+            case 72: case 73: case 74: case 75: case 76: case 77: {
+                // Cổng casino của gốc (LoadMap.doJoin): doGetHandlerCasino
+                // (type - 72) -> typeCasino 0 Tiến Lên / 1 Phỏm / 2 Kim
+                // Cương / 3 Bầu Cua. Bản port mới có Bầu Cua (handler 3).
+                // Lưu ý: lưới type hiện tại của bản port không còn ô nào
+                // mang type 72..77 (đã rà soát) — nối sẵn để đúng gốc;
+                // lối vào dùng được hiện tại là nút Bầu Cua ở hub Mini
+                // game [PORT].
+                if (type - 72 == 3) {
+                    startCasinoBauCua();
+                } else {
+                    addChatLog(TAB_SYSTEM, null, "Khu casino này chưa mở.", true);
+                }
+                break;
+            }
             case 21: // T_ROAD_HOUSE: ô cửa trong nhà -> ra phố nhà
                 if (houseIn) exitHouse();
                 break;
@@ -5509,6 +5545,8 @@ public class WorldScreen extends ScreenAdapter {
         if (aiTouch(x, y, pointer)) return;
         // hub mini-game + hộp nhập mã + lời mời là modal trên cùng
         if (mgTouch(x, y, pointer)) return;
+        // casino (phòng/bàn/Bầu Cua) là modal khi đang mở
+        if (casinoTouch(x, y, pointer)) return;
         // hộp hỏi thoát về thành phố (ô cổng 9/12/17) là lớp trên cùng
         if (exitConfirmTouch(x, y)) return;
         // hộp xác nhận nâng cấp rương (−90) là modal trên cùng
@@ -7386,6 +7424,17 @@ public class WorldScreen extends ScreenAdapter {
         panelPlayer = null;
         panelSub = false;
         menuOpen = false;
+        // Các panel shop/farm/nhà cũng phải đóng khi mở panel khác — thiếu
+        // mục này thì shop đồ câu còn mở sẽ hiện mờ XUYÊN QUA hub Mini
+        // game (bắt gặp ở ảnh chụp kiểm chứng 2026-11-04).
+        fishShopOpen = false;
+        sbOpen = false;
+        farmSeedOpen = farmFertOpen = farmLandOpen = false;
+        farmStoreOpen = farmShopOpen = farmCookOpen = false;
+        farmAnimalSellOpen = false;
+        houseBuyOpen = false;
+        housePayOpen = false;
+        guideOpen = false;
     }
 
     private void openMsgPanel() {
@@ -9558,6 +9607,7 @@ public class WorldScreen extends ScreenAdapter {
     private void update(float dt) {
         if (boardLatch > 0f) boardLatch -= dt;
         if (portalLatch > 0f) portalLatch -= dt;
+        csUpdate();
         // cổng cửa hàng farm ở farmway (type 52): đã vào farm + có dữ liệu
         // thì mở panel cửa hàng như gốc (FarmScr.doOpenCuaHang)
         if (portalFarmShopPending && farmIn && farm != null && farm.joined) {
@@ -10026,7 +10076,10 @@ public class WorldScreen extends ScreenAdapter {
             float startXF = -1f - worldLeft;
             startXF -= (float) Math.floor(startXF / stepF) * stepF;
             if (startXF > 0) startXF -= stepF;
-            for (float x = startXF; x < Ui.W; x += stepF) batch.draw(bgFullTex, x, fullBottomY);
+            for (float x = startXF; x < Ui.W; x += stepF) {
+                batch.draw(bgFullTex, x, fullBottomY,
+                    bgFullTex.getWidth(), bgFullDrawH);
+            }
             for (Cloud c : clouds) {
                 Texture t = cloudTex[c.anchor];
                 float pf = (c.anchor == 0) ? 0.25f : (1f - 30f / 35f);
@@ -10144,6 +10197,7 @@ public class WorldScreen extends ScreenAdapter {
         // hoá đơn vẽ SAU các panel shop (nó mở đè lên trên, gồm cả
         // panel mua nội thất ở SB_HOUSE)
         if (sbOpen) drawShopBillCommon();
+        if (casinoIn || csPending) drawCasino();
         if (chestUpConfirmOpen) drawChestUpConfirm();
         batch.end();
     }
@@ -11118,7 +11172,7 @@ public class WorldScreen extends ScreenAdapter {
         }
         // ô nhập (chừa chỗ cho nút emoji + nút micro + nút Gửi ở cuối)
         float inputW = CHAT_W - 16 - CHAT_SEND_W - 8 - MIC_BTN_W - 6 - EMOJI_BTN_W - 6;
-        if (!recording) {
+        if (!recording && !casinoIn) {
             SoftInput.register("world.chat",
                 SoftInput.of(typeBuffer, 60, () -> { SoftInput.hide(); sendChat(); }),
                 false, false, CHAT_X + 8, CHAT_Y + 7, inputW, CHAT_INPUT_H, 12);
@@ -12089,6 +12143,1211 @@ public class WorldScreen extends ScreenAdapter {
     private static final int[] TC_FLEET_QTY = {0, 6, 4, 2, 1, 1}; // theo độ dài 1..5 — mirror server
     private static final String[] TC_SHIP_NAMES = {
         "", "Khu trục hạm", "Tuần dương hạm", "Tàu ngầm", "Thiết giáp hạm", "Tàu sân bay"};
+    // ==================================================================
+    // CASINO — BẦU CUA (handler 3, gameType 22; docs/baucua-spec.md)
+    // Khung riêng của gốc (không qua hub Mini game): phòng -> bàn ->
+    // màn bàn 5 ghế. Mọi gói bắt đầu bằng 2 byte roomID, boardID.
+    // ==================================================================
+    private static final byte CS_ROOM_LIST = 6, CS_BOARD_LIST = 7, CS_JOIN_BOARD = 8,
+        CS_CHAT_BOARD = 9, CS_KICK = 11, CS_SOMEONE_JOIN = 12, CS_SOMEONE_LEAVE = 14,
+        CS_LEAVE = 15, CS_READY = 16, CS_SET_PASSWORD = 18, CS_SET_MONEY = 19,
+        CS_START = 20, CS_BET_OK = 21, CS_RESULT = 37, CS_SKIP = 49, CS_FINISH = 51,
+        CS_WIN = 60, CS_GAME_TYPE = 61, CS_PLAYING = 62, CS_TA = 65, CS_SET_TURN = 100;
+    private static final String[] BC_DOORS = {"Nai", "Bầu", "Gà", "Cá", "Cua", "Tôm"};
+    /** Dãy frame lăn của 3 viên xúc xắc (Xingau của gốc). */
+    private static final int[][] BC_DICE_SEQ = {
+        {6, 0, 7, 1, 6, 2, 7, 3}, {6, 5, 7, 4, 6, 3, 7, 2}, {7, 4, 6, 1, 7, 3, 6, 5}};
+    private static final int[] BC_MONEY_PRESETS = {100, 500, 1000, 5000, 10000, 50000, 100000};
+
+    private boolean casinoIn;      // server đã ack 61 {22}
+    private boolean csPending;     // đã gửi -1{3} + 61{22}, chờ ack
+    private long csPendingAt;
+    private int casinoPage;        // 0 phòng · 1 danh sách bàn · 2 trong bàn
+    private static class CsRoom { int id, free, wait, lv; }
+    private final java.util.List<CsRoom> csRooms = new ArrayList<>();
+    private static class CsBoardInfo { int id, n, max, money; boolean pass, playing; }
+    private final java.util.List<CsBoardInfo> csBoards = new ArrayList<>();
+    private int csRoomId = 43;
+
+    private static class CsSeat {
+        int id = -1;
+        String name = "";
+        int xu;
+        PaperDoll doll;
+        AvatarAnimator anim = new AvatarAnimator();
+        boolean ready;
+    }
+    private final CsSeat[] csSeats = {new CsSeat(), new CsSeat(), new CsSeat(),
+        new CsSeat(), new CsSeat()};
+    private int csBoardId = -1, csOwnerId = -1, csBoardMoney = 0, csMySeat = -1;
+    /** Pha: 0 rảnh · 1 đặt cược · 2 tả · 3 mở kết quả/xem kết quả. */
+    private int csPhase;
+    private final int[] csMyBets = new int[6];
+    private final int[][] csBetsSv = new int[5][6];
+    private boolean csBetLocked, csSpectating;
+    private int csCountEnter, csTurnSeat = -1, csTaFrom = -1;
+    private int csPhaseSecs = 10;
+    private long csPhaseEndMs;
+    private final int[] csDice = {-1, -1, -1};
+    private boolean csDiceRolling;
+    private long csDiceRollStart;
+    private final int[] csDeltas = new int[5];
+    private boolean csFinished;
+    private boolean csMoneySheet, csKickSheet;
+    private int csKickSeat = -1;
+    private String csStatus = "";
+    private static class CsFly { int from, to, amount; long startMs; }
+    private final java.util.List<CsFly> csFlies = new ArrayList<>();
+    private com.badlogic.gdx.graphics.g2d.TextureRegion[] bcDoorRegions, bcDiceRegions;
+
+    private boolean isCasinoCmd(byte cmd) {
+        switch (cmd) {
+            case CS_ROOM_LIST: case CS_BOARD_LIST: case CS_JOIN_BOARD:
+            case CS_CHAT_BOARD: case CS_KICK: case CS_SOMEONE_JOIN:
+            case CS_SOMEONE_LEAVE: case CS_READY: case CS_SET_MONEY:
+            case CS_START: case CS_BET_OK: case CS_RESULT: case CS_FINISH:
+            case CS_WIN: case CS_GAME_TYPE: case CS_PLAYING: case CS_TA:
+            case CS_SET_TURN:
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    /** Vào Bầu Cua: đổi handler sang Casino (3) rồi xin gameType 22 —
+     *  đúng chuỗi doGetHandlerCasino(3) -> onJoinCasino của gốc. */
+    private void startCasinoBauCua() {
+        if (!online()) {
+            addChatLog(TAB_SYSTEM, null,
+                "Bầu Cua cần chơi online — bản chơi thử không có.", true);
+            return;
+        }
+        if (casinoIn || csPending) return;
+        closeOtherPanels();
+        typing = false;
+        csPending = true;
+        csPendingAt = System.currentTimeMillis();
+        csStatus = "";
+        try {
+            Msg h = new Msg(AvatarProtocol.GET_HANDLER);
+            h.writer().writeByte(3);
+            game.connection.send(h);
+            Msg g = new Msg(CS_GAME_TYPE);
+            g.writer().writeByte(22);
+            game.connection.send(g);
+        } catch (Exception ignored) {
+        }
+    }
+
+    /** Thoát hẳn casino: rời bàn (nếu đang ở bàn) + trả handler về 8. */
+    private void csExitCasino() {
+        try {
+            if (casinoIn && casinoPage == 2 && csBoardId >= 0) {
+                Msg lv = new Msg(CS_LEAVE);
+                lv.writer().writeByte(csRoomId);
+                lv.writer().writeByte(csBoardId);
+                game.connection.send(lv);
+            }
+            Msg h = new Msg(AvatarProtocol.GET_HANDLER);
+            h.writer().writeByte(8);
+            game.connection.send(h);
+        } catch (Exception ignored) {
+        }
+        casinoIn = false;
+        csPending = false;
+        csResetBoard();
+    }
+
+    private void csResetBoard() {
+        csBoardId = -1;
+        csOwnerId = -1;
+        csBoardMoney = 0;
+        csMySeat = -1;
+        csPhase = 0;
+        for (CsSeat s : csSeats) {
+            s.id = -1;
+            s.name = "";
+            s.doll = null;
+            s.ready = false;
+        }
+        csResetRound();
+    }
+
+    private void csResetRound() {
+        java.util.Arrays.fill(csMyBets, 0);
+        for (int[] row : csBetsSv) java.util.Arrays.fill(row, 0);
+        java.util.Arrays.fill(csDeltas, 0);
+        csBetLocked = false;
+        csSpectating = false;
+        csCountEnter = 0;
+        csTurnSeat = -1;
+        csTaFrom = -1;
+        csDice[0] = csDice[1] = csDice[2] = -1;
+        csDiceRolling = false;
+        csFinished = false;
+        csMoneySheet = false;
+        csKickSheet = false;
+        csFlies.clear();
+    }
+
+    private void csSend(Msg m) {
+        if (!online()) return;
+        try {
+            game.connection.send(m);
+        } catch (Exception ignored) {
+        }
+    }
+
+    private Msg csMsgRB(byte cmd) {
+        Msg m = new Msg(cmd);
+        try {
+            m.writer().writeByte(csRoomId);
+            m.writer().writeByte(csBoardId);
+        } catch (Exception ignored) {
+        }
+        return m;
+    }
+
+    private void csUpdate() {
+        if (csPending && System.currentTimeMillis() - csPendingAt > 6000) {
+            csPending = false;
+            addChatLog(TAB_SYSTEM, null, "Không vào được casino (server không trả lời).", true);
+        }
+        if (!casinoIn || casinoPage != 2) return;
+        long now = System.currentTimeMillis();
+        // Hết giờ pha đặt mà chưa chốt: tự chốt như client gốc (putMoneyFN).
+        if (csPhase == 1 && !csBetLocked && csMySeat > 0 && now > csPhaseEndMs) {
+            csSendBetOk();
+        }
+        // Hết giờ lượt tả của mình: tự bỏ lượt như client gốc (onSkip).
+        if (csPhase == 2 && csTurnSeat == csMySeat && csMySeat > 0 && now > csPhaseEndMs) {
+            csSend(new Msg(CS_SKIP)); // gói rỗng đúng như gốc
+            csTurnSeat = -1; // chờ server gọi ghế tiếp theo
+        }
+    }
+
+    private void csSendBetOk() {
+        Msg m = csMsgRB(CS_BET_OK);
+        try {
+            for (int d = 0; d < 6; d++) m.writer().writeByte(csMyBets[d]);
+        } catch (Exception ignored) {
+        }
+        csSend(m);
+        csBetLocked = true;
+    }
+
+    private CsSeat csSeatById(int userId) {
+        for (CsSeat s : csSeats) if (s.id == userId) return s;
+        return null;
+    }
+
+    private void handleCasinoMsg(Msg m) {
+        try {
+            java.io.DataInputStream r = m.reader();
+            switch (m.command) {
+                case CS_GAME_TYPE: {
+                    int t = r.readByte();
+                    if (t == 22) {
+                        csPending = false;
+                        casinoIn = true;
+                        casinoPage = 0;
+                        csSend(new Msg(CS_ROOM_LIST)); // gốc tự xin phòng sau 61
+                    }
+                    break;
+                }
+                case CS_ROOM_LIST: {
+                    csRooms.clear();
+                    while (r.available() >= 4) {
+                        CsRoom rm = new CsRoom();
+                        rm.id = r.readByte();
+                        rm.free = r.readByte();
+                        rm.wait = r.readByte();
+                        rm.lv = r.readByte();
+                        csRooms.add(rm);
+                    }
+                    casinoPage = 0;
+                    break;
+                }
+                case CS_BOARD_LIST: {
+                    csRoomId = r.readByte();
+                    csBoards.clear();
+                    while (r.available() >= 7) {
+                        CsBoardInfo b = new CsBoardInfo();
+                        b.id = r.readByte();
+                        int packed = r.readUnsignedByte();
+                        b.n = packed % 16;
+                        b.max = packed / 16;
+                        int flags = r.readUnsignedByte();
+                        b.pass = (flags & 1) != 0;
+                        b.playing = (flags & 2) != 0;
+                        b.money = r.readInt();
+                        csBoards.add(b);
+                    }
+                    casinoPage = 1;
+                    break;
+                }
+                case CS_JOIN_BOARD: {
+                    csRoomId = r.readByte();
+                    csBoardId = r.readByte();
+                    csOwnerId = r.readInt();
+                    csBoardMoney = r.readInt();
+                    csResetRound();
+                    csMySeat = -1;
+                    for (int s = 0; s < 5; s++) {
+                        CsSeat seat = csSeats[s];
+                        int iddb = r.readInt();
+                        if (iddb == -1) {
+                            seat.id = -1;
+                            seat.name = "";
+                            seat.doll = null;
+                            continue;
+                        }
+                        seat.id = iddb;
+                        seat.name = r.readUTF();
+                        seat.xu = r.readInt();
+                        int nw = r.readUnsignedByte();
+                        java.util.List<Integer> parts = new ArrayList<>();
+                        for (int i = 0; i < nw; i++) parts.add((int) r.readShort());
+                        r.readInt(); // exp
+                        seat.ready = r.readBoolean();
+                        r.readShort(); // idImg
+                        seat.doll = game.newDoll(parts);
+                        seat.anim.action = AvatarAnimator.STAND;
+                        if (iddb == ownId()) csMySeat = s;
+                    }
+                    csPhase = 0;
+                    casinoPage = 2;
+                    break;
+                }
+                case CS_SOMEONE_JOIN: {
+                    int seat = r.readByte();
+                    if (seat < 0 || seat > 4) break;
+                    CsSeat s = csSeats[seat];
+                    s.id = r.readInt();
+                    s.name = r.readUTF();
+                    s.xu = r.readInt();
+                    int nw = r.readUnsignedByte();
+                    java.util.List<Integer> parts = new ArrayList<>();
+                    for (int i = 0; i < nw; i++) parts.add((int) r.readShort());
+                    r.readInt(); // exp
+                    r.readShort(); // idImg
+                    s.ready = false;
+                    s.doll = game.newDoll(parts);
+                    s.anim.action = AvatarAnimator.STAND;
+                    break;
+                }
+                case CS_SOMEONE_LEAVE: {
+                    int leaveId = r.readInt();
+                    csOwnerId = r.readInt();
+                    CsSeat s = csSeatById(leaveId);
+                    if (s != null) {
+                        s.id = -1;
+                        s.name = "";
+                        s.doll = null;
+                        s.ready = false;
+                    }
+                    break;
+                }
+                case CS_READY: {
+                    int uid = r.readInt();
+                    boolean ready = r.readBoolean();
+                    CsSeat s = csSeatById(uid);
+                    if (s != null) s.ready = ready;
+                    break;
+                }
+                case CS_SET_MONEY: {
+                    r.readByte();
+                    r.readByte();
+                    csBoardMoney = r.readInt();
+                    csMoneySheet = false;
+                    break;
+                }
+                case CS_CHAT_BOARD: {
+                    r.readByte();
+                    r.readByte();
+                    int fromId = r.readInt();
+                    String text = r.readUTF();
+                    CsSeat s = csSeatById(fromId);
+                    addChatLog(TAB_NEARBY, s != null ? s.name : "?", text, false);
+                    break;
+                }
+                case CS_KICK: {
+                    r.readByte();
+                    r.readByte();
+                    int kickId = r.readInt();
+                    if (kickId == ownId()) {
+                        csResetBoard();
+                        casinoPage = 1;
+                        csStatus = "Bạn bị chủ bàn đuổi khỏi bàn.";
+                        Msg bl = new Msg(CS_BOARD_LIST);
+                        bl.writer().writeByte(csRoomId);
+                        csSend(bl);
+                    } else {
+                        CsSeat s = csSeatById(kickId);
+                        if (s != null) {
+                            s.id = -1;
+                            s.name = "";
+                            s.doll = null;
+                        }
+                    }
+                    break;
+                }
+                case CS_START: {
+                    r.readByte();
+                    r.readByte();
+                    csPhaseSecs = r.readByte();
+                    csResetRound();
+                    csPhase = 1;
+                    csBetLocked = csMySeat == 0; // chủ bàn không đặt
+                    csPhaseEndMs = System.currentTimeMillis() + csPhaseSecs * 1000L;
+                    break;
+                }
+                case CS_BET_OK: {
+                    r.readByte();
+                    r.readByte();
+                    int seat = r.readByte();
+                    if (seat >= 0 && seat < 5) {
+                        for (int d = 0; d < 6; d++) csBetsSv[seat][d] = r.readByte();
+                        if (seat == csMySeat) csBetLocked = true;
+                    }
+                    break;
+                }
+                case CS_SET_TURN: {
+                    r.readByte();
+                    r.readByte();
+                    csPhase = 2;
+                    csTurnSeat = r.readByte();
+                    csTaFrom = -1;
+                    csPhaseEndMs = System.currentTimeMillis() + csPhaseSecs * 1000L;
+                    break;
+                }
+                case CS_TA: {
+                    r.readByte();
+                    r.readByte();
+                    int seat = r.readByte();
+                    int from = r.readByte();
+                    int to = r.readByte();
+                    int value = r.readUnsignedByte();
+                    if (seat >= 0 && seat < 5 && from != to && value > 0) {
+                        csBetsSv[seat][to] = value;
+                        csBetsSv[seat][from] = 0;
+                    }
+                    break;
+                }
+                case CS_RESULT: {
+                    r.readByte();
+                    r.readByte();
+                    for (int i = 0; i < 3; i++) csDice[i] = r.readByte();
+                    csPhase = 3;
+                    csDiceRolling = true;
+                    csDiceRollStart = System.currentTimeMillis();
+                    break;
+                }
+                case CS_WIN: {
+                    r.readByte();
+                    r.readByte();
+                    CsFly f = new CsFly();
+                    f.from = r.readByte();
+                    f.to = r.readByte();
+                    f.amount = r.readInt();
+                    f.startMs = System.currentTimeMillis();
+                    csFlies.add(f);
+                    break;
+                }
+                case CS_FINISH: {
+                    r.readByte();
+                    r.readByte();
+                    for (int s = 0; s < 5; s++) {
+                        csDeltas[s] = r.readInt();
+                        if (csSeats[s].id != -1) csSeats[s].xu += csDeltas[s];
+                    }
+                    if (csMySeat >= 0) myXu += csDeltas[csMySeat];
+                    csDiceRolling = false;
+                    csFinished = true;
+                    csPhase = 3;
+                    break;
+                }
+                case CS_PLAYING: {
+                    r.readByte();
+                    r.readByte();
+                    r.readByte(); // giây còn lại
+                    for (int s = 0; s < 5; s++) {
+                        for (int d = 0; d < 6; d++) csBetsSv[s][d] = r.readByte();
+                    }
+                    csSpectating = true;
+                    csBetLocked = true;
+                    csPhase = 2; // đang giữa ván — chỉ xem
+                    csStatus = "Ván đang chơi — bạn xem và chờ ván sau.";
+                    break;
+                }
+                default: break;
+            }
+        } catch (Exception ignored) {
+        }
+    }
+
+    // ---------- Casino: harness kiểm chứng ----------
+    public void debugCasinoRooms() {
+        casinoIn = true;
+        csPending = false;
+        casinoPage = 0;
+        csRooms.clear();
+        int[][] rr = {{43, 12, 3, 0}, {44, 8, 5, 1}, {45, 20, 0, 2}};
+        for (int[] r : rr) {
+            CsRoom rm = new CsRoom();
+            rm.id = r[0];
+            rm.free = r[1];
+            rm.wait = r[2];
+            rm.lv = r[3];
+            csRooms.add(rm);
+        }
+    }
+
+    public void debugCasinoBoards() {
+        casinoIn = true;
+        csPending = false;
+        casinoPage = 1;
+        csRoomId = 43;
+        csStatus = "";
+        csBoards.clear();
+        int[][] bb = {{0, 2, 5, 1000, 0}, {1, 5, 5, 5000, 0}, {2, 0, 5, 0, 0},
+            {3, 3, 5, 500, 2}, {4, 1, 5, 10000, 1}, {5, 4, 5, 2000, 0}};
+        for (int[] r : bb) {
+            CsBoardInfo b = new CsBoardInfo();
+            b.id = r[0];
+            b.n = r[1];
+            b.max = r[2];
+            b.money = r[3];
+            b.playing = (r[4] & 2) != 0;
+            b.pass = (r[4] & 1) != 0;
+            csBoards.add(b);
+        }
+    }
+
+    private void csDebugSeat(int s, String name, int xu, boolean ready, int... parts) {
+        CsSeat seat = csSeats[s];
+        seat.id = 1000 + s;
+        seat.name = name;
+        seat.xu = xu;
+        seat.ready = ready;
+        java.util.List<Integer> pl = new ArrayList<>();
+        for (int p : parts) pl.add(p);
+        seat.doll = game.newDoll(pl);
+        seat.anim.action = AvatarAnimator.STAND;
+    }
+
+    public void debugCasinoBoard() {
+        casinoIn = true;
+        csPending = false;
+        casinoPage = 2;
+        csRoomId = 43;
+        csBoardId = 2;
+        csOwnerId = 1000;
+        csBoardMoney = 1000;
+        csResetRound();
+        csDebugSeat(0, "Sơn", 208000, false, 628, 474, 0, 80, 46);
+        csDebugSeat(1, "Linh Chi", 192000, true, 628, 474, 0, 80, 49);
+        csDebugSeat(2, "Tuấn", 50000, true, 628, 475, 0, 81, 46);
+        csDebugSeat(3, "Minh", 75000, false, 628, 476, 0, 82, 46);
+        csDebugSeat(4, "Hương", 120000, true, 628, 477, 0, 83, 49);
+        csMySeat = 1;
+        csPhase = 1;
+        csBetLocked = false;
+        csMyBets[0] = 2;
+        csMyBets[5] = 1;
+        csBetsSv[2][0] = 1;
+        csBetsSv[2][3] = 2;
+        csBetsSv[3][1] = 1;
+        csBetsSv[4][4] = 3;
+        csPhaseSecs = 10;
+        csPhaseEndMs = System.currentTimeMillis() + 7000;
+        csDice[0] = 0;
+        csDice[1] = 1;
+        csDice[2] = 2;
+    }
+
+    /** Harness: đóng casino + panel lẻ, ép nền BAN NGÀY để kiểm lớp trời. */
+    public void debugBgDay() {
+        casinoIn = false;
+        csPending = false;
+        closeOtherPanels();
+        bgStatusOverride = 0;
+        if (mapDef != null) loadBackground(mapDef);
+    }
+
+    public void debugCasinoResult() {
+        debugCasinoBoard();
+        csBetLocked = true;
+        csBetsSv[1][0] = 2;
+        csBetsSv[1][5] = 1;
+        java.util.Arrays.fill(csMyBets, 0);
+        csDice[0] = 5;
+        csDice[1] = 5;
+        csDice[2] = 0;
+        csDeltas[0] = -8000;
+        csDeltas[1] = 5000;
+        csDeltas[2] = -1000;
+        csDeltas[3] = 1000;
+        csDeltas[4] = 3000;
+        csFinished = true;
+        csPhase = 3;
+    }
+
+    // ---------- Casino: vẽ + chạm ----------
+    private static final float CS_PX = 16f, CS_PY = 16f, CS_PW = 1248f, CS_PH = 688f;
+
+    private void bcEnsureRegions() {
+        if (bcDoorRegions != null || house == null) return;
+        Texture doorTex = house.imgTexture(872);
+        Texture diceTex = house.imgTexture(874);
+        if (doorTex == null || diceTex == null) return;
+        bcDoorRegions = new com.badlogic.gdx.graphics.g2d.TextureRegion[6];
+        for (int i = 0; i < 6; i++) {
+            bcDoorRegions[i] = new com.badlogic.gdx.graphics.g2d.TextureRegion(
+                doorTex, 0, i * 96, 96, 96);
+        }
+        bcDiceRegions = new com.badlogic.gdx.graphics.g2d.TextureRegion[8];
+        for (int i = 0; i < 8; i++) {
+            bcDiceRegions[i] = new com.badlogic.gdx.graphics.g2d.TextureRegion(
+                diceTex, 0, i * 108, 108, 108);
+        }
+    }
+
+    private void csPanelBase(String title, String sub) {
+        batch.setColor(0f, 0f, 0f, 0.45f);
+        batch.draw(whiteTex, 0, 0, Ui.W, Ui.H);
+        batch.setColor(Color.WHITE);
+        batch.draw(Ui.roundedRect((int) CS_PW, (int) CS_PH, 18,
+            new Color(0.07f, 0.11f, 0.17f, 0.98f), GLASS_RIM), CS_PX, CS_PY);
+        Ui.fontTitle.setColor(1f, 0.85f, 0.38f, 1f);
+        Ui.fontTitle.draw(batch, title, CS_PX + 28, CS_PY + CS_PH - 30);
+        if (sub != null && !sub.isEmpty()) {
+            Ui.fontSmall.setColor(1f, 1f, 1f, 0.75f);
+            Ui.fontSmall.draw(batch, sub, CS_PX + 28, CS_PY + CS_PH - 66);
+        }
+        batch.draw(Ui.roundedRect(36, 36, 10, Ui.BTN_CLOSE, GLASS_RIM),
+            CS_PX + CS_PW - 54, CS_PY + CS_PH - 54);
+        Ui.faIcon(batch, Ui.fa20, Ui.FA_XMARK, CS_PX + CS_PW - 36,
+            CS_PY + CS_PH - 36, new Color(1f, 1f, 1f, 0.9f));
+    }
+
+    /** style: 0 đen · 1 cam gradient · 2 đỏ sẫm · 3 xám khoá. */
+    private void csButton(float x, float y, float w, float h, String label, int style) {
+        if (style == 1) {
+            batch.draw(Ui.gradientRect((int) w, (int) h, 12,
+                EntryUi.ORANGE_TOP, EntryUi.ORANGE_BOT), x, y);
+        } else if (style == 2) {
+            batch.draw(Ui.roundedRect((int) w, (int) h, 12,
+                new Color(0.45f, 0.16f, 0.16f, 0.95f), GLASS_RIM), x, y);
+        } else if (style == 3) {
+            batch.draw(Ui.roundedRect((int) w, (int) h, 12,
+                new Color(0.25f, 0.27f, 0.30f, 0.9f), GLASS_RIM), x, y);
+        } else {
+            batch.draw(Ui.roundedRect((int) w, (int) h, 12, Ui.BTN_CANCEL, GLASS_RIM), x, y);
+        }
+        Ui.centered(batch, Ui.font, label, x + w / 2f, y + h / 2f + 8, Color.WHITE);
+    }
+
+    private void drawCasino() {
+        bcEnsureRegions();
+        if (csPending && !casinoIn) {
+            csPanelBase("Bầu Cua", null);
+            Ui.centered(batch, Ui.font, "Đang vào casino…",
+                640, 380, Color.WHITE);
+            Ui.centered(batch, Ui.fontSmall, "Đang kết nối tới sảnh Bầu Cua",
+                640, 344, new Color(1f, 1f, 1f, 0.7f));
+            return;
+        }
+        if (casinoPage == 0) drawCsRooms();
+        else if (casinoPage == 1) drawCsBoards();
+        else drawCsBoard();
+        if (csMoneySheet) drawCsMoneySheet();
+        if (csKickSheet) drawCsKickSheet();
+    }
+
+    private void drawCsRooms() {
+        csPanelBase("Casino — Bầu Cua", "Chọn phòng để xem bàn");
+        if (csRooms.isEmpty()) {
+            Ui.centered(batch, Ui.font, "Chưa có phòng nào.",
+                640, 380, new Color(1f, 1f, 1f, 0.8f));
+        }
+        int n = csRooms.size();
+        float cw = 340, chh = 150, gap = 24;
+        float total = n * cw + (n - 1) * gap;
+        float sx = 640 - total / 2f, sy = 290;
+        for (int i = 0; i < n; i++) {
+            CsRoom rm = csRooms.get(i);
+            float cx = sx + i * (cw + gap);
+            batch.draw(Ui.roundedRect((int) cw, (int) chh, 14,
+                new Color(0.10f, 0.16f, 0.24f, 0.97f), GLASS_RIM), cx, sy);
+            Ui.centered(batch, Ui.fontTitle, "Phòng " + rm.id,
+                cx + cw / 2f, sy + 106, new Color(1f, 0.85f, 0.38f, 1f));
+            Ui.centered(batch, Ui.fontSmall, "Cấp độ " + (rm.lv + 1),
+                cx + cw / 2f, sy + 64, Color.WHITE);
+            Ui.centered(batch, Ui.fontTiny,
+                "Trống: " + rm.free + " · Đang chờ: " + rm.wait,
+                cx + cw / 2f, sy + 34, new Color(1f, 1f, 1f, 0.7f));
+        }
+        Ui.centered(batch, Ui.fontSmall, "Chạm vào một phòng để xem danh sách bàn.",
+            640, 200, new Color(1f, 1f, 1f, 0.65f));
+        csButton(CS_PX + 24, CS_PY + 24, 150, 48, "Thoát", 2);
+    }
+
+    private void drawCsBoards() {
+        csPanelBase("Casino — Bầu Cua", "Phòng " + csRoomId + " · chọn một bàn");
+        float cw = 380, chh = 160, gx = 46, gyTop = 340, gyBot = 160;
+        for (int i = 0; i < csBoards.size() && i < 6; i++) {
+            CsBoardInfo b = csBoards.get(i);
+            float cx = gx + (i % 3) * (cw + 24);
+            float cy = (i / 3 == 0) ? gyTop : gyBot;
+            float cTop = cy + chh;
+            batch.draw(Ui.roundedRect((int) cw, (int) chh, 14,
+                new Color(0.10f, 0.16f, 0.24f, 0.97f), GLASS_RIM), cx, cy);
+            Ui.font.setColor(1f, 0.85f, 0.38f, 1f);
+            Ui.font.draw(batch, "Bàn " + (b.id + 1), cx + 20, cTop - 38);
+            String badge = b.playing ? "Đang chơi" : b.pass ? "Có mật khẩu" : "";
+            if (!badge.isEmpty()) {
+                Ui.fontTiny.setColor(1f, 0.75f, 0.4f, 1f);
+                layout.setText(Ui.fontTiny, badge);
+                Ui.fontTiny.draw(batch, badge, cx + cw - 20 - layout.width, cTop - 36);
+            }
+            Ui.fontSmall.setColor(Color.WHITE);
+            Ui.fontSmall.draw(batch, "Người chơi: " + b.n + "/" + Math.max(b.max, 5),
+                cx + 20, cTop - 84);
+            Ui.fontSmall.setColor(1f, 1f, 1f, 0.8f);
+            Ui.fontSmall.draw(batch, b.money > 0
+                ? "Mức cược: " + fmtMoney(b.money) + " xu / đơn vị" : "Mức cược: chưa đặt",
+                cx + 20, cTop - 122);
+            if (b.n >= 5) {
+                batch.setColor(0f, 0f, 0f, 0.45f);
+                batch.draw(Ui.roundedRect((int) cw, (int) chh, 14,
+                    new Color(0f, 0f, 0f, 0.45f), GLASS_RIM), cx, cy);
+                batch.setColor(Color.WHITE);
+                Ui.centered(batch, Ui.font, "Bàn đầy", cx + cw / 2f, cy + 100,
+                    new Color(1f, 0.6f, 0.5f, 1f));
+            }
+        }
+        if (!csStatus.isEmpty()) {
+            Ui.centered(batch, Ui.fontSmall, csStatus, 640, CS_PY + 108,
+                new Color(1f, 0.85f, 0.38f, 1f));
+        }
+        csButton(CS_PX + 24, CS_PY + 24, 150, 48, "Phòng", 0);
+        csButton(CS_PX + CS_PW - 174, CS_PY + 24, 150, 48, "Thoát", 2);
+    }
+
+    private float[] csSeatPos(int seat) {
+        int rel = csMySeat >= 0 ? (seat - csMySeat + 5) % 5 : seat;
+        switch (rel) {
+            case 0: return new float[]{640, 208};
+            case 1: return new float[]{1072, 300};
+            case 2: return new float[]{1072, 545};
+            case 3: return new float[]{208, 545};
+            default: return new float[]{208, 300};
+        }
+    }
+
+    private int csDoorTotal(int d) {
+        int t = 0;
+        for (int s = 0; s < 5; s++) t += csBetsSv[s][d];
+        if (csPhase == 1 && !csBetLocked && csMySeat > 0) t += csMyBets[d];
+        return t;
+    }
+
+    private void drawCsBoard() {
+        CsSeat owner = csOwnerId >= 0 ? csSeatById(csOwnerId) : null;
+        String sub = "Chủ bàn: " + (owner != null ? owner.name : "—")
+            + (csBoardMoney > 0 ? " · Mức cược: " + fmtMoney(csBoardMoney) + " xu / đơn vị"
+                : " · Chưa đặt mức cược");
+        csPanelBase("Bầu Cua — Bàn " + (csBoardId + 1), sub);
+        long now = System.currentTimeMillis();
+        // pha + đồng hồ
+        String phaseText = csFinished ? "Kết quả"
+            : csPhase == 1 ? "Đang đặt cược"
+            : csPhase == 2 ? "Đang tả" : csPhase == 3 ? "Mở xúc xắc" : "Sẵn sàng";
+        Ui.centered(batch, Ui.font, phaseText, 640, CS_PY + CS_PH - 38,
+            new Color(1f, 0.85f, 0.38f, 1f));
+        if ((csPhase == 1 || csPhase == 2) && !csFinished) {
+            long remain = Math.max(0, (csPhaseEndMs - now + 999) / 1000);
+            Ui.centered(batch, Ui.fontTitle, String.valueOf(remain), 768, 612,
+                new Color(1f, 0.6f, 0.25f, 1f));
+        }
+        // xúc xắc
+        if (bcDiceRegions != null) {
+            for (int i = 0; i < 3; i++) {
+                int frame;
+                if (csDiceRolling) {
+                    int idx = (int) ((now - csDiceRollStart) / 110) % 8;
+                    frame = BC_DICE_SEQ[i][idx];
+                } else if (csDice[i] >= 0) {
+                    frame = csDice[i];
+                } else {
+                    frame = i;
+                }
+                batch.draw(bcDiceRegions[frame], 640 + (i - 1) * 76 - 32, 574, 64, 64);
+            }
+        }
+        // lưới 6 ô cửa 3x2
+        float gx = 460, cell = 112, pitch = 124;
+        for (int d = 0; d < 6; d++) {
+            int col = d % 3, row = d / 3;
+            float cx = gx + col * pitch;
+            float cy = (row == 0) ? 442 : 318;
+            boolean hot = (csPhase == 2 && csTaFrom == d)
+                || (csPhase == 1 && !csBetLocked && csMySeat > 0);
+            batch.draw(Ui.roundedRect((int) cell, (int) cell, 14,
+                new Color(0.10f, 0.16f, 0.24f, 0.97f),
+                hot && csTaFrom == d ? new Color(1f, 0.62f, 0.15f, 0.95f) : GLASS_RIM),
+                cx, cy);
+            if (bcDoorRegions != null) {
+                batch.draw(bcDoorRegions[d], cx + 16, cy + 24, 80, 80);
+            }
+            Ui.centered(batch, Ui.fontSmall, BC_DOORS[d], cx + cell / 2f, cy + 18,
+                Color.WHITE);
+            int total = csDoorTotal(d);
+            if (total > 0) {
+                batch.draw(Ui.roundedRect(38, 24, 10,
+                    new Color(0.95f, 0.55f, 0.12f, 0.95f), GLASS_RIM),
+                    cx + cell - 44, cy + cell - 30);
+                Ui.centered(batch, Ui.fontTiny, "×" + total, cx + cell - 25,
+                    cy + cell - 13, Color.WHITE);
+            }
+            if (csPhase == 2 && csMySeat > 0 && csBetsSv[csMySeat][d] > 0) {
+                Ui.fontTiny.setColor(1f, 0.85f, 0.38f, 1f);
+                Ui.fontTiny.draw(batch, "của bạn", cx + 6, cy + cell - 10);
+            }
+        }
+        // 5 ghế
+        for (int s = 0; s < 5; s++) {
+            CsSeat seat = csSeats[s];
+            float[] pos = csSeatPos(s);
+            if (seat.id == -1 || seat.doll == null) {
+                Ui.centered(batch, Ui.fontTiny, "Ghế trống", pos[0], pos[1] + 52,
+                    new Color(1f, 1f, 1f, 0.4f));
+                continue;
+            }
+            game.dollRenderer.draw(batch, seat.doll, seat.anim.frameIndex(),
+                pos[0], pos[1], 2f, false);
+            boolean isOwner = seat.id == csOwnerId;
+            Ui.centered(batch, Ui.fontSmall, truncTo(Ui.fontSmall, seat.name, 130),
+                pos[0], pos[1] - 12,
+                isOwner ? new Color(1f, 0.85f, 0.38f, 1f) : Color.WHITE);
+            Ui.centered(batch, Ui.fontTiny, fmtMoney(seat.xu) + " xu",
+                pos[0], pos[1] - 36, new Color(1f, 1f, 1f, 0.7f));
+            if (csPhase == 0 && seat.ready) {
+                Ui.centered(batch, Ui.fontTiny, "Sẵn sàng", pos[0], pos[1] - 60,
+                    new Color(0.45f, 0.95f, 0.5f, 1f));
+            }
+            if (csPhase > 0) {
+                int bet = 0;
+                for (int d = 0; d < 6; d++) bet += csBetsSv[s][d];
+                if (s == csMySeat && csPhase == 1 && !csBetLocked) {
+                    for (int d = 0; d < 6; d++) bet += csMyBets[d];
+                }
+                if (bet > 0) {
+                    Ui.centered(batch, Ui.fontTiny, "Đã đặt " + bet + " đơn vị",
+                        pos[0], pos[1] - 60, new Color(1f, 0.8f, 0.45f, 1f));
+                }
+            }
+            if (csFinished && csDeltas[s] != 0) {
+                // bong bóng delta nằm DƯỚI dòng "Đã đặt" của ghế (vị trí cũ
+                // trên đầu ghế đè vào tiêu đề panel/lưới cửa — chụp kiểm
+                // chứng 2026-11-04)
+                Ui.centered(batch, Ui.font,
+                    (csDeltas[s] > 0 ? "+" : "-") + fmtMoney(Math.abs(csDeltas[s])),
+                    pos[0], pos[1] - 84,
+                    csDeltas[s] > 0 ? new Color(0.45f, 0.95f, 0.5f, 1f)
+                        : new Color(1f, 0.45f, 0.4f, 1f));
+            }
+        }
+        // tiền bay (gói 60)
+        for (int i = csFlies.size() - 1; i >= 0; i--) {
+            CsFly f = csFlies.get(i);
+            float t = (now - f.startMs) / 900f;
+            if (t >= 1f) {
+                csFlies.remove(i);
+                continue;
+            }
+            if (f.from < 0 || f.from > 4 || f.to < 0 || f.to > 4) continue;
+            float[] a = csSeatPos(f.from), b = csSeatPos(f.to);
+            float fx = a[0] + (b[0] - a[0]) * t;
+            float fy = a[1] + 60 + (b[1] - a[1]) * t + (float) (Math.sin(t * Math.PI) * 40);
+            Ui.centered(batch, Ui.fontSmall, "+" + fmtMoney(f.amount), fx, fy,
+                new Color(1f, 0.9f, 0.4f, 1f - t * 0.5f));
+        }
+        // gợi ý + thanh nút theo pha
+        String hint = csHintText();
+        if (!hint.isEmpty()) {
+            Ui.centered(batch, Ui.fontSmall, hint, 640, 100,
+                new Color(1f, 1f, 1f, 0.85f));
+        }
+        csButton(CS_PX + CS_PW - 174, 20, 150, 52, "Rời bàn", 2);
+        if (csFinished) {
+            csButton(540, 20, 200, 52, "Tiếp tục", 1);
+        } else if (csPhase == 0) {
+            if (csMySeat == 0) {
+                csButton(462, 20, 170, 52, "Đặt tiền", 0);
+                csButton(646, 20, 170, 52, "Bắt đầu", 1);
+            } else if (csMySeat > 0) {
+                boolean ready = csSeats[csMySeat].ready;
+                csButton(530, 20, 220, 52, ready ? "Huỷ sẵn sàng" : "Sẵn sàng", ready ? 0 : 1);
+            }
+        } else if (csPhase == 1 && csMySeat > 0 && !csBetLocked) {
+            csButton(485, 20, 150, 52, "Đặt lại", 0);
+            csButton(645, 20, 150, 52, "Xong", 1);
+        } else if (csPhase == 2 && csTurnSeat == csMySeat && csMySeat > 0) {
+            if (csTaFrom >= 0) {
+                csButton(471, 20, 160, 52, "Bỏ lượt", 0);
+                csButton(645, 20, 160, 52, "Chọn lại", 0);
+            } else {
+                csButton(555, 20, 170, 52, "Bỏ lượt", 0);
+            }
+        }
+    }
+
+    private String csHintText() {
+        if (csSpectating && !csFinished) return csStatus;
+        if (csFinished) {
+            if (csMySeat >= 0) {
+                int d = csDeltas[csMySeat];
+                return d > 0 ? "Ván này bạn thắng " + fmtMoney(d) + " xu."
+                    : d < 0 ? "Ván này bạn thua " + fmtMoney(-d) + " xu."
+                    : "Ván này bạn hoà vốn.";
+            }
+            return "";
+        }
+        if (csPhase == 0) {
+            return csMySeat == 0
+                ? "Bạn là chủ bàn — đặt mức tiền, chờ người chơi sẵn sàng rồi bấm Bắt đầu."
+                : "Chờ chủ bàn bắt đầu — bấm Sẵn sàng khi đã sẵn lòng.";
+        }
+        if (csPhase == 1) {
+            if (csMySeat == 0) return "Bạn là chủ bàn — chờ người chơi đặt cược.";
+            if (csBetLocked) return "Đã chốt cược — chờ mọi người…";
+            int sum = 0;
+            for (int v : csMyBets) sum += v;
+            return "Chạm vào ô cửa để đặt — đã đặt " + sum + "/6 đơn vị"
+                + (csBoardMoney > 0 ? " (mỗi đơn vị " + fmtMoney(csBoardMoney) + " xu)" : "");
+        }
+        if (csPhase == 2) {
+            if (csTurnSeat == csMySeat && csMySeat > 0) {
+                return csTaFrom < 0
+                    ? "Lượt tả của bạn: chạm ô có tiền của bạn để chọn dời đi."
+                    : "Đã chọn ô " + BC_DOORS[csTaFrom] + " — chạm ô đích để dời sang.";
+            }
+            if (csTurnSeat >= 0 && csSeats[csTurnSeat].id != -1) {
+                return csSeats[csTurnSeat].name + " đang tả…";
+            }
+            return "Đang chờ lượt tả…";
+        }
+        if (csPhase == 3) return "Đang mở xúc xắc…";
+        return "";
+    }
+
+    private void drawCsMoneySheet() {
+        batch.setColor(0f, 0f, 0f, 0.5f);
+        batch.draw(whiteTex, 0, 0, Ui.W, Ui.H);
+        batch.setColor(Color.WHITE);
+        float sx = 340, sy = 200, sw = 600, sh = 320, sTop = sy + sh;
+        batch.draw(Ui.roundedRect((int) sw, (int) sh, 16,
+            new Color(0.07f, 0.11f, 0.17f, 0.99f), GLASS_RIM), sx, sy);
+        Ui.centered(batch, Ui.font, "Mức tiền bàn (xu / đơn vị)", 640, sTop - 44,
+            new Color(1f, 0.85f, 0.38f, 1f));
+        for (int i = 0; i < BC_MONEY_PRESETS.length; i++) {
+            int row = i / 4, col = i % 4;
+            int inRow = (row == 0) ? 4 : BC_MONEY_PRESETS.length - 4;
+            float rowW = inRow * 124 + (inRow - 1) * 12;
+            float cx = 640 - rowW / 2f + col * 136;
+            float cy = (row == 0) ? 356 : 272;
+            boolean cur = BC_MONEY_PRESETS[i] == csBoardMoney;
+            batch.draw(Ui.roundedRect(124, 52, 12,
+                cur ? new Color(0.95f, 0.55f, 0.12f, 0.95f)
+                    : new Color(0.16f, 0.17f, 0.20f, 0.95f), GLASS_RIM), cx, cy);
+            Ui.centered(batch, Ui.fontSmall, fmtMoney(BC_MONEY_PRESETS[i]),
+                cx + 62, cy + 33, Color.WHITE);
+        }
+        csButton(560, 216, 160, 48, "Huỷ", 0);
+    }
+
+    private void drawCsKickSheet() {
+        if (csKickSeat < 0 || csKickSeat > 4) return;
+        batch.setColor(0f, 0f, 0f, 0.5f);
+        batch.draw(whiteTex, 0, 0, Ui.W, Ui.H);
+        batch.setColor(Color.WHITE);
+        batch.draw(Ui.roundedRect(500, 220, 16,
+            new Color(0.07f, 0.11f, 0.17f, 0.99f), GLASS_RIM), 390, 250);
+        Ui.centered(batch, Ui.font,
+            "Đuổi " + truncTo(Ui.font, csSeats[csKickSeat].name, 380) + " khỏi bàn?",
+            640, 408, Color.WHITE);
+        csButton(480, 282, 150, 52, "Đuổi", 2);
+        csButton(650, 282, 150, 52, "Huỷ", 0);
+    }
+
+    private void csBack() {
+        if (casinoPage == 2) {
+            csSend(csMsgRB(CS_LEAVE));
+            int room = csRoomId;
+            csResetBoard();
+            casinoPage = 1;
+            Msg bl = new Msg(CS_BOARD_LIST);
+            try {
+                bl.writer().writeByte(room);
+            } catch (Exception ignored) {
+            }
+            csSend(bl);
+        } else if (casinoPage == 1) {
+            csSend(new Msg(CS_ROOM_LIST));
+        } else {
+            csExitCasino();
+        }
+    }
+
+    private boolean casinoTouch(float x, float y, int pointer) {
+        if (!casinoIn && !csPending) return false;
+        if (csPending) return true; // đang chờ ack: nuốt mọi chạm
+        float top = CS_PY + CS_PH;
+        if (csMoneySheet) {
+            csMoneySheetTouch(x, y);
+            return true;
+        }
+        if (csKickSheet) {
+            csKickSheetTouch(x, y);
+            return true;
+        }
+        if (x >= CS_PX + CS_PW - 54 && x <= CS_PX + CS_PW - 18
+                && y >= top - 54 && y <= top - 18) {
+            csBack();
+            return true;
+        }
+        if (casinoPage == 0) {
+            if (x >= CS_PX + 24 && x <= CS_PX + 174 && y >= CS_PY + 24 && y <= CS_PY + 72) {
+                csExitCasino();
+                return true;
+            }
+            int n = csRooms.size();
+            float cw = 340, gap = 24;
+            float total = n * cw + (n - 1) * gap;
+            float sx = 640 - total / 2f;
+            for (int i = 0; i < n; i++) {
+                float cx = sx + i * (cw + gap);
+                if (x >= cx && x <= cx + cw && y >= 290 && y <= 440) {
+                    csRoomId = csRooms.get(i).id;
+                    csStatus = "";
+                    Msg bl = new Msg(CS_BOARD_LIST);
+                    try {
+                        bl.writer().writeByte(csRoomId);
+                    } catch (Exception ignored) {
+                    }
+                    csSend(bl);
+                    return true;
+                }
+            }
+            return true;
+        }
+        if (casinoPage == 1) {
+            if (x >= CS_PX + 24 && x <= CS_PX + 174 && y >= CS_PY + 24 && y <= CS_PY + 72) {
+                csSend(new Msg(CS_ROOM_LIST));
+                return true;
+            }
+            if (x >= CS_PX + CS_PW - 174 && x <= CS_PX + CS_PW - 24
+                    && y >= CS_PY + 24 && y <= CS_PY + 72) {
+                csExitCasino();
+                return true;
+            }
+            float cw = 380, chh = 160;
+            for (int i = 0; i < csBoards.size() && i < 6; i++) {
+                CsBoardInfo b = csBoards.get(i);
+                float cx = 46 + (i % 3) * (cw + 24);
+                float cy = (i / 3 == 0) ? 340 : 160;
+                if (x >= cx && x <= cx + cw && y >= cy && y <= cy + chh) {
+                    if (b.n >= 5) {
+                        csStatus = "Bàn đã đầy.";
+                        return true;
+                    }
+                    Msg j = new Msg(CS_JOIN_BOARD);
+                    try {
+                        j.writer().writeByte(csRoomId);
+                        j.writer().writeByte(b.id);
+                        j.writer().writeUTF("");
+                    } catch (Exception ignored) {
+                    }
+                    csSend(j);
+                    return true;
+                }
+            }
+            return true;
+        }
+        // trong bàn
+        if (x >= CS_PX + CS_PW - 174 && x <= CS_PX + CS_PW - 24 && y >= 20 && y <= 72) {
+            csBack();
+            return true;
+        }
+        // ô cửa
+        float gx = 460, pitch = 124, cell = 112;
+        for (int d = 0; d < 6; d++) {
+            int col = d % 3, row = d / 3;
+            float cx = gx + col * pitch;
+            float cy = (row == 0) ? 442 : 318;
+            if (x >= cx && x <= cx + cell && y >= cy && y <= cy + cell) {
+                csDoorTap(d);
+                return true;
+            }
+        }
+        // ghế (chủ bàn đuổi người — pha rảnh)
+        if (csPhase == 0 && csMySeat == 0 && !csFinished) {
+            for (int s = 1; s < 5; s++) {
+                if (csSeats[s].id == -1) continue;
+                float[] pos = csSeatPos(s);
+                if (x >= pos[0] - 56 && x <= pos[0] + 56
+                        && y >= pos[1] - 44 && y <= pos[1] + 130) {
+                    csKickSeat = s;
+                    csKickSheet = true;
+                    return true;
+                }
+            }
+        }
+        // nút theo pha
+        if (csFinished) {
+            if (x >= 540 && x <= 740 && y >= 20 && y <= 72) {
+                csResetRound();
+                csPhase = 0;
+                for (CsSeat seat : csSeats) seat.ready = false;
+                return true;
+            }
+            return true;
+        }
+        if (csPhase == 0) {
+            if (csMySeat == 0) {
+                if (x >= 462 && x <= 632 && y >= 20 && y <= 72) {
+                    csMoneySheet = true;
+                    return true;
+                }
+                if (x >= 646 && x <= 816 && y >= 20 && y <= 72) {
+                    csSend(csMsgRB(CS_START));
+                    return true;
+                }
+            } else if (csMySeat > 0) {
+                if (x >= 530 && x <= 750 && y >= 20 && y <= 72) {
+                    Msg rd = csMsgRB(CS_READY);
+                    try {
+                        rd.writer().writeBoolean(!csSeats[csMySeat].ready);
+                    } catch (Exception ignored) {
+                    }
+                    csSend(rd);
+                    return true;
+                }
+            }
+            return true;
+        }
+        if (csPhase == 1 && csMySeat > 0 && !csBetLocked) {
+            if (x >= 485 && x <= 635 && y >= 20 && y <= 72) {
+                java.util.Arrays.fill(csMyBets, 0);
+                csCountEnter = 0;
+                return true;
+            }
+            if (x >= 645 && x <= 795 && y >= 20 && y <= 72) {
+                csSendBetOk();
+                return true;
+            }
+            return true;
+        }
+        if (csPhase == 2 && csTurnSeat == csMySeat && csMySeat > 0) {
+            if (csTaFrom >= 0) {
+                if (x >= 471 && x <= 631 && y >= 20 && y <= 72) {
+                    csSend(new Msg(CS_SKIP));
+                    csTurnSeat = -1;
+                    return true;
+                }
+                if (x >= 645 && x <= 805 && y >= 20 && y <= 72) {
+                    csTaFrom = -1;
+                    return true;
+                }
+            } else if (x >= 555 && x <= 725 && y >= 20 && y <= 72) {
+                csSend(new Msg(CS_SKIP));
+                csTurnSeat = -1;
+                return true;
+            }
+            return true;
+        }
+        return true; // modal: nuốt mọi chạm còn lại
+    }
+
+    private void csDoorTap(int d) {
+        if (csPhase == 1 && csMySeat > 0 && !csBetLocked && !csFinished) {
+            int sum = 0;
+            for (int v : csMyBets) sum += v;
+            if (sum < 6) {
+                csMyBets[d]++;
+                csCountEnter++;
+            }
+            return;
+        }
+        if (csPhase == 2 && csTurnSeat == csMySeat && csMySeat > 0) {
+            if (csTaFrom < 0) {
+                if (csBetsSv[csMySeat][d] > 0) csTaFrom = d;
+            } else if (d == csTaFrom) {
+                csTaFrom = -1;
+            } else {
+                Msg m = new Msg(CS_TA);
+                try {
+                    // định dạng gốc: room, board bị NHÂN ĐÔI (lỗi client gốc)
+                    m.writer().writeByte(csRoomId);
+                    m.writer().writeByte(csBoardId);
+                    m.writer().writeByte(csRoomId);
+                    m.writer().writeByte(csBoardId);
+                    m.writer().writeByte(csTaFrom);
+                    m.writer().writeByte(d);
+                } catch (Exception ignored) {
+                }
+                csSend(m);
+                csTaFrom = -1;
+            }
+        }
+    }
+
+    private void csMoneySheetTouch(float x, float y) {
+        if (x >= 560 && x <= 720 && y >= 216 && y <= 264) {
+            csMoneySheet = false;
+            return;
+        }
+        for (int i = 0; i < BC_MONEY_PRESETS.length; i++) {
+            int row = i / 4, col = i % 4;
+            int inRow = (row == 0) ? 4 : BC_MONEY_PRESETS.length - 4;
+            float rowW = inRow * 124 + (inRow - 1) * 12;
+            float cx = 640 - rowW / 2f + col * 136;
+            float cy = (row == 0) ? 356 : 272;
+            if (x >= cx && x <= cx + 124 && y >= cy && y <= cy + 52) {
+                Msg m = csMsgRB(CS_SET_MONEY);
+                try {
+                    m.writer().writeInt(BC_MONEY_PRESETS[i]);
+                } catch (Exception ignored) {
+                }
+                csSend(m);
+                csMoneySheet = false;
+                return;
+            }
+        }
+    }
+
+    private void csKickSheetTouch(float x, float y) {
+        if (x >= 480 && x <= 630 && y >= 282 && y <= 334) {
+            if (csKickSeat >= 0 && csKickSeat <= 4 && csSeats[csKickSeat].id != -1) {
+                Msg m = csMsgRB(CS_KICK);
+                try {
+                    m.writer().writeInt(csSeats[csKickSeat].id);
+                } catch (Exception ignored) {
+                }
+                csSend(m);
+            }
+            csKickSheet = false;
+            csKickSeat = -1;
+            return;
+        }
+        if (x >= 650 && x <= 800 && y >= 282 && y <= 334) {
+            csKickSheet = false;
+            csKickSeat = -1;
+        }
+    }
+
     private static final float MG_PW = 920f, MG_PH = 600f;
     private final byte[] tcSpecShots0 = new byte[100], tcSpecShots1 = new byte[100];
     private final java.util.List<TcShip> tcSpecSunk0 = new java.util.ArrayList<>();
@@ -12509,6 +13768,14 @@ public class WorldScreen extends ScreenAdapter {
             px + (MG_PW - 300) / 2f, py + 70);
         Ui.centered(batch, Ui.font, "Bảng xếp hạng", px + MG_PW / 2f, py + 104,
             Color.WHITE);
+        // Lối vào Bầu Cua [PORT]: game này thuộc khung Casino (handler 3)
+        // chứ không thuộc hub; cổng casino type 75 trên map hiện không
+        // còn trong dữ liệu lưới của bản port nên tạm vào từ đây.
+        batch.draw(Ui.roundedRect(300, 48, 11,
+            new Color(0.45f, 0.16f, 0.16f, 0.95f), GLASS_RIM),
+            px + (MG_PW - 300) / 2f, py + 14);
+        Ui.centered(batch, Ui.font, "Bầu Cua · Casino", px + MG_PW / 2f, py + 48,
+            Color.WHITE);
     }
 
     private void drawMgLobby(float px, float py, float top) {
@@ -12716,6 +13983,13 @@ public class WorldScreen extends ScreenAdapter {
                 mgTopGame = 0;
                 mgTopLoaded = false;
                 mgRequestTop();
+                return true;
+            }
+            // nút Bầu Cua · Casino (khung casino riêng, không qua hub)
+            if (x >= px + (MG_PW - 300) / 2f && x <= px + (MG_PW + 300) / 2f
+                    && y >= py + 14 && y <= py + 62) {
+                mgCloseHub();
+                startCasinoBauCua();
                 return true;
             }
             // ô lưới game của zone hiện tại

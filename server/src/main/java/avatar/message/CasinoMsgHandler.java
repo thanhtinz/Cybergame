@@ -1,46 +1,64 @@
 package avatar.message;
 
-import java.io.ByteArrayOutputStream;
+import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 
-import avatar.constants.NpcName;
-import avatar.handler.NpcHandler;
+import avatar.constants.Cmd;
 import avatar.item.Item;
 import avatar.message.minigame.BauCuaMsgHandler;
 import avatar.model.BoardInfo;
-import avatar.model.Menu;
-import avatar.model.Npc;
 import avatar.model.User;
 import avatar.network.Message;
 import avatar.network.Session;
 import avatar.server.BoardManager;
-import avatar.server.ServerManager;
-import avatar.server.UserManager;
 import avatar.server.Utils;
-import avatar.service.EffectService;
-import avatar.service.FarmService;
-import avatar.constants.Cmd;
 
-import static avatar.server.BoardManager.boardList;
-import static avatar.server.BoardManager.users;
-
+/**
+ * Handler Casino (GET_HANDLER 3) — bản port viết lại theo client gốc
+ * Pack5 (xem docs/baucua-spec.md). Bầu Cua = gameType 22.
+ *
+ * Các sửa/làm mới so với server fan:
+ * - Xúc xắc đủ 6 mặt (fan nextInt(5) không bao giờ ra Tôm).
+ * - Trả thưởng THẬT: delta từng ghế từ tiền đặt × mức bàn so với 3 mặt
+ *   xúc xắc (ra k mặt trùng: +k lần cược; không trúng: mất cược), nhà
+ *   cái đối ứng zero-sum, cộng/trừ xu (User.xu) thật.
+ * - HA_PHOM (65) đọc đúng 6 byte {room, board, room, board, from, to}
+ *   và dời TOÀN BỘ tiền một ô sang ô khác.
+ * - SKIP (49) chấp nhận gói rỗng như client gốc gửi.
+ * - BoardList đóng gói byte packed nPlayer|maxPlayer + byte flags.
+ * - JOIN_BOARD ghi tiền TỪNG người; SOMEONE_JOINBOARD đúng định dạng
+ *   gốc (không thừa int, có short idImg); CHAT ghi fromID kiểu int.
+ * - Ghế cố định theo BoardInfo.seats; ảnh chụp ghế lúc bắt đầu ván để
+ *   người rời giữa ván không làm lệch số ghế của người còn lại.
+ * - Hẹn giờ từng pha: hết giờ mà chưa chốt đặt / chưa tả thì server tự
+ *   tiến hành (client gốc cũng tự chốt/tự bỏ lượt khi hết giờ).
+ * - Thêm KICK (11) và SET_PASSWORD (18) mà fan chưa xử lý.
+ */
 public class CasinoMsgHandler extends MessageHandler {
-    private BauCuaMsgHandler service;
+    private final BauCuaMsgHandler service;
+
+    /** Giây cho pha đặt cược và cho từng lượt tả (số của server fan). */
+    private static final byte PHASE_TIME = 10;
+    /** Nghỉ giữa GAME_RESULT và WIN/FINISH (fan dùng 2,5 giây). */
+    private static final int RESULT_DELAY_MS = 2500;
+
+    private static final ScheduledExecutorService TIMER =
+        Executors.newScheduledThreadPool(2);
 
     public CasinoMsgHandler(Session client) {
         super(client);
         this.service = new BauCuaMsgHandler(client);
-
     }
-    @Override
 
+    @Override
     public void onMessage(Message mss) {
         try {
-            System.out.println("casino mess: " + mss.getCommand());
             switch (mss.getCommand()) {
                 case 61:
                     service.joinCasino(mss);
@@ -48,43 +66,49 @@ public class CasinoMsgHandler extends MessageHandler {
                 case Cmd.REQUEST_ROOMLIST:
                     requestRoomList();
                     break;
-                case Cmd.GET_IMG_ICON: {
-                    if (this.client.user != null) {
-                        this.client.doGetImgIcon(mss);
-                        break;
-                    }}
+                case Cmd.GET_IMG_ICON:
+                    if (this.client.user != null) this.client.doGetImgIcon(mss);
+                    break;
                 case Cmd.REQUEST_BOARDLIST:
-                    BoardList(mss);
+                    boardList(mss);
                     break;
                 case Cmd.JOIN_BOARD:
-                    joinBoard(mss,this.client.user);
+                    joinBoard(mss, this.client.user);
                     break;
                 case Cmd.CHAT_TO_BOARD:
                     chatToBoard(mss);
                     break;
-                case Cmd.LEAVE_BOARD:
-                    leaveBoard(mss,this.client.user);
+                case Cmd.KICK:
+                    kick(mss, this.client.user);
                     break;
-                case Cmd.START:
-                    Start(mss);
+                case Cmd.LEAVE_BOARD:
+                    leaveBoard(mss, this.client.user);
                     break;
                 case Cmd.READY:
-                    Ready(mss,this.client.user);
+                    ready(mss, this.client.user);
                     break;
-                case Cmd.TO_XONG:
-                    toXong(mss,this.client.user);
-                    break;
-                case 65:
-                    haPhom(mss,this.client.user);
-                    break;
-                case 49:
-                    Skip(mss,this.client.user);
+                case 18: // SET_PASSWORD (Cmd.java không có hằng)
+                    setPassword(mss, this.client.user);
                     break;
                 case Cmd.SET_MONEY:
-                    setMoney(mss,this.client.user);
+                    setMoney(mss, this.client.user);
+                    break;
+                case Cmd.START:
+                    start(mss, this.client.user);
+                    break;
+                case Cmd.TO_XONG:
+                    toXong(mss, this.client.user);
+                    break;
+                case Cmd.HA_PHOM:
+                    haPhom(mss, this.client.user);
+                    break;
+                case 49: // SKIP — client Bầu Cua gửi gói rỗng
+                    skip(mss, this.client.user);
+                    break;
+                case 56: // SET_MAX_PLAYER: bàn Bầu Cua cố định 5 ghế — bỏ qua
                     break;
                 default:
-                    System.out.println("casino mess: " + mss.getCommand());
+                    System.out.println("casino mess chua xu ly: " + mss.getCommand());
                     break;
             }
         } catch (Exception e) {
@@ -92,577 +116,743 @@ public class CasinoMsgHandler extends MessageHandler {
         }
     }
 
-    private void requestRoomList() throws IOException {//ms 6
+    // ------------------------------------------------------------------
+    // Tiện ích
+    // ------------------------------------------------------------------
+
+    private static Message boardMsg(byte cmd, byte roomID, byte boardID) throws IOException {
+        Message ms = new Message(cmd);
+        DataOutputStream ds = ms.writer();
+        ds.writeByte(roomID);
+        ds.writeByte(boardID);
+        return ms;
+    }
+
+    /** Gửi cho mọi người đang ở bàn (theo ghế). */
+    private static void broadcast(BoardInfo board, Message ms) {
+        for (User u : new ArrayList<>(board.getLstUsers())) {
+            if (u != null && u.session != null) u.session.sendMessage(ms);
+        }
+    }
+
+    private static int xuInt(User u) {
+        long x = u.getXu();
+        if (x > Integer.MAX_VALUE) return Integer.MAX_VALUE;
+        if (x < Integer.MIN_VALUE) return Integer.MIN_VALUE;
+        return (int) x;
+    }
+
+    private static void writeSeat(DataOutputStream ds, User u, BoardInfo board) throws IOException {
+        if (u == null) {
+            ds.writeInt(-1); // ghế trống: chỉ IDDB = -1 (client gốc đọc đúng vậy)
+            return;
+        }
+        ds.writeInt(u.getId());
+        ds.writeUTF(u.getDisplayName());
+        ds.writeInt(xuInt(u));
+        List<Item> wearing = u.getWearing();
+        ds.writeByte(wearing == null ? 0 : wearing.size());
+        if (wearing != null) {
+            for (Item item : wearing) ds.writeShort(item.getId());
+        }
+        ds.writeInt(10); // exp (server fan ghi cứng 10)
+        ds.writeBoolean(board.readyIds.contains(u.getId()));
+        ds.writeShort(u.getIdImg());
+    }
+
+    // ------------------------------------------------------------------
+    // Phòng / bàn
+    // ------------------------------------------------------------------
+
+    private void requestRoomList() throws IOException {
         Message ms = new Message(Cmd.REQUEST_ROOMLIST);
         DataOutputStream ds = ms.writer();
-
         for (int i = 0; i < 3; i++) {
-            ds.writeByte(43+i);//id
-            ds.writeByte(1);//roomfree//vàng 0 đỏ 2 xanh
-            ds.writeByte(0+i);//roomWait
-            ds.writeByte(0+i);//lv
+            ds.writeByte(43 + i); // id phòng (số của server fan)
+            ds.writeByte(1);      // roomFree
+            ds.writeByte(i);      // roomWait
+            ds.writeByte(i);      // lv
         }
         ds.flush();
         this.client.user.sendMessage(ms);
     }
 
-    private void BoardList(Message ms) throws IOException {//ms 7
-
-        byte id = ms.reader().readByte();
+    private void boardList(Message ms) throws IOException {
+        byte roomID = ms.reader().readByte();
         ms = new Message(Cmd.REQUEST_BOARDLIST);
         DataOutputStream ds = ms.writer();
-        ds.writeByte(id);
-
-        List<BoardInfo> boardInfos = BoardManager.getInstance().boardList;
-
-
-        for(BoardInfo a : boardInfos)
-        {
+        ds.writeByte(roomID);
+        for (BoardInfo a : BoardManager.getInstance().boardList) {
             ds.writeByte(a.boardID);
-            ds.writeByte(a.nPlayer);
-            if(a.isPass){ds.writeByte(1);}
-            else{ds.writeByte(0);}
+            // byte đóng gói của gốc: nPlayer = v % 16, maxPlayer = v / 16
+            ds.writeByte(a.presentCount() + (5 << 4));
+            int flags = (a.isPass ? 1 : 0) | (a.phase != 0 ? 2 : 0);
+            ds.writeByte(flags);
             ds.writeInt(a.getMoney());
         }
         ds.flush();
-
         this.client.user.sendMessage(ms);
-
     }
 
+    // ------------------------------------------------------------------
+    // Vào / rời bàn
+    // ------------------------------------------------------------------
 
-    private void chatToBoard(Message ms) throws IOException {//ms 7
-        byte roomID = ms.reader().readByte();
-        byte boardID = ms.reader().readByte();
-        String text = ms.reader().readUTF();
+    private void joinBoard(Message ms, User us) throws IOException {
+        if (us == null) return;
+        DataInputStream rd = ms.reader();
+        byte roomID = rd.readByte();
+        byte boardID = rd.readByte();
+        String pass = rd.readUTF();
         BoardInfo board = BoardManager.getInstance().find(boardID);
-        List<User> BoardUs = board.getLstUsers();
+        if (board == null) return;
 
-        ms = new Message(Cmd.CHAT_TO_BOARD);
-        DataOutputStream ds = ms.writer();
-        ds.writeByte(roomID);
-        ds.writeByte(boardID);
-        ds.writeByte(this.client.user.getId());//lv
-        ds.writeUTF(text);
-        ds.flush();
-
-        for(User u : BoardUs)
-        {
-            u.sendMessage(ms);
+        // Đang ở bàn khác thì rời bàn đó trước.
+        BoardInfo other = BoardManager.getInstance().findUserBoard(us);
+        if (other != null && other != board) {
+            removeFromBoard(other, us, (byte) us.getRoomID(), true);
         }
-        //this.client.user.sendMessage(ms);
 
-    }
-
-    private void joinBoard(Message ms, User us) throws IOException {//ms 8
-        byte roomID = ms.reader().readByte();
-        byte boardID = ms.reader().readByte();
-        String pass = ms.reader().readUTF();
-        if (this.client.isResourceHD())
-        {
-            this.client.user.getAvatarService().serverDialog("error 0011");
-            return;
-        }
-        BoardInfo board = BoardManager.getInstance().find(boardID);
-
-        BoardManager.getInstance().increaseMaxPlayer(boardID,roomID,us);
-        List<User> BoardUs = board.getLstUsers();
-
-
-        if(BoardUs.size() > 1)
-        {
-            for (int i = 0; i < BoardUs.size(); i++) {
-                Message ms1 = new Message(Cmd.SOMEONE_JOINBOARD);
-                DataOutputStream ds1 = ms1.writer();
-                ds1.writeByte(BoardUs.indexOf(us));//seat // vi tri
-                ds1.writeInt(us.getId());//seat // vi tri
-                ds1.writeUTF(us.getUsername());//seat // vi tri
-                ds1.writeInt(0);// tien
-
-                ds1.writeByte(us.getWearing().size()); // Số phần mặc
-                for (Item item : us.getWearing()) {
-                    ds1.writeShort(item.getId()); // ID item
+        synchronized (board) {
+            if (board.seatOf(us) < 0) {
+                if (board.isPass && !board.password.equals(pass)) {
+                    us.getAvatarService().serverDialog("Mật khẩu bàn không đúng");
+                    return;
                 }
-                ds1.writeInt(0);// tien
-                ds1.writeInt(1);// tien
-                ds1.flush();
-                BoardUs.get(i).session.sendMessage(ms1);
+                if (board.presentCount() >= 5) {
+                    us.getAvatarService().serverDialog("Bàn đã đầy");
+                    return;
+                }
+                int seat = board.addUser(us);
+                if (seat < 0) return;
+                us.setRoomID(roomID);
 
-                for (int j = 1; j < BoardUs.size(); j++) {
-                    ms = new Message(Cmd.READY);//16
-                    DataOutputStream ds = ms.writer();
-
-                    ds.writeInt(BoardUs.get(i).getId());
-                    ds.writeBoolean(false);
-                    ds.flush();
-
-                    for(User u : BoardUs)
-                    {
-                        u.session.sendMessage(ms);
+                // Báo cho những người đã ở bàn: có người mới vào.
+                Message join = new Message(Cmd.SOMEONE_JOINBOARD);
+                DataOutputStream dj = join.writer();
+                dj.writeByte(seat);
+                dj.writeInt(us.getId());
+                dj.writeUTF(us.getDisplayName());
+                dj.writeInt(xuInt(us));
+                List<Item> wearing = us.getWearing();
+                dj.writeByte(wearing == null ? 0 : wearing.size());
+                if (wearing != null) {
+                    for (Item item : wearing) dj.writeShort(item.getId());
+                }
+                dj.writeInt(10); // exp
+                dj.writeShort(us.getIdImg());
+                dj.flush();
+                for (User u : new ArrayList<>(board.getLstUsers())) {
+                    if (u != null && u.getId() != us.getId() && u.session != null) {
+                        u.session.sendMessage(join);
                     }
                 }
             }
-        }
 
+            // Gói vào bàn cho chính người vào: đủ 5 ghế theo thứ tự ghế.
+            Message msj = new Message(Cmd.JOIN_BOARD);
+            DataOutputStream ds = msj.writer();
+            ds.writeByte(roomID);
+            ds.writeByte(boardID);
+            User owner = board.owner();
+            ds.writeInt(owner == null ? -1 : owner.getId());
+            ds.writeInt(board.getMoney());
+            for (int s = 0; s < 5; s++) writeSeat(ds, board.seats[s], board);
+            ds.flush();
+            us.sendMessage(msj);
 
-        ms = new Message(Cmd.JOIN_BOARD);
-        DataOutputStream ds = ms.writer();
-
-        ds.writeByte(roomID);
-        ds.writeByte(boardID);
-        ds.writeInt(BoardUs.get(0).getId()); // ID user
-        ds.writeInt(board.getMoney()); // số tiền cược ở phòng
-
-
-        for (User user : BoardUs) {
-            ds.writeInt(user.getId()); // IDDB
-            ds.writeUTF(user.getUsername()); // Username
-            ds.writeInt(us.getXeng()); // Số tiền của user
-            ds.writeByte(user.getWearing().size()); // Số phần mặc
-            for (Item item : user.getWearing()) {
-                ds.writeShort(item.getId()); // ID item
+            // Vào giữa ván: gửi trạng thái ván để xem (không được đặt).
+            if (board.phase != 0) {
+                us.setToXong(true);
+                us.setHaPhom(true);
+                Message ms2 = new Message(Cmd.PLAYING);
+                DataOutputStream ds2 = ms2.writer();
+                ds2.writeByte(roomID);
+                ds2.writeByte(boardID);
+                long remain = (board.phaseDeadline - System.currentTimeMillis()) / 1000;
+                ds2.writeByte((int) Math.max(0, Math.min((long) PHASE_TIME, remain)));
+                for (int s = 0; s < 5; s++) {
+                    for (int d = 0; d < 6; d++) ds2.writeByte(betAt(board, s, d));
+                }
+                ds2.flush();
+                us.sendMessage(ms2);
             }
-
-            ds.writeInt(10); // Kinh nghiệm
-            ds.writeBoolean(false); // Trạng thái sẵn sàng
-            ds.writeShort(user.getIdImg()); // ID hình ảnh
         }
+    }
 
-        for (int i = BoardUs.size(); i < 5; i++) {
-            ds.writeInt(-1); // IDDB placeholder for empty slots
+    /** Tiền đặt hiện tại của một ghế (ảnh chụp sau khi chốt, danh sách
+     *  đặt trực tiếp trong pha đặt). Ghế trống/không có = 0. */
+    private static int betAt(BoardInfo board, int seat, int door) {
+        if (board.phase >= 2 && board.seatSnap != null) {
+            return board.seatBets[seat][door];
         }
-
-        ds.flush();
-        this.client.user.sendMessage(ms);
-
-        if(board.isPlaying()){
-            Message ms2 = new Message(Cmd.PLAYING);
-            DataOutputStream ds2 = ms2.writer();
-            ds2.writeByte(roomID);
-            ds2.writeByte(boardID);
-            ds2.writeByte(10);
-            ds2.flush();
-            us.getSession().sendMessage(ms2);
-            us.setToXong(true);
-            us.setHaPhom(true);
-        }
+        User u = board.seats[seat];
+        if (u == null) return 0;
+        List<Byte> put = u.getMoneyPutList();
+        return (put != null && door < put.size()) ? put.get(door) : 0;
     }
 
     private void leaveBoard(Message ms, User us) throws IOException {
-        byte roomID = ms.reader().readByte();
-        byte boardID = ms.reader().readByte();
-        BoardInfo board = BoardManager.getInstance().find(boardID);
+        if (us == null) return;
+        DataInputStream rd = ms.reader();
+        byte roomID = rd.available() > 0 ? rd.readByte() : (byte) us.getRoomID();
+        byte boardID = rd.available() > 0 ? rd.readByte() : -1;
+        BoardInfo board = boardID >= 0 ? BoardManager.getInstance().find(boardID) : null;
+        if (board == null || board.seatOf(us) < 0) {
+            board = BoardManager.getInstance().findUserBoard(us);
+        }
+        if (board == null) return;
+        removeFromBoard(board, us, roomID, true);
+    }
 
-        List<User> BoardUs = board.getLstUsers();
-        if(board.isPlaying() && BoardUs.size()>1)
-        {
-            us.setToXong(true);
-            us.setHaPhom(true);
-            for(User user : BoardUs) {
-                if (!user.isHaPhom())
-                {
-                    System.out.println("Gửi Lượt Hạ Phỏm "+user.getUsername());
-                    try {
-                        setTurn(BoardUs,user,roomID,boardID,BoardUs.indexOf(user));
-                        board.nPlayer--;
-                        List<User> updatedBoardUs = new ArrayList<>(BoardUs);
-                        updatedBoardUs.remove(us);
-                        board.setLstUsers(updatedBoardUs);
-                        BoardUs = updatedBoardUs;
-                        ms = new Message(Cmd.SOMEONE_LEAVEBOARD);//14
-                        DataOutputStream ds = ms.writer();
-                        ds.writeInt(us.getId());
-                        ds.writeInt(BoardUs.get(0).getId());
-                        for (User user1 : board.getLstUsers()) {
-                            user1.getSession().sendMessage(ms);
-                        }
+    /**
+     * Gỡ một người khỏi bàn + báo SOMEONE_LEAVEBOARD + tiến hành ván
+     * nếu cần. Trả true nếu ván bị huỷ vì chủ bàn (ghế 0) rời giữa ván.
+     */
+    private void removeFromBoard(BoardInfo board, User us, byte roomID, boolean notify) {
+        synchronized (board) {
+            int seat = board.seatOf(us);
+            if (seat < 0) return;
+            boolean wasPlaying = board.phase != 0;
+            board.removeUser(us);
 
-                        return;
-                    } catch (InterruptedException e) {
-                        throw new RuntimeException(e);
-                    }
+            if (board.presentCount() == 0) {
+                board.phase = 0;
+                board.phaseGen++;
+                board.turnSeat = -1;
+                board.seatSnap = null;
+                board.setPlaying(false);
+                return;
+            }
+            if (notify) {
+                try {
+                    Message ms = new Message(Cmd.SOMEONE_LEAVEBOARD);
+                    DataOutputStream ds = ms.writer();
+                    ds.writeInt(us.getId());
+                    User owner = board.owner();
+                    ds.writeInt(owner == null ? -1 : owner.getId());
+                    ds.flush();
+                    broadcast(board, ms);
+                } catch (IOException ignored) {
                 }
             }
-            try {
-                gameResult(roomID,boardID);
-            } catch (InterruptedException e) {
-                throw new RuntimeException(e);
+            if (!wasPlaying) return;
+
+            if (seat == 0) {
+                // Chủ bàn rời giữa ván: huỷ ván, mọi delta = 0.
+                abortRound(board, roomID);
+                return;
             }
-        }
-
-
-        board.nPlayer--;
-        List<User> updatedBoardUs = new ArrayList<>(BoardUs);
-        updatedBoardUs.remove(us);
-        board.setLstUsers(updatedBoardUs);
-        BoardUs = updatedBoardUs;
-
-        if(BoardUs.size() == 0)
-        {
-            return;
-        }
-
-
-        ms = new Message(Cmd.SOMEONE_LEAVEBOARD);//14
-        DataOutputStream ds = ms.writer();
-        ds.writeInt(us.getId());
-        ds.writeInt(BoardUs.get(0).getId());
-        for (User user : board.getLstUsers()) {
-            user.getSession().sendMessage(ms);
-        }
-
-        if(board.isPlaying() && BoardUs.size()==1)
-        {
-            Message ms3 = new Message(Cmd.FINISH);
-            DataOutputStream ds3 = ms3.writer();
-            ds3.writeByte(roomID);
-            ds3.writeByte(boardID);
-            for (int i = 0; i < 5; i++)
-            {
-                ds3.writeInt(0);
+            if (board.phase == 1) {
+                // Người rời coi như chốt với số đã gửi (thường là 0).
+                us.setToXong(true);
+                checkAllBetDone(board, roomID);
+            } else if (board.phase == 2 && board.turnSeat == seat) {
+                us.setHaPhom(true);
+                advanceTa(board, roomID);
             }
-            ds3.flush();
-            BoardUs.get(0).session.sendMessage(ms3);
-        }
-
-    }
-
-
-    private void Ready(Message ms,User us) throws IOException {//ms 20
-        byte roomID = ms.reader().readByte();
-        byte boardID = ms.reader().readByte();
-        Boolean isReady = ms.reader().readBoolean();
-
-        BoardInfo board = BoardManager.getInstance().find(boardID);
-        List<User> BoardUs = board.getLstUsers();
-
-        ms = new Message(Cmd.READY);//16
-        DataOutputStream ds = ms.writer();
-
-        ds.writeInt(us.getId());
-        ds.writeBoolean(isReady);
-        ds.flush();
-
-        for(User u : BoardUs)
-        {
-            u.session.sendMessage(ms);
         }
     }
 
-
-    private void Start(Message ms) throws IOException {//20
-        byte roomID = ms.reader().readByte();
-        byte boardID = ms.reader().readByte();
-        BoardInfo board = BoardManager.getInstance().find(boardID);
-        List<User> BoardUs = board.getLstUsers();
-        for(User u : BoardUs){
-            List<Byte> moneyPutList = u.getMoneyPutList();
-            moneyPutList.clear();
-            u.setHaPhom(false);
-            u.setToXong(false);
-            u.getMoneyPutList().clear();
-        }
-        BoardUs.get(0).setToXong(true);
-        BoardUs.get(0).setHaPhom(true);
-        board.setPlaying(true);
-
-        ms = new Message(Cmd.START);//20
-        DataOutputStream ds = ms.writer();
-
-        ds.writeByte(roomID);
-        ds.writeByte(boardID);
-        ds.writeByte(10); // ID user hoặc ID bàn
-        ds.flush();
-
-        for (User user : BoardUs) {
-            user.session.sendMessage(ms);
-        }
-    }
-
-
-    private void toXong(Message ms, User us) throws IOException { // ms 21
-        byte roomID = ms.reader().readByte();
-        byte boardID = ms.reader().readByte();
-
-        BoardInfo board = BoardManager.getInstance().find(boardID);
-        List<User> BoardUs = board.getLstUsers();
-        List<Byte> moneyPutList = us.getMoneyPutList();
-
-
-        // Nếu chưa có putlist thì thêm putlist mới
-        if (us.getMoneyPutList().size() <= 0 && BoardUs.indexOf(us) != 0) {
-            while (ms.reader().available() > 0) {
-                byte moneyPut = ms.reader().readByte();
-                moneyPutList.add(moneyPut);
-            }
-            us.setMoneyPutList(moneyPutList);
-            ms = new Message(Cmd.TO_XONG);
+    /** Huỷ ván đang chơi: FINISH toàn 0 cho người còn lại, về pha rảnh. */
+    private void abortRound(BoardInfo board, byte roomID) {
+        board.phase = 0;
+        board.phaseGen++;
+        board.turnSeat = -1;
+        board.setPlaying(false);
+        try {
+            Message ms = boardMsg(Cmd.FINISH, roomID, board.boardID);
             DataOutputStream ds = ms.writer();
-            ds.writeByte(roomID);
-            ds.writeByte(boardID);
-            ds.writeByte(BoardUs.indexOf(us));
-            for (Byte moneyPut : moneyPutList) {
-                ds.writeByte(moneyPut);
+            for (int s = 0; s < 5; s++) ds.writeInt(0);
+            ds.flush();
+            broadcast(board, ms);
+        } catch (IOException ignored) {
+        }
+        clearRoundState(board);
+    }
+
+    private void clearRoundState(BoardInfo board) {
+        board.seatSnap = null;
+        for (User u : board.getLstUsers()) {
+            if (u == null) continue;
+            u.getMoneyPutList().clear();
+            u.setToXong(false);
+            u.setHaPhom(false);
+        }
+    }
+
+    private void kick(Message ms, User us) throws IOException {
+        if (us == null) return;
+        DataInputStream rd = ms.reader();
+        byte roomID = rd.readByte();
+        byte boardID = rd.readByte();
+        int kickID = rd.readInt();
+        BoardInfo board = BoardManager.getInstance().find(boardID);
+        if (board == null) return;
+        synchronized (board) {
+            User owner = board.owner();
+            if (owner == null || owner.getId() != us.getId()) return; // chỉ chủ bàn
+            User target = null;
+            for (User u : board.getLstUsers()) {
+                if (u != null && u.getId() == kickID) target = u;
+            }
+            if (target == null || target.getId() == us.getId()) return;
+            // Báo cho cả bàn (kể cả người bị đuổi, vẫn đang ở bàn) trước khi gỡ.
+            Message mk = boardMsg(Cmd.KICK, roomID, boardID);
+            mk.writer().writeInt(kickID);
+            mk.writer().flush();
+            broadcast(board, mk);
+            removeFromBoard(board, target, roomID, false);
+        }
+    }
+
+    private void setPassword(Message ms, User us) throws IOException {
+        if (us == null) return;
+        DataInputStream rd = ms.reader();
+        rd.readByte(); // roomID
+        byte boardID = rd.readByte();
+        String pass = rd.readUTF();
+        BoardInfo board = BoardManager.getInstance().find(boardID);
+        if (board == null) return;
+        synchronized (board) {
+            User owner = board.owner();
+            if (owner == null || owner.getId() != us.getId()) return;
+            board.password = pass == null ? "" : pass;
+            board.isPass = !board.password.isEmpty();
+        }
+    }
+
+    // ------------------------------------------------------------------
+    // Chuẩn bị ván
+    // ------------------------------------------------------------------
+
+    private void chatToBoard(Message ms) throws IOException {
+        DataInputStream rd = ms.reader();
+        byte roomID = rd.readByte();
+        byte boardID = rd.readByte();
+        String text = rd.readUTF();
+        BoardInfo board = BoardManager.getInstance().find(boardID);
+        if (board == null || this.client.user == null) return;
+        Message out = boardMsg(Cmd.CHAT_TO_BOARD, roomID, boardID);
+        DataOutputStream ds = out.writer();
+        ds.writeInt(this.client.user.getId());
+        ds.writeUTF(text);
+        ds.flush();
+        broadcast(board, out);
+    }
+
+    private void ready(Message ms, User us) throws IOException {
+        if (us == null) return;
+        DataInputStream rd = ms.reader();
+        rd.readByte(); // roomID
+        byte boardID = rd.readByte();
+        boolean isReady = rd.readBoolean();
+        BoardInfo board = BoardManager.getInstance().find(boardID);
+        if (board == null || board.seatOf(us) < 0) return;
+        synchronized (board) {
+            if (isReady) board.readyIds.add(us.getId());
+            else board.readyIds.remove(us.getId());
+            Message out = new Message(Cmd.READY);
+            DataOutputStream ds = out.writer();
+            ds.writeInt(us.getId());
+            ds.writeBoolean(isReady);
+            ds.flush();
+            broadcast(board, out);
+        }
+    }
+
+    private void setMoney(Message ms, User us) throws IOException {
+        if (us == null) return;
+        DataInputStream rd = ms.reader();
+        byte roomID = rd.readByte();
+        byte boardID = rd.readByte();
+        int money = rd.readInt();
+        BoardInfo board = BoardManager.getInstance().find(boardID);
+        if (board == null) return;
+        synchronized (board) {
+            User owner = board.owner();
+            if (owner == null || owner.getId() != us.getId()) return; // chỉ chủ bàn
+            if (money > 100000) {
+                us.getAvatarService().serverDialog("Vui lòng đặt nhỏ hơn 100.000");
+                return;
+            }
+            if (money < 0 || us.getXu() < (long) money * 48) {
+                us.getAvatarService().serverDialog(
+                    "Để đặt được " + money + " thì bạn cần có số tiền là " + ((long) money * 48));
+                return;
+            }
+            board.setMoney(money);
+            Message out = boardMsg(Cmd.SET_MONEY, roomID, boardID);
+            out.writer().writeInt(money);
+            out.writer().flush();
+            broadcast(board, out);
+        }
+    }
+
+    // ------------------------------------------------------------------
+    // Luồng ván: START → đặt (21) → tả (100/65/49) → kết quả (37/60/51)
+    // ------------------------------------------------------------------
+
+    private void start(Message ms, User us) throws IOException {
+        if (us == null) return;
+        DataInputStream rd = ms.reader();
+        byte roomID = rd.readByte();
+        byte boardID = rd.readByte();
+        BoardInfo board = BoardManager.getInstance().find(boardID);
+        if (board == null) return;
+        synchronized (board) {
+            User owner = board.owner();
+            if (owner == null || owner.getId() != us.getId()) return; // chỉ chủ bàn
+            if (board.phase != 0) return;
+            if (board.presentCount() < 2) {
+                us.getAvatarService().serverDialog("Cần ít nhất 2 người chơi mới bắt đầu được");
+                return;
+            }
+            if (board.getMoney() <= 0) {
+                us.getAvatarService().serverDialog("Hãy đặt mức tiền của bàn trước");
+                return;
+            }
+            // Ảnh chụp ghế cho cả ván + xoá trạng thái cũ.
+            board.seatSnap = new User[5];
+            for (int s = 0; s < 5; s++) {
+                board.seatSnap[s] = board.seats[s];
+                board.seatBets[s] = new byte[6];
+                board.seatDeltas[s] = 0;
+            }
+            for (User u : board.getLstUsers()) {
+                if (u == null) continue;
+                u.getMoneyPutList().clear();
+                boolean dealer = board.seatOf(u) == 0;
+                u.setToXong(dealer);   // chủ bàn không đặt cược
+                u.setHaPhom(dealer);   // chủ bàn không tả
+            }
+            board.setPlaying(true);
+            board.phase = 1;
+            board.phaseGen++;
+            board.turnSeat = -1;
+            board.phaseDeadline = System.currentTimeMillis() + PHASE_TIME * 1000L;
+
+            Message out = boardMsg(Cmd.START, roomID, boardID);
+            out.writer().writeByte(PHASE_TIME);
+            out.writer().flush();
+            broadcast(board, out);
+
+            final int gen = board.phaseGen;
+            TIMER.schedule(() -> betTimeout(board, roomID, gen),
+                PHASE_TIME * 1000L + 3000, TimeUnit.MILLISECONDS);
+        }
+    }
+
+    /** Hết giờ pha đặt: ai chưa chốt thì chốt với số đã gửi (thường 0). */
+    private void betTimeout(BoardInfo board, byte roomID, int gen) {
+        synchronized (board) {
+            if (board.phase != 1 || board.phaseGen != gen) return;
+            for (int s = 1; s < 5; s++) {
+                User u = board.seats[s];
+                if (u != null && !u.isToXong()) {
+                    u.setToXong(true);
+                    broadcastBets(board, roomID, s);
+                }
+            }
+            checkAllBetDone(board, roomID);
+        }
+    }
+
+    private void toXong(Message ms, User us) throws IOException {
+        if (us == null) return;
+        DataInputStream rd = ms.reader();
+        byte roomID = rd.readByte();
+        byte boardID = rd.readByte();
+        BoardInfo board = BoardManager.getInstance().find(boardID);
+        if (board == null) return;
+        synchronized (board) {
+            int seat = board.seatOf(us);
+            if (board.phase != 1 || seat <= 0 || us.isToXong()) return;
+
+            List<Byte> bets = new ArrayList<>();
+            while (rd.available() > 0 && bets.size() < 6) bets.add(rd.readByte());
+            while (bets.size() < 6) bets.add((byte) 0);
+
+            // Luật gốc: tối đa 6 đơn vị/người/ván — cắt phần thừa từ ô cuối.
+            int total = 0;
+            for (byte b : bets) total += Math.max(0, b);
+            for (int d = 5; d >= 0 && total > 6; d--) {
+                int cut = Math.min(Math.max(0, bets.get(d)), total - 6);
+                bets.set(d, (byte) (Math.max(0, bets.get(d)) - cut));
+                total -= cut;
+            }
+            // Không đủ xu trả cược thì coi như không đặt.
+            if ((long) total * board.getMoney() > us.getXu()) {
+                us.getAvatarService().serverDialog("Không đủ xu để đặt cược");
+                bets.replaceAll(b -> (byte) 0);
+            }
+
+            List<Byte> put = us.getMoneyPutList();
+            put.clear();
+            put.addAll(bets);
+            us.setToXong(true);
+            broadcastBets(board, roomID, seat);
+            checkAllBetDone(board, roomID);
+        }
+    }
+
+    /** Phát gói 21 (tiền đã đặt của một ghế) cho cả bàn. */
+    private void broadcastBets(BoardInfo board, byte roomID, int seat) {
+        User u = board.seats[seat];
+        if (u == null) return;
+        try {
+            Message out = boardMsg(Cmd.TO_XONG, roomID, board.boardID);
+            DataOutputStream ds = out.writer();
+            ds.writeByte(seat);
+            List<Byte> put = u.getMoneyPutList();
+            for (int d = 0; d < 6; d++) {
+                ds.writeByte(put != null && d < put.size() ? put.get(d) : 0);
             }
             ds.flush();
-            us.getSession().sendMessage(ms);
-            us.setToXong(true);
-            System.out.println(us.getUsername() + " đã đặt xong ");
+            broadcast(board, out);
+        } catch (IOException ignored) {
+        }
+    }
 
-            for (User user : BoardUs) {
-                user.session.sendMessage(ms);
+    /** Mọi người đặt đã chốt → chụp tiền đặt, chuyển sang pha tả. */
+    private void checkAllBetDone(BoardInfo board, byte roomID) {
+        if (board.phase != 1) return;
+        for (int s = 1; s < 5; s++) {
+            User u = board.seats[s];
+            if (u != null && !u.isToXong()) return;
+        }
+        // Chụp tiền đặt theo ghế (người đã rời vẫn giữ cược đã chốt).
+        if (board.seatSnap != null) {
+            for (int s = 1; s < 5; s++) {
+                User u = board.seatSnap[s];
+                if (u == null) continue;
+                List<Byte> put = u.getMoneyPutList();
+                for (int d = 0; d < 6; d++) {
+                    board.seatBets[s][d] = (byte) Math.max(0,
+                        put != null && d < put.size() ? put.get(d) : 0);
+                }
+            }
+        }
+        board.phase = 2;
+        board.phaseGen++;
+        board.turnSeat = -1;
+        advanceTa(board, roomID);
+    }
+
+    /** Gọi lượt tả cho ghế đặt tiếp theo còn ở bàn; hết người thì mở kết quả. */
+    private void advanceTa(BoardInfo board, byte roomID) {
+        if (board.phase != 2) return;
+        for (int s = board.turnSeat + 1; s < 5; s++) {
+            User u = board.seats[s];
+            if (u == null || u.isHaPhom()) continue;
+            if (board.seatSnap == null || board.seatSnap[s] == null) continue;
+            board.turnSeat = s;
+            board.phaseGen++;
+            board.phaseDeadline = System.currentTimeMillis() + PHASE_TIME * 1000L;
+            try {
+                Message out = boardMsg(Cmd.SET_TURN, roomID, board.boardID);
+                out.writer().writeByte(s);
+                out.writer().flush();
+                broadcast(board, out);
+            } catch (IOException ignored) {
+            }
+            final int gen = board.phaseGen;
+            final int turnSeat = s;
+            TIMER.schedule(() -> taTimeout(board, roomID, gen, turnSeat),
+                PHASE_TIME * 1000L + 3000, TimeUnit.MILLISECONDS);
+            return;
+        }
+        board.turnSeat = -1;
+        gameResult(board, roomID);
+    }
+
+    /** Hết giờ lượt tả: tự bỏ lượt cho ghế đó. */
+    private void taTimeout(BoardInfo board, byte roomID, int gen, int turnSeat) {
+        synchronized (board) {
+            if (board.phase != 2 || board.phaseGen != gen || board.turnSeat != turnSeat) return;
+            User u = board.seats[turnSeat];
+            if (u != null) u.setHaPhom(true);
+            advanceTa(board, roomID);
+        }
+    }
+
+    private void haPhom(Message ms, User us) throws IOException {
+        if (us == null) return;
+        DataInputStream rd = ms.reader();
+        // Client gốc gửi 6 byte: room, board, room, board, from, to.
+        byte roomID = rd.readByte();
+        byte boardID = rd.readByte();
+        rd.readByte(); // room lặp lại (lỗi nhân đôi của client gốc)
+        rd.readByte(); // board lặp lại
+        byte from = rd.readByte();
+        byte to = rd.readByte();
+        BoardInfo board = BoardManager.getInstance().find(boardID);
+        if (board == null) return;
+        synchronized (board) {
+            int seat = board.seatOf(us);
+            if (board.phase != 2 || seat < 0 || board.turnSeat != seat) return;
+            if (from < 0 || from > 5 || to < 0 || to > 5 || from == to) return;
+            if (board.seatBets[seat][from] <= 0) return;
+            // Dời TOÀN BỘ tiền ở ô nguồn sang ô đích.
+            board.seatBets[seat][to] = (byte) (board.seatBets[seat][to] + board.seatBets[seat][from]);
+            board.seatBets[seat][from] = 0;
+            // Đồng bộ danh sách đặt của người chơi (cho gói PLAYING).
+            List<Byte> put = us.getMoneyPutList();
+            if (put != null && put.size() == 6) {
+                put.set(to, board.seatBets[seat][to]);
+                put.set(from, (byte) 0);
+            }
+            Message out = boardMsg(Cmd.HA_PHOM, roomID, boardID);
+            DataOutputStream ds = out.writer();
+            ds.writeByte(seat);
+            ds.writeByte(from);
+            ds.writeByte(to);
+            ds.writeByte(board.seatBets[seat][to]);
+            ds.flush();
+            broadcast(board, out);
+            us.setHaPhom(true);
+            advanceTa(board, roomID);
+        }
+    }
+
+    private void skip(Message ms, User us) throws IOException {
+        if (us == null) return;
+        BoardInfo board = BoardManager.getInstance().findUserBoard(us);
+        if (board == null) return;
+        byte roomID = (byte) us.getRoomID();
+        if (ms.reader().available() >= 2) {
+            roomID = ms.reader().readByte();
+            ms.reader().readByte(); // boardID (không cần, đã có bàn theo người)
+        }
+        synchronized (board) {
+            int seat = board.seatOf(us);
+            if (board.phase != 2 || seat < 0 || board.turnSeat != seat) return;
+            us.setHaPhom(true);
+            advanceTa(board, roomID);
+        }
+    }
+
+    // ------------------------------------------------------------------
+    // Kết quả ván
+    // ------------------------------------------------------------------
+
+    private void gameResult(BoardInfo board, byte roomID) {
+        board.phase = 3;
+        board.phaseGen++;
+        board.turnSeat = -1;
+        board.phaseDeadline = 0;
+
+        final int[] dice = new int[3];
+        try {
+            Message out = boardMsg(Cmd.GAME_RESULT, roomID, board.boardID);
+            DataOutputStream ds = out.writer();
+            for (int i = 0; i < 3; i++) {
+                dice[i] = Utils.nextInt(6); // đủ 6 mặt 0..5 (fan bị thiếu Tôm)
+                ds.writeByte(dice[i]);
+            }
+            ds.flush();
+            broadcast(board, out);
+        } catch (IOException ignored) {
+        }
+
+        // Tính delta: mỗi ô đặt s đơn vị, ra k mặt trùng → +k·s; trượt → −s.
+        // Chủ bàn (ghế 0) đối ứng toàn bộ (zero-sum).
+        int money = board.getMoney();
+        int dealerDelta = 0;
+        for (int s = 1; s < 5; s++) {
+            if (board.seatSnap == null || board.seatSnap[s] == null) {
+                board.seatDeltas[s] = 0;
+                continue;
+            }
+            int delta = 0;
+            for (int d = 0; d < 6; d++) {
+                int stake = board.seatBets[s][d];
+                if (stake <= 0) continue;
+                int k = 0;
+                for (int die : dice) if (die == d) k++;
+                delta += (k > 0 ? k * stake : -stake) * money;
+            }
+            board.seatDeltas[s] = delta;
+            dealerDelta -= delta;
+        }
+        board.seatDeltas[0] = dealerDelta;
+
+        // Chủ bàn không đủ xu trả phần thắng: giảm tiền thắng theo tỉ lệ
+        // để chủ bàn không âm xu (người thua vẫn mất đủ phần của mình).
+        User dealer = board.seatSnap == null ? null : board.seatSnap[0];
+        if (dealer != null && dealerDelta < 0 && dealer.getXu() < -dealerDelta) {
+            long winTotal = 0, loseTotal = 0;
+            for (int s = 1; s < 5; s++) {
+                if (board.seatDeltas[s] > 0) winTotal += board.seatDeltas[s];
+                else loseTotal -= board.seatDeltas[s];
+            }
+            long canPay = dealer.getXu() + loseTotal;
+            if (winTotal > 0 && canPay < winTotal) {
+                int paid = 0;
+                for (int s = 1; s < 5; s++) {
+                    if (board.seatDeltas[s] > 0) {
+                        board.seatDeltas[s] = (int) (board.seatDeltas[s] * canPay / winTotal);
+                        paid += board.seatDeltas[s];
+                    }
+                }
+                board.seatDeltas[0] = (int) (paid - loseTotal) * -1;
             }
         }
 
-        // Kiểm tra xem tất cả người chơi đã "to xong" chưa
-        Boolean allToXong = true;
-        for (User user : BoardUs) {
-            if (!user.isToXong()) {
-                System.out.println(user.getUsername() + " chưa to xong ");
-                allToXong = false;
-                break; // Thoát khỏi vòng lặp nếu có một người chưa to xong
-            }
-        }
+        final int gen = board.phaseGen;
+        TIMER.schedule(() -> finishRound(board, roomID, gen),
+            RESULT_DELAY_MS, TimeUnit.MILLISECONDS);
+    }
 
-        if (allToXong) {
-            for (User user : BoardUs) {
-                if (!user.isHaPhom()) {
-                    System.out.println("luot ta => "+user.getUsername());
-                    try {
-                        setTurn(BoardUs,user,roomID,boardID,BoardUs.indexOf(user));
-                        return;
-                    } catch (InterruptedException e) {
-                        throw new RuntimeException(e);
+    /** Sau 2,5 giây: cộng/trừ xu thật, phát WIN từng khoản rồi FINISH. */
+    private void finishRound(BoardInfo board, byte roomID, int gen) {
+        synchronized (board) {
+            if (board.phase != 3 || board.phaseGen != gen) return;
+
+            // Áp tiền vào tài khoản (người đã rời nhưng còn phiên thì vẫn
+            // nhận qua chính đối tượng User trong ảnh chụp ghế).
+            if (board.seatSnap != null) {
+                for (int s = 0; s < 5; s++) {
+                    User u = board.seatSnap[s];
+                    if (u != null && board.seatDeltas[s] != 0) {
+                        u.updateXu(board.seatDeltas[s]);
                     }
                 }
             }
-        }
-    }
 
-
-
-    private void haPhom(Message ms,User us) throws IOException, InterruptedException {//ms 65
-        byte roomID = ms.reader().readByte();
-        byte boardID = ms.reader().readByte();
-        byte indexFrom = ms.reader().readByte();
-        byte indexTo = ms.reader().readByte();
-
-        System.out.println("indexFrom: " + indexFrom);
-        System.out.println("indexTo: " + indexTo);
-
-        BoardInfo board1 = BoardManager.getInstance().find(boardID);
-        List<User> boardUsers = board1.getLstUsers();
-
-        // Lấy danh sách tiền đã đặt của người chơi hiện tại (us)
-        List<Byte> userMoneyPutList = us.getMoneyPutList();
-        System.out.println("Initial Money Put List for " + us.getUsername() + ": " + userMoneyPutList);
-
-        // Tổng số tiền cược từ indexFrom đến indexTo
-        int totalSum = 0;
-
-        // Cộng dồn tổng tiền từ indexFrom đến indexTo
-        if (indexFrom <= indexTo) {
-            for (int i = indexFrom; i <= indexTo; i++) {
-                totalSum += userMoneyPutList.get(i);
-            }
-        } else {
-            for (int i = indexFrom; i >= indexTo; i--) {
-                totalSum += userMoneyPutList.get(i);
-            }
-        }
-
-        System.out.println("Total Sum from indexFrom (" + indexFrom + ") to indexTo (" + indexTo + "): " + totalSum);
-
-        // Cập nhật danh sách putMoneyList của người chơi us tại indexTo
-        userMoneyPutList.set(indexTo, (byte) (userMoneyPutList.get(indexTo) + totalSum));
-
-        // Đặt lại tiền ở indexFrom về 0, giữ nguyên tiền ở các vị trí khác
-        userMoneyPutList.set(indexFrom, (byte) 0);
-
-        System.out.println("Updated Money Put List for " + us.getUsername() + ": " + userMoneyPutList);
-
-        ms = new Message(Cmd.HA_PHOM); // 65
-        DataOutputStream ds = ms.writer();
-        ds.writeByte(roomID);
-        ds.writeByte(boardID);
-
-        ds.writeByte(boardUsers.indexOf(us)); // Ghi lại chỉ số của người chơi hiện tại
-        ds.writeByte(indexFrom); // Ghi giá trị indexFrom
-        ds.writeByte(indexTo);
-        ds.writeByte(userMoneyPutList.get(indexTo));
-        ds.flush();
-
-        System.out.println(us.getUsername()+"đã Hạ Phỏm thành công ");
-        for (User user : boardUsers) {
-            user.getSession().sendMessage(ms);
-        }
-
-        for(User user : boardUsers) {
-            if (!user.isHaPhom())
-            {
-                System.out.println("Gửi Lượt Hạ Phỏm "+user.getUsername());
-                try {
-                    setTurn(boardUsers,user,roomID,boardID,boardUsers.indexOf(user));
-                    return;
-                } catch (InterruptedException e) {
-                    throw new RuntimeException(e);
+            // WIN (60): từng khoản chuyển — người thua → chủ bàn,
+            // chủ bàn → người thắng. Mỗi khoản một gói như client gốc đọc.
+            try {
+                for (int s = 1; s < 5; s++) {
+                    int delta = board.seatDeltas[s];
+                    if (delta == 0) continue;
+                    Message win = boardMsg(Cmd.WIN, roomID, board.boardID);
+                    DataOutputStream dw = win.writer();
+                    if (delta < 0) {
+                        dw.writeByte(s);
+                        dw.writeByte(0);
+                        dw.writeInt(-delta);
+                    } else {
+                        dw.writeByte(0);
+                        dw.writeByte(s);
+                        dw.writeInt(delta);
+                    }
+                    dw.flush();
+                    broadcast(board, win);
                 }
+                Message fin = boardMsg(Cmd.FINISH, roomID, board.boardID);
+                DataOutputStream df = fin.writer();
+                for (int s = 0; s < 5; s++) df.writeInt(board.seatDeltas[s]);
+                df.flush();
+                broadcast(board, fin);
+            } catch (IOException ignored) {
             }
-        }
-        gameResult(roomID,boardID);
-    }
 
-
-    private void Skip(Message ms,User us) throws IOException, InterruptedException {//ms 6
-
-        byte roomID = ms.reader().readByte();
-        byte boardID = ms.reader().readByte();
-        //us.getService().serverDialog("skip dang xay dung");
-        BoardInfo board = BoardManager.getInstance().find(boardID);
-        List<User> BoardUs = board.getLstUsers();
-        us.setHaPhom(true);
-        ms = new Message(Cmd.HA_PHOM); // 65
-        DataOutputStream ds = ms.writer();
-        ds.writeByte(roomID);
-        ds.writeByte(boardID);
-
-        for(User user : BoardUs) {
-            if (!user.isHaPhom())
-            {
-                System.out.println("Gửi Lượt Hạ Phỏm "+user.getUsername());
-                try {
-                    setTurn(BoardUs,user,roomID,boardID,BoardUs.indexOf(user));
-                    return;
-                } catch (InterruptedException e) {
-                    throw new RuntimeException(e);
-                }
-            }
-        }
-        gameResult(roomID,boardID);
-    }
-
-
-
-    private void setTurn(List<User> lstus,User us,byte roomID,byte boardID,int index) throws IOException, InterruptedException {
-        Message ms1 = new Message(Cmd.SET_TURN);
-        DataOutputStream ds1 = ms1.writer();
-        ds1.writeByte(roomID);
-        ds1.writeByte(boardID);
-        ds1.writeByte(index);
-        ds1.flush();
-        us.getSession().sendMessage(ms1);
-        us.setHaPhom(true);
-        System.out.println("Người chơi "+us.getUsername()+" đang hạ phỏm");
-        for (User user1 : lstus) {
-            user1.session.sendMessage(ms1);
+            board.phase = 0;
+            board.phaseGen++;
+            board.setPlaying(false);
+            board.readyIds.clear();
+            clearRoundState(board);
         }
     }
-
-
-    private void gameResult(byte roomID,byte boardID) throws IOException, InterruptedException {
-
-        BoardInfo board = BoardManager.getInstance().find(boardID);
-        List<User> BoardUs = board.getLstUsers();
-        System.out.println("game resutl");
-        Message ms1 = new Message(Cmd.GAME_RESULT);
-
-        DataOutputStream ds1 = ms1.writer();
-        ds1.writeByte(roomID);
-        ds1.writeByte(boardID);
-
-        for (int i = 0; i < 3; i++) {
-            int xn = Utils.nextInt(5);
-            ds1.writeByte(xn);
-        }
-
-        ds1.flush();
-        for (User user : BoardUs) {
-            user.getSession().sendMessage(ms1);
-        }
-
-        Thread.sleep(2500);
-        Message ms2 = new Message(Cmd.WIN);
-        DataOutputStream ds2 = ms2.writer();
-        ds2.writeByte(roomID);
-        ds2.writeByte(boardID);
-        for (User user : BoardUs) {
-            ds2.writeByte(BoardUs.indexOf(user));
-            ds2.writeByte(1);
-            ds2.writeByte(999);//money
-            ds2.flush();
-            user.getSession().sendMessage(ms2);
-        }
-
-        Message ms3 = new Message(Cmd.FINISH);
-        DataOutputStream ds3 = ms3.writer();
-        ds3.writeByte(roomID);
-        ds3.writeByte(boardID);
-        for (int i = 0; i < 5; i++)
-        {
-            ds3.writeInt(999);
-        }
-        ds3.flush();
-        for (User user : BoardUs) {
-            user.getSession().sendMessage(ms3);
-        }
-
-        board.setPlaying(false);
-    }
-
-
-
-    private void setMoney(Message ms,User us) throws IOException {
-        byte roomID = ms.reader().readByte();
-        byte boardID = ms.reader().readByte();
-        BoardInfo board = BoardManager.getInstance().find(boardID);
-        List<User> BoardUs = board.getLstUsers();
-
-        int Money = ms.reader().readInt();
-        ms = new Message(Cmd.SET_MONEY);
-
-        if (us.getXeng() < Money*48)
-        {
-            int xengValue = us.getXeng();
-            int result = xengValue / 50;
-            us.getAvatarService().serverDialog("Để đặt được "+Money+" thì bạn cần có số tiền là "+ Money*48);
-            return;
-        }
-        if (Money > 100000)
-        {
-            us.getAvatarService().serverDialog("Vui lòng đặt nhỏ hơn 100.000");
-            return;
-        }
-        for (User user : BoardUs) {
-            board.setMoney(Money);
-            DataOutputStream ds = ms.writer();
-            ds.writeByte(roomID);
-            ds.writeByte(boardID);
-            ds.writeInt(Money);
-            user.getSession().sendMessage(ms);
-        }
-
-//        byte id = ms.reader().readByte();
-//        ms = new Message(Cmd.REQUEST_BOARDLIST);
-//        DataOutputStream ds = ms.writer();
-//        ds.writeByte(id);
-//
-//        List<BoardInfo> boardInfos = BoardManager.getInstance().boardList;
-//
-//
-//        for(BoardInfo a : boardInfos)
-//        {
-//            ds.writeByte(a.boardID);
-//            ds.writeByte(a.nPlayer);
-//            if(a.isPass){ds.writeByte(1);}
-//            else{ds.writeByte(0);}
-//            ds.writeInt(0);
-//        }
-//        ds.flush();
-//
-//        this.client.user.sendMessage(ms);
-//
-
-    }
-
-
 }

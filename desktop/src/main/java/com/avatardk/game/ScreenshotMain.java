@@ -1134,6 +1134,53 @@ public class ScreenshotMain {
                         }
                         if (frame == 15) {
                             shot("shot-aincrad-battle.png");
+                            stage = 117; frame = 0;
+                        }
+                        break;
+                    case 117: // Casino: chọn phòng
+                        if (frame == 1) {
+                            world.debugCloseHubGames();
+                            world.debugCasinoRooms();
+                        }
+                        if (frame == 15) {
+                            shot("shot-casino-rooms.png");
+                            stage = 118; frame = 0;
+                        }
+                        break;
+                    case 118: // Casino: chọn bàn
+                        if (frame == 1) {
+                            world.debugCasinoBoards();
+                        }
+                        if (frame == 15) {
+                            shot("shot-casino-boards.png");
+                            stage = 119; frame = 0;
+                        }
+                        break;
+                    case 119: // Bầu Cua: đang đặt cược
+                        if (frame == 1) {
+                            world.debugCasinoBoard();
+                        }
+                        if (frame == 15) {
+                            shot("shot-casino-board.png");
+                            stage = 120; frame = 0;
+                        }
+                        break;
+                    case 120: // Bầu Cua: kết quả ván
+                        if (frame == 1) {
+                            world.debugCasinoResult();
+                        }
+                        if (frame == 15) {
+                            shot("shot-casino-result.png");
+                            stage = 121; frame = 0;
+                        }
+                        break;
+                    case 121: // nền ban ngày ở thành phố (kiểm lớp trời/BGMap)
+                        if (frame == 1) {
+                            world.debugCloseHubGames();
+                            world.debugBgDay();
+                        }
+                        if (frame == 15) {
+                            shot("shot-bg-day-city.png");
                             stage = 112; frame = 0;
                         }
                         break;

@@ -38,16 +38,7 @@ public class BoardManager {
         synchronized (this) {
             for (BoardInfo board : boardList) {
                 if (board.boardID == id) {
-                    boolean userExists = false;
-                    for (User existingUser : board.lstUsers) {
-                        if (existingUser.getId() == user.getId()) {
-                            userExists = true;
-                            break;
-                        }
-                    }
-                    if (!userExists) {
-                        board.nPlayer += 1;
-                        board.lstUsers.add(user);
+                    if (board.seatOf(user) < 0 && board.addUser(user) >= 0) {
                         user.setRoomID(roomID);
                     }
                 }
@@ -64,7 +55,7 @@ public class BoardManager {
         for (int i = 0; i < 6; i++) {
             BoardInfo board = new BoardInfo();
             board.boardID = (byte) i;
-            board.nPlayer = 80;//số ng chia 16
+            board.nPlayer = 0;
             board.maxPlayer = 5; // Đặt maxPlayer là 5
             board.isPass = false;
             board.isPlaying = false;
