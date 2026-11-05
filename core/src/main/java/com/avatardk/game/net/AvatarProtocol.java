@@ -82,6 +82,12 @@ public final class AvatarProtocol {
      *  -120]: sub 0 LIST, 1 SET {short id}, 5 ZONE_REQ; server trả
      *  sub 0 STATE, 3 WEAR (cả khu), 4 ZONE_STATE. */
     public static final byte TITLE = -120;
+    /** Đố vui trên map [PORT theo ANSWERQUESTION của bản chính;
+     *  số -97 đã là REQUEST_DYNAMIC_PART ở bản fan nên dùng -121]:
+     *  server phát sub 0 QUESTION cho cả khu, client trả sub 1
+     *  ANSWER {int id, byte chọn}; server trả sub 3 FEEDBACK riêng
+     *  và sub 2 RESULT cho cả khu khi hết giờ. */
+    public static final byte QUIZ = -121;
     /** Xoá đồ: C→S {short idPart, byte type} (1 = trong giỏ, 0 = đang mặc);
      *  S→C {int id người, short idPart} (Cmd.REMOVE_ITEM của gốc). */
     public static final byte REMOVE_ITEM = -36;
@@ -476,6 +482,22 @@ public final class AvatarProtocol {
     public static void titleZoneReq(GameConnection conn) throws IOException {
         Msg m = new Msg(TITLE);
         m.writer().writeByte(5);
+        conn.send(m);
+    }
+
+    public static void quizPing(GameConnection conn) throws IOException {
+        Msg m = new Msg(QUIZ);
+        m.writer().writeByte(9);
+        conn.send(m);
+    }
+
+    public static void quizAnswer(GameConnection conn, int quizId, int choice)
+            throws IOException {
+        Msg m = new Msg(QUIZ);
+        java.io.DataOutputStream w = m.writer();
+        w.writeByte(1);
+        w.writeInt(quizId);
+        w.writeByte(choice);
         conn.send(m);
     }
 

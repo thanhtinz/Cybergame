@@ -1486,6 +1486,15 @@ public class ScreenshotMain {
                         }
                         if (frame == 15) {
                             shot("shot-title-map.png");
+                            stage = 157; frame = 0;
+                        }
+                        break;
+                    case 157: // Panel Đố vui
+                        if (frame == 1) {
+                            world.debugOpenQuiz();
+                        }
+                        if (frame == 15) {
+                            shot("shot-quiz.png");
                             stage = 121; frame = 0;
                         }
                         break;

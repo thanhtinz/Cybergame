@@ -165,6 +165,13 @@ public class MessageHandler implements IMessageHandler {
                         }
                         break;
                     }
+                    case Cmd.QUIZ: {
+                        if (this.client.user != null) {
+                            new avatar.service.QuizService(this.client)
+                                    .onMessage(mss);
+                        }
+                        break;
+                    }
                     case Cmd.TITLE: {
                         if (this.client.user != null) {
                             new avatar.service.TitleService(this.client)

@@ -3371,6 +3371,49 @@ public class WorldScreen extends ScreenAdapter {
                 return;
             }
             switch (m.command) {
+                case AvatarProtocol.QUIZ: {
+                    java.io.DataInputStream qr = m.reader();
+                    int qsub = qr.readByte();
+                    if (qsub == 0) {
+                        int qid = qr.readInt();
+                        String q = qr.readUTF();
+                        String[] ans = new String[4];
+                        for (int i = 0; i < 4; i++) ans[i] = qr.readUTF();
+                        int secs = qr.readByte();
+                        qr.readInt(); // thưởng tối đa (chỉ để hiển thị nếu cần)
+                        if (!inMiniGameScreen()) {
+                            closeOtherPanels();
+                            quizId = qid;
+                            quizQuestion = q;
+                            for (int i = 0; i < 4; i++) quizAnswers[i] = ans[i];
+                            quizSeconds = secs;
+                            quizDeadline = System.currentTimeMillis() + secs * 1000L;
+                            quizAnswered = false;
+                            quizFeedback = "";
+                            quizOpen = true;
+                        }
+                    } else if (qsub == 2) {
+                        String right = qr.readUTF();
+                        String fastest = qr.readUTF();
+                        quizOpen = false;
+                        addChatLog(TAB_SYSTEM, null, "Đố vui — đáp án đúng: "
+                            + right + (fastest.isEmpty() ? " · Không ai trả lời đúng"
+                                : " · Nhanh nhất: " + fastest), true);
+                    } else if (qsub == 3) {
+                        int okFlag = qr.readByte();
+                        int reward = qr.readInt();
+                        String right = qr.readUTF();
+                        if (okFlag == 1) {
+                            quizOpen = false;
+                            addChatLog(TAB_SYSTEM, null,
+                                "Trả lời đúng! +" + fmtMoney(reward) + " xu", true);
+                        } else if (quizOpen) {
+                            quizAnswered = true;
+                            quizFeedback = "Chưa đúng — đáp án đúng: " + right;
+                        }
+                    }
+                    break;
+                }
                 case AvatarProtocol.TITLE: {
                     java.io.DataInputStream r = m.reader();
                     int sub = r.readByte();
@@ -3418,6 +3461,7 @@ public class WorldScreen extends ScreenAdapter {
                     // vào khu: xin danh hiệu của mọi người trong khu
                     if (online()) {
                         try {
+                            AvatarProtocol.quizPing(game.connection);
                             AvatarProtocol.titleZoneReq(game.connection);
                             if (!titleAsked) {
                                 titleAsked = true;
@@ -5961,6 +6005,10 @@ public class WorldScreen extends ScreenAdapter {
         }
         if (titleOpen) {
             titleTouch(x, y);
+            return;
+        }
+        if (quizOpen) {
+            quizTouch(x, y);
             return;
         }
         // panel giỏ đồ / rương đồ đang mở: modal, nuốt mọi chạm
@@ -9348,6 +9396,16 @@ public class WorldScreen extends ScreenAdapter {
         new Color(1f, 0.85f, 0.38f, 1f), new Color(1f, 0.62f, 0.30f, 1f),
         new Color(1f, 0.60f, 0.80f, 1f)};
 
+    // ĐỐ VUI TRÊN MAP [PORT gói -121]
+    private boolean quizOpen = false;
+    private int quizId = 0;
+    private String quizQuestion = "";
+    private final String[] quizAnswers = new String[4];
+    private long quizDeadline = 0;
+    private int quizSeconds = 30;
+    private boolean quizAnswered = false;
+    private String quizFeedback = "";
+
     /** Danh hiệu của doll ĐANG được vẽ (nơi gọi đặt trước drawFigure,
      *  drawFigure tự xoá sau khi dùng). */
     private int drawingTitleId = 0;
@@ -9955,6 +10013,100 @@ public class WorldScreen extends ScreenAdapter {
                 try {
                     AvatarProtocol.titleSet(game.connection,
                         myTitleId == d.id ? 0 : d.id);
+                } catch (IOException ignored) {
+                }
+                return;
+            }
+        }
+    }
+
+    private static final float QZ_W = 640, QZ_H = 470;
+
+    /** Panel ĐỐ VUI [PORT]: câu hỏi + thanh thời gian + 4 đáp án
+     *  2x2. Hết giờ tự đóng (server phát RESULT ngay sau đó). */
+    private void drawQuizPanel() {
+        long remainMs = quizDeadline - System.currentTimeMillis();
+        if (remainMs <= 0 && !quizAnswered) {
+            quizOpen = false;
+            return;
+        }
+        float px = (Ui.W - QZ_W) / 2f, py = (Ui.H - QZ_H) / 2f, top = py + QZ_H;
+        batch.setColor(0f, 0f, 0f, 0.55f);
+        batch.draw(whiteTex, 0, 0, Ui.W, Ui.H);
+        batch.setColor(Color.WHITE);
+        batch.draw(Ui.roundedRect((int) QZ_W, (int) QZ_H, 18,
+            new Color(0.07f, 0.11f, 0.17f, 0.97f), GLASS_RIM), px, py);
+        Ui.font.setColor(1f, 0.85f, 0.38f, 1f);
+        Ui.font.draw(batch, "ĐỐ VUI", px + 28, top - 24);
+        batch.draw(Ui.roundedRect(36, 36, 10, Ui.BTN_CLOSE, GLASS_RIM), px + QZ_W - 54, top - 54);
+        Ui.faIcon(batch, Ui.fa20, Ui.FA_XMARK, px + QZ_W - 36, top - 36,
+            new Color(0.9f, 0.93f, 1f, 1f));
+        // thanh thời gian
+        float frac = quizSeconds > 0
+            ? Math.max(0f, Math.min(1f, remainMs / (quizSeconds * 1000f))) : 0f;
+        batch.draw(Ui.roundedRect((int) (QZ_W - 56), 14, 7, new Color(0f, 0f, 0f, 0.45f), GLASS_RIM),
+            px + 28, top - 92);
+        if (frac > 0.01f) {
+            Color tc = frac > 0.34f ? new Color(0.45f, 0.85f, 0.5f, 1f)
+                : new Color(0.95f, 0.45f, 0.4f, 1f);
+            batch.draw(Ui.roundedRect(Math.max(14, (int) ((QZ_W - 56) * frac)), 14, 7, tc, tc),
+                px + 28, top - 92);
+        }
+        Ui.fontSmall.setColor(1f, 1f, 1f, 0.8f);
+        String timeTxt = "Còn " + Math.max(0, (remainMs + 999) / 1000) + " giây · Trả lời đúng nhận tới 2.000 xu";
+        layout.setText(Ui.fontSmall, timeTxt);
+        Ui.fontSmall.draw(batch, timeTxt, px + QZ_W - 28 - layout.width, top - 62);
+        // câu hỏi (bọc chữ)
+        java.util.List<String> lines = wrapText(quizQuestion, Ui.font, QZ_W - 56);
+        float ly = top - 128;
+        Ui.font.setColor(Color.WHITE);
+        for (String ln : lines) {
+            Ui.font.draw(batch, ln, px + 28, ly);
+            ly -= 30;
+        }
+        // 4 đáp án 2x2
+        float bw = 282, bh = 64, gap = 16;
+        float gridTop = py + 178;
+        String[] abc = {"A", "B", "C", "D"};
+        for (int i = 0; i < 4; i++) {
+            int col = i % 2, row = i / 2;
+            float bx = px + 28 + col * (bw + gap);
+            float by = gridTop - row * (bh + gap);
+            batch.draw(Ui.roundedRect((int) bw, (int) bh, 12,
+                quizAnswered ? new Color(0f, 0f, 0f, 0.25f) : new Color(0.16f, 0.24f, 0.34f, 0.95f),
+                GLASS_RIM), bx, by);
+            Ui.font.setColor(1f, 0.85f, 0.38f, 1f);
+            Ui.font.draw(batch, abc[i] + ".", bx + 16, by + 41);
+            Ui.font.setColor(1f, 1f, 1f, quizAnswered ? 0.5f : 0.95f);
+            Ui.font.draw(batch, truncTo(Ui.font,
+                quizAnswers[i] == null ? "" : quizAnswers[i], bw - 64), bx + 52, by + 41);
+        }
+        Ui.font.setColor(Color.WHITE);
+        if (!quizFeedback.isEmpty()) {
+            Ui.centered(batch, Ui.fontSmall, quizFeedback, px + QZ_W / 2f, py + 34,
+                new Color(1f, 0.6f, 0.5f, 1f));
+        }
+    }
+
+    private void quizTouch(float x, float y) {
+        float px = (Ui.W - QZ_W) / 2f, py = (Ui.H - QZ_H) / 2f, top = py + QZ_H;
+        if (x >= px + QZ_W - 54 && x <= px + QZ_W - 18
+                && y >= top - 54 && y <= top - 18) {
+            quizOpen = false;
+            return;
+        }
+        if (x < px || x > px + QZ_W || y < py || y > py + QZ_H) return;
+        if (quizAnswered || !online()) return;
+        float bw = 282, bh = 64, gap = 16;
+        float gridTop = py + 178;
+        for (int i = 0; i < 4; i++) {
+            int col = i % 2, row = i / 2;
+            float bx = px + 28 + col * (bw + gap);
+            float by = gridTop - row * (bh + gap);
+            if (x >= bx && x <= bx + bw && y >= by && y <= by + bh) {
+                quizAnswered = true;
+                try {
+                    AvatarProtocol.quizAnswer(game.connection, quizId, i);
                 } catch (IOException ignored) {
                 }
                 return;
@@ -11261,6 +11413,7 @@ public class WorldScreen extends ScreenAdapter {
         if (charPanel) drawCharPanel();
         if (bagPanel) drawInvPanel(false);
         if (titleOpen) drawTitlePanel();
+        if (quizOpen) drawQuizPanel();
         if (chestPanel) drawChestPanels();
         if (shopOpen) drawShop();
         if (npcMenuOpen) drawNpcMenu();
@@ -24619,6 +24772,24 @@ public class WorldScreen extends ScreenAdapter {
         shopNewFlow = true;
         myXu = 100000;
         openBill();
+    }
+
+    /** Sân khấu chụp ĐỐ VUI: nạp một câu hỏi mẫu, panel mở với
+     *  gần như trọn 30 giây. */
+    public void debugOpenQuiz() {
+        debugCloseHubGames();
+        closeOtherPanels();
+        quizId = 99;
+        quizQuestion = "Sông nào dài nhất Việt Nam và chảy qua bao nhiêu tỉnh thành?";
+        quizAnswers[0] = "Sông Hồng";
+        quizAnswers[1] = "Sông Mê Kông";
+        quizAnswers[2] = "Sông Đồng Nai";
+        quizAnswers[3] = "Sông Đà";
+        quizSeconds = 30;
+        quizDeadline = System.currentTimeMillis() + 24000L;
+        quizAnswered = false;
+        quizFeedback = "";
+        quizOpen = true;
     }
 
     /** Sân khấu chụp DANH HIỆU: nạp bảng định nghĩa mẫu (khớp
