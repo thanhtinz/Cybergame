@@ -7530,6 +7530,27 @@ public class WorldScreen extends ScreenAdapter {
         }
         return circleTex;
     }
+    private Texture goldRingTex;
+    /** Khung vàng đơn giản quanh avatar panel (lệnh Tín: thêm
+     *  khung đơn giản cho avatar nổi bật — game gốc không có hệ
+     *  khung avatar nên đây là trang trí cố định của panel). */
+    private Texture goldRingTexture() {
+        if (goldRingTex == null) {
+            Pixmap pm = new Pixmap(96, 96, Pixmap.Format.RGBA8888);
+            pm.setBlending(Pixmap.Blending.None);
+            pm.setColor(0.72f, 0.45f, 0.10f, 1f);
+            pm.fillCircle(48, 48, 47);
+            pm.setColor(1f, 0.78f, 0.30f, 1f);
+            pm.fillCircle(48, 48, 45);
+            pm.setColor(1f, 0.90f, 0.55f, 1f);
+            pm.fillCircle(48, 48, 41);
+            pm.setColor(0f, 0f, 0f, 0f);
+            pm.fillCircle(48, 48, 38);
+            goldRingTex = new Texture(pm);
+            pm.dispose();
+        }
+        return goldRingTex;
+    }
     private Texture ringTexture() {
         if (ringTex == null) {
             Pixmap pm = new Pixmap(76, 76, Pixmap.Format.RGBA8888);
@@ -9440,6 +9461,8 @@ public class WorldScreen extends ScreenAdapter {
         int[] st = charStats();
         // header: avatar tròn + tên + cấp
         float avCx = px + 62, avCy = py + CP_H - 52;
+        batch.setColor(1f, 0.80f, 0.35f, 0.15f);
+        batch.draw(circleTexture(), avCx - 52, avCy - 52, 104, 104);
         batch.setColor(0.10f, 0.16f, 0.24f, 0.9f);
         batch.draw(circleTexture(), avCx - 39, avCy - 39, 78, 78);
         batch.setColor(Color.WHITE);
@@ -9468,6 +9491,8 @@ public class WorldScreen extends ScreenAdapter {
                     p.gender == 1 ? 1f : 0.75f, 1f));
         }
         // huy hiệu "Lv" vàng cam thay icon khiên (lệnh Tín)
+        // khung vàng đơn giản quanh avatar cho nổi bật
+        batch.draw(goldRingTexture(), avCx - 48, avCy - 48, 96, 96);
         batch.draw(Ui.gradientRect(38, 22, 11,
             EntryUi.ORANGE_TOP, EntryUi.ORANGE_BOT), px + 114, avCy - 36);
         Ui.centered(batch, Ui.fontTiny, "Lv", px + 133, avCy - 18,
