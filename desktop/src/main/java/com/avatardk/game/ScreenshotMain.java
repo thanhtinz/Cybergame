@@ -1315,6 +1315,33 @@ public class ScreenshotMain {
                         }
                         if (frame == 15) {
                             shot("shot-clan-list.png");
+                            stage = 138; frame = 0;
+                        }
+                        break;
+                    case 138: // Chợ người chơi: danh sách tin bán
+                        if (frame == 1) {
+                            world.debugMarket();
+                        }
+                        if (frame == 15) {
+                            shot("shot-market.png");
+                            stage = 139; frame = 0;
+                        }
+                        break;
+                    case 139: // Chợ: tab Đăng bán
+                        if (frame == 1) {
+                            world.debugMarketSell();
+                        }
+                        if (frame == 15) {
+                            shot("shot-market-sell.png");
+                            stage = 140; frame = 0;
+                        }
+                        break;
+                    case 140: // Giao dịch trực tiếp
+                        if (frame == 1) {
+                            world.debugTrade();
+                        }
+                        if (frame == 15) {
+                            shot("shot-trade.png");
                             stage = 121; frame = 0;
                         }
                         break;

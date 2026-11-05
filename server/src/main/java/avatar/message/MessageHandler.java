@@ -374,6 +374,13 @@ public class MessageHandler implements IMessageHandler {
                         }
                         break;
                     }
+                    // [PORT] Chợ + Giao dịch theo bản chính 3.4.4 (gói 127)
+                    case Cmd.MARKET: {
+                        if (this.client.user != null) {
+                            new avatar.service.MarketTradeService(this.client).onMessage(mss);
+                        }
+                        break;
+                    }
                     // [PORT] Clan đầy đủ theo bản chính 3.4.4 (gói −112)
                     case Cmd.CLAN: {
                         if (this.client.user != null) {

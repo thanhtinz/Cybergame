@@ -582,6 +582,62 @@ public final class AvatarProtocol {
     }
 
     // ===== Clan đầy đủ (bản chính 3.4.4; docs/clan-spec.md) =====
+    // ---- CHỢ + GIAO DỊCH (bản chính: gói 127 MARKET) ----
+    public static final byte MARKET = 127;
+    public static final byte MK_LIST = 0, MK_SELL = 1, MK_BUY = 2, MK_CANCEL = 3,
+        MK_MY = 4, MK_RESULT = 5, MK_CHEST = 6;
+    public static final byte TR_INVITE = 10, TR_INVITE_IN = 11, TR_REPLY = 12,
+        TR_OPEN = 13, TR_SET = 14, TR_PARTNER_SET = 15, TR_LOCK = 16,
+        TR_LOCK_STATE = 17, TR_ACCEPT = 18, TR_DONE = 19, TR_CANCEL = 20,
+        TR_CHAT = 21;
+
+    public static Msg marketMsg(byte sub) throws IOException {
+        Msg m = new Msg(MARKET); m.writer().writeByte(sub); return m;
+    }
+
+    public static void marketList(GameConnection conn, int page) throws IOException {
+        Msg m = marketMsg(MK_LIST); m.writer().writeByte(page); conn.send(m);
+    }
+    public static void marketSell(GameConnection conn, int partId, int qty, int price) throws IOException {
+        Msg m = marketMsg(MK_SELL);
+        m.writer().writeShort(partId); m.writer().writeInt(qty); m.writer().writeInt(price);
+        conn.send(m);
+    }
+    public static void marketBuy(GameConnection conn, int listingId) throws IOException {
+        Msg m = marketMsg(MK_BUY); m.writer().writeInt(listingId); conn.send(m);
+    }
+    public static void marketCancel(GameConnection conn, int listingId) throws IOException {
+        Msg m = marketMsg(MK_CANCEL); m.writer().writeInt(listingId); conn.send(m);
+    }
+    public static void marketMy(GameConnection conn) throws IOException { conn.send(marketMsg(MK_MY)); }
+    public static void marketChest(GameConnection conn) throws IOException { conn.send(marketMsg(MK_CHEST)); }
+    public static void tradeInvite(GameConnection conn, int targetId) throws IOException {
+        Msg m = marketMsg(TR_INVITE); m.writer().writeInt(targetId); conn.send(m);
+    }
+    public static void tradeReply(GameConnection conn, int fromId, boolean ok) throws IOException {
+        Msg m = marketMsg(TR_REPLY); m.writer().writeInt(fromId); m.writer().writeBoolean(ok); conn.send(m);
+    }
+    public static void tradeSet(GameConnection conn, java.util.List<int[]> items,
+                                java.util.List<Long> exps, int xu) throws IOException {
+        Msg m = marketMsg(TR_SET);
+        m.writer().writeByte(items.size());
+        for (int i = 0; i < items.size(); i++) {
+            m.writer().writeShort(items.get(i)[0]);
+            m.writer().writeInt(items.get(i)[1]);
+            m.writer().writeLong(exps.get(i));
+        }
+        m.writer().writeInt(xu);
+        conn.send(m);
+    }
+    public static void tradeLock(GameConnection conn, boolean lock) throws IOException {
+        Msg m = marketMsg(TR_LOCK); m.writer().writeBoolean(lock); conn.send(m);
+    }
+    public static void tradeAccept(GameConnection conn) throws IOException { conn.send(marketMsg(TR_ACCEPT)); }
+    public static void tradeCancel(GameConnection conn) throws IOException { conn.send(marketMsg(TR_CANCEL)); }
+    public static void tradeChat(GameConnection conn, String text) throws IOException {
+        Msg m = marketMsg(TR_CHAT); m.writer().writeUTF(text); conn.send(m);
+    }
+
     // Phong bì CLAN: {byte sub, ...}. Số lệnh chính −112 đúng bản chính;
     // lệnh con theo thứ tự khai báo Cmd_Message của bản chính.
     public static final byte CLAN = -112;

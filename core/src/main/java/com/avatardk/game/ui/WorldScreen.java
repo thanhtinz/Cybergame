@@ -3731,6 +3731,11 @@ public class WorldScreen extends ScreenAdapter {
                     handleClanPacket(m);
                     break;
                 }
+                case AvatarProtocol.MARKET: {
+                    // phong bì chợ + giao dịch {127}: {byte sub,...}
+                    handleMarketPacket(m);
+                    break;
+                }
                 case AvatarProtocol.FISH_START: {
                     // gói 86 trả lời bắt đầu câu: {bool ok, UTF lỗi}
                     java.io.DataInputStream r = m.reader();
@@ -5616,6 +5621,10 @@ public class WorldScreen extends ScreenAdapter {
         if (weddingConfirmTouch(x, y)) return;
         // panel clan + hộp lời mời clan
         if (clanTouch(x, y)) return;
+        // chợ + giao dịch + hộp mời giao dịch
+        if (tradeInviteTouch(x, y)) return;
+        if (marketTouch(x, y)) return;
+        if (tradeTouch(x, y)) return;
         // hộp xác nhận nâng cấp rương (−90) là modal trên cùng
         if (chestUpTouch(x, y)) return;
         // hoá đơn mua chung là lớp trên cùng (mở đè cả panel nhà —
@@ -5790,9 +5799,9 @@ public class WorldScreen extends ScreenAdapter {
             }
             if (panelSub) {
                 float sy = ppSubY();
-                for (int i = 0; i < 4; i++) {
+                for (int i = 0; i < 5; i++) {
                     float bx = ppSubBtnX(i);
-                    if (x >= bx && x <= bx + 100 && y >= sy + 6 && y <= sy + 82) {
+                    if (x >= bx && x <= bx + 82 && y >= sy + 6 && y <= sy + 82) {
                         panelSubAction(i);
                         return;
                     }
@@ -7022,7 +7031,9 @@ public class WorldScreen extends ScreenAdapter {
         // NPC Lái Buôn khi offline (bản web chơi thử): mở menu cục bộ
         // đúng 3 mục của gốc để xem được panel; hành động chạy tại chỗ
         // (xem openLaiBuonLocalMenu / laiBuonLocalSelect).
-        if (n.data.id == NPC_LAI_BUON && game.connection == null) {
+        if (n.data.id == NPC_LAI_BUON) {
+            // [PORT] menu cục bộ 4 mục: 3 mục gốc + "Chợ người chơi"
+            // (điểm vào chợ theo bản chính, docs/market-trade-spec.md)
             openLaiBuonLocalMenu();
             return;
         }
@@ -7061,8 +7072,8 @@ public class WorldScreen extends ScreenAdapter {
     private static final float PP_W = 470f, PP_H = 184f;
     private static final String[] PP_LABELS = {"Nhắn tin", "Kết bạn", "Tặng quà", "Tương tác", "Khác"};
     private static final String[] PP_ICONS = {Ui.FA_COMMENT_DOTS, Ui.FA_USER_PLUS, Ui.FA_GIFT, Ui.FA_HEART, Ui.FA_FACE_SMILE};
-    private static final String[] PP_SUB_LABELS = {"Đánh", "Hôn", "Mời về nhà", "Thông tin"};
-    private static final String[] PP_SUB_ICONS = {Ui.FA_HAND_FIST, Ui.FA_HEART, Ui.FA_HOUSE, Ui.FA_CIRCLE_INFO};
+    private static final String[] PP_SUB_LABELS = {"Đánh", "Hôn", "Mời về nhà", "Giao dịch", "Thông tin"};
+    private static final String[] PP_SUB_ICONS = {Ui.FA_HAND_FIST, Ui.FA_HEART, Ui.FA_HOUSE, Ui.FA_COINS, Ui.FA_CIRCLE_INFO};
     private RemoteFigure panelPlayer;
     private boolean panelSub;
     private int privateTargetId;
@@ -7160,7 +7171,7 @@ public class WorldScreen extends ScreenAdapter {
     }
     private float ppBtnX(int i) { return playerPanelGeom()[0] + 41f + i * 80f; }
     private float ppBtnY() { return playerPanelGeom()[1] + 28f; }
-    private float ppSubBtnX(int i) { return playerPanelGeom()[0] + 23f + i * 108f; }
+    private float ppSubBtnX(int i) { return playerPanelGeom()[0] + 15f + i * 90f; }
     private float ppSubY() {
         float[] g = playerPanelGeom();
         return ppExtrasUp() ? g[1] + PP_H + 8f : g[1] - 8f - PP_SUB_H;
@@ -7301,6 +7312,20 @@ public class WorldScreen extends ScreenAdapter {
             case 2: // Mời về nhà — đợt Nhà
                 addChatLog(TAB_SYSTEM, null, "Mời về nhà sẽ mở ở đợt Nhà sắp tới.", true);
                 break;
+            case 3: // Giao dịch trực tiếp (gói 127, docs/market-trade-spec.md)
+                if (!online()) {
+                    addChatLog(TAB_SYSTEM, null, "Vào thế giới online mới giao dịch được.", true);
+                    return;
+                }
+                panelPlayer = null;
+                panelSub = false;
+                try {
+                    AvatarProtocol.tradeInvite(game.connection, id);
+                    addChatLog(TAB_SYSTEM, null, "Đã gửi lời mời giao dịch.", true);
+                } catch (IOException e) {
+                    addChatLog(TAB_SYSTEM, null, "Không gửi được lời mời (mất kết nối?).", true);
+                }
+                break;
             default: // Thông tin (gói −22)
                 if (!online()) {
                     addChatLog(TAB_SYSTEM, null, "Vào thế giới online mới xem được thông tin.", true);
@@ -7368,12 +7393,12 @@ public class WorldScreen extends ScreenAdapter {
         if (panelSub) {
             float sy = ppSubY();
             batch.draw(Ui.roundedRect((int) PP_W, (int) PP_SUB_H, 14, GLASS_FILL_DARK, GLASS_RIM), px, sy);
-            for (int i = 0; i < 4; i++) {
+            for (int i = 0; i < 5; i++) {
                 float bx = ppSubBtnX(i);
-                batch.draw(Ui.roundedRect(100, 52, 10, GLASS_FILL, GLASS_RIM), bx, sy + 24);
-                Ui.faIcon(batch, Ui.fa20, PP_SUB_ICONS[i], bx + 50, sy + 50,
+                batch.draw(Ui.roundedRect(82, 52, 10, GLASS_FILL, GLASS_RIM), bx, sy + 24);
+                Ui.faIcon(batch, Ui.fa20, PP_SUB_ICONS[i], bx + 41, sy + 50,
                     i == 1 ? new Color(1f, 0.45f, 0.6f, 1f) : Color.WHITE);
-                Ui.centered(batch, Ui.fontTiny, PP_SUB_LABELS[i], bx + 50, sy + 15,
+                Ui.centered(batch, Ui.fontTiny, PP_SUB_LABELS[i], bx + 41, sy + 15,
                     new Color(1f, 1f, 1f, 0.92f));
             }
         }
@@ -7568,6 +7593,8 @@ public class WorldScreen extends ScreenAdapter {
         guideOpen = false;
         dlPrizeOpen = false;
         clanOpen = false;
+        marketOpen = false;
+        tradeOpen = false;
     }
 
     private void openMsgPanel() {
@@ -10356,7 +10383,8 @@ public class WorldScreen extends ScreenAdapter {
      *  chat) — lệnh của Tín 2026-11-04. */
     private boolean inMiniGameScreen() {
         return mgOpen || tcOpen || crOpen || txOpen || aiOpen
-            || casinoIn || csPending || raceIn || dlOpen || dlPrizeOpen;
+            || casinoIn || csPending || raceIn || dlOpen || dlPrizeOpen
+            || marketOpen || tradeOpen;
     }
 
     private void drawHud(float playerFeetX, float playerFeetY) {
@@ -10400,6 +10428,9 @@ public class WorldScreen extends ScreenAdapter {
         if (msgOpen) drawMsgPanel();
         if (mailOpen) drawMailPanel();
         if (clanOpen) drawClanPanel();
+        if (marketOpen) drawMarketPanel();
+        if (tradeOpen) drawTradePanel();
+        drawTradeInviteBox();
         if (friendOpen) drawFriendPanel();
         if (passFormOpen) drawPassFormPanel();
         if (giftFormOpen) drawGiftFormPanel();
@@ -12021,6 +12052,7 @@ public class WorldScreen extends ScreenAdapter {
         npcMenuTitle = "Lái buôn";
         npcMenuItems.clear();
         npcMenuItems.add("Điểm Danh");
+        npcMenuItems.add("Chợ người chơi");
         npcMenuItems.add("Xem hướng dẫn");
         npcMenuItems.add("Thoát");
         npcMenuOpen = true;
@@ -12028,11 +12060,19 @@ public class WorldScreen extends ScreenAdapter {
 
     private void laiBuonLocalSelect(int i) {
         if (i == 0) {
-            // đúng stub của server gốc: chỉ báo "đang xây dựng"
-            addChatLog(TAB_SYSTEM, null, "đang xây dựng", true);
-            chatBubble = "đang xây dựng";
-            chatTimer = 3f;
+            if (online()) {
+                // Điểm Danh: chạy đúng luồng gốc — xin menu server
+                try { AvatarProtocol.communicate(game.connection, NPC_ID_ADD + NPC_LAI_BUON); }
+                catch (IOException e) { }
+            } else {
+                // offline: đúng stub của server gốc
+                addChatLog(TAB_SYSTEM, null, "đang xây dựng", true);
+                chatBubble = "đang xây dựng";
+                chatTimer = 3f;
+            }
         } else if (i == 1) {
+            openMarketPanel();
+        } else if (i == 2) {
             openGuide("Hướng dẫn", LAI_BUON_GUIDE);
         }
     }
@@ -13065,6 +13105,722 @@ public class WorldScreen extends ScreenAdapter {
             return true;
         }
         return true;
+    }
+
+
+    // ---------- CHỢ + GIAO DỊCH (gói 127, docs/market-trade-spec.md) ----------
+    private static class MkRow {
+        int id; int sellerId; String seller = ""; int partId; int qty;
+        int price; long exp;
+    }
+    private static class ChestRow {
+        int partId; int qty; long exp;
+    }
+    private boolean marketOpen;
+    private int marketTab; // 0 chợ · 1 đăng bán · 2 tin của tôi
+    private final List<MkRow> marketRows = new ArrayList<>();
+    private int marketPage, marketPages = 1;
+    private String marketMsgText = "";
+    private boolean marketMsgOk;
+    private final List<ChestRow> chestRows = new ArrayList<>();
+    private int sellSel = -1, sellQty = 1;
+    private final StringBuilder sellPriceField = new StringBuilder();
+    // giao dịch
+    private boolean tradeOpen;
+    private int tradeOtherId = -1;
+    private String tradeOtherName = "";
+    private final List<int[]> tradeMineItems = new ArrayList<>();
+    private final List<Long> tradeMineExps = new ArrayList<>();
+    private final List<int[]> tradeOtherItems = new ArrayList<>();
+    private final List<Long> tradeOtherExps = new ArrayList<>();
+    private int tradeMyXuOffer, tradeOtherXu;
+    private boolean tradeMyLock, tradeOtherLock;
+    private final List<String> tradeLog = new ArrayList<>();
+    private int tradeInviteFrom = -1;
+    private String tradeInviteName = "";
+    private final StringBuilder tradeChatField = new StringBuilder();
+    private final StringBuilder tradeXuField = new StringBuilder();
+    private boolean tradePickOpen;
+    private String tradeMsg = "";
+    private static final int MK_PW = 920, MK_PH = 600;
+    private static final int MK_PX = (1280 - MK_PW) / 2, MK_PY = (720 - MK_PH) / 2;
+
+    private void openMarketPanel() {
+        if (!online()) {
+            addChatLog(TAB_SYSTEM, null, "Chợ người chơi cần chơi online — bản chơi thử không có.", true);
+            return;
+        }
+        closeOtherPanels();
+        marketOpen = true;
+        marketTab = 0;
+        marketMsgText = "";
+        try {
+            AvatarProtocol.marketList(game.connection, 0);
+            AvatarProtocol.marketChest(game.connection);
+        } catch (IOException e) { }
+    }
+
+    private void tradeSendSet() {
+        try {
+            AvatarProtocol.tradeSet(game.connection, tradeMineItems, tradeMineExps, tradeMyXuOffer);
+        } catch (IOException e) { }
+    }
+
+    private void tradeReset() {
+        tradeMineItems.clear(); tradeMineExps.clear();
+        tradeOtherItems.clear(); tradeOtherExps.clear();
+        tradeMyXuOffer = 0; tradeOtherXu = 0;
+        tradeMyLock = false; tradeOtherLock = false;
+        tradeLog.clear(); tradeMsg = ""; tradePickOpen = false;
+        tradeXuField.setLength(0); tradeChatField.setLength(0);
+    }
+
+    private void handleMarketPacket(Msg m) {
+        try {
+            java.io.DataInputStream r = m.reader();
+            if (r.available() < 1) return;
+            int sub = r.readByte();
+            switch (sub) {
+                case AvatarProtocol.MK_LIST: {
+                    marketPage = r.readByte();
+                    marketPages = Math.max(1, r.readByte());
+                    int n = r.readByte();
+                    marketRows.clear();
+                    for (int i = 0; i < n; i++) {
+                        MkRow row = new MkRow();
+                        row.id = r.readInt();
+                        row.sellerId = r.readInt();
+                        row.seller = r.readUTF();
+                        row.partId = r.readShort();
+                        row.qty = r.readInt();
+                        row.price = r.readInt();
+                        row.exp = r.readLong();
+                        marketRows.add(row);
+                    }
+                    break;
+                }
+                case AvatarProtocol.MK_RESULT: {
+                    boolean ok = r.readBoolean();
+                    String text = r.readUTF();
+                    marketMsgText = text;
+                    marketMsgOk = ok;
+                    if (tradeOpen) {
+                        tradeMsg = text;
+                    } else if (!marketOpen) {
+                        addChatLog(TAB_SYSTEM, null, text, true);
+                    }
+                    break;
+                }
+                case AvatarProtocol.MK_CHEST: {
+                    int n = r.readByte() & 0xFF;
+                    chestRows.clear();
+                    for (int i = 0; i < n; i++) {
+                        ChestRow cr = new ChestRow();
+                        cr.partId = r.readShort();
+                        cr.qty = r.readInt();
+                        cr.exp = r.readLong();
+                        chestRows.add(cr);
+                    }
+                    if (sellSel >= chestRows.size()) sellSel = -1;
+                    break;
+                }
+                case AvatarProtocol.TR_INVITE_IN: {
+                    tradeInviteFrom = r.readInt();
+                    tradeInviteName = r.readUTF();
+                    addChatLog(TAB_SYSTEM, null, tradeInviteName + " mời bạn giao dịch.", true);
+                    break;
+                }
+                case AvatarProtocol.TR_OPEN: {
+                    tradeOtherId = r.readInt();
+                    tradeOtherName = r.readUTF();
+                    tradeInviteFrom = -1;
+                    tradeReset();
+                    closeOtherPanels();
+                    tradeOpen = true;
+                    try { AvatarProtocol.marketChest(game.connection); } catch (IOException e) { }
+                    break;
+                }
+                case AvatarProtocol.TR_PARTNER_SET: {
+                    int n = r.readByte();
+                    tradeOtherItems.clear(); tradeOtherExps.clear();
+                    for (int i = 0; i < n; i++) {
+                        int pid = r.readShort();
+                        int q = r.readInt();
+                        long e2 = r.readLong();
+                        tradeOtherItems.add(new int[]{pid, q});
+                        tradeOtherExps.add(e2);
+                    }
+                    tradeOtherXu = r.readInt();
+                    tradeOtherLock = false;
+                    tradeMyLock = false;
+                    break;
+                }
+                case AvatarProtocol.TR_LOCK_STATE: {
+                    int who = r.readByte();
+                    boolean locked = r.readBoolean();
+                    if (who == 0) tradeMyLock = locked; else tradeOtherLock = locked;
+                    break;
+                }
+                case AvatarProtocol.TR_DONE: {
+                    boolean ok = r.readBoolean();
+                    String text = r.readUTF();
+                    tradeMsg = text;
+                    addChatLog(TAB_SYSTEM, null, text, true);
+                    if (ok) {
+                        tradeOpen = false;
+                        try { AvatarProtocol.marketChest(game.connection); } catch (IOException e) { }
+                    }
+                    break;
+                }
+                case AvatarProtocol.TR_CANCEL: {
+                    String text = r.readUTF();
+                    tradeOpen = false;
+                    addChatLog(TAB_SYSTEM, null, text, true);
+                    break;
+                }
+                case AvatarProtocol.TR_CHAT: {
+                    String from = r.readUTF();
+                    String text = r.readUTF();
+                    tradeLog.add(0, from + ": " + text);
+                    while (tradeLog.size() > 30) tradeLog.remove(tradeLog.size() - 1);
+                    break;
+                }
+                default: break;
+            }
+        } catch (IOException e) { }
+    }
+
+
+    private String itemNameOf(int partId) {
+        com.avatardk.game.data.PartData pd = game.data.part(partId);
+        return pd != null && pd.name != null ? pd.name : ("#" + partId);
+    }
+
+    private String expLabel(long exp) {
+        if (exp < 0) return "Vĩnh viễn";
+        long days = (exp - System.currentTimeMillis()) / 86400000L;
+        if (days < 0) return "Hết hạn";
+        if (days == 0) return "Còn <1 ngày";
+        return "Còn " + days + " ngày";
+    }
+
+    private void mkBtn(int x, int y, int w, int h, String label, int style) {
+        Color fill = style == 1 ? null : style == 2 ? new Color(0.55f, 0.16f, 0.16f, 1f)
+            : style == 3 ? new Color(0.35f, 0.38f, 0.42f, 1f) : Ui.BTN_CANCEL;
+        if (style == 1) {
+            batch.draw(Ui.gradientRect(w, h, 10, EntryUi.ORANGE_TOP, EntryUi.ORANGE_BOT), x, y);
+        } else {
+            batch.draw(Ui.roundedRect(w, h, 10, fill, null), x, y);
+        }
+        Ui.centered(batch, Ui.fontSmall, label, x + w / 2f, y + h / 2f + 7, Color.WHITE);
+    }
+
+    private void drawMarketPanel() {
+        int px = MK_PX, py = MK_PY;
+        batch.draw(Ui.roundedRect(MK_PW, MK_PH, 18, GLASS_FILL_DARK, GLASS_RIM), px, py);
+        Ui.fontTitle.setColor(1f, 0.85f, 0.3f, 1f);
+        Ui.fontTitle.draw(batch, marketTab == 2 ? "Chợ người chơi — Tin của tôi" : "Chợ người chơi",
+            px + 28, py + MK_PH - 16);
+        // nút đóng chuẩn
+        batch.draw(Ui.roundedRect(36, 36, 10, Ui.BTN_CLOSE, null), px + MK_PW - 54, py + MK_PH - 54);
+        Ui.faIcon(batch, Ui.fa20, Ui.FA_XMARK, px + MK_PW - 36, py + MK_PH - 36, Color.WHITE);
+        // tab
+        String[] tabs = {"Chợ", "Đăng bán", "Tin của tôi"};
+        for (int i = 0; i < 3; i++) {
+            int tx = px + 28 + i * 190;
+            int ty = py + MK_PH - 118;
+            batch.draw(Ui.roundedRect(178, 44, 10,
+                marketTab == i ? new Color(0.95f, 0.55f, 0.15f, 1f) : Ui.BTN_CANCEL, null), tx, ty);
+            Ui.centered(batch, Ui.font, tabs[i], tx + 89, ty + 29, Color.WHITE);
+        }
+        if (!marketMsgText.isEmpty()) {
+            Ui.fontSmall.setColor(marketMsgOk ? new Color(0.55f, 0.95f, 0.6f, 1f)
+                : new Color(1f, 0.55f, 0.5f, 1f));
+            Ui.fontSmall.draw(batch, truncTo(Ui.fontSmall, marketMsgText, MK_PW - 56),
+                px + 28, py + MK_PH - 138);
+        }
+        if (marketTab == 1) drawMarketSell(px, py);
+        else drawMarketList(px, py, marketTab == 2);
+    }
+
+    private void drawMarketList(int px, int py, boolean mine) {
+        int top = py + MK_PH - 160;
+        if (marketRows.isEmpty()) {
+            Ui.font.setColor(1f, 1f, 1f, 0.75f);
+            Ui.centered(batch, Ui.font, mine ? "Bạn chưa đăng tin bán nào." : "Chợ đang trống.",
+                px + MK_PW / 2f, top - 60, new Color(1f, 1f, 1f, 0.75f));
+        }
+        for (int i = 0; i < marketRows.size() && i < 6; i++) {
+            MkRow row = marketRows.get(i);
+            int ry = top - 62 - i * 62;
+            batch.draw(Ui.roundedRect(MK_PW - 56, 54, 10, GLASS_FILL, null), px + 28, ry);
+            drawPartIcon(row.partId, px + 62, ry + 27, 42);
+            Ui.font.setColor(Color.WHITE);
+            Ui.font.draw(batch, truncTo(Ui.font, itemNameOf(row.partId), 330), px + 92, ry + 40);
+            Ui.fontSmall.setColor(1f, 1f, 1f, 0.75f);
+            Ui.fontSmall.draw(batch, "x" + row.qty + " · " + expLabel(row.exp)
+                + (mine ? "" : " · Người bán: " + truncTo(Ui.fontSmall, row.seller, 180)),
+                px + 92, ry + 17);
+            Ui.font.setColor(1f, 0.85f, 0.3f, 1f);
+            String price = fmtMoney(row.price) + " xu";
+            layout.setText(Ui.font, price);
+            Ui.font.draw(batch, price, px + MK_PW - 210 - layout.width, ry + 34);
+            if (mine) mkBtn(px + MK_PW - 196, ry + 9, 110, 36, "Gỡ tin", 2);
+            else if (row.sellerId != ownId()) mkBtn(px + MK_PW - 196, ry + 9, 110, 36, "Mua", 1);
+        }
+        if (!mine) {
+            mkBtn(px + 28, py + 24, 130, 40, "< Trước", 0);
+            Ui.font.setColor(Color.WHITE);
+            Ui.centered(batch, Ui.font, (marketPage + 1) + "/" + marketPages,
+                px + MK_PW / 2f, py + 50, Color.WHITE);
+            mkBtn(px + MK_PW - 158, py + 24, 130, 40, "Sau >", 0);
+        }
+    }
+
+    private void drawMarketSell(int px, int py) {
+        int top = py + MK_PH - 160;
+        Ui.font.setColor(1f, 1f, 1f, 0.9f);
+        Ui.font.draw(batch, "Chọn đồ trong rương để đăng bán:", px + 28, top + 6);
+        if (chestRows.isEmpty()) {
+            Ui.fontSmall.setColor(1f, 1f, 1f, 0.7f);
+            Ui.fontSmall.draw(batch, "Rương trống — chưa có đồ để bán.", px + 28, top - 40);
+        }
+        for (int i = 0; i < chestRows.size() && i < 12; i++) {
+            ChestRow cr = chestRows.get(i);
+            int col = i % 4, rowI = i / 4;
+            int cx = px + 28 + col * 150;
+            int cy = top - 96 - rowI * 96;
+            boolean sel = sellSel == i;
+            batch.draw(Ui.roundedRect(138, 84, 10,
+                sel ? new Color(0.95f, 0.55f, 0.15f, 0.9f) : GLASS_FILL, null), cx, cy);
+            drawPartIcon(cr.partId, cx + 69, cy + 52, 40);
+            Ui.centered(batch, Ui.fontTiny, truncTo(Ui.fontTiny, itemNameOf(cr.partId), 128),
+                cx + 69, cy + 24, Color.WHITE);
+            Ui.centered(batch, Ui.fontTiny, "x" + cr.qty, cx + 69, cy + 10,
+                new Color(1f, 0.9f, 0.5f, 1f));
+        }
+        int by = py + 118;
+        Ui.font.setColor(Color.WHITE);
+        Ui.font.draw(batch, "Số lượng:", px + 28, by + 66);
+        mkBtn(px + 150, by + 40, 44, 40, "-", 0);
+        Ui.centered(batch, Ui.font, "" + sellQty, px + 238, by + 66, Color.WHITE);
+        mkBtn(px + 282, by + 40, 44, 40, "+", 0);
+        Ui.font.draw(batch, "Giá bán (xu):", px + 380, by + 66);
+        batch.draw(Ui.roundedRect(240, 44, 10, new Color(0.06f, 0.09f, 0.14f, 1f), GLASS_RIM),
+            px + 560, by + 38);
+        String price = sellPriceField.length() == 0 ? "Nhập giá..." : sellPriceField.toString();
+        Ui.font.setColor(sellPriceField.length() == 0 ? new Color(1f, 1f, 1f, 0.5f) : Color.WHITE);
+        Ui.font.draw(batch, price, px + 576, by + 66);
+        SoftInput.register("market.price", SoftInput.of(sellPriceField, 12, null),
+            false, false, px + 560, by + 38, 240, 44, 10);
+        Ui.fontSmall.setColor(1f, 1f, 1f, 0.65f);
+        Ui.fontSmall.draw(batch, "Người mua trả giá này; bạn nhận 95% (thuế chợ 5%).",
+            px + 28, by + 16);
+        mkBtn(px + MK_PW - 268, by + 34, 240, 48, "Đăng bán", sellSel >= 0 ? 1 : 3);
+    }
+
+    private boolean marketTouch(float x, float y) {
+        if (!marketOpen) return false;
+        int px = MK_PX, py = MK_PY;
+        if (inRect(x, y, px + MK_PW - 54, py + MK_PH - 54, 36, 36)) {
+            marketOpen = false;
+            SoftInput.hide();
+            return true;
+        }
+        if (x < px || x > px + MK_PW || y < py || y > py + MK_PH) return false;
+        for (int i = 0; i < 3; i++) {
+            int tx = px + 28 + i * 190;
+            int ty = py + MK_PH - 118;
+            if (inRect(x, y, tx, ty, 178, 44)) {
+                if (marketTab != i) {
+                    marketTab = i;
+                    marketMsgText = "";
+                    try {
+                        if (i == 0) AvatarProtocol.marketList(game.connection, 0);
+                        else if (i == 2) AvatarProtocol.marketMy(game.connection);
+                        else AvatarProtocol.marketChest(game.connection);
+                    } catch (IOException e) { }
+                }
+                return true;
+            }
+        }
+        int top = py + MK_PH - 160;
+        if (marketTab == 1) {
+            for (int i = 0; i < chestRows.size() && i < 12; i++) {
+                int col = i % 4, rowI = i / 4;
+                int cx = px + 28 + col * 150;
+                int cy = top - 96 - rowI * 96;
+                if (inRect(x, y, cx, cy, 138, 84)) {
+                    sellSel = i;
+                    sellQty = 1;
+                    return true;
+                }
+            }
+            int by = py + 118;
+            if (inRect(x, y, px + 150, by + 40, 44, 40)) {
+                sellQty = Math.max(1, sellQty - 1);
+                return true;
+            }
+            if (inRect(x, y, px + 282, by + 40, 44, 40)) {
+                int max = sellSel >= 0 ? chestRows.get(sellSel).qty : 1;
+                sellQty = Math.min(max, sellQty + 1);
+                return true;
+            }
+            if (inRect(x, y, px + MK_PW - 268, by + 34, 240, 48) && sellSel >= 0) {
+                int price = 0;
+                try { price = Integer.parseInt(sellPriceField.toString().trim()); }
+                catch (Exception e) { }
+                if (price < 100) {
+                    marketMsgText = "Giá bán phải từ 100 xu trở lên.";
+                    marketMsgOk = false;
+                    return true;
+                }
+                try {
+                    AvatarProtocol.marketSell(game.connection,
+                        chestRows.get(sellSel).partId, sellQty, price);
+                    sellPriceField.setLength(0);
+                    SoftInput.hide();
+                } catch (IOException e) { }
+                return true;
+            }
+            return true;
+        }
+        // tab danh sách
+        boolean mine = marketTab == 2;
+        for (int i = 0; i < marketRows.size() && i < 6; i++) {
+            int ry = top - 62 - i * 62;
+            if (inRect(x, y, px + MK_PW - 196, ry + 9, 110, 36)) {
+                MkRow row = marketRows.get(i);
+                try {
+                    if (mine) AvatarProtocol.marketCancel(game.connection, row.id);
+                    else if (row.sellerId != ownId()) AvatarProtocol.marketBuy(game.connection, row.id);
+                } catch (IOException e) { }
+                return true;
+            }
+        }
+        if (!mine) {
+            if (inRect(x, y, px + 28, py + 24, 130, 40) && marketPage > 0) {
+                try { AvatarProtocol.marketList(game.connection, marketPage - 1); }
+                catch (IOException e) { }
+                return true;
+            }
+            if (inRect(x, y, px + MK_PW - 158, py + 24, 130, 40) && marketPage < marketPages - 1) {
+                try { AvatarProtocol.marketList(game.connection, marketPage + 1); }
+                catch (IOException e) { }
+                return true;
+            }
+        }
+        return true;
+    }
+
+    // ----- Giao dịch -----
+
+    private void drawTradePanel() {
+        int px = MK_PX, py = MK_PY;
+        batch.draw(Ui.roundedRect(MK_PW, MK_PH, 18, GLASS_FILL_DARK, GLASS_RIM), px, py);
+        Ui.fontTitle.setColor(1f, 0.85f, 0.3f, 1f);
+        Ui.fontTitle.draw(batch, "Giao dịch với " + truncTo(Ui.fontTitle, tradeOtherName, 560),
+            px + 28, py + MK_PH - 16);
+        batch.draw(Ui.roundedRect(36, 36, 10, Ui.BTN_CLOSE, null), px + MK_PW - 54, py + MK_PH - 54);
+        Ui.faIcon(batch, Ui.fa20, Ui.FA_XMARK, px + MK_PW - 36, py + MK_PH - 36, Color.WHITE);
+        // hai cột
+        drawTradeSide(px + 28, py, true);
+        drawTradeSide(px + MK_PW / 2 + 8, py, false);
+        // nút điều khiển
+        int by = py + 118;
+        mkBtn(px + 28, by, 200, 48, tradeMyLock ? "Đã khoá ✓" : "Khoá", tradeMyLock ? 3 : 0);
+        boolean bothLock = tradeMyLock && tradeOtherLock;
+        mkBtn(px + 244, by, 220, 48, "Chấp nhận", bothLock ? 1 : 3);
+        mkBtn(px + MK_PW - 228, by, 200, 48, "Huỷ giao dịch", 2);
+        // chat
+        batch.draw(Ui.roundedRect(MK_PW - 56, 44, 10, new Color(0.06f, 0.09f, 0.14f, 1f), GLASS_RIM),
+            px + 28, py + 58);
+        String chat = tradeChatField.length() == 0 ? "Nhắn cho đối tác..." : tradeChatField.toString();
+        Ui.font.setColor(tradeChatField.length() == 0 ? new Color(1f, 1f, 1f, 0.5f) : Color.WHITE);
+        Ui.font.draw(batch, truncTo(Ui.font, chat, MK_PW - 240), px + 44, py + 86);
+        SoftInput.register("trade.chat", SoftInput.of(tradeChatField, 120, () -> tradeSendChat()),
+            false, false, px + 28, py + 58, MK_PW - 216, 44, 10);
+        mkBtn(px + MK_PW - 168, py + 58, 140, 44, "Gửi", 1);
+        if (!tradeLog.isEmpty()) {
+            Ui.fontSmall.setColor(1f, 1f, 1f, 0.8f);
+            Ui.fontSmall.draw(batch, truncTo(Ui.fontSmall, tradeLog.get(0), MK_PW - 56),
+                px + 28, py + 38);
+        }
+        if (!tradeMsg.isEmpty()) {
+            Ui.fontSmall.setColor(1f, 0.9f, 0.5f, 1f);
+            Ui.fontSmall.draw(batch, truncTo(Ui.fontSmall, tradeMsg, MK_PW - 56), px + 28, py + 16);
+        }
+        if (tradePickOpen) drawTradePick(px, py);
+    }
+
+    private void drawTradeSide(int sx, int py, boolean mine) {
+        int top = MK_PY + MK_PH - 76;
+        Ui.font.setColor(mine ? new Color(0.55f, 0.95f, 0.6f, 1f) : new Color(1f, 0.7f, 0.5f, 1f));
+        Ui.font.draw(batch, mine ? "Bạn đưa ra" : tradeOtherName + " đưa ra", sx, top);
+        boolean locked = mine ? tradeMyLock : tradeOtherLock;
+        if (locked) {
+            Ui.fontSmall.setColor(1f, 0.85f, 0.3f, 1f);
+            Ui.fontSmall.draw(batch, "(đã khoá)", sx + 130, top);
+        }
+        List<int[]> items = mine ? tradeMineItems : tradeOtherItems;
+        List<Long> exps = mine ? tradeMineExps : tradeOtherExps;
+        for (int i = 0; i < 8; i++) {
+            int col = i % 4, rowI = i / 4;
+            int cx = sx + col * 106;
+            int cy = top - 108 - rowI * 96;
+            batch.draw(Ui.roundedRect(96, 84, 10, GLASS_FILL, null), cx, cy);
+            if (i < items.size()) {
+                drawPartIcon(items.get(i)[0], cx + 48, cy + 52, 40);
+                Ui.centered(batch, Ui.fontTiny, "x" + items.get(i)[1], cx + 48, cy + 14, Color.WHITE);
+            } else if (mine && i == items.size()) {
+                Ui.centered(batch, Ui.font, "+", cx + 48, cy + 48, new Color(1f, 1f, 1f, 0.55f));
+            }
+        }
+        int xy = top - 316;
+        Ui.font.setColor(Color.WHITE);
+        Ui.font.draw(batch, "Xu:", sx, xy + 24);
+        if (mine) {
+            batch.draw(Ui.roundedRect(190, 40, 10, new Color(0.06f, 0.09f, 0.14f, 1f), GLASS_RIM),
+                sx + 48, xy);
+            String v = tradeXuField.length() == 0 ? "" + tradeMyXuOffer : tradeXuField.toString();
+            Ui.font.setColor(Color.WHITE);
+            Ui.font.draw(batch, v, sx + 60, xy + 27);
+            SoftInput.register("trade.xu", SoftInput.of(tradeXuField, 10, null),
+                false, false, sx + 48, xy, 190, 40, 10);
+            mkBtn(sx + 248, xy, 110, 40, "Đặt xu", 0);
+        } else {
+            Ui.font.setColor(1f, 0.85f, 0.3f, 1f);
+            Ui.font.draw(batch, fmtMoney(tradeOtherXu) + " xu", sx + 48, xy + 24);
+        }
+    }
+
+    private void drawTradePick(int px, int py) {
+        int w = 640, h = 420;
+        int x0 = px + (MK_PW - w) / 2, y0 = py + (MK_PH - h) / 2;
+        batch.draw(Ui.roundedRect(w, h, 14, new Color(0.05f, 0.08f, 0.13f, 0.99f), GLASS_RIM), x0, y0);
+        Ui.font.setColor(1f, 0.85f, 0.3f, 1f);
+        Ui.font.draw(batch, "Chọn đồ trong rương", x0 + 24, y0 + h - 18);
+        batch.draw(Ui.roundedRect(36, 36, 10, Ui.BTN_CLOSE, null), x0 + w - 54, y0 + h - 54);
+        Ui.faIcon(batch, Ui.fa20, Ui.FA_XMARK, x0 + w - 36, y0 + h - 36, Color.WHITE);
+        for (int i = 0; i < chestRows.size() && i < 12; i++) {
+            ChestRow cr = chestRows.get(i);
+            int col = i % 4, rowI = i / 4;
+            int cx = x0 + 24 + col * 150;
+            int cy = y0 + h - 150 - rowI * 96;
+            batch.draw(Ui.roundedRect(138, 84, 10, GLASS_FILL, null), cx, cy);
+            drawPartIcon(cr.partId, cx + 69, cy + 52, 40);
+            Ui.centered(batch, Ui.fontTiny, truncTo(Ui.fontTiny, itemNameOf(cr.partId), 128),
+                cx + 69, cy + 24, Color.WHITE);
+            Ui.centered(batch, Ui.fontTiny, "x" + cr.qty, cx + 69, cy + 10,
+                new Color(1f, 0.9f, 0.5f, 1f));
+        }
+        if (chestRows.isEmpty()) {
+            Ui.fontSmall.setColor(1f, 1f, 1f, 0.7f);
+            Ui.fontSmall.draw(batch, "Rương trống.", x0 + 24, y0 + h - 80);
+        }
+    }
+
+    private void tradeSendChat() {
+        String t = tradeChatField.toString().trim();
+        if (!t.isEmpty() && online()) {
+            try { AvatarProtocol.tradeChat(game.connection, t); } catch (IOException e) { }
+            tradeLog.add(0, "Bạn: " + t);
+            while (tradeLog.size() > 30) tradeLog.remove(tradeLog.size() - 1);
+        }
+        tradeChatField.setLength(0);
+        SoftInput.hide();
+    }
+
+    private boolean tradeTouch(float x, float y) {
+        if (!tradeOpen) return false;
+        int px = MK_PX, py = MK_PY;
+        if (tradePickOpen) {
+            int w = 640, h = 420;
+            int x0 = px + (MK_PW - w) / 2, y0 = py + (MK_PH - h) / 2;
+            if (inRect(x, y, x0 + w - 54, y0 + h - 54, 36, 36)) {
+                tradePickOpen = false;
+                return true;
+            }
+            for (int i = 0; i < chestRows.size() && i < 12; i++) {
+                ChestRow cr = chestRows.get(i);
+                int col = i % 4, rowI = i / 4;
+                int cx = x0 + 24 + col * 150;
+                int cy = y0 + h - 150 - rowI * 96;
+                if (inRect(x, y, cx, cy, 138, 84)) {
+                    // thêm 1 đơn vị của món này (gộp nếu đã có)
+                    boolean merged = false;
+                    for (int k = 0; k < tradeMineItems.size(); k++) {
+                        if (tradeMineItems.get(k)[0] == cr.partId
+                            && tradeMineExps.get(k) == cr.exp) {
+                            if (tradeMineItems.get(k)[1] < cr.qty) tradeMineItems.get(k)[1]++;
+                            merged = true;
+                            break;
+                        }
+                    }
+                    if (!merged && tradeMineItems.size() < 8) {
+                        tradeMineItems.add(new int[]{cr.partId, 1});
+                        tradeMineExps.add(cr.exp);
+                    }
+                    tradeSendSet();
+                    tradePickOpen = false;
+                    return true;
+                }
+            }
+            if (x >= x0 && x <= x0 + w && y >= y0 && y <= y0 + h) return true;
+            tradePickOpen = false;
+            return true;
+        }
+        if (inRect(x, y, px + MK_PW - 54, py + MK_PH - 54, 36, 36)) {
+            try { AvatarProtocol.tradeCancel(game.connection); } catch (IOException e) { }
+            tradeOpen = false;
+            SoftInput.hide();
+            return true;
+        }
+        if (x < px || x > px + MK_PW || y < py || y > py + MK_PH) return false;
+        int top = MK_PY + MK_PH - 76;
+        // ô + thêm đồ / chạm ô đồ của mình để gỡ
+        for (int i = 0; i < 8; i++) {
+            int col = i % 4, rowI = i / 4;
+            int cx = px + 28 + col * 106;
+            int cy = top - 108 - rowI * 96;
+            if (inRect(x, y, cx, cy, 96, 84)) {
+                if (i < tradeMineItems.size()) {
+                    tradeMineItems.remove(i);
+                    tradeMineExps.remove(i);
+                    tradeSendSet();
+                } else if (i == tradeMineItems.size()) {
+                    try { AvatarProtocol.marketChest(game.connection); } catch (IOException e) { }
+                    tradePickOpen = true;
+                }
+                return true;
+            }
+        }
+        int xy = top - 316;
+        if (inRect(x, y, px + 28 + 248, xy, 110, 40)) {
+            int v = 0;
+            try { v = Integer.parseInt(tradeXuField.toString().trim()); } catch (Exception e) { }
+            tradeMyXuOffer = Math.max(0, v);
+            tradeXuField.setLength(0);
+            SoftInput.hide();
+            tradeSendSet();
+            return true;
+        }
+        int by = py + 118;
+        if (inRect(x, y, px + 28, by, 200, 48)) {
+            try { AvatarProtocol.tradeLock(game.connection, !tradeMyLock); } catch (IOException e) { }
+            return true;
+        }
+        if (inRect(x, y, px + 244, by, 220, 48)) {
+            if (tradeMyLock && tradeOtherLock) {
+                try { AvatarProtocol.tradeAccept(game.connection); } catch (IOException e) { }
+            } else {
+                tradeMsg = "Cả hai bên phải Khoá trước khi Chấp nhận.";
+            }
+            return true;
+        }
+        if (inRect(x, y, px + MK_PW - 228, by, 200, 48)) {
+            try { AvatarProtocol.tradeCancel(game.connection); } catch (IOException e) { }
+            tradeOpen = false;
+            SoftInput.hide();
+            return true;
+        }
+        if (inRect(x, y, px + MK_PW - 168, py + 58, 140, 44)) {
+            tradeSendChat();
+            return true;
+        }
+        return true;
+    }
+
+    private void drawTradeInviteBox() {
+        if (tradeInviteFrom < 0 || tradeOpen) return;
+        int w = 560, h = 190;
+        int x0 = (1280 - w) / 2, y0 = (720 - h) / 2;
+        batch.draw(Ui.roundedRect(w, h, 14, GLASS_FILL_DARK, GLASS_RIM), x0, y0);
+        Ui.font.setColor(1f, 0.85f, 0.3f, 1f);
+        Ui.centered(batch, Ui.font, "Mời giao dịch", x0 + w / 2f, y0 + h - 24,
+            new Color(1f, 0.85f, 0.3f, 1f));
+        Ui.centered(batch, Ui.font, truncTo(Ui.font, tradeInviteName, 480) + " muốn giao dịch với bạn.",
+            x0 + w / 2f, y0 + h - 66, Color.WHITE);
+        mkBtn(x0 + 60, y0 + 34, 190, 48, "Đồng ý", 1);
+        mkBtn(x0 + w - 250, y0 + 34, 190, 48, "Từ chối", 0);
+    }
+
+    private boolean tradeInviteTouch(float x, float y) {
+        if (tradeInviteFrom < 0 || tradeOpen) return false;
+        int w = 560, h = 190;
+        int x0 = (1280 - w) / 2, y0 = (720 - h) / 2;
+        if (inRect(x, y, x0 + 60, y0 + 34, 190, 48)) {
+            try { AvatarProtocol.tradeReply(game.connection, tradeInviteFrom, true); }
+            catch (IOException e) { }
+            tradeInviteFrom = -1;
+            return true;
+        }
+        if (inRect(x, y, x0 + w - 250, y0 + 34, 190, 48)) {
+            try { AvatarProtocol.tradeReply(game.connection, tradeInviteFrom, false); }
+            catch (IOException e) { }
+            tradeInviteFrom = -1;
+            return true;
+        }
+        if (x >= x0 && x <= x0 + w && y >= y0 && y <= y0 + h) return true;
+        return false;
+    }
+
+    // ----- harness chợ/giao dịch -----
+    public void debugMarket() {
+        closeOtherPanels();
+        marketOpen = true;
+        marketTab = 0;
+        marketMsgText = "";
+        marketRows.clear();
+        Object[][] fake = {
+            {11, 1001, "Linh Chi", 446, 1, 45000, -1L},
+            {10, 1002, "Tuấn Anh", 442, 2, 15000, -1L},
+            {9, 1003, "Minh Ngọc", 455, 3, 99000, -1L},
+            {8, 1001, "Linh Chi", 2090, 1, 250000, -1L},
+        };
+        for (Object[] f : fake) {
+            MkRow r = new MkRow();
+            r.id = (Integer) f[0]; r.sellerId = (Integer) f[1]; r.seller = (String) f[2];
+            r.partId = (Integer) f[3]; r.qty = (Integer) f[4]; r.price = (Integer) f[5];
+            r.exp = (Long) f[6];
+            marketRows.add(r);
+        }
+        marketPage = 0; marketPages = 2;
+    }
+
+    public void debugMarketSell() {
+        debugMarket();
+        marketTab = 1;
+        chestRows.clear();
+        int[] parts = {442, 446, 448, 444, 455, 460};
+        for (int i = 0; i < parts.length; i++) {
+            ChestRow cr = new ChestRow();
+            cr.partId = parts[i]; cr.qty = 3 + i; cr.exp = -1;
+            chestRows.add(cr);
+        }
+        sellSel = 1;
+        sellQty = 2;
+        sellPriceField.setLength(0);
+        sellPriceField.append("45000");
+    }
+
+    public void debugTrade() {
+        closeOtherPanels();
+        tradeReset();
+        tradeOtherId = 1001;
+        tradeOtherName = "Linh Chi";
+        tradeMineItems.add(new int[]{442, 1});
+        tradeMineExps.add(-1L);
+        tradeMineItems.add(new int[]{448, 5});
+        tradeMineExps.add(-1L);
+        tradeOtherItems.add(new int[]{446, 1});
+        tradeOtherExps.add(-1L);
+        tradeMyXuOffer = 20000;
+        tradeOtherXu = 0;
+        tradeMyLock = true;
+        tradeOtherLock = false;
+        tradeLog.add(0, "Linh Chi: ok chốt nhé");
+        tradeOpen = true;
     }
 
     // Harness tour: mở panel clan với dữ liệu giả (my clan + list)

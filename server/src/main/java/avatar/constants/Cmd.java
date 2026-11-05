@@ -13,6 +13,7 @@ public class Cmd {
     public static final byte MINIGAME_HUB = -113;
     /** [PORT] Clan đầy đủ theo bản chính 3.4.4 (xem ClanService). */
     public static final byte CLAN = -112;
+    public static final byte MARKET = 127;
     public static final byte TRANS_ICON_WEDDING = -103;
     public static final byte CHANS_MONEY_XENG = -102;
     public static final byte ADD_MENU = -101;
