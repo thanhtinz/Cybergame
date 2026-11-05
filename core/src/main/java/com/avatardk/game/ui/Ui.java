@@ -83,6 +83,8 @@ public final class Ui {
     public static final String FA_MAGNIFYING_GLASS = "\uf002";
     public static final String FA_VOLUME_HIGH = "\uf028";
     public static final String FA_LIST = "\uf03a";
+    public static final String FA_CHEVRON_DOWN = "\uf078"; // thu nhỏ khung chat
+    public static final String FA_CHEVRON_UP = "\uf077";
     public static final String FA_CHEVRON_LEFT = "\uf053"; // nút ‹ ở panel Cài đặt
     public static final String FA_CHEVRON_RIGHT = "\uf054"; // nút › ở panel Cài đặt
     public static final String FA_ARROW_RIGHT = "\uf061"; // nút Di chuyển ở panel rương
@@ -115,6 +117,7 @@ public final class Ui {
         + FA_MARS + FA_VENUS + FA_BOX_ARCHIVE + FA_ARROW_RIGHT + FA_ARROW_LEFT
         + FA_ARROW_UP + FA_ARROW_DOWN
         + FA_PLUS + FA_MINUS + FA_LOCATION_DOT + FA_LOCATION_CROSSHAIRS + FA_STORE
+        + FA_CHEVRON_DOWN + FA_CHEVRON_UP
         + FA_GEAR + FA_CHEVRON_LEFT + FA_CHEVRON_RIGHT
         + FA_PAUSE + FA_FORWARD_STEP + FA_BACKWARD_STEP + FA_SHUFFLE + FA_REPEAT
         + FA_MAGNIFYING_GLASS + FA_VOLUME_HIGH + FA_LIST

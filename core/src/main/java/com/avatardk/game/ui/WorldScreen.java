@@ -596,6 +596,9 @@ public class WorldScreen extends ScreenAdapter {
     /** Chiều cao panel chat HIỆN TẠI (chạy mượt giữa CHAT_H và CHAT_H_BIG). */
     private float chatH = CHAT_H;
     private boolean chatExpanded = false;
+    /** Khung chat thu nhỏ hẳn (nút chevron ở góc panel): ẩn cả
+     *  khung + ô nhập, chỉ còn nút bong bóng chat để mở lại. */
+    private boolean chatMin = false;
     // Tab kiểu "thẻ thư mục": TRUNG TÂM của tab nằm đúng trên đường viền trên
     // của khung (nửa tab nhô lên ngoài, nửa tab lọt vào trong khung — như một
     // khối liền với khung). Cả 3 tab RỘNG BẰNG NHAU; tab đang dùng chỉ CAO
@@ -5332,6 +5335,7 @@ public class WorldScreen extends ScreenAdapter {
     }
     public void debugCloseBoard() { boardOpen = false; }
     public void debugToggleChatBig() { chatExpanded = !chatExpanded; }
+    public void debugToggleChatMin() { chatMin = !chatMin; }
     public void debugOpenEmoji() { emojiOpen = true; typing = true; }
     public void debugCloseEmoji() { emojiOpen = false; }
     /** Nạp vài dòng chat mẫu vào tab Gần đây để kiểm chứng panel chat. */
@@ -6237,9 +6241,28 @@ public class WorldScreen extends ScreenAdapter {
         // xích vào trong chỉ nhô ra ~12px (khớp vị trí vẽ ở drawChatFrame)
         {
             float ebX = CHAT_X + CHAT_W - 26, ebY = CHAT_Y + chatH - 26;
-            if (!mgScreen && x >= ebX && x <= ebX + 38 && y >= ebY && y <= ebY + 38) {
-                chatExpanded = !chatExpanded;
-                return;
+            if (chatMin) {
+                // nút mở lại khung chat khi đang thu nhỏ
+                float rbX = CHAT_X + CHAT_W - 44;
+                if (!mgScreen && x >= rbX && x <= rbX + 44
+                        && y >= CHAT_Y && y <= CHAT_Y + 44) {
+                    chatMin = false;
+                    return;
+                }
+            } else {
+                if (!mgScreen && x >= ebX && x <= ebX + 38 && y >= ebY && y <= ebY + 38) {
+                    chatExpanded = !chatExpanded;
+                    return;
+                }
+                // nút thu nhỏ: bên trái nút phóng to 46px
+                float mbX = ebX - 46;
+                if (!mgScreen && x >= mbX && x <= mbX + 38 && y >= ebY && y <= ebY + 38) {
+                    chatMin = true;
+                    typing = false;
+                    emojiOpen = false;
+                    SoftInput.hide();
+                    return;
+                }
             }
         }
         // chip tin nhắn thoại trong nhật ký: chạm để nghe / dừng nghe
@@ -6299,11 +6322,11 @@ public class WorldScreen extends ScreenAdapter {
             }
         }
         float sendX = CHAT_X + CHAT_W - 8 - CHAT_SEND_W;
-        if (!mgScreen && x >= sendX && x <= sendX + CHAT_SEND_W && y >= CHAT_Y + 7 && y <= CHAT_Y + 7 + CHAT_INPUT_H) {
+        if (!chatMin && !mgScreen && x >= sendX && x <= sendX + CHAT_SEND_W && y >= CHAT_Y + 7 && y <= CHAT_Y + 7 + CHAT_INPUT_H) {
             if (typing) sendChat();
             return;
         }
-        if (!mgScreen && x >= CHAT_X && x <= sendX - 6 && y >= CHAT_Y && y <= CHAT_Y + CHAT_INPUT_H + 6) {
+        if (!chatMin && !mgScreen && x >= CHAT_X && x <= sendX - 6 && y >= CHAT_Y && y <= CHAT_Y + CHAT_INPUT_H + 6) {
             typing = true;
             return;
         }
@@ -10977,7 +11000,8 @@ public class WorldScreen extends ScreenAdapter {
         // ghi âm đủ 30 giây thì tự dừng và gửi
         if (recording && recCount >= recBuf.length - 1600) finishRecording();
         // chiều cao panel chat chạy mượt tới nấc đích khi bấm phóng to/thu nhỏ
-        float chatTarget = chatExpanded ? CHAT_H_BIG : CHAT_H;
+        float chatTarget = chatMin ? 0f
+            : chatExpanded ? CHAT_H_BIG : CHAT_H;
         chatH += (chatTarget - chatH) * Math.min(1f, dt * 12f);
         if (Math.abs(chatTarget - chatH) < 0.6f) chatH = chatTarget;
         // sheet biểu cảm: chiều cao chạy mượt về nấc đích (trừ lúc đang kéo tay cầm)
@@ -12748,6 +12772,18 @@ public class WorldScreen extends ScreenAdapter {
      *  Khi nối server: tab Gần đây = gói chat 55/77, Thế giới = kênh toàn server,
      *  Hệ thống = gói SERVER_MESSAGE (-9) của gốc. */
     private void drawChatFrame() {
+        if (chatMin) {
+            // đã thu nhỏ: chỉ còn nút bong bóng chat ở góc phải dưới
+            // (đúng vị trí mép phải khung cũ) để mở lại khung
+            voiceHits.clear();
+            float rbS = 44;
+            float rbX = CHAT_X + CHAT_W - rbS, rbY = CHAT_Y;
+            batch.draw(Ui.roundedRect((int) rbS, (int) rbS, 12,
+                new Color(0.10f, 0.17f, 0.26f, 0.97f), GLASS_RIM), rbX, rbY);
+            Ui.faIcon(batch, Ui.fa20, Ui.FA_COMMENT_DOTS,
+                rbX + rbS / 2f, rbY + rbS / 2f, Color.WHITE);
+            return;
+        }
         batch.draw(Ui.roundedRect((int) CHAT_W, (int) chatH, 14,
             new Color(0.04f, 0.09f, 0.15f, 0.82f), GLASS_RIM), CHAT_X, CHAT_Y);
         // Hàng tab kiểu "thẻ thư mục" VẮT NGANG ĐƯỜNG VIỀN TRÊN của khung
@@ -12891,6 +12927,13 @@ public class WorldScreen extends ScreenAdapter {
             new Color(0.10f, 0.17f, 0.26f, 0.97f), GLASS_RIM), ebX, ebY);
         Ui.faIcon(batch, Ui.fa20, chatExpanded ? Ui.FA_COMPRESS : Ui.FA_EXPAND,
             ebX + ebS / 2f, ebY + ebS / 2f, Color.WHITE);
+        // nút THU NHỎ khung chat: ngay bên trái nút phóng to, cùng
+        // hàng góc trên phải; bấm là khung gập hẳn xuống
+        float mbX = ebX - ebS - 8;
+        batch.draw(Ui.roundedRect((int) ebS, (int) ebS, 9,
+            new Color(0.10f, 0.17f, 0.26f, 0.97f), GLASS_RIM), mbX, ebY);
+        Ui.faIcon(batch, Ui.fa20, Ui.FA_CHEVRON_DOWN,
+            mbX + ebS / 2f, ebY + ebS / 2f, Color.WHITE);
         // ô emoji (popover): lưới 6×4 ảnh emoji thật ngay trên hàng nhập,
         // neo phải; chạm một emoji là chèn mã :ten: vào ô nhập, panel giữ
         // mở để chèn tiếp

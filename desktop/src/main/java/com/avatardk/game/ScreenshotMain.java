@@ -319,6 +319,11 @@ public class ScreenshotMain {
                     case 21:
                         if (frame == 40) {
                             shot("shot-chat-big.png");
+                            world.debugToggleChatMin();
+                        }
+                        if (frame == 80) {
+                            shot("shot-chat-min.png");
+                            world.debugToggleChatMin();
                             // Kiểm đồng bộ biểu cảm (gói 57): Linh (id 7) đang
                             // ở map 10 nhận mặt 107 — so với shot-online (mặt
                             // thường) phải thấy khác rõ ở ảnh feel-sync.
