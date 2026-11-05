@@ -213,6 +213,7 @@ public class QuizService extends Service {
             long used = 30000L - (a.deadline - System.currentTimeMillis());
             correct = choice == a.correctIdx;
             if (correct) {
+                TitleService.bump(u.getId(), "quiz_ok");
                 reward = used <= 10000L ? 2000 : used <= 20000L ? 1200 : 600;
                 u.updateXu(reward);
                 if (used < a.fastestMs) {

@@ -58,3 +58,34 @@
 - Client có FALLBACK_TITLE_DEFS (12 định nghĩa khớp server) dùng khi chưa nhận STATE. CHẾ ĐỘ CHƠI THỬ OFFLINE: đeo thử tự do mọi danh hiệu (chỉ hiển thị trên máy, myTitleId + remoteTitles của chính mình) để xem danh hiệu hiện trên đầu nhân vật; online vẫn theo sở hữu thật ở server.
 - Chuỗi điều kiện rút gọn cho vừa thẻ: "Danh hiệu khởi đầu", "Nắm giữ 1.000.000 xu", "Sở hữu cần câu xịn", "Sở hữu 30 món đồ" (đồng bộ server + client + harness).
 - Kiểm mắt: kiem-title-tab-v1.png (tab), kiem-title-dau-v1.png (danh hiệu "Đại Gia" vàng trên đầu nhân vật trong map). Test sống live_title_test.py vẫn ALL PASS sau khi sửa.
+
+## V2 — ẢNH DANH HIỆU GỐC (Tín hỏi 2026-11-05 "Ko có danh hiệu ảnh à")
+
+- GIẢI MÃ: ảnh nằm trong TextAsset `Title` (manifest: int 21 + từng
+  cặp short id/short len) và `Title1..Title21` (short id + short len
+  + PNG) ở `apk-avatardk-new/deep/textassets/`. Đã trích ra
+  `assets/titles/title-<id>.png` (+ `.b64` trong `assets-src/`).
+- NỘI DUNG ẢNH: 7 danh hiệu x 3 hạng (trong mỗi bộ ba: id đầu =
+  Vàng, giữa = Bạc, cuối = Đồng): Nhà Thông Thái (cánh) · Thần Nông
+  (lá) · Thần Câu (cá) · Cao Thủ 3X (cánh lớn) · Vua Đầu Bếp (xẻng
+  + mũ bếp) · Nông Dân Chăm Chỉ (bông lúa) · Ngư Dân Chăm Chỉ (cá).
+- ĐỊNH NGHĨA MỚI (thay hẳn bộ 12 tự soạn): 21 def, ngưỡng [PORT]
+  theo bộ đếm `title_counters` (quiz_ok/fish/harvest/cook) + mg_stats
+  (mini game): Nhà Thông Thái quiz 10/30/75 · Thần Nông thu hoạch
+  40/120/300 · Thần Câu câu 30/80/200 · Cao Thủ 3X thắng 10/25/50
+  · Vua Đầu Bếp nấu 15/40/100 · Nông Dân Chăm Chỉ thu hoạch 15/60/150
+  · Ngư Dân Chăm Chỉ câu 10/25/60. Màu def: 4 vàng, 7 bạc, 8 đồng.
+- BỘ ĐẾM: `TitleService.bump(userId, col)` (whitelist, nuốt lỗi);
+  hook ở QuizService (trả lời đúng), ParkService.handleFinishFishing
+  (câu được cá), FarmService.treeHarvest + harvestCook. Migration 1
+  lần (title_meta defs_v2): xoá player_titles + title_id cũ vì bộ
+  định nghĩa đổi hẳn; quét lại cấp từ bộ đếm (bắt đầu từ 0).
+- HIỂN THỊ: trên đầu nhân vật vẽ ẢNH (rộng 118px, lọc Linear) thay
+  dòng chữ màu; thiếu ảnh mới lùi về chữ. Tab Danh hiệu: thẻ 292x74
+  hiện ảnh gốc + dòng điều kiện + nhãn Đeo/Đang đeo/Chưa có, phân
+  trang 8 thẻ/trang (1/3, 2/3, 3/3). Hạng "Đang đeo: ..." ở hàng tab
+  dùng fontTiny + truncTo 244 cho khỏi chồng nút tab.
+- Test sống live_title_test.py v2 ALL PASS (21 defs, owned đúng bộ
+  {2,3,6,9,11,12,18,20,21}); bump quiz đã kiểm bằng live_quiz_test
+  (quiz_ok của 1001 tăng lên 1). Kiểm mắt: kiem-title-anh-tab-v1.png
+  + kiem-title-anh-dau-v1.png.

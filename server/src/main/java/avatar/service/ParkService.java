@@ -453,6 +453,7 @@ public class ParkService extends Service {
             fishBroadcast(out);
 
             if (result > 0) {
+                TitleService.bump(us.getId(), "fish");
                 us.addItemToChests(new Item(result, -1, 1));
                 if (result == 457) {
                     UserManager.users.forEach(u -> {

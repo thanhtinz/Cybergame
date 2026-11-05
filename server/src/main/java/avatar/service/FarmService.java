@@ -183,6 +183,7 @@ public class FarmService extends Service {
             } else {
                 this.session.user.NongSan.add(new NongSan(productId, sanluong));
             }
+            TitleService.bump(this.session.user.getId(), "harvest");
         }
         ms = new Message(Cmd.TREE_HARVEST);
         DataOutputStream ds = ms.writer();
@@ -607,6 +608,7 @@ public class FarmService extends Service {
             } else {
                 this.session.user.NongSan.add(new avatar.Farm.NongSan(food.productId, 1));
             }
+            TitleService.bump(this.session.user.getId(), "cook");
         }
         ms = new Message(Cmd.HARVEST_COOK);
         ms.writer().flush();

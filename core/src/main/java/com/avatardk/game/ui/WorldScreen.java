@@ -5997,12 +5997,29 @@ public class WorldScreen extends ScreenAdapter {
             }
             // lưới danh hiệu khi đang ở tab Danh hiệu
             if (charVariant == 3 && charTab == 1) {
+                // nút phân trang của tab Danh hiệu
+                {
+                    java.util.List<TitleDef> defs0 = titleListEffective();
+                    int pages = Math.max(1, (defs0.size() + 7) / 8);
+                    if (pages > 1 && y >= py + 6 && y <= py + 32) {
+                        if (titlePage > 0 && x >= px + 24 && x <= px + 76) {
+                            titlePage--;
+                            return;
+                        }
+                        if (titlePage < pages - 1 && x >= px + CP_W - 76 && x <= px + CP_W - 24) {
+                            titlePage++;
+                            return;
+                        }
+                    }
+                }
                 java.util.List<TitleDef> defs = titleListEffective();
-                float cw = 292, chh = 48, gapX = 8, gapY = 7;
+                float cw = 292, chh = 74, gapX = 8, gapY = 8;
                 float gridTop = py + 356;
-                for (int i = 0; i < defs.size() && i < 12; i++) {
+                int fromI = titlePage * TITLE_PER_PAGE;
+                for (int i = fromI; i < defs.size() && i < fromI + TITLE_PER_PAGE; i++) {
                     TitleDef d = defs.get(i);
-                    int col = i % 2, row = i / 2;
+                    int k = i - fromI;
+                    int col = k % 2, row = k / 2;
                     float cx = px + 24 + col * (cw + gapX);
                     float cy = gridTop - (row + 1) * chh - row * gapY;
                     if (x >= cx && x <= cx + cw && y >= cy && y <= cy + chh) {
@@ -9221,16 +9238,26 @@ public class WorldScreen extends ScreenAdapter {
     /** Kiểu D — THẺ HIỆN ĐẠI: header avatar tròn + chip tiền, sân khấu rộng,
      *  6 thẻ chỉ số dạng lưới 3×2. */
     /** Lưới Danh hiệu trong TAB Danh hiệu của panel nhân vật:
-     *  3 cột x 4 hàng. Online: chỉ đeo được cái đã sở hữu (server
-     *  cấp). Offline (chơi thử): đeo thử tự do để xem hiệu ứng —
-     *  đeo thật vẫn tính ở server khi online. */
+     *  2 cột x 4 hàng/trang, mỗi thẻ hiện ẢNH danh hiệu gốc của
+     *  bản chính (titles/title-<id>.png) + dòng điều kiện + nhãn
+     *  Đeo/Đang đeo/Chưa có, có phân trang. Online: chỉ đeo được
+     *  cái đã sở hữu (server cấp). Offline (chơi thử): đeo thử tự
+     *  do để xem hiệu ứng — đeo thật vẫn tính ở server khi online. */
+    private static final int TITLE_PER_PAGE = 8;
+
     private void drawCharTitleGrid(float px, float py) {
         java.util.List<TitleDef> defs = titleListEffective();
-        float cw = 292, chh = 48, gapX = 8, gapY = 7;
+        int pages = Math.max(1, (defs.size() + TITLE_PER_PAGE - 1) / TITLE_PER_PAGE);
+        if (titlePage >= pages) titlePage = pages - 1;
+        if (titlePage < 0) titlePage = 0;
+        float cw = 292, chh = 74, gapX = 8, gapY = 8;
         float gridTop = py + 356;
-        for (int i = 0; i < defs.size() && i < 12; i++) {
+        int from = titlePage * TITLE_PER_PAGE;
+        int to = Math.min(defs.size(), from + TITLE_PER_PAGE);
+        for (int i = from; i < to; i++) {
             TitleDef d = defs.get(i);
-            int col = i % 2, row = i / 2;
+            int k = i - from;
+            int col = k % 2, row = k / 2;
             float cx = px + 24 + col * (cw + gapX);
             float cy = gridTop - (row + 1) * chh - row * gapY;
             boolean ownedT = !online() || titleOwned.contains(d.id);
@@ -9238,18 +9265,50 @@ public class WorldScreen extends ScreenAdapter {
             batch.draw(Ui.roundedRect((int) cw, (int) chh, 10,
                 ownedT ? new Color(0.16f, 0.24f, 0.34f, 0.92f) : new Color(0f, 0f, 0f, 0.22f),
                 equipped ? new Color(1f, 0.78f, 0.30f, 1f) : GLASS_RIM), cx, cy);
-            Color nc = TITLE_COLORS[d.color];
-            if (!ownedT) nc = new Color(nc.r, nc.g, nc.b, 0.45f);
-            Ui.fontSmall.setColor(nc);
-            Ui.fontSmall.draw(batch, truncTo(Ui.fontSmall, d.name, cw - 20), cx + 12, cy + 33);
+            // ảnh danh hiệu gốc ở nửa trên thẻ
+            Texture tt = null;
+            try {
+                tt = game.texture("titles/title-" + d.id + ".png");
+                tt.setFilter(Texture.TextureFilter.Linear, Texture.TextureFilter.Linear);
+            } catch (Exception ignored) {
+            }
+            if (tt != null && tt.getWidth() > 0) {
+                float sc = Math.min(210f / tt.getWidth(), 36f / tt.getHeight());
+                float tw = tt.getWidth() * sc, th = tt.getHeight() * sc;
+                if (!ownedT) batch.setColor(1f, 1f, 1f, 0.45f);
+                batch.draw(tt, cx + (cw - tw) / 2f, cy + chh - 6 - th, tw, th);
+                batch.setColor(Color.WHITE);
+            } else {
+                Color nc = TITLE_COLORS[d.color];
+                if (!ownedT) nc = new Color(nc.r, nc.g, nc.b, 0.45f);
+                Ui.fontSmall.setColor(nc);
+                layout.setText(Ui.fontSmall, d.name);
+                Ui.fontSmall.draw(batch, d.name, cx + (cw - layout.width) / 2f, cy + chh - 14);
+            }
             Ui.fontTiny.setColor(1f, 1f, 1f, ownedT ? 0.70f : 0.42f);
-            Ui.fontTiny.draw(batch, truncTo(Ui.fontTiny, d.req, cw - 100), cx + 12, cy + 15);
+            Ui.fontTiny.draw(batch, truncTo(Ui.fontTiny, d.req, cw - 124), cx + 12, cy + 15);
             String tag = equipped ? "Đang đeo" : ownedT ? "Đeo" : "Chưa có";
             Color tagC = equipped ? new Color(1f, 0.85f, 0.38f, 1f)
                 : ownedT ? new Color(0.55f, 0.95f, 0.65f, 1f) : new Color(1f, 1f, 1f, 0.4f);
             layout.setText(Ui.fontTiny, tag);
             Ui.fontTiny.setColor(tagC);
             Ui.fontTiny.draw(batch, tag, cx + cw - 12 - layout.width, cy + 15);
+        }
+        // hàng phân trang
+        if (pages > 1) {
+            float by = py + 6;
+            if (titlePage > 0) {
+                batch.draw(Ui.roundedRect(52, 26, 8, new Color(0f, 0f, 0f, 0.35f), GLASS_RIM),
+                    px + 24, by);
+                Ui.centered(batch, Ui.fontSmall, "<", px + 50, by + 19, Color.WHITE);
+            }
+            if (titlePage < pages - 1) {
+                batch.draw(Ui.roundedRect(52, 26, 8, new Color(0f, 0f, 0f, 0.35f), GLASS_RIM),
+                    px + CP_W - 76, by);
+                Ui.centered(batch, Ui.fontSmall, ">", px + CP_W - 50, by + 19, Color.WHITE);
+            }
+            Ui.centered(batch, Ui.fontSmall, (titlePage + 1) + "/" + pages,
+                px + CP_W / 2f, by + 19, new Color(1f, 1f, 1f, 0.75f));
         }
     }
 
@@ -9332,10 +9391,11 @@ public class WorldScreen extends ScreenAdapter {
                 act ? Color.WHITE : new Color(1f, 1f, 1f, 0.55f));
         }
         TitleDef curT = titleDef(myTitleId);
-        String eq = "Đang đeo: " + (curT != null ? curT.name : "—");
-        layout.setText(Ui.fontSmall, eq);
-        Ui.fontSmall.setColor(1f, 0.85f, 0.38f, 1f);
-        Ui.fontSmall.draw(batch, eq, px + CP_W - 24 - layout.width, tabY + 22);
+        String eq = truncTo(Ui.fontTiny,
+            "Đang đeo: " + (curT != null ? curT.name : "—"), 244);
+        layout.setText(Ui.fontTiny, eq);
+        Ui.fontTiny.setColor(1f, 0.85f, 0.38f, 1f);
+        Ui.fontTiny.draw(batch, eq, px + CP_W - 24 - layout.width, tabY + 21);
         if (charTab == 1) {
             drawCharTitleGrid(px, py);
             return;
@@ -9471,21 +9531,32 @@ public class WorldScreen extends ScreenAdapter {
      *  thử offline để tab Danh hiệu vẫn hiện đủ và đeo thử được. */
     private static final java.util.List<TitleDef> FALLBACK_TITLE_DEFS = new ArrayList<>();
     static {
-        FALLBACK_TITLE_DEFS.add(new TitleDef(1, "Người Mới", 0, "Danh hiệu khởi đầu"));
-        FALLBACK_TITLE_DEFS.add(new TitleDef(2, "Cư Dân Thị Trấn", 1, "Đạt cấp 5"));
-        FALLBACK_TITLE_DEFS.add(new TitleDef(3, "Lão Làng", 2, "Đạt cấp 15"));
-        FALLBACK_TITLE_DEFS.add(new TitleDef(4, "Huyền Thoại Thị Trấn", 3, "Đạt cấp 30"));
-        FALLBACK_TITLE_DEFS.add(new TitleDef(5, "Đại Gia", 4, "Nắm giữ 1.000.000 xu"));
-        FALLBACK_TITLE_DEFS.add(new TitleDef(6, "Cao Thủ Mini Game", 5, "Thắng 25 ván mini game"));
-        FALLBACK_TITLE_DEFS.add(new TitleDef(7, "Vua Câu Cá", 2, "Sở hữu cần câu xịn"));
-        FALLBACK_TITLE_DEFS.add(new TitleDef(8, "Chủ Clan", 5, "Là chủ một clan"));
-        FALLBACK_TITLE_DEFS.add(new TitleDef(9, "Phu Thê Song Toàn", 6, "Đã kết hôn"));
-        FALLBACK_TITLE_DEFS.add(new TitleDef(10, "Nông Dân Vàng", 1, "Đã nâng cấp Farm cấp 2"));
-        FALLBACK_TITLE_DEFS.add(new TitleDef(11, "Siêng Năng", 4, "Điểm danh tích luỹ 7 điểm"));
-        FALLBACK_TITLE_DEFS.add(new TitleDef(12, "Nhà Sưu Tầm", 3, "Sở hữu 30 món đồ"));
+        FALLBACK_TITLE_DEFS.add(new TitleDef(1, "Nhà Thông Thái (Vàng)", 4, "Trả lời đúng 75 câu đố vui"));
+        FALLBACK_TITLE_DEFS.add(new TitleDef(2, "Nhà Thông Thái (Bạc)", 7, "Trả lời đúng 30 câu đố vui"));
+        FALLBACK_TITLE_DEFS.add(new TitleDef(3, "Nhà Thông Thái (Đồng)", 8, "Trả lời đúng 10 câu đố vui"));
+        FALLBACK_TITLE_DEFS.add(new TitleDef(4, "Thần Nông (Vàng)", 4, "Thu hoạch 300 lần"));
+        FALLBACK_TITLE_DEFS.add(new TitleDef(5, "Thần Nông (Bạc)", 7, "Thu hoạch 120 lần"));
+        FALLBACK_TITLE_DEFS.add(new TitleDef(6, "Thần Nông (Đồng)", 8, "Thu hoạch 40 lần"));
+        FALLBACK_TITLE_DEFS.add(new TitleDef(7, "Thần Câu (Vàng)", 4, "Câu được 200 con cá"));
+        FALLBACK_TITLE_DEFS.add(new TitleDef(8, "Thần Câu (Bạc)", 7, "Câu được 80 con cá"));
+        FALLBACK_TITLE_DEFS.add(new TitleDef(9, "Thần Câu (Đồng)", 8, "Câu được 30 con cá"));
+        FALLBACK_TITLE_DEFS.add(new TitleDef(10, "Cao Thủ 3X (Vàng)", 4, "Thắng 50 ván mini game"));
+        FALLBACK_TITLE_DEFS.add(new TitleDef(11, "Cao Thủ 3X (Bạc)", 7, "Thắng 25 ván mini game"));
+        FALLBACK_TITLE_DEFS.add(new TitleDef(12, "Cao Thủ 3X (Đồng)", 8, "Thắng 10 ván mini game"));
+        FALLBACK_TITLE_DEFS.add(new TitleDef(13, "Vua Đầu Bếp (Vàng)", 4, "Nấu 100 món ăn"));
+        FALLBACK_TITLE_DEFS.add(new TitleDef(14, "Vua Đầu Bếp (Bạc)", 7, "Nấu 40 món ăn"));
+        FALLBACK_TITLE_DEFS.add(new TitleDef(15, "Vua Đầu Bếp (Đồng)", 8, "Nấu 15 món ăn"));
+        FALLBACK_TITLE_DEFS.add(new TitleDef(16, "Nông Dân Chăm Chỉ (Vàng)", 4, "Thu hoạch 150 lần"));
+        FALLBACK_TITLE_DEFS.add(new TitleDef(17, "Nông Dân Chăm Chỉ (Bạc)", 7, "Thu hoạch 60 lần"));
+        FALLBACK_TITLE_DEFS.add(new TitleDef(18, "Nông Dân Chăm Chỉ (Đồng)", 8, "Thu hoạch 15 lần"));
+        FALLBACK_TITLE_DEFS.add(new TitleDef(19, "Ngư Dân Chăm Chỉ (Vàng)", 4, "Câu được 60 con cá"));
+        FALLBACK_TITLE_DEFS.add(new TitleDef(20, "Ngư Dân Chăm Chỉ (Bạc)", 7, "Câu được 25 con cá"));
+        FALLBACK_TITLE_DEFS.add(new TitleDef(21, "Ngư Dân Chăm Chỉ (Đồng)", 8, "Câu được 10 con cá"));
     }
     /** Tab trong panel Thông tin nhân vật: 0 = Thông tin, 1 = Danh hiệu. */
     private int charTab = 0;
+    /** Trang đang xem trong tab Danh hiệu (8 thẻ/trang). */
+    private int titlePage = 0;
 
     private java.util.List<TitleDef> titleListEffective() {
         return titleDefs.isEmpty() ? FALLBACK_TITLE_DEFS : titleDefs;
@@ -9498,7 +9569,8 @@ public class WorldScreen extends ScreenAdapter {
         new Color(1f, 1f, 1f, 1f), new Color(0.45f, 0.90f, 0.50f, 1f),
         new Color(0.45f, 0.75f, 1f, 1f), new Color(0.78f, 0.55f, 1f, 1f),
         new Color(1f, 0.85f, 0.38f, 1f), new Color(1f, 0.62f, 0.30f, 1f),
-        new Color(1f, 0.60f, 0.80f, 1f)};
+        new Color(1f, 0.60f, 0.80f, 1f), new Color(0.85f, 0.88f, 0.92f, 1f),
+        new Color(0.85f, 0.55f, 0.35f, 1f)};
 
     // ĐỐ VUI TRÊN MAP [PORT gói -121]
     private boolean quizOpen = false;
@@ -11364,15 +11436,31 @@ public class WorldScreen extends ScreenAdapter {
         Ui.fontSmall.draw(batch, name, feetX - layout.width / 2f + 1.5f, topY + 24f - 1.5f);
         Ui.fontSmall.setColor(c);
         Ui.fontSmall.draw(batch, name, feetX - layout.width / 2f, topY + 24f);
-        // danh hiệu [PORT]: dòng nhỏ màu riêng NẰM TRÊN tên
-        String ttl = titleTextFor(doll);
-        if (ttl != null) {
-            Color tc = titleColorFor(doll);
-            Ui.fontTiny.setColor(0f, 0f, 0f, 0.85f);
-            layout.setText(Ui.fontTiny, ttl);
-            Ui.fontTiny.draw(batch, ttl, feetX - layout.width / 2f + 1f, topY + 43f - 1f);
-            Ui.fontTiny.setColor(tc);
-            Ui.fontTiny.draw(batch, ttl, feetX - layout.width / 2f, topY + 43f);
+        // danh hiệu: ẢNH gốc của bản chính (titles/title-<id>.png,
+        // giải mã từ TextAsset Title1..21) vẽ TRÊN tên; thiếu ảnh
+        // thì lùi về dòng chữ màu như bản đầu.
+        if (drawingTitleId > 0) {
+            Texture tt = null;
+            try {
+                tt = game.texture("titles/title-" + drawingTitleId + ".png");
+                tt.setFilter(Texture.TextureFilter.Linear, Texture.TextureFilter.Linear);
+            } catch (Exception ignored) {
+            }
+            if (tt != null && tt.getWidth() > 0) {
+                float tw = 118f;
+                float th = tw * tt.getHeight() / tt.getWidth();
+                batch.draw(tt, feetX - tw / 2f, topY + 41f, tw, th);
+            } else {
+                String ttl = titleTextFor(doll);
+                if (ttl != null) {
+                    Color tc = titleColorFor(doll);
+                    Ui.fontTiny.setColor(0f, 0f, 0f, 0.85f);
+                    layout.setText(Ui.fontTiny, ttl);
+                    Ui.fontTiny.draw(batch, ttl, feetX - layout.width / 2f + 1f, topY + 43f - 1f);
+                    Ui.fontTiny.setColor(tc);
+                    Ui.fontTiny.draw(batch, ttl, feetX - layout.width / 2f, topY + 43f);
+                }
+            }
         }
         drawingTitleId = 0;
     }
@@ -24819,24 +24907,20 @@ public class WorldScreen extends ScreenAdapter {
     public void debugOpenTitle(boolean withPanel) {
         debugCloseHubGames();
         closeOtherPanels();
+        // defs: để trống -> dùng FALLBACK 21 danh hiệu khớp server
         titleDefs.clear();
-        titleDefs.add(new TitleDef(1, "Người Mới", 0, "Danh hiệu khởi đầu"));
-        titleDefs.add(new TitleDef(2, "Cư Dân Thị Trấn", 1, "Đạt cấp 5"));
-        titleDefs.add(new TitleDef(3, "Lão Làng", 2, "Đạt cấp 15"));
-        titleDefs.add(new TitleDef(4, "Huyền Thoại Thị Trấn", 3, "Đạt cấp 30"));
-        titleDefs.add(new TitleDef(5, "Đại Gia", 4, "Nắm giữ 1.000.000 xu"));
-        titleDefs.add(new TitleDef(6, "Cao Thủ Mini Game", 5, "Thắng 25 ván mini game"));
-        titleDefs.add(new TitleDef(7, "Vua Câu Cá", 2, "Sở hữu cần câu xịn"));
-        titleDefs.add(new TitleDef(8, "Chủ Clan", 5, "Là chủ một clan"));
-        titleDefs.add(new TitleDef(9, "Phu Thê Song Toàn", 6, "Đã kết hôn"));
-        titleDefs.add(new TitleDef(10, "Nông Dân Vàng", 1, "Đã nâng cấp Farm cấp 2"));
-        titleDefs.add(new TitleDef(11, "Siêng Năng", 4, "Điểm danh tích luỹ 7 điểm"));
-        titleDefs.add(new TitleDef(12, "Nhà Sưu Tầm", 3, "Sở hữu 30 món đồ"));
         titleOwned.clear();
-        titleOwned.add(1);
-        titleOwned.add(5);
+        titleOwned.add(2);
+        titleOwned.add(3);
         titleOwned.add(6);
-        myTitleId = 5;
+        titleOwned.add(9);
+        titleOwned.add(11);
+        titleOwned.add(12);
+        titleOwned.add(18);
+        titleOwned.add(20);
+        titleOwned.add(21);
+        myTitleId = 1;
+        titlePage = 0;
         charPanel = withPanel;
         charTab = 1;
     }

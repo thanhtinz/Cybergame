@@ -42,20 +42,36 @@ import java.util.Set;
  */
 public class TitleService extends Service {
 
-    // id, tên, màu (0 trắng 1 xanh lá 2 xanh dương 3 tím 4 vàng 5 cam 6 hồng), điều kiện
+    // [PORT-DEFS] 7 danh hiệu x 3 hạng (Đồng/Bạc/Vàng) theo ĐÚNG
+    // ảnh gốc Title1..Title21 của bản chính (đã giải mã: mỗi file
+    // TextAsset là short id + short len + PNG). Thứ tự id theo file
+    // gốc: trong mỗi bộ ba, id đầu = Vàng, giữa = Bạc, cuối = Đồng.
+    // Ngưỡng đạt là [PORT] (server nhà phát hành không công bố):
+    // đếm bằng bảng title_counters (quiz/fish/harvest/cook) +
+    // mg_stats (mini game). Màu: 4 vàng, 7 bạc, 8 đồng.
+    // id, tên, màu, điều kiện, bộ đếm, ngưỡng
     public static final Object[][] DEFS = {
-        {1, "Người Mới", 0, "Danh hiệu khởi đầu"},
-        {2, "Cư Dân Thị Trấn", 1, "Đạt cấp 5"},
-        {3, "Lão Làng", 2, "Đạt cấp 15"},
-        {4, "Huyền Thoại Thị Trấn", 3, "Đạt cấp 30"},
-        {5, "Đại Gia", 4, "Nắm giữ 1.000.000 xu"},
-        {6, "Cao Thủ Mini Game", 5, "Thắng 25 ván mini game"},
-        {7, "Vua Câu Cá", 2, "Sở hữu cần câu xịn"},
-        {8, "Chủ Clan", 5, "Là chủ một clan"},
-        {9, "Phu Thê Song Toàn", 6, "Đã kết hôn"},
-        {10, "Nông Dân Vàng", 1, "Đã nâng cấp Farm cấp 2"},
-        {11, "Siêng Năng", 4, "Điểm danh tích luỹ 7 điểm"},
-        {12, "Nhà Sưu Tầm", 3, "Sở hữu 30 món đồ"},
+        {1, "Nhà Thông Thái (Vàng)", 4, "Trả lời đúng 75 câu đố vui", "quiz", 75},
+        {2, "Nhà Thông Thái (Bạc)", 7, "Trả lời đúng 30 câu đố vui", "quiz", 30},
+        {3, "Nhà Thông Thái (Đồng)", 8, "Trả lời đúng 10 câu đố vui", "quiz", 10},
+        {4, "Thần Nông (Vàng)", 4, "Thu hoạch 300 lần", "harvest", 300},
+        {5, "Thần Nông (Bạc)", 7, "Thu hoạch 120 lần", "harvest", 120},
+        {6, "Thần Nông (Đồng)", 8, "Thu hoạch 40 lần", "harvest", 40},
+        {7, "Thần Câu (Vàng)", 4, "Câu được 200 con cá", "fish", 200},
+        {8, "Thần Câu (Bạc)", 7, "Câu được 80 con cá", "fish", 80},
+        {9, "Thần Câu (Đồng)", 8, "Câu được 30 con cá", "fish", 30},
+        {10, "Cao Thủ 3X (Vàng)", 4, "Thắng 50 ván mini game", "mgwins", 50},
+        {11, "Cao Thủ 3X (Bạc)", 7, "Thắng 25 ván mini game", "mgwins", 25},
+        {12, "Cao Thủ 3X (Đồng)", 8, "Thắng 10 ván mini game", "mgwins", 10},
+        {13, "Vua Đầu Bếp (Vàng)", 4, "Nấu 100 món ăn", "cook", 100},
+        {14, "Vua Đầu Bếp (Bạc)", 7, "Nấu 40 món ăn", "cook", 40},
+        {15, "Vua Đầu Bếp (Đồng)", 8, "Nấu 15 món ăn", "cook", 15},
+        {16, "Nông Dân Chăm Chỉ (Vàng)", 4, "Thu hoạch 150 lần", "harvest", 150},
+        {17, "Nông Dân Chăm Chỉ (Bạc)", 7, "Thu hoạch 60 lần", "harvest", 60},
+        {18, "Nông Dân Chăm Chỉ (Đồng)", 8, "Thu hoạch 15 lần", "harvest", 15},
+        {19, "Ngư Dân Chăm Chỉ (Vàng)", 4, "Câu được 60 con cá", "fish", 60},
+        {20, "Ngư Dân Chăm Chỉ (Bạc)", 7, "Câu được 25 con cá", "fish", 25},
+        {21, "Ngư Dân Chăm Chỉ (Đồng)", 8, "Câu được 10 con cá", "fish", 10},
     };
 
     private static volatile boolean schemaReady = false;
@@ -80,11 +96,78 @@ public class TitleService extends Service {
                 } catch (Exception ignored) {
                     // cột đã tồn tại
                 }
+                c.createStatement().execute(
+                        "CREATE TABLE IF NOT EXISTS title_counters ("
+                        + "user_id INT NOT NULL PRIMARY KEY,"
+                        + "quiz_ok INT DEFAULT 0, fish INT DEFAULT 0,"
+                        + "harvest INT DEFAULT 0, cook INT DEFAULT 0)");
+                c.createStatement().execute(
+                        "CREATE TABLE IF NOT EXISTS title_meta ("
+                        + "k VARCHAR(32) NOT NULL PRIMARY KEY, v INT DEFAULT 0)");
+                // Migration 1 lần sang bộ định nghĩa 21 danh hiệu:
+                // danh hiệu cũ (bộ 12 tự soạn) bị xoá, quét lại từ đầu.
+                try (PreparedStatement ps = c.prepareStatement(
+                        "SELECT v FROM title_meta WHERE k = 'defs_v2'");
+                     ResultSet rs = ps.executeQuery()) {
+                    if (!rs.next()) {
+                        c.createStatement().execute("DELETE FROM player_titles");
+                        c.createStatement().execute(
+                                "UPDATE players SET title_id = 0");
+                        c.createStatement().execute(
+                                "INSERT INTO title_meta (k, v) VALUES ('defs_v2', 1)");
+                    }
+                }
                 schemaReady = true;
             } catch (Exception e) {
                 e.printStackTrace();
             }
         }
+    }
+
+    /** Cộng 1 vào bộ đếm thành tích (cột trong whitelist). Lỗi ở
+     *  đây KHÔNG được làm hỏng luồng chơi chính — nuốt hết. */
+    public static void bump(int userId, String column) {
+        if (!column.equals("quiz_ok") && !column.equals("fish")
+                && !column.equals("harvest") && !column.equals("cook")) return;
+        ensureSchema();
+        try (Connection c = DbManager.getInstance().getConnection();
+             PreparedStatement ps = c.prepareStatement(
+                     "INSERT INTO title_counters (user_id, " + column + ")"
+                     + " VALUES (?, 1) ON DUPLICATE KEY UPDATE "
+                     + column + " = " + column + " + 1")) {
+            ps.setInt(1, userId);
+            ps.executeUpdate();
+        } catch (Exception ignored) {
+        }
+    }
+
+    /** Đọc 4 bộ đếm + tổng thắng mini game của 1 người chơi. */
+    private static java.util.Map<String, Integer> counters(User u) {
+        java.util.Map<String, Integer> m = new java.util.HashMap<>();
+        m.put("quiz", 0); m.put("fish", 0); m.put("harvest", 0);
+        m.put("cook", 0); m.put("mgwins", 0);
+        try (Connection c = DbManager.getInstance().getConnection()) {
+            try (PreparedStatement ps = c.prepareStatement(
+                    "SELECT quiz_ok, fish, harvest, cook FROM title_counters"
+                    + " WHERE user_id = ?")) {
+                ps.setInt(1, u.getId());
+                ResultSet rs = ps.executeQuery();
+                if (rs.next()) {
+                    m.put("quiz", rs.getInt(1));
+                    m.put("fish", rs.getInt(2));
+                    m.put("harvest", rs.getInt(3));
+                    m.put("cook", rs.getInt(4));
+                }
+            } catch (Exception ignored) { }
+            try (PreparedStatement ps = c.prepareStatement(
+                    "SELECT COALESCE(SUM(wins),0) FROM mg_stats WHERE user_id = ?")) {
+                ps.setInt(1, u.getId());
+                ResultSet rs = ps.executeQuery();
+                if (rs.next()) m.put("mgwins", rs.getInt(1));
+            } catch (Exception ignored) { }
+        } catch (Exception ignored) {
+        }
+        return m;
     }
 
     /** Nạp danh hiệu đang đeo từ DB vào RAM (an toàn khi chưa có cột). */
@@ -159,7 +242,6 @@ public class TitleService extends Service {
 
     private Set<Integer> owned(User u) {
         Set<Integer> out = new LinkedHashSet<>();
-        out.add(1);
         try (Connection c = DbManager.getInstance().getConnection();
              PreparedStatement ps = c.prepareStatement(
                      "SELECT title_id FROM player_titles WHERE user_id = ?")) {
@@ -172,68 +254,19 @@ public class TitleService extends Service {
         return out;
     }
 
-    /** Quét điều kiện, cấp danh hiệu mới đạt; trả danh sách vừa cấp. */
+    /** Quét điều kiện theo bộ đếm, cấp danh hiệu mới đạt; trả
+     *  danh sách vừa cấp. */
     private List<Integer> grantCheck(User u) {
         Set<Integer> have = owned(u);
         List<Integer> fresh = new ArrayList<>();
-        List<Integer> grant = new ArrayList<>();
-        if (u.getLeverMain() >= 5) grant.add(2);
-        if (u.getLeverMain() >= 15) grant.add(3);
-        if (u.getLeverMain() >= 30) grant.add(4);
-        if (u.getXu() >= 1000000L) grant.add(5);
-        try (Connection c = DbManager.getInstance().getConnection()) {
-            try (PreparedStatement ps = c.prepareStatement(
-                    "SELECT COALESCE(SUM(wins),0) FROM mg_stats WHERE user_id = ?")) {
-                ps.setInt(1, u.getId());
-                ResultSet rs = ps.executeQuery();
-                if (rs.next() && rs.getInt(1) >= 25) grant.add(6);
-            } catch (Exception ignored) { }
-            try (PreparedStatement ps = c.prepareStatement(
-                    "SELECT COUNT(*) FROM clans WHERE users_id = ?")) {
-                ps.setInt(1, u.getId());
-                ResultSet rs = ps.executeQuery();
-                if (rs.next() && rs.getInt(1) > 0) grant.add(8);
-            } catch (Exception ignored) { }
-            try (PreparedStatement ps = c.prepareStatement(
-                    "SELECT COUNT(*) FROM marry WHERE idNam = ? OR idNu = ?")) {
-                ps.setInt(1, u.getId());
-                ps.setInt(2, u.getId());
-                ResultSet rs = ps.executeQuery();
-                if (rs.next() && rs.getInt(1) > 0) grant.add(9);
-            } catch (Exception ignored) { }
-            try (PreparedStatement ps = c.prepareStatement(
-                    "SELECT lvl2_data FROM farm_data WHERE user_id = ?")) {
-                ps.setInt(1, u.getId());
-                ResultSet rs = ps.executeQuery();
-                if (rs.next()) {
-                    String d = rs.getString(1);
-                    if (d != null && d.length() > 2) grant.add(10);
-                }
-            } catch (Exception ignored) { }
-            try (PreparedStatement ps = c.prepareStatement(
-                    "SELECT total_point FROM daily_state WHERE user_id = ?")) {
-                ps.setInt(1, u.getId());
-                ResultSet rs = ps.executeQuery();
-                if (rs.next() && rs.getInt(1) >= 7) grant.add(11);
-            } catch (Exception ignored) { }
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-        // cần câu xịn trong giỏ hoặc đang mặc
-        java.util.Set<Integer> distinct = new java.util.HashSet<>();
-        boolean hasRod = false;
-        for (avatar.item.Item it : u.chests) {
-            distinct.add(it.getId());
-            if (it.getId() == 447 || it.getId() == 448) hasRod = true;
-        }
-        for (avatar.item.Item it : u.getWearing()) {
-            distinct.add(it.getId());
-            if (it.getId() == 447 || it.getId() == 448) hasRod = true;
-        }
-        if (hasRod) grant.add(7);
-        if (distinct.size() >= 30) grant.add(12);
-        for (int tid : grant) {
+        java.util.Map<String, Integer> cnt = counters(u);
+        for (Object[] d : DEFS) {
+            int tid = (Integer) d[0];
+            String counter = (String) d[4];
+            int need = (Integer) d[5];
             if (have.contains(tid)) continue;
+            Integer cur = cnt.get(counter);
+            if (cur == null || cur < need) continue;
             try (Connection c = DbManager.getInstance().getConnection();
                  PreparedStatement ps = c.prepareStatement(
                          "INSERT IGNORE INTO player_titles (user_id, title_id)"
