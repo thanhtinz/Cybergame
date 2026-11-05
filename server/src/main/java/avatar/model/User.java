@@ -69,6 +69,19 @@ public class User {
     private List<Item> wearingMarry;
     private int levelMarry;
     private int PerLevelMarry;
+
+    /** Id ẢNH icon hôn nhân vẽ cạnh tên (idWedding của client gốc):
+     *  −1 độc thân · 2 hẹn hò · 1153–1157 nhẫn cưới theo cấp
+     *  (mốc theo AvatarService của gốc/fan). */
+    public short weddingIconId() {
+        if (this.levelMarry >= 20) return 1157;
+        if (this.levelMarry >= 15) return 1156;
+        if (this.levelMarry >= 10) return 1155;
+        if (this.levelMarry >= 5) return 1154;
+        if (this.levelMarry >= 1) return 1153;
+        if (this.idUsHenHo != 0) return 2;
+        return -1;
+    }
     private int imginfo;
     private String tenNhan;
     private java.sql.Date timeCreate;

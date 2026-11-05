@@ -288,6 +288,16 @@ public class MessageHandler implements IMessageHandler {
                         }
                         break;
                     }
+                    // [PORT kết hôn] Gói 93 bắt đầu lễ cưới vốn thuộc
+                    // ParkMsgHandler; phiên park sống ở MessageHandler
+                    // nên đăng ký thêm ở đây (như câu cá).
+                    case Cmd.WEDDING_BIGIN: {
+                        if (this.client.user != null) {
+                            this.client.getParkService().WEDDING_BIGINHanlder(this.client.user, mss);
+                            break;
+                        }
+                        break;
+                    }
                     // [PORT câu cá] Client port chỉ dùng handler 8 nên
                     // các gói câu cá (vốn thuộc ParkMsgHandler) được
                     // đăng ký thêm ở đây, trỏ về cùng ParkService.

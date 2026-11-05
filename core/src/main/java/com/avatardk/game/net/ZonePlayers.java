@@ -18,6 +18,7 @@ public final class ZonePlayers {
         public int x, y;      // medium
         public int role;      // 0 = NPC
         public int direct;    // 0 = phải, 2 = trái (Base của gốc)
+        public int idWedding = -1; // icon hôn nhân cạnh tên (−1 = độc thân)
     }
 
     /** Kết quả đọc gói 50: map/khu server xác nhận + danh sách người. */
@@ -58,7 +59,10 @@ public final class ZonePlayers {
             }
             int nItems = r.readByte();
             for (int i = 0; i < nItems; i++) { r.readByte(); r.readByte(); r.readByte(); r.readByte(); }
-            for (int i = 0; i < num; i++) r.readShort(); // -1 cuối mỗi user
+            for (int i = 0; i < num; i++) {
+                int w = r.readShort(); // idWedding cuối mỗi user
+                if (i < out.size()) out.get(i).idWedding = w;
+            }
         } catch (IOException tail) {
             // đuôi gói lệch cũng không được làm mất danh sách người chơi đã đọc
         }
@@ -80,6 +84,15 @@ public final class ZonePlayers {
         DataInputStream r = m.reader();
         RemotePlayer p = readPlayerBlock(r);
         p.direct = 2; // mặc định LEFT như Base của gốc (gói 51 không chở direct)
+        // đuôi block phía server: byte −1, short idImg, short idWedding
+        try {
+            if (r.available() >= 5) {
+                r.readByte();
+                r.readShort();
+                p.idWedding = r.readShort();
+            }
+        } catch (IOException ignored) {
+        }
         return p;
     }
 

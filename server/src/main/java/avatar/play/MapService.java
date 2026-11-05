@@ -172,7 +172,7 @@ public class MapService extends Service {
             ds.writeByte(us.getRole());
             ds.writeByte(-1);
             ds.writeShort(-1);
-            ds.writeShort(-1);
+            ds.writeShort(us.weddingIconId());
             ds.flush();
             sendMessage(ms);
         } catch (IOException ex) {

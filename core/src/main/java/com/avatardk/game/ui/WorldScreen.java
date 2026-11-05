@@ -354,6 +354,7 @@ public class WorldScreen extends ScreenAdapter {
         float bubbleTimer = 0f;
         int pose = 0;         // tư thế hành động đang giữ (gói 57 byte < 100)
         float jumpT = -1f;    // tiến trình cú nhảy của người này
+        PaperDoll wedDoll;    // doll cưới tạm (tạo lười khi vào lễ)
 
         float jumpOffY() { return jumpOffsetY(jumpT); }
     }
@@ -3348,6 +3349,14 @@ public class WorldScreen extends ScreenAdapter {
                 handleRaceMsg(m);
                 return;
             }
+            // Lễ cưới (handler park): gói 93 {int boyId, int girlId} —
+            // ở farm số 93 là nấu nhanh (chưa làm) nên chỉ rẽ khi
+            // không ở farm/nhà.
+            if (m.command == 93 && !farmIn && !houseIn) {
+                java.io.DataInputStream r = m.reader();
+                onWeddingStart(r.readInt(), r.readInt());
+                return;
+            }
             switch (m.command) {
                 case AvatarProtocol.AVATAR_JOIN_PARK: {
                     ZonePlayers.JoinResult jr = ZonePlayers.parseJoin(m);
@@ -5599,6 +5608,7 @@ public class WorldScreen extends ScreenAdapter {
         if (raceTouch(x, y)) return;
         // hộp hỏi thoát về thành phố (ô cổng 9/12/17) là lớp trên cùng
         if (exitConfirmTouch(x, y)) return;
+        if (weddingConfirmTouch(x, y)) return;
         // hộp xác nhận nâng cấp rương (−90) là modal trên cùng
         if (chestUpTouch(x, y)) return;
         // hoá đơn mua chung là lớp trên cùng (mở đè cả panel nhà —
@@ -7005,6 +7015,13 @@ public class WorldScreen extends ScreenAdapter {
         // (xem openLaiBuonLocalMenu / laiBuonLocalSelect).
         if (n.data.id == NPC_LAI_BUON && game.connection == null) {
             openLaiBuonLocalMenu();
+            return;
+        }
+        // NPC Chủ Hôn (525, lễ đường): [PORT] mở menu cục bộ 3 việc
+        // Hẹn hò / Bắt đầu lễ cưới / Chia tay — gốc mở hộp cưới bằng
+        // chạm vào Chủ Hôn (đối tượng −100), xem docs/wedding-spec.md.
+        if (n.data.id == NPC_CHU_HON) {
+            openWeddingMenu();
             return;
         }
         // NPC có case phía server (menu/hướng dẫn/cược...): nói chuyện
@@ -10046,10 +10063,40 @@ public class WorldScreen extends ScreenAdapter {
                         }
                         if (rfish.dollRod != null) rdoll = rfish.dollRod;
                     }
-                    drawFigure(rdoll, it.remote.anim, it.remote.feetX,
-                        it.remote.feetY + it.remote.jumpOffY(),
+                    // đang lễ cưới: dâu/rể mặc đồ cưới tạm, đứng cặp
+                    // tại điểm lễ trước Chủ Hôn (gốc: onWeddingStart)
+                    float rDrawX = it.remote.feetX;
+                    float rDrawY = it.remote.feetY + it.remote.jumpOffY();
+                    PaperDoll rUseDoll = rdoll;
+                    if (weddingOn && (it.remote.info.id == weddingBoyId
+                            || it.remote.info.id == weddingGirlId)) {
+                        boolean girl = it.remote.info.id == weddingGirlId;
+                        if (it.remote.wedDoll == null) {
+                            List<Integer> base = new ArrayList<>();
+                            for (int pid : it.remote.info.wearing) base.add(pid);
+                            it.remote.wedDoll = weddingDollFor(girl, base);
+                        }
+                        rUseDoll = it.remote.wedDoll;
+                        float[] lp = weddingSpot(girl);
+                        rDrawX = lp[0];
+                        rDrawY = lp[1];
+                    }
+                    drawFigure(rUseDoll, it.remote.anim, rDrawX, rDrawY,
                         com.avatardk.game.data.GameSettings.showName ? it.remote.info.name : null,
                         new Color(0.55f, 0.9f, 1f, 1f));
+                    // icon hôn nhân (nhẫn/tim) ngay sau tên — gốc vẽ
+                    // ảnh idWedding cạnh tên nhân vật
+                    if (com.avatardk.game.data.GameSettings.showName
+                            && it.remote.info.idWedding > 0) {
+                        Texture wtex = house.imgTexture(it.remote.info.idWedding);
+                        if (wtex != null) {
+                            layout.setText(Ui.fontSmall, it.remote.info.name);
+                            float topY = rDrawY + game.dollRenderer.heightPx(
+                                rUseDoll, it.remote.anim.frameIndex(), AvatarDkGame.HD);
+                            batch.draw(wtex, rDrawX + layout.width / 2f + 5,
+                                topY + 8, 17, 17);
+                        }
+                    }
                     if (it.remote.bubble != null) {
                         drawBubble(rdoll, it.remote.anim, it.remote.feetX,
                             it.remote.feetY + it.remote.jumpOffY(), it.remote.bubble);
@@ -10145,10 +10192,21 @@ public class WorldScreen extends ScreenAdapter {
                     break;
                 }
                 default: // PLAYER
-                    if (raceIn) break; // trường đua: mình là khán giả (vẽ ở drawRacePets)
+                    if (raceIn) break; // trường đua: mình là khán giả (vẽ ở drawRacepets)
                     PaperDoll pdoll = fishState != FISH_NONE ? playerFishDoll() : playerDoll;
-                    drawFigure(pdoll, playerAnim, playerFeetX,
-                        playerFeetY + jumpOffsetY(playerJumpT), displayName, true);
+                    float pDrawX = playerFeetX;
+                    float pDrawY = playerFeetY + jumpOffsetY(playerJumpT);
+                    if (weddingOn && (ownId() == weddingBoyId || ownId() == weddingGirlId)) {
+                        boolean girl = ownId() == weddingGirlId;
+                        if (weddingDollSelf == null) {
+                            weddingDollSelf = weddingDollFor(girl, playerParts);
+                        }
+                        pdoll = weddingDollSelf;
+                        float[] lp = weddingSpot(girl);
+                        pDrawX = lp[0];
+                        pDrawY = lp[1];
+                    }
+                    drawFigure(pdoll, playerAnim, pDrawX, pDrawY, displayName, true);
                     if (chatBubble != null) {
                         drawBubble(pdoll, playerAnim, playerFeetX,
                             playerFeetY + jumpOffsetY(playerJumpT), chatBubble);
@@ -10317,6 +10375,7 @@ public class WorldScreen extends ScreenAdapter {
         if (npcMenuOpen) drawNpcMenu();
         if (guideOpen) drawGuidePanel();
         if (exitConfirmOpen) drawExitConfirm();
+        if (weddingConfirmOpen) drawWeddingConfirm();
         if (boardOpen) drawBoardPanel();
         if (cityMapOpen) drawCityMap();
         if (farmSeedOpen) drawFarmSeedPanel();
@@ -11910,7 +11969,11 @@ public class WorldScreen extends ScreenAdapter {
                 npcMenuOpen = false;
                 if (npcMenuLocal) {
                     npcMenuLocal = false;
-                    laiBuonLocalSelect(i);
+                    if (npcMenuUserId == NPC_ID_ADD + NPC_CHU_HON) {
+                        weddingLocalSelect(i);
+                    } else {
+                        laiBuonLocalSelect(i);
+                    }
                     return;
                 }
                 if (game.connection != null) {
@@ -11961,6 +12024,152 @@ public class WorldScreen extends ScreenAdapter {
         } else if (i == 1) {
             openGuide("Hướng dẫn", LAI_BUON_GUIDE);
         }
+    }
+
+    // ---------- KẾT HÔN / HẸN HÒ (gói 93 + MENU_ROTATE −83) ----------
+    // Đặc tả: docs/wedding-spec.md. Gốc: chạm Chủ Hôn -> hộp "Bạn có
+    // muốn bắt đầu lễ cưới không?" -> gửi 93 {room, board}; server
+    // phát 93 {boyId, girlId} -> onWeddingStart: dâu/rể mặc đồ cưới
+    // tạm (part 2475–2478 + 300 + 302) ra đứng lễ tới khi rời map.
+    // Hẹn hò: MENU_ROTATE 36 -> TEXT_BOX 100/101 phía server; chia
+    // tay [PORT]: MENU_ROTATE 37 -> TEXT_BOX 103.
+    private static final int NPC_CHU_HON = 525;
+    private boolean weddingOn = false;
+    private int weddingBoyId = -1, weddingGirlId = -1;
+    private PaperDoll weddingDollSelf;
+    private boolean weddingConfirmOpen = false;
+
+    private void openWeddingMenu() {
+        npcMenuLocal = true;
+        npcMenuUserId = NPC_ID_ADD + NPC_CHU_HON;
+        npcMenuId = 0;
+        npcMenuTitle = "Chủ Hôn";
+        npcMenuItems.clear();
+        npcMenuItems.add("Hẹn hò");
+        npcMenuItems.add("Bắt đầu lễ cưới");
+        npcMenuItems.add("Chia tay");
+        npcMenuItems.add("Thoát");
+        npcMenuOpen = true;
+    }
+
+    private void weddingLocalSelect(int i) {
+        if (i == 3) return;
+        if (!online()) {
+            addChatLog(TAB_SYSTEM, null,
+                "Kết hôn cần chơi online — bản chơi thử không có.", true);
+            return;
+        }
+        try {
+            if (i == 0) {
+                Msg m = new Msg((byte) -83);
+                m.writer().writeShort(36);
+                game.connection.send(m);
+            } else if (i == 1) {
+                weddingConfirmOpen = true;
+            } else if (i == 2) {
+                Msg m = new Msg((byte) -83);
+                m.writer().writeShort(37);
+                game.connection.send(m);
+            }
+        } catch (Exception ignored) {
+        }
+    }
+
+    /** Doll cưới theo đúng Avatar.addPart của gốc: mỗi part cưới
+     *  THAY part đang mặc có cùng zOrder (dâu: 2475 z20, 2476 z10,
+     *  300 z60, 302 z70; rể: 2477 z20, 2478 z10) — trang phục cưới
+     *  thay áo/quần/phụ kiện, phần còn lại của nhân vật giữ nguyên. */
+    private PaperDoll weddingDollFor(boolean girl, List<Integer> baseWearing) {
+        List<Integer> ps = new ArrayList<>(baseWearing);
+        int[] add = girl ? new int[]{2475, 2476, 300, 302} : new int[]{2477, 2478};
+        for (int p : add) {
+            com.avatardk.game.data.PartData pd = game.data.part(p);
+            if (pd == null) continue;
+            for (int i = ps.size() - 1; i >= 0; i--) {
+                com.avatardk.game.data.PartData cur = game.data.part(ps.get(i));
+                if (cur != null && cur.zorder == pd.zorder) ps.remove(i);
+            }
+            ps.add(p);
+        }
+        return game.newDoll(ps);
+    }
+
+    /** Điểm lễ (feet px): dâu/rể đứng cặp ngay trước NPC Chủ Hôn. */
+    private float[] weddingSpot(boolean girl) {
+        for (NpcFigure n : npcFigures) {
+            if (n.data.id == NPC_CHU_HON) {
+                return new float[]{n.feetX + (girl ? 42 : -42), n.feetY - 6};
+            }
+        }
+        return new float[]{playerX * AvatarDkGame.HD + (girl ? 42 : -42),
+            mapBottomPx - playerY * AvatarDkGame.HD};
+    }
+
+    private void onWeddingStart(int boy, int girl) {
+        weddingBoyId = boy;
+        weddingGirlId = girl;
+        weddingOn = true;
+        weddingDollSelf = null;
+        for (RemoteFigure f : remotes.values()) f.wedDoll = null;
+        addChatLog(TAB_SYSTEM, null, "Lễ cưới bắt đầu!", true);
+    }
+
+    /** Harness: thoát hẳn trạng thái casino (các stage sau khi qua
+     *  bàn casino phải gọi trước khi đổi map, không thì drawCasino
+     *  vẫn vẽ đè với số liệu bị xáo trộn). */
+    public void debugLeaveCasino() {
+        casinoIn = false;
+        csPending = false;
+        phStopped = false;
+        phPlaying = false;
+        tlStopped = false;
+        tlPlaying = false;
+        raceIn = false; // stage đua trước đó cũng phải tắt, không thì
+        raceLocal = false; // drawRace + khán giả đua vẽ đè sang stage sau
+        raceWinOpen = raceHistOpen = false;
+    }
+
+    /** Harness kiểm chứng: bật lễ cưới — mình là chú rể, cô dâu là
+     *  remote đã inject; gán luôn icon nhẫn cho cô dâu. */
+    public void debugWedding(int girlId) {
+        onWeddingStart(ownId(), girlId);
+        RemoteFigure f = remotes.get(girlId);
+        if (f != null) f.info.idWedding = 1153;
+    }
+
+    private void drawWeddingConfirm() {
+        float pw = 520, ph = 176, px = (Ui.W - pw) / 2f, py = (Ui.H - ph) / 2f;
+        batch.setColor(0f, 0f, 0f, 0.45f);
+        batch.draw(whiteTex, 0, 0, Ui.W, Ui.H);
+        batch.setColor(Color.WHITE);
+        batch.draw(Ui.roundedRect((int) pw, (int) ph, 16,
+            new Color(0.08f, 0.13f, 0.20f, 0.98f), GLASS_RIM), px, py);
+        Ui.centered(batch, Ui.font, "Bạn có muốn bắt đầu lễ cưới không?",
+            px + pw / 2f, py + ph - 42, new Color(1f, 0.85f, 0.38f, 1f));
+        batch.draw(Ui.gradientRect(170, 48, 12, EntryUi.ORANGE_TOP, EntryUi.ORANGE_BOT),
+            px + 40, py + 26);
+        Ui.centered(batch, Ui.fontSmall, "Đồng ý", px + 40 + 85, py + 57, Color.WHITE);
+        batch.draw(Ui.roundedRect(170, 48, 12, Ui.BTN_CANCEL, GLASS_RIM),
+            px + pw - 40 - 170, py + 26);
+        Ui.centered(batch, Ui.fontSmall, "Huỷ", px + pw - 40 - 85, py + 57, Color.WHITE);
+    }
+
+    /** Chạm khi hộp xác nhận lễ cưới đang mở: true nếu đã nuốt chạm. */
+    private boolean weddingConfirmTouch(float x, float y) {
+        if (!weddingConfirmOpen) return false;
+        float pw = 520, ph = 176, cx0 = (Ui.W - pw) / 2f, cy0 = (Ui.H - ph) / 2f;
+        weddingConfirmOpen = false;
+        if (x >= cx0 + 40 && x <= cx0 + 210 && y >= cy0 + 26 && y <= cy0 + 74
+                && online()) {
+            try {
+                Msg m = new Msg((byte) 93);
+                m.writer().writeByte(mapDef != null ? mapDef.id - 1 : 10);
+                m.writer().writeByte(-1);
+                game.connection.send(m);
+            } catch (Exception ignored) {
+            }
+        }
+        return true;
     }
 
     // ----- Panel tab thông tin (gói −58 CUSTOM_TAB của gốc) -----
@@ -12102,6 +12311,7 @@ public class WorldScreen extends ScreenAdapter {
 
     /** Sang map kề qua mép đường: spawnX âm = lùi từ mép phải vào. */
     private void gotoMap(int mapId, float spawnX, float spawnY) {
+        weddingOn = false; // rời map = hết trạng thái lễ (như gốc)
         // Trường đua (map 108): vào = bật chế độ đua, rời map = thoát đua
         if (raceIn && mapId != 108) {
             raceIn = false;

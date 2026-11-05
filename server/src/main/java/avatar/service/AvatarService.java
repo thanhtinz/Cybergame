@@ -580,8 +580,10 @@ public class AvatarService extends Service {
                 ds.writeByte(mapItem.getX());
                 ds.writeByte(mapItem.getY());
             }
-            for (int i = 0; i < numUser; ++i) {
-                ds.writeShort(-1);
+            // mảng idWedding theo từng người (đúng vị trí client gốc đọc:
+            // sau map items) — icon hôn nhân cạnh tên
+            for (User pl : players) {
+                ds.writeShort(pl.weddingIconId());
             }
             ds.flush();
 
@@ -1087,6 +1089,11 @@ public class AvatarService extends Service {
                 //hẹn hò
                 case 36: {
                     us.getAvatarService().sendTextBoxPopup(us.getId(), 100, "gửi lời mới hẹn hò tới ? (ghi tên nhân vật)", 0);
+                    break;
+                }
+                //chia tay / ly hôn [PORT]
+                case 37: {
+                    us.getAvatarService().sendTextBoxPopup(us.getId(), 103, "Bạn có chắc muốn chia tay? Gõ ok để xác nhận", 0);
                     break;
                 }
                 case 48: {

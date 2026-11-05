@@ -218,6 +218,35 @@ public class GlobalHandler {
                     e.printStackTrace();
                 }
                 break;
+            case 103: // [PORT] chia tay / ly hôn: gõ "ok" để xác nhận
+                try {
+                    if (text.equalsIgnoreCase("ok") || text.equalsIgnoreCase("yes")) {
+                        int partnerId = us.getIdUsHenHo();
+                        try (Connection conn = DbManager.getInstance().getConnection();
+                             PreparedStatement ps = conn.prepareStatement(
+                                 "DELETE FROM marry WHERE idNam = ? OR idNu = ?")) {
+                            ps.setInt(1, us.getId());
+                            ps.setInt(2, us.getId());
+                            ps.executeUpdate();
+                        }
+                        us.setLevelMarry(0);
+                        us.setPerLevelMarry(0);
+                        us.setIdUsHenHo(0);
+                        us.getAvatarService().serverDialog("Bạn đã chia tay.");
+                        UserManager.users.forEach(user -> {
+                            if (user.getId() == partnerId && partnerId != 0) {
+                                user.setLevelMarry(0);
+                                user.setPerLevelMarry(0);
+                                user.setIdUsHenHo(0);
+                                user.getAvatarService().serverDialog(
+                                    us.getUsername() + " đã chia tay với bạn.");
+                            }
+                        });
+                    }
+                } catch (Exception e) {
+                    e.printStackTrace();
+                }
+                break;
             case 0: // Cược Tài (Xu)
             case 1: // Cược Xỉu (Xu)
             case 2: // Cược Tài (Lượng)

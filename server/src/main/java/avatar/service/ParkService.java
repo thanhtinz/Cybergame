@@ -19,6 +19,7 @@ import java.io.DataOutputStream;
 import java.io.IOException;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
+import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.Random;
 
@@ -32,25 +33,70 @@ public class ParkService extends Service {
         randomItemList1.add(80, 2383);//nro
         randomItemList1.add(20, 2384);
     }
-///le duong
+///le duong — [PORT hoàn thiện từ stub fan hardcode {7,1}]:
+    // người gửi phải có cặp trong bảng marry, bạn đời phải đang
+    // online cùng khu; lần đầu làm lễ thì marry.level 0 -> 1.
     public void WEDDING_BIGINHanlder(User user, Message ms) {
         try {
+            if (user.getZone() == null) return;
+            int[] couple = findCouple(user.getId());
+            if (couple == null) {
+                user.getAvatarService().serverDialog(
+                    "Bạn chưa hẹn hò với ai — hãy hẹn hò trước khi làm lễ cưới.");
+                return;
+            }
+            int idNam = couple[0], idNu = couple[1], level = couple[2];
+            int partnerId = user.getId() == idNam ? idNu : idNam;
+            User partner = null;
+            for (User u : user.getZone().getPlayers()) {
+                if (u.getId() == partnerId) { partner = u; break; }
+            }
+            if (partner == null) {
+                user.getAvatarService().serverDialog(
+                    "Bạn đời của bạn chưa tới lễ đường này.");
+                return;
+            }
+            if (level < 1) {
+                accceptMarry(idNam);
+                user.setLevelMarry(1);
+                partner.setLevelMarry(1);
+            }
             Message ms1 = new Message(Cmd.WEDDING_BIGIN);
             DataOutputStream ds = ms1.writer();
-            ds.writeInt(7);
-            ds.writeInt(1);//id girl
+            ds.writeInt(idNam);
+            ds.writeInt(idNu);
             ds.flush();
-            user.getZone().getPlayers().forEach(u -> {
-                u.session.sendMessage(ms1);
-            });
-            accceptMarry(user.getId());
-            user.setLevelMarry(1
-            );
+            // gửi từng người, bỏ qua phần tử session == null (NPC
+            // phía server cũng nằm trong getPlayers() — lambda
+            // forEach của stub gốc chết NPE ở NPC nên không ai nhận)
+            for (User u : user.getZone().getPlayers()) {
+                try {
+                    u.session.sendMessage(ms1);
+                } catch (Exception ignored) {
+                }
+            }
         } catch (IOException e) {
             e.printStackTrace();
         }
     }
 
+    /** Tra cặp marry của một user: {idNam, idNu, level} hoặc null. */
+    public static int[] findCouple(int userId) {
+        String q = "SELECT idNam, idNu, level FROM marry WHERE idNam = ? OR idNu = ? LIMIT 1";
+        try (Connection conn = DbManager.getInstance().getConnection();
+             PreparedStatement ps = conn.prepareStatement(q)) {
+            ps.setInt(1, userId);
+            ps.setInt(2, userId);
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) {
+                    return new int[]{rs.getInt(1), rs.getInt(2), rs.getInt(3)};
+                }
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+        return null;
+    }
 
     public void accceptMarry(int IDuserNam){
 

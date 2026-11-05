@@ -1261,6 +1261,24 @@ public class ScreenshotMain {
                         }
                         if (frame == 15) {
                             shot("shot-phom-result.png");
+                            world.debugLeaveCasino();
+                            world.debugSetMap(11);
+                            world.debugSetPlayer(278f, 78f);
+                            try {
+                                java.util.List<Integer> items = game.data.npcs.get(3).items;
+                                int[] linhParts = items.stream().mapToInt(Integer::intValue).toArray();
+                                world.debugClearRemotes();
+                                world.debugInjectNet((byte) 51, joinPayload(7, "Linh Chi", linhParts, 262, 78));
+                                world.debugWedding(7);
+                            } catch (java.io.IOException ioe) {
+                                throw new RuntimeException(ioe);
+                            }
+                            stage = 133; frame = 0;
+                        }
+                        break;
+                    case 133: // Lễ cưới ở lễ đường: dâu/rể đồ cưới + nhẫn
+                        if (frame == 20) {
+                            shot("shot-wedding.png");
                             stage = 121; frame = 0;
                         }
                         break;
