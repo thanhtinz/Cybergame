@@ -9124,20 +9124,9 @@ public class WorldScreen extends ScreenAdapter {
         Ui.font.setColor(1f, 0.83f, 0.38f, 1f);
         Ui.font.draw(batch, p.username, px + 24, py + 176);
         Ui.font.setColor(Color.WHITE);
-        // sân khấu doll bên phải — chỉ nhân vật của mình (hình cặp
-        // đôi đã chuyển hẳn sang tab Cặp Đôi theo lệnh Tín)
-        float stX = px + 306, stY = py + 196, stW = 310, stH = 216;
-        batch.draw(Ui.roundedRect((int) stW, (int) stH, 14, cStage, GLASS_RIM), stX, stY);
-        float floorY = stY + 36;
-        float selfCx = stX + stW / 2f;
-        batch.setColor(0f, 0f, 0f, 0.30f);
-        batch.draw(circleTexture(), selfCx - 52, floorY - 8, 104, 16);
-        batch.setColor(Color.WHITE);
-        game.dollRenderer.draw(batch, playerDoll, playerAnim.frameIndex(), selfCx, floorY, 3.4f, false);
-        // đường chia + 6 thanh chỉ số (2 cột × 3 hàng) như gốc
-        batch.setColor(GLASS_RIM);
-        batch.draw(whiteTex, px + 24, py + 158, CP_W - 48, 2);
-        batch.setColor(Color.WHITE);
+        // 6 thanh chỉ số xếp CỘT PHẢI (chỗ sân khấu doll cũ — tab
+        // Thông tin không còn doll theo lệnh Tín)
+        {
         String[] labels = {"Cấp", "Thân thiện", "Gây rối", "Sành điệu", "Vui vẻ", "Sức khỏe"};
         Color[] cols = {new Color(0.55f, 0.85f, 1f, 0.95f), new Color(0.45f, 0.9f, 0.5f, 0.95f),
             new Color(0.9f, 0.45f, 0.6f, 0.95f), new Color(0.6f, 0.72f, 1f, 0.95f),
@@ -9145,19 +9134,19 @@ public class WorldScreen extends ScreenAdapter {
         int[] barVals = st == null ? new int[6]
             : new int[]{st[1], st[2], st[3], st[4], st[5], st[6]};
         for (int i = 0; i < 6; i++) {
-            int col = i % 2, row = i / 2;
-            float bx = px + 24 + col * 306;
-            float by = py + 118 - row * 38;
+            float bx = px + 306;
+            float by = py + 384 - i * 36;
             Ui.fontTiny.setColor(cText);
             Ui.fontTiny.draw(batch, labels[i], bx, by + 4);
-            batch.draw(Ui.roundedRect(150, 12, 6, cTrack, GLASS_RIM), bx + 84, by - 4);
+            batch.draw(Ui.roundedRect(140, 12, 6, cTrack, GLASS_RIM), bx + 84, by - 4);
             int v = MathUtils.clamp(barVals[i], 0, 100);
             if (v > 0) {
-                batch.draw(Ui.roundedRect(Math.max(12, 150 * v / 100), 12, 6, cols[i], cols[i]), bx + 84, by - 4);
+                batch.draw(Ui.roundedRect(Math.max(12, 140 * v / 100), 12, 6, cols[i], cols[i]), bx + 84, by - 4);
             }
             Ui.fontTiny.setColor(cText);
             Ui.fontTiny.draw(batch, st == null ? "—"
-                : (i == 0 ? st[0] + " · " + st[1] + "%" : String.valueOf(barVals[i])), bx + 242, by + 4);
+                : (i == 0 ? st[0] + " · " + st[1] + "%" : String.valueOf(barVals[i])), bx + 232, by + 4);
+        }
         }
     }
 
@@ -9199,15 +9188,10 @@ public class WorldScreen extends ScreenAdapter {
         batch.draw(game.texture("myinfo/icon3.png"), px + 24, ry, 28, 28);
         Ui.fontSmall.setColor(blue);
         Ui.fontSmall.draw(batch, st != null ? st[0] + " + " + st[1] + "%" : "—", px + 64, ry + 20);
-        // nền sân khấu gốc back.png + doll đứng trên đó
-        float backX = px + CP_W - 345 - 14, backY = py + 262;
-        batch.draw(game.texture("myinfo/back.png"), backX, backY, 345, 145);
-        float floorY = backY + 22;
-        float selfCx = backX + 172;
-        game.dollRenderer.draw(batch, playerDoll, playerAnim.frameIndex(), selfCx, floorY, 2.6f, false);
+        // (đã bỏ nền sân khấu back.png + doll khỏi tab Thông tin)
         // đường chia nâu + 6 chỉ số bằng ảnh thanh gốc
         batch.setColor(brown);
-        batch.draw(whiteTex, px + 24, py + 186, CP_W - 48, 2);
+        batch.draw(whiteTex, px + 24, py + 232, CP_W - 48, 2);
         batch.setColor(Color.WHITE);
         String[] labels = {"Lv:", "Thân thiện", "Gây rối", "Sành điệu", "Vui vẻ", "Sức khỏe"};
         int[] barVals = st == null ? new int[6]
@@ -9218,7 +9202,7 @@ public class WorldScreen extends ScreenAdapter {
         for (int i = 0; i < 6; i++) {
             int col = i % 2, row = i / 2;
             float bx = px + 24 + col * 306;
-            float by = py + 120 - row * 44;
+            float by = py + 188 - row * 44;
             Ui.fontTiny.setColor(blue);
             Ui.fontTiny.draw(batch, i == 0 && st != null ? "Lv: " + st[0] : labels[i], bx, by + 17);
             batch.draw(thanh2, bx + 84, by, 150, 22);
@@ -9508,17 +9492,8 @@ public class WorldScreen extends ScreenAdapter {
             Ui.fontSmall.setColor(1f, 1f, 1f, 0.94f);
             Ui.fontSmall.draw(batch, vals[i], cx + 38, cy + 24);
         }
-        // sân khấu rộng
-        float stX = px + 24, stY = py + 164, stW = CP_W - 48, stH = 130;
-        batch.draw(Ui.roundedRect((int) stW, (int) stH, 14,
-            new Color(0.30f, 0.45f, 0.62f, 0.35f), GLASS_RIM), stX, stY);
-        float floorY = stY + 26;
-        float selfCx = stX + stW / 2f;
-        batch.setColor(0f, 0f, 0f, 0.30f);
-        batch.draw(circleTexture(), selfCx - 48, floorY - 7, 96, 15);
-        batch.setColor(Color.WHITE);
-        game.dollRenderer.draw(batch, playerDoll, playerAnim.frameIndex(), selfCx, floorY, 2.5f, false);
-        // lưới 6 thẻ chỉ số 3×2
+        // lưới 6 thẻ chỉ số 3×2 — thẻ cao lấp đầy khoảng giữa
+        // (sân khấu doll đã bỏ hẳn khỏi tab Thông tin theo lệnh Tín)
         String[] labels = {"Cấp", "Thân thiện", "Gây rối", "Sành điệu", "Vui vẻ", "Sức khỏe"};
         Color[] cols = {new Color(0.55f, 0.85f, 1f, 0.95f), new Color(0.45f, 0.9f, 0.5f, 0.95f),
             new Color(0.9f, 0.45f, 0.6f, 0.95f), new Color(0.6f, 0.72f, 1f, 0.95f),
@@ -9528,19 +9503,21 @@ public class WorldScreen extends ScreenAdapter {
         for (int i = 0; i < 6; i++) {
             int col = i % 3, row = i / 3;
             float cx = px + 24 + col * 202;
-            float cy = py + 88 - row * 72;
-            batch.draw(Ui.roundedRect(190, 62, 10, new Color(0f, 0f, 0f, 0.30f), GLASS_RIM), cx, cy);
+            float cy = py + 186 - row * 122;
+            batch.draw(Ui.roundedRect(190, 110, 10, new Color(0f, 0f, 0f, 0.30f), GLASS_RIM), cx, cy);
             Ui.fontTiny.setColor(1f, 1f, 1f, 0.85f);
-            Ui.fontTiny.draw(batch, labels[i], cx + 12, cy + 48);
+            Ui.fontTiny.draw(batch, labels[i], cx + 12, cy + 92);
             Ui.fontTiny.setColor(1f, 1f, 1f, 0.95f);
             String vt = st == null ? "—" : (i == 0 ? st[0] + " · " + st[1] + "%" : String.valueOf(barVals[i]));
             layout.setText(Ui.fontTiny, vt);
-            Ui.fontTiny.draw(batch, vt, cx + 190 - 12 - layout.width, cy + 48);
-            batch.draw(Ui.roundedRect(166, 10, 5, new Color(0f, 0f, 0f, 0.45f), GLASS_RIM), cx + 12, cy + 12);
+            Ui.fontTiny.draw(batch, vt, cx + 190 - 12 - layout.width, cy + 92);
+            batch.draw(Ui.roundedRect(166, 14, 7, new Color(0f, 0f, 0f, 0.45f), GLASS_RIM), cx + 12, cy + 30);
             int v = MathUtils.clamp(barVals[i], 0, 100);
             if (v > 0) {
-                batch.draw(Ui.roundedRect(Math.max(10, 166 * v / 100), 10, 5, cols[i], cols[i]), cx + 12, cy + 12);
+                batch.draw(Ui.roundedRect(Math.max(14, 166 * v / 100), 14, 7, cols[i], cols[i]), cx + 12, cy + 30);
             }
+            Ui.fontTiny.setColor(1f, 1f, 1f, 0.55f);
+            Ui.fontTiny.draw(batch, v + "%", cx + 12, cy + 20);
         }
     }
 
