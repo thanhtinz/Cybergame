@@ -596,9 +596,11 @@ public class WorldScreen extends ScreenAdapter {
     /** Chiều cao panel chat HIỆN TẠI (chạy mượt giữa CHAT_H và CHAT_H_BIG). */
     private float chatH = CHAT_H;
     private boolean chatExpanded = false;
-    /** Khung chat thu nhỏ hẳn (nút chevron ở góc panel): ẩn cả
-     *  khung + ô nhập, chỉ còn nút bong bóng chat để mở lại. */
+    /** Khung chat thu nhỏ (nút chevron ở góc panel): gập xuống
+     *  còn đúng 1 DÒNG nhật ký mới nhất để vẫn đọc được tin đến,
+     *  kèm nút chevron lên để mở lại (lệnh Tín). */
     private boolean chatMin = false;
+    private static final float CHAT_H_MIN = 34f;
     // Tab kiểu "thẻ thư mục": TRUNG TÂM của tab nằm đúng trên đường viền trên
     // của khung (nửa tab nhô lên ngoài, nửa tab lọt vào trong khung — như một
     // khối liền với khung). Cả 3 tab RỘNG BẰNG NHAU; tab đang dùng chỉ CAO
@@ -6242,12 +6244,25 @@ public class WorldScreen extends ScreenAdapter {
         {
             float ebX = CHAT_X + CHAT_W - 26, ebY = CHAT_Y + chatH - 26;
             if (chatMin) {
-                // nút mở lại khung chat khi đang thu nhỏ
-                float rbX = CHAT_X + CHAT_W - 44;
-                if (!mgScreen && x >= rbX && x <= rbX + 44
-                        && y >= CHAT_Y && y <= CHAT_Y + 44) {
-                    chatMin = false;
-                    return;
+                // đang thu nhỏ: chạm vào dải 1 dòng (trừ chip tin
+                // nhắn thoại — để lọt xuống vòng xử lý chip) hoặc
+                // nút chevron lên là mở lại khung
+                if (!mgScreen && x >= CHAT_X && x <= CHAT_X + CHAT_W
+                        && y >= CHAT_Y && y <= CHAT_Y + CHAT_H_MIN) {
+                    boolean onVoiceChip = false;
+                    for (Object[] h : voiceHits) {
+                        float hx = (Float) h[0], hy = (Float) h[1];
+                        float hw = (Float) h[2], hh = (Float) h[3];
+                        if (x >= hx && x <= hx + hw
+                                && y >= hy && y <= hy + hh) {
+                            onVoiceChip = true;
+                            break;
+                        }
+                    }
+                    if (!onVoiceChip) {
+                        chatMin = false;
+                        return;
+                    }
                 }
             } else {
                 if (!mgScreen && x >= ebX && x <= ebX + 38 && y >= ebY && y <= ebY + 38) {
@@ -11000,7 +11015,7 @@ public class WorldScreen extends ScreenAdapter {
         // ghi âm đủ 30 giây thì tự dừng và gửi
         if (recording && recCount >= recBuf.length - 1600) finishRecording();
         // chiều cao panel chat chạy mượt tới nấc đích khi bấm phóng to/thu nhỏ
-        float chatTarget = chatMin ? 0f
+        float chatTarget = chatMin ? CHAT_H_MIN
             : chatExpanded ? CHAT_H_BIG : CHAT_H;
         chatH += (chatTarget - chatH) * Math.min(1f, dt * 12f);
         if (Math.abs(chatTarget - chatH) < 0.6f) chatH = chatTarget;
@@ -12773,14 +12788,65 @@ public class WorldScreen extends ScreenAdapter {
      *  Hệ thống = gói SERVER_MESSAGE (-9) của gốc. */
     private void drawChatFrame() {
         if (chatMin) {
-            // đã thu nhỏ: chỉ còn nút bong bóng chat ở góc phải dưới
-            // (đúng vị trí mép phải khung cũ) để mở lại khung
+            // đã thu nhỏ: dải mỏng đúng 1 dòng — hiện tin MỚI NHẤT
+            // của tab đang chọn để vẫn đọc được, nút chevron lên ở
+            // cuối dải để mở lại khung
             voiceHits.clear();
-            float rbS = 44;
-            float rbX = CHAT_X + CHAT_W - rbS, rbY = CHAT_Y;
-            batch.draw(Ui.roundedRect((int) rbS, (int) rbS, 12,
-                new Color(0.10f, 0.17f, 0.26f, 0.97f), GLASS_RIM), rbX, rbY);
-            Ui.faIcon(batch, Ui.fa20, Ui.FA_COMMENT_DOTS,
+            batch.draw(Ui.roundedRect((int) CHAT_W, (int) CHAT_H_MIN, 10,
+                new Color(0.04f, 0.09f, 0.15f, 0.82f), GLASS_RIM),
+                CHAT_X, CHAT_Y);
+            List<ChatLine> log = chatLogs[activeChatTab];
+            float ly = CHAT_Y + 23;
+            if (log.isEmpty()) {
+                Ui.fontSmall.setColor(1f, 1f, 1f, 0.45f);
+                Ui.fontSmall.draw(batch, "Chưa có tin nhắn nào.",
+                    CHAT_X + 14, ly);
+            } else {
+                ChatLine l = log.get(log.size() - 1);
+                if (l.system) {
+                    drawRichText(truncTo(Ui.fontSmall, l.text,
+                        CHAT_W - 120), CHAT_X + 14, ly,
+                        new Color(1f, 0.62f, 0.35f, 1f));
+                } else {
+                    Ui.fontSmall.setColor(0.65f, 0.9f, 1f, 1f);
+                    Ui.fontSmall.draw(batch, l.name + ":",
+                        CHAT_X + 14, ly);
+                    layout.setText(Ui.fontSmall, l.name + ":");
+                    float tx2 = CHAT_X + 14 + layout.width + 6;
+                    if (l.voice != null) {
+                        String label = "Tin nhắn thoại "
+                            + voiceDurText(l.voice);
+                        layout.setText(Ui.fontSmall, label);
+                        float chipW = layout.width + 46;
+                        float chipY = CHAT_Y + 7;
+                        batch.draw(Ui.roundedRect((int) chipW, 20, 10,
+                            new Color(0.10f, 0.17f, 0.26f, 0.97f),
+                            GLASS_RIM), tx2, chipY);
+                        Ui.faIcon(batch, Ui.fa20, l.voicePlaying
+                            ? Ui.FA_STOP : Ui.FA_PLAY, tx2 + 15,
+                            chipY + 10, l.voicePlaying
+                                ? new Color(1f, 0.45f, 0.4f, 1f)
+                                : Color.WHITE);
+                        Ui.fontSmall.setColor(Color.WHITE);
+                        Ui.fontSmall.draw(batch, label, tx2 + 29, ly);
+                        voiceHits.add(new Object[]{tx2, chipY, chipW,
+                            20f, l});
+                    } else {
+                        drawRichText(truncTo(Ui.fontSmall, l.text,
+                            CHAT_X + CHAT_W - 56 - tx2), tx2, ly, null);
+                    }
+                }
+                Ui.fontSmall.setColor(1f, 1f, 1f, 0.42f);
+                layout.setText(Ui.fontSmall, l.time);
+                Ui.fontSmall.draw(batch, l.time,
+                    CHAT_X + CHAT_W - 48 - layout.width, ly);
+            }
+            float rbS = 30;
+            float rbX = CHAT_X + CHAT_W - rbS - 6, rbY = CHAT_Y + 2;
+            batch.draw(Ui.roundedRect((int) rbS, (int) rbS, 8,
+                new Color(0.10f, 0.17f, 0.26f, 0.97f), GLASS_RIM),
+                rbX, rbY);
+            Ui.faIcon(batch, Ui.fa20, Ui.FA_CHEVRON_UP,
                 rbX + rbS / 2f, rbY + rbS / 2f, Color.WHITE);
             return;
         }
