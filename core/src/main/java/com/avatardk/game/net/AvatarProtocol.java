@@ -598,6 +598,36 @@ public final class AvatarProtocol {
     public static void farm2BeeCollect(GameConnection conn) throws IOException { conn.send(farm2Msg(F2_BEE_COLLECT)); }
     public static void farm2BeeUpgrade(GameConnection conn) throws IOException { conn.send(farm2Msg(F2_BEE_UPGRADE)); }
 
+    // ---- ĐIỂM DANH + NHIỆM VỤ NGÀY ([PORT]: gói −116, docs/daily-auction-spec.md) ----
+    public static final byte DAILY = -116;
+    public static final byte D_DASHBOARD = 0, D_BAODANH = 1, D_MILESTONE = 2,
+        D_GUIDE = 3, D_RESULT = 4, D_QSHOW = 10, D_QCHANGE = 11, D_QDONE = 12, D_QBOX = 13;
+
+    public static Msg dailyMsg(byte sub) throws IOException {
+        Msg m = new Msg(DAILY); m.writer().writeByte(sub); return m;
+    }
+    public static void dailyDashboard(GameConnection conn) throws IOException { conn.send(dailyMsg(D_DASHBOARD)); }
+    public static void dailyBaoDanh(GameConnection conn) throws IOException { conn.send(dailyMsg(D_BAODANH)); }
+    public static void dailyMilestone(GameConnection conn, int idx) throws IOException {
+        Msg m = dailyMsg(D_MILESTONE); m.writer().writeByte(idx); conn.send(m);
+    }
+    public static void dailyQuestShow(GameConnection conn) throws IOException { conn.send(dailyMsg(D_QSHOW)); }
+    public static void dailyQuestChange(GameConnection conn) throws IOException { conn.send(dailyMsg(D_QCHANGE)); }
+    public static void dailyQuestDone(GameConnection conn) throws IOException { conn.send(dailyMsg(D_QDONE)); }
+    public static void dailyQuestBox(GameConnection conn, int idx) throws IOException {
+        Msg m = dailyMsg(D_QBOX); m.writer().writeByte(idx); conn.send(m);
+    }
+
+    // ---- ĐẤU GIÁ NGƯỢC ([PORT]: gói −117, docs/daily-auction-spec.md) ----
+    public static final byte AUCTION = -117;
+    public static final byte A_INFO = 0, A_BID = 1, A_RESULT = 2;
+
+    public static Msg auctionMsg(byte sub) throws IOException {
+        Msg m = new Msg(AUCTION); m.writer().writeByte(sub); return m;
+    }
+    public static void auctionInfo(GameConnection conn) throws IOException { conn.send(auctionMsg(A_INFO)); }
+    public static void auctionBid(GameConnection conn) throws IOException { conn.send(auctionMsg(A_BID)); }
+
     // ---- CHỢ + GIAO DỊCH (bản chính: gói 127 MARKET) ----
     public static final byte MARKET = 127;
     public static final byte MK_LIST = 0, MK_SELL = 1, MK_BUY = 2, MK_CANCEL = 3,

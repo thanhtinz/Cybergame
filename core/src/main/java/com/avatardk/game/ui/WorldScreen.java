@@ -3751,6 +3751,14 @@ public class WorldScreen extends ScreenAdapter {
                     handleFarm2Packet(m);
                     break;
                 }
+                case AvatarProtocol.DAILY: {
+                    handleDailyPacket(m);
+                    break;
+                }
+                case AvatarProtocol.AUCTION: {
+                    handleAuctionPacket(m);
+                    break;
+                }
                 case AvatarProtocol.FISH_START: {
                     // gói 86 trả lời bắt đầu câu: {bool ok, UTF lỗi}
                     java.io.DataInputStream r = m.reader();
@@ -5641,6 +5649,8 @@ public class WorldScreen extends ScreenAdapter {
         if (marketTouch(x, y)) return;
         if (tradeTouch(x, y)) return;
         if (farm2Touch(x, y)) return;
+        if (dailyTouch(x, y)) return;
+        if (auctionTouch(x, y)) return;
         // hộp xác nhận nâng cấp rương (−90) là modal trên cùng
         if (chestUpTouch(x, y)) return;
         // hoá đơn mua chung là lớp trên cùng (mở đè cả panel nhà —
@@ -7053,6 +7063,13 @@ public class WorldScreen extends ScreenAdapter {
             openLaiBuonLocalMenu();
             return;
         }
+        // NPC Đấu Giá (186): [PORT] online mở panel đấu giá ngược
+        // theo bản chính (docs/daily-auction-spec.md) thay dialog
+        // "đang bảo trì" của Pack5; offline rơi xuống lời chào thường.
+        if (n.data.id == 186 && online()) {
+            openAuctionPanel();
+            return;
+        }
         // NPC Chủ Hôn (525, lễ đường): [PORT] mở menu cục bộ 3 việc
         // Hẹn hò / Bắt đầu lễ cưới / Chia tay — gốc mở hộp cưới bằng
         // chạm vào Chủ Hôn (đối tượng −100), xem docs/wedding-spec.md.
@@ -7612,6 +7629,8 @@ public class WorldScreen extends ScreenAdapter {
         marketOpen = false;
         tradeOpen = false;
         farm2Open = false;
+        dailyOpen = false;
+        auctionOpen = false;
     }
 
     private void openMsgPanel() {
@@ -10401,7 +10420,7 @@ public class WorldScreen extends ScreenAdapter {
     private boolean inMiniGameScreen() {
         return mgOpen || tcOpen || crOpen || txOpen || aiOpen
             || casinoIn || csPending || raceIn || dlOpen || dlPrizeOpen
-            || marketOpen || tradeOpen || farm2Open;
+            || marketOpen || tradeOpen || farm2Open || dailyOpen || auctionOpen;
     }
 
     private void drawHud(float playerFeetX, float playerFeetY) {
@@ -10448,6 +10467,8 @@ public class WorldScreen extends ScreenAdapter {
         if (marketOpen) drawMarketPanel();
         if (tradeOpen) drawTradePanel();
         if (farm2Open) drawFarm2Panel();
+        if (dailyOpen) drawDailyPanel();
+        if (auctionOpen) drawAuctionPanel();
         drawTradeInviteBox();
         if (friendOpen) drawFriendPanel();
         if (passFormOpen) drawPassFormPanel();
@@ -12079,9 +12100,9 @@ public class WorldScreen extends ScreenAdapter {
     private void laiBuonLocalSelect(int i) {
         if (i == 0) {
             if (online()) {
-                // Điểm Danh: chạy đúng luồng gốc — xin menu server
-                try { AvatarProtocol.communicate(game.connection, NPC_ID_ADD + NPC_LAI_BUON); }
-                catch (IOException e) { }
+                // [PORT] Điểm danh + nhiệm vụ ngày theo bản chính
+                // (docs/daily-auction-spec.md) thay stub gốc "đang xây dựng"
+                openDailyPanel();
             } else {
                 // offline: đúng stub của server gốc
                 addChatLog(TAB_SYSTEM, null, "đang xây dựng", true);
@@ -14067,6 +14088,520 @@ public class WorldScreen extends ScreenAdapter {
         farm2BeeBank = 17;
         farm2BeeCap = 30;
         farm2BeePerH = 3;
+    }
+
+
+    // ---------- ĐIỂM DANH + NHIỆM VỤ NGÀY (gói −116, docs/daily-auction-spec.md) ----------
+    private boolean dailyOpen;
+    private int dailyTab; // 0 điểm danh · 1 nhiệm vụ ngày
+    private int dlDay, dlDaysInMonth, dlDayCount, dlTotalPoint, dlSecsNext, dlMilestones;
+    private boolean dlTodayDone;
+    private final java.util.Set<Integer> dlClaimed = new java.util.HashSet<>();
+    private String dailyMsg = "";
+    private boolean dailyMsgOk;
+    private static final int[] DL_MILE_POINTS = {50, 120, 220, 350, 500};
+    private static final String[] DL_MILE_GIFTS = {
+        "5.000 xu", "5 lượng", "15.000 xu", "Đồ hạn 15 ngày", "20 lượng"};
+    // nhiệm vụ ngày
+    private String dqName = "";
+    private final java.util.List<int[]> dqReqs = new java.util.ArrayList<>(); // pid, qty, have
+    private final java.util.List<int[]> dqRews = new java.util.ArrayList<>(); // type, a, b
+    private int dqScore;
+    private final java.util.List<int[]> dqBoxes = new java.util.ArrayList<>(); // point, claimed
+    private int dqChangeType, dqChangeCost;
+    private static final int DL_PW = 920, DL_PH = 600;
+    private static final int DL_PX = (1280 - DL_PW) / 2, DL_PY = (720 - DL_PH) / 2;
+
+    private void openDailyPanel() {
+        if (!online()) {
+            addChatLog(TAB_SYSTEM, null, "Điểm danh cần chơi online — bản chơi thử không có.", true);
+            return;
+        }
+        closeOtherPanels();
+        dailyOpen = true;
+        dailyTab = 0;
+        dailyMsg = "";
+        farm.load(game);
+        try {
+            AvatarProtocol.dailyDashboard(game.connection);
+            AvatarProtocol.dailyQuestShow(game.connection);
+        } catch (IOException e) { }
+    }
+
+    private void handleDailyPacket(Msg m) {
+        try {
+            java.io.DataInputStream r = m.reader();
+            if (r.available() < 1) return;
+            int sub = r.readByte();
+            if (sub == AvatarProtocol.D_DASHBOARD) {
+                dlDay = r.readByte();
+                dlDaysInMonth = r.readByte();
+                dlDayCount = r.readInt();
+                dlTotalPoint = r.readInt();
+                dlTodayDone = r.readByte() == 1;
+                dlSecsNext = r.readInt();
+                dlMilestones = r.readInt();
+                dlClaimed.clear();
+                int n = r.readByte();
+                for (int i = 0; i < n; i++) dlClaimed.add((int) r.readByte());
+            } else if (sub == AvatarProtocol.D_QSHOW) {
+                dqName = r.readUTF();
+                dqReqs.clear();
+                int n = r.readByte();
+                for (int i = 0; i < n; i++) {
+                    dqReqs.add(new int[]{r.readShort(), r.readInt(), r.readInt()});
+                }
+                dqRews.clear();
+                int n2 = r.readByte();
+                for (int i = 0; i < n2; i++) {
+                    dqRews.add(new int[]{r.readByte(), r.readInt(), r.readInt()});
+                }
+                dqScore = r.readInt();
+                dqBoxes.clear();
+                int n3 = r.readByte();
+                for (int i = 0; i < n3; i++) {
+                    dqBoxes.add(new int[]{r.readInt(), r.readBoolean() ? 1 : 0});
+                }
+                dqChangeType = r.readByte();
+                dqChangeCost = r.readInt();
+            } else if (sub == AvatarProtocol.D_RESULT) {
+                dailyMsgOk = r.readBoolean();
+                dailyMsg = r.readUTF();
+                if (!dailyOpen) addChatLog(TAB_SYSTEM, null, dailyMsg, true);
+            }
+        } catch (IOException e) { }
+    }
+
+    private String dqRewardText(int[] rw) {
+        FarmWorld.ProductDef pd;
+        switch (rw[0]) {
+            case 0: return fmtMoney(rw[1]) + " xu";
+            case 1: return rw[1] + " lượng";
+            case 2: return rw[1] + " exp";
+            case 3:
+                pd = farm.productDefs.get(rw[1]);
+                return (pd != null ? pd.name : "Nông sản") + " x" + rw[2];
+            default: return "";
+        }
+    }
+
+    private boolean dqEnough() {
+        if (dqReqs.isEmpty()) return false;
+        for (int[] q : dqReqs) if (q[2] < q[1]) return false;
+        return true;
+    }
+
+    private void drawDailyPanel() {
+        int px = DL_PX, py = DL_PY;
+        batch.draw(Ui.roundedRect(DL_PW, DL_PH, 18, GLASS_FILL_DARK, GLASS_RIM), px, py);
+        Ui.fontTitle.setColor(1f, 0.85f, 0.3f, 1f);
+        Ui.fontTitle.draw(batch, "Điểm danh & Nhiệm vụ ngày", px + 28, py + DL_PH - 16);
+        batch.draw(Ui.roundedRect(36, 36, 10, Ui.BTN_CLOSE, null), px + DL_PW - 54, py + DL_PH - 54);
+        Ui.faIcon(batch, Ui.fa20, Ui.FA_XMARK, px + DL_PW - 36, py + DL_PH - 36, Color.WHITE);
+        String[] tabs = {"Điểm danh", "Nhiệm vụ ngày"};
+        for (int i = 0; i < 2; i++) {
+            int tx = px + 28 + i * 190;
+            int ty = py + DL_PH - 118;
+            batch.draw(Ui.roundedRect(178, 44, 10,
+                dailyTab == i ? new Color(0.95f, 0.55f, 0.15f, 1f) : Ui.BTN_CANCEL, null), tx, ty);
+            Ui.centered(batch, Ui.font, tabs[i], tx + 89, ty + 29, Color.WHITE);
+        }
+        if (!dailyMsg.isEmpty()) {
+            Ui.fontSmall.setColor(dailyMsgOk ? new Color(0.55f, 0.95f, 0.6f, 1f)
+                : new Color(1f, 0.55f, 0.5f, 1f));
+            Ui.fontSmall.draw(batch, truncTo(Ui.fontSmall, dailyMsg, DL_PW - 56),
+                px + 28, py + DL_PH - 138);
+        }
+        if (dailyTab == 0) drawDailyCheckin(px, py);
+        else drawDailyQuest(px, py);
+    }
+
+    private void drawDailyCheckin(int px, int py) {
+        // lưới ngày trong tháng: 7 cột x tối đa 5 hàng
+        int gx = px + 28, gy = py + DL_PH - 196;
+        int cw = 64, chh = 48, gap = 6;
+        for (int d = 1; d <= dlDaysInMonth; d++) {
+            int col = (d - 1) % 7, row = (d - 1) / 7;
+            int cx = gx + col * (cw + gap);
+            int cy = gy - (row + 1) * (chh + gap) + gap;
+            boolean claimed = dlClaimed.contains(d);
+            boolean today = d == dlDay;
+            batch.draw(Ui.roundedRect(cw, chh, 10,
+                today ? new Color(0.95f, 0.55f, 0.15f, 0.95f) : GLASS_FILL, null), cx, cy);
+            Ui.centered(batch, Ui.font, "" + d, cx + cw / 2f, cy + chh - 8,
+                claimed || today ? Color.WHITE : new Color(1f, 1f, 1f, 0.65f));
+            if (claimed) {
+                Ui.centered(batch, Ui.fontSmall, "Xong", cx + cw / 2f, cy + 16,
+                    new Color(0.55f, 0.95f, 0.6f, 1f));
+            } else if (today) {
+                Ui.centered(batch, Ui.fontSmall, "Nay", cx + cw / 2f, cy + 16, Color.WHITE);
+            }
+        }
+        int infoX = px + 28 + 7 * (cw + gap) + 16;
+        int infoW = px + DL_PW - 28 - infoX;
+        Ui.font.setColor(Color.WHITE);
+        Ui.font.draw(batch, "Điểm chuyên cần: " + dlTotalPoint, infoX, gy - 8);
+        Ui.fontSmall.setColor(1f, 1f, 1f, 0.78f);
+        Ui.fontSmall.draw(batch, "Đã báo danh: " + dlDayCount + " ngày", infoX, gy - 36);
+        if (!dlTodayDone) {
+            mkBtn(infoX, gy - 96, infoW, 46, "Báo danh hôm nay", 1);
+        } else {
+            mkBtn(infoX, gy - 96, infoW, 46, "Đã báo danh", 3);
+            Ui.fontSmall.setColor(1f, 1f, 1f, 0.7f);
+            Ui.fontSmall.draw(batch, "Lần tới sau: " + (dlSecsNext / 3600) + " giờ "
+                + ((dlSecsNext % 3600) / 60) + " phút", infoX, gy - 118);
+        }
+        // mốc quà điểm chuyên cần (dải dưới lưới ngày)
+        Ui.font.setColor(1f, 0.9f, 0.5f, 1f);
+        Ui.font.draw(batch, "Quà mốc điểm chuyên cần:", px + 28, py + 122);
+        for (int i = 0; i < DL_MILE_POINTS.length; i++) {
+            int bx = px + 28 + i * 176;
+            boolean got = (dlMilestones & (1 << i)) != 0;
+            boolean can = dlTotalPoint >= DL_MILE_POINTS[i] && !got;
+            Ui.centered(batch, Ui.fontSmall, DL_MILE_POINTS[i] + " điểm", bx + 80, py + 100, Color.WHITE);
+            Ui.centered(batch, Ui.fontSmall, DL_MILE_GIFTS[i], bx + 80, py + 82,
+                new Color(1f, 1f, 1f, 0.75f));
+            mkBtn(bx, py + 16, 160, 38, got ? "Đã nhận" : "Nhận", can ? 1 : 3);
+        }
+    }
+
+    private void drawDailyQuest(int px, int py) {
+        int top = py + DL_PH - 170;
+        Ui.font.setColor(1f, 0.9f, 0.5f, 1f);
+        Ui.font.draw(batch, truncTo(Ui.font, dqName, 700), px + 28, top);
+        // vật phẩm cần nộp (đỉnh thẻ đầu phải dưới hẳn baseline tên nhiệm vụ)
+        int ry = top - 76;
+        for (int i = 0; i < dqReqs.size(); i++) {
+            int[] q = dqReqs.get(i);
+            int yy = ry - i * 56;
+            batch.draw(Ui.roundedRect(500, 48, 10, GLASS_FILL, null), px + 28, yy);
+            FarmWorld.ProductDef pd = farm.productDefs.get(q[0]);
+            drawProductIcon(q[0], pd, px + 40, yy + 8, 32);
+            Ui.font.setColor(Color.WHITE);
+            Ui.font.draw(batch, truncTo(Ui.font, pd != null ? pd.name : ("Sản phẩm " + q[0]), 300),
+                px + 84, yy + 31);
+            Ui.font.setColor(q[2] >= q[1] ? new Color(0.55f, 0.95f, 0.6f, 1f)
+                : new Color(1f, 0.6f, 0.5f, 1f));
+            String have = q[2] + "/" + q[1];
+            layout.setText(Ui.font, have);
+            Ui.font.draw(batch, have, px + 528 - 16 - layout.width, yy + 31);
+        }
+        // phần thưởng
+        int rwY = ry - dqReqs.size() * 56 - 16;
+        Ui.fontSmall.setColor(1f, 1f, 1f, 0.8f);
+        StringBuilder sb = new StringBuilder("Phần thưởng: ");
+        for (int i = 0; i < dqRews.size(); i++) {
+            if (i > 0) sb.append(" · ");
+            sb.append(dqRewardText(dqRews.get(i)));
+        }
+        Ui.fontSmall.draw(batch, truncTo(Ui.fontSmall, sb.toString(), 500), px + 28, rwY);
+        // nút hoàn thành + đổi
+        mkBtn(px + 28, py + 86, 240, 48, "Hoàn thành nhiệm vụ", dqEnough() ? 1 : 3);
+        mkBtn(px + 284, py + 86, 240, 48,
+            dqChangeType == 0 ? "Đổi nhiệm vụ (miễn phí)" : "Đổi nhiệm vụ (" + fmtMoney(dqChangeCost) + " xu)", 0);
+        // thanh điểm + hộp quà (cột phải)
+        int bx = px + 580;
+        Ui.font.setColor(Color.WHITE);
+        Ui.font.draw(batch, "Điểm nhiệm vụ hôm nay: " + dqScore, bx, top);
+        int barY = top - 52;
+        int maxP = dqBoxes.isEmpty() ? 360 : dqBoxes.get(dqBoxes.size() - 1)[0];
+        batch.draw(Ui.roundedRect(312, 20, 10, new Color(0.02f, 0.04f, 0.08f, 0.9f), null), bx, barY);
+        int fill = (int) (312 * Math.min(1f, dqScore / (float) Math.max(1, maxP)));
+        if (fill > 4) {
+            batch.draw(Ui.roundedRect(fill, 20, 10,
+                new Color(0.95f, 0.6f, 0.15f, 1f), null), bx, barY);
+        }
+        for (int i = 0; i < dqBoxes.size(); i++) {
+            int[] b = dqBoxes.get(i);
+            int yy = barY - 44 - i * 58;
+            Ui.fontSmall.setColor(Color.WHITE);
+            Ui.fontSmall.draw(batch, "Mốc " + b[0] + " điểm", bx, yy + 26);
+            boolean can = dqScore >= b[0] && b[1] == 0;
+            mkBtn(bx + 172, yy - 4, 140, 38, b[1] == 1 ? "Đã mở" : "Mở hộp", can ? 1 : 3);
+        }
+    }
+
+    private boolean dailyTouch(float x, float y) {
+        if (!dailyOpen) return false;
+        int px = DL_PX, py = DL_PY;
+        if (inRect(x, y, px + DL_PW - 54, py + DL_PH - 54, 36, 36)) {
+            dailyOpen = false;
+            return true;
+        }
+        if (x < px || x > px + DL_PW || y < py || y > py + DL_PH) return false;
+        for (int i = 0; i < 2; i++) {
+            int tx = px + 28 + i * 190;
+            int ty = py + DL_PH - 118;
+            if (inRect(x, y, tx, ty, 178, 44)) {
+                dailyTab = i;
+                dailyMsg = "";
+                try {
+                    if (i == 0) AvatarProtocol.dailyDashboard(game.connection);
+                    else AvatarProtocol.dailyQuestShow(game.connection);
+                } catch (IOException e) { }
+                return true;
+            }
+        }
+        if (dailyTab == 0) {
+            int gx = px + 28, gy = py + DL_PH - 196;
+            int cw = 64, gap = 6;
+            int infoX = gx + 7 * (cw + gap) + 16;
+            int infoW = px + DL_PW - 28 - infoX;
+            if (!dlTodayDone && inRect(x, y, infoX, gy - 96, infoW, 46)) {
+                try { AvatarProtocol.dailyBaoDanh(game.connection); } catch (IOException e) { }
+                return true;
+            }
+            for (int i = 0; i < DL_MILE_POINTS.length; i++) {
+                int bx = px + 28 + i * 176;
+                boolean got = (dlMilestones & (1 << i)) != 0;
+                if (!got && inRect(x, y, bx, py + 16, 160, 38)) {
+                    try { AvatarProtocol.dailyMilestone(game.connection, i); }
+                    catch (IOException e) { }
+                    return true;
+                }
+            }
+        } else {
+            if (inRect(x, y, px + 28, py + 86, 240, 48)) {
+                try { AvatarProtocol.dailyQuestDone(game.connection); } catch (IOException e) { }
+                return true;
+            }
+            if (inRect(x, y, px + 284, py + 86, 240, 48)) {
+                try { AvatarProtocol.dailyQuestChange(game.connection); } catch (IOException e) { }
+                return true;
+            }
+            int top = py + DL_PH - 170;
+            int bx = px + 580;
+            int barY = top - 52;
+            for (int i = 0; i < dqBoxes.size(); i++) {
+                int yy = barY - 44 - i * 58;
+                if (dqBoxes.get(i)[1] == 0 && inRect(x, y, bx + 172, yy - 4, 140, 38)) {
+                    try { AvatarProtocol.dailyQuestBox(game.connection, i); }
+                    catch (IOException e) { }
+                    return true;
+                }
+            }
+        }
+        return true;
+    }
+
+    // ---------- ĐẤU GIÁ NGƯỢC (gói −117, docs/daily-auction-spec.md) ----------
+    private boolean auctionOpen;
+    private boolean aucActive;
+    private int aucPartId, aucPrice, aucStart, aucFloor, aucSecs;
+    private String aucTop = "";
+    private String aucMsg = "";
+    private boolean aucMsgOk;
+    private long aucLastFetch;
+    private int aucConfirmArm; // mốc thời gian chờ xác nhận chốt giá (ms epoch / 1000)
+    private static class AucHist {
+        String winner = ""; int partId; int price; long endAt;
+    }
+    private final java.util.List<AucHist> aucHist = new java.util.ArrayList<>();
+    private static final int AU_PW = 920, AU_PH = 600;
+    private static final int AU_PX = (1280 - AU_PW) / 2, AU_PY = (720 - AU_PH) / 2;
+
+    private void openAuctionPanel() {
+        if (!online()) {
+            addChatLog(TAB_SYSTEM, null, "Đấu giá cần chơi online — bản chơi thử không có.", true);
+            return;
+        }
+        closeOtherPanels();
+        auctionOpen = true;
+        aucMsg = "";
+        aucConfirmArm = 0;
+        try { AvatarProtocol.auctionInfo(game.connection); } catch (IOException e) { }
+    }
+
+    private void handleAuctionPacket(Msg m) {
+        try {
+            java.io.DataInputStream r = m.reader();
+            if (r.available() < 1) return;
+            int sub = r.readByte();
+            if (sub == AvatarProtocol.A_INFO) {
+                aucActive = r.readBoolean();
+                aucPartId = r.readShort();
+                aucPrice = r.readInt();
+                aucStart = r.readInt();
+                aucFloor = r.readInt();
+                aucSecs = r.readInt();
+                aucTop = r.readUTF();
+                aucHist.clear();
+                int n = r.readByte();
+                for (int i = 0; i < n; i++) {
+                    AucHist h = new AucHist();
+                    h.winner = r.readUTF();
+                    h.partId = r.readShort();
+                    h.price = r.readInt();
+                    h.endAt = r.readLong();
+                    aucHist.add(h);
+                }
+                aucLastFetch = System.currentTimeMillis();
+            } else if (sub == AvatarProtocol.A_RESULT) {
+                aucMsgOk = r.readBoolean();
+                aucMsg = r.readUTF();
+                if (!auctionOpen) addChatLog(TAB_SYSTEM, null, aucMsg, true);
+            }
+        } catch (IOException e) { }
+    }
+
+    private void drawAuctionPanel() {
+        // tự làm mới 5 giây/lần khi panel đang mở
+        if (System.currentTimeMillis() - aucLastFetch > 5000 && online()) {
+            try { AvatarProtocol.auctionInfo(game.connection); } catch (IOException e) { }
+            aucLastFetch = System.currentTimeMillis();
+        }
+        int px = AU_PX, py = AU_PY;
+        batch.draw(Ui.roundedRect(AU_PW, AU_PH, 18, GLASS_FILL_DARK, GLASS_RIM), px, py);
+        Ui.fontTitle.setColor(1f, 0.85f, 0.3f, 1f);
+        Ui.fontTitle.draw(batch, "Đấu giá ngược", px + 28, py + AU_PH - 16);
+        batch.draw(Ui.roundedRect(36, 36, 10, Ui.BTN_CLOSE, null), px + AU_PW - 54, py + AU_PH - 54);
+        Ui.faIcon(batch, Ui.fa20, Ui.FA_XMARK, px + AU_PW - 36, py + AU_PH - 36, Color.WHITE);
+        Ui.fontSmall.setColor(1f, 1f, 1f, 0.78f);
+        Ui.fontSmall.draw(batch,
+            "Giá giảm dần theo thời gian — ai chốt trước thì thắng, trả đúng giá lúc chốt.",
+            px + 28, py + AU_PH - 62);
+        if (!aucMsg.isEmpty()) {
+            Ui.fontSmall.setColor(aucMsgOk ? new Color(0.55f, 0.95f, 0.6f, 1f)
+                : new Color(1f, 0.55f, 0.5f, 1f));
+            Ui.fontSmall.draw(batch, truncTo(Ui.fontSmall, aucMsg, AU_PW - 56),
+                px + 28, py + AU_PH - 86);
+        }
+        // thẻ vật phẩm phiên hiện tại
+        int cy = py + AU_PH - 330;
+        batch.draw(Ui.roundedRect(500, 220, 14, GLASS_FILL, null), px + 28, cy);
+        drawPartIcon(aucPartId, px + 92, cy + 128, 84);
+        Ui.font.setColor(Color.WHITE);
+        Ui.font.draw(batch, truncTo(Ui.font, itemNameOf(aucPartId), 330), px + 150, cy + 168);
+        Ui.fontSmall.setColor(1f, 1f, 1f, 0.75f);
+        Ui.fontSmall.draw(batch, "Giá khởi điểm: " + fmtMoney(aucStart) + " xu · Giá sàn: "
+            + fmtMoney(aucFloor) + " xu", px + 150, cy + 140);
+        if (aucActive) {
+            Ui.fontSmall.setColor(1f, 0.9f, 0.5f, 1f);
+            Ui.fontSmall.draw(batch, "Giá hiện tại (giảm dần):", px + 150, cy + 106);
+            Ui.fontTitle.setColor(1f, 0.6f, 0.15f, 1f);
+            Ui.fontTitle.draw(batch, fmtMoney(aucPrice) + " xu", px + 150, cy + 72);
+            Ui.fontSmall.setColor(Color.WHITE);
+            Ui.fontSmall.draw(batch, "Còn lại: " + (aucSecs / 60) + " phút " + (aucSecs % 60) + " giây",
+                px + 150, cy + 40);
+        } else {
+            Ui.font.setColor(1f, 0.6f, 0.5f, 1f);
+            Ui.font.draw(batch, "Phiên đã có người chốt!", px + 150, cy + 100);
+            Ui.fontSmall.setColor(Color.WHITE);
+            Ui.fontSmall.draw(batch, "Người thắng: " + truncTo(Ui.fontSmall, aucTop, 260)
+                + " · Phiên mới sau: " + (aucSecs / 60) + " phút " + (aucSecs % 60) + " giây",
+                px + 150, cy + 68);
+        }
+        // nút chốt giá (xác nhận 2 chạm trong 3 giây)
+        boolean armed = System.currentTimeMillis() / 1000 < aucConfirmArm;
+        if (aucActive) {
+            mkBtn(px + 28, cy - 70, 500, 52,
+                armed ? "Chạm lần nữa để CHỐT giá " + fmtMoney(aucPrice) + " xu"
+                      : "Chốt giá này", 1);
+        } else {
+            mkBtn(px + 28, cy - 70, 500, 52, "Chờ phiên mới", 3);
+        }
+        // lịch sử
+        int hx = px + 560;
+        Ui.font.setColor(1f, 0.9f, 0.5f, 1f);
+        Ui.font.draw(batch, "Lịch sử đấu giá", hx, cy + 196);
+        if (aucHist.isEmpty()) {
+            Ui.fontSmall.setColor(1f, 1f, 1f, 0.7f);
+            Ui.fontSmall.draw(batch, "Chưa có phiên nào kết thúc.", hx, cy + 160);
+        }
+        for (int i = 0; i < aucHist.size() && i < 6; i++) {
+            AucHist h = aucHist.get(i);
+            int yy = cy + 168 - i * 52;
+            drawPartIcon(h.partId, hx + 20, yy - 8, 30);
+            Ui.fontSmall.setColor(Color.WHITE);
+            Ui.fontSmall.draw(batch, truncTo(Ui.fontSmall, h.winner, 130), hx + 44, yy + 8);
+            Ui.fontSmall.setColor(1f, 0.85f, 0.4f, 1f);
+            String pr = fmtMoney(h.price) + " xu";
+            layout.setText(Ui.fontSmall, pr);
+            Ui.fontSmall.draw(batch, pr, px + AU_PW - 28 - layout.width, yy + 8);
+        }
+        Ui.fontSmall.setColor(1f, 1f, 1f, 0.65f);
+        Ui.fontSmall.draw(batch, "Phiên mới mở mỗi 30 phút. Vật phẩm thắng đấu giá vào thẳng rương, vĩnh viễn.",
+            px + 28, py + 36);
+    }
+
+    private boolean auctionTouch(float x, float y) {
+        if (!auctionOpen) return false;
+        int px = AU_PX, py = AU_PY;
+        if (inRect(x, y, px + AU_PW - 54, py + AU_PH - 54, 36, 36)) {
+            auctionOpen = false;
+            return true;
+        }
+        if (x < px || x > px + AU_PW || y < py || y > py + AU_PH) return false;
+        int cy = py + AU_PH - 330;
+        if (aucActive && inRect(x, y, px + 28, cy - 70, 500, 52)) {
+            long nowS = System.currentTimeMillis() / 1000;
+            if (nowS < aucConfirmArm) {
+                aucConfirmArm = 0;
+                try { AvatarProtocol.auctionBid(game.connection); } catch (IOException e) { }
+            } else {
+                aucConfirmArm = (int) (nowS + 3);
+            }
+            return true;
+        }
+        return true;
+    }
+
+    // ----- harness điểm danh + đấu giá -----
+    public void debugDaily() {
+        closeOtherPanels();
+        dailyOpen = true;
+        dailyTab = 0;
+        dailyMsg = "";
+        dlDay = 14;
+        dlDaysInMonth = 30;
+        dlDayCount = 21;
+        dlTotalPoint = 210;
+        dlTodayDone = false;
+        dlSecsNext = 5 * 3600 + 42 * 60;
+        dlMilestones = 1;
+        dlClaimed.clear();
+        for (int d = 1; d <= 13; d++) dlClaimed.add(d);
+    }
+
+    public void debugDailyQuest() {
+        debugDaily();
+        dailyTab = 1;
+        dqName = "Hoa thơm tặng nàng";
+        dqReqs.clear();
+        dqReqs.add(new int[]{266, 6, 6});
+        dqReqs.add(new int[]{267, 6, 4});
+        dqRews.clear();
+        dqRews.add(new int[]{0, 7000, 0});
+        dqScore = 105;
+        dqBoxes.clear();
+        dqBoxes.add(new int[]{40, 1});
+        dqBoxes.add(new int[]{90, 0});
+        dqBoxes.add(new int[]{150, 0});
+        dqBoxes.add(new int[]{240, 0});
+        dqBoxes.add(new int[]{360, 0});
+        dqChangeType = 0;
+        dqChangeCost = 0;
+    }
+
+    public void debugAuction() {
+        closeOtherPanels();
+        auctionOpen = true;
+        aucMsg = "";
+        aucActive = true;
+        aucPartId = 2090;
+        aucPrice = 342500;
+        aucStart = 600000;
+        aucFloor = 210000;
+        aucSecs = 17 * 60 + 24;
+        aucTop = "";
+        aucLastFetch = System.currentTimeMillis();
+        aucHist.clear();
+        AucHist h1 = new AucHist();
+        h1.winner = "Linh Chi"; h1.partId = 620; h1.price = 98500; h1.endAt = System.currentTimeMillis() - 1800000;
+        aucHist.add(h1);
+        AucHist h2 = new AucHist();
+        h2.winner = "betest01"; h2.partId = 2052; h2.price = 402100; h2.endAt = System.currentTimeMillis() - 3600000;
+        aucHist.add(h2);
     }
 
     // Harness tour: mở panel clan với dữ liệu giả (my clan + list)

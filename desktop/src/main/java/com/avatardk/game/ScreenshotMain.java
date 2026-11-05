@@ -1360,6 +1360,33 @@ public class ScreenshotMain {
                         }
                         if (frame == 15) {
                             shot("shot-farm2-bee.png");
+                            stage = 143; frame = 0;
+                        }
+                        break;
+                    case 143: // Điểm danh: tab Điểm danh
+                        if (frame == 1) {
+                            world.debugDaily();
+                        }
+                        if (frame == 15) {
+                            shot("shot-daily.png");
+                            stage = 144; frame = 0;
+                        }
+                        break;
+                    case 144: // Điểm danh: tab Nhiệm vụ ngày
+                        if (frame == 1) {
+                            world.debugDailyQuest();
+                        }
+                        if (frame == 15) {
+                            shot("shot-daily-quest.png");
+                            stage = 145; frame = 0;
+                        }
+                        break;
+                    case 145: // Đấu giá ngược
+                        if (frame == 1) {
+                            world.debugAuction();
+                        }
+                        if (frame == 15) {
+                            shot("shot-auction.png");
                             stage = 121; frame = 0;
                         }
                         break;

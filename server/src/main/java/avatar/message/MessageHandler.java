@@ -374,6 +374,20 @@ public class MessageHandler implements IMessageHandler {
                         }
                         break;
                     }
+                    // [PORT] Điểm danh + Nhiệm vụ ngày (gói −116)
+                    case Cmd.DAILY: {
+                        if (this.client.user != null) {
+                            new avatar.service.DailyService(this.client).onMessage(mss);
+                        }
+                        break;
+                    }
+                    // [PORT] Đấu giá ngược (gói −117)
+                    case Cmd.AUCTION: {
+                        if (this.client.user != null) {
+                            new avatar.service.AuctionService(this.client).onMessage(mss);
+                        }
+                        break;
+                    }
                     // [PORT] Farm cấp 2 + nuôi ong (gói −115)
                     case Cmd.FARM2: {
                         if (this.client.user != null) {
