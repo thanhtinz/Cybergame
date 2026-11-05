@@ -245,7 +245,36 @@ $("newNpcBtn").addEventListener("click", () => guard((async () => {
 LOADERS.npcs = loadNpcs;
 
 // ===== Vòng quay =====
+async function loadWheelConfig() {
+  const c = await api("/api/wheel/config");
+  $("wcfgPriceXu").value = c.priceXu;
+  $("wcfgPriceLuong").value = c.priceLuong;
+  $("wcfgWItem").value = c.weightItem;
+  $("wcfgWXu").value = c.weightXu;
+  $("wcfgWXp").value = c.weightXp;
+  $("wcfgWLuong").value = c.weightLuong;
+  $("wcfgXuMin").value = c.xuMin;
+  $("wcfgXuMax").value = c.xuMax;
+  $("wcfgXpMin").value = c.xpMin;
+  $("wcfgXpMax").value = c.xpMax;
+  $("wcfgLuongMin").value = c.luongMin;
+  $("wcfgLuongMax").value = c.luongMax;
+  $("wcfgExpireDays").value = c.expireDays;
+}
+$("wcfgSave").addEventListener("click", () => guard((async () => {
+  await api("/api/wheel/config/save", {
+    priceXu: +$("wcfgPriceXu").value, priceLuong: +$("wcfgPriceLuong").value,
+    weightItem: +$("wcfgWItem").value, weightXu: +$("wcfgWXu").value,
+    weightXp: +$("wcfgWXp").value, weightLuong: +$("wcfgWLuong").value,
+    xuMin: +$("wcfgXuMin").value, xuMax: +$("wcfgXuMax").value,
+    xpMin: +$("wcfgXpMin").value, xpMax: +$("wcfgXpMax").value,
+    luongMin: +$("wcfgLuongMin").value, luongMax: +$("wcfgLuongMax").value,
+    expireDays: $("wcfgExpireDays").value
+  });
+  toast("Đã lưu cấu hình vòng quay — có hiệu lực ngay");
+})()));
 async function loadWheel() {
+  await loadWheelConfig();
   const o = await api("/api/wheel");
   const tb = document.querySelector("#wheelTable tbody");
   tb.innerHTML = o.rows.map((r) => {

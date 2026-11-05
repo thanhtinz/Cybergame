@@ -99,10 +99,28 @@ public class DialLucky {
         service.openUIShop(100, "Quay số", items);
     }
 
+    /** Lăn một giá trị theo nấc 10 trong [min, max] (cấu hình admin). */
+    private static int step10(int min, int max) {
+        int a = Math.max(0, min) / 10, b = Math.max(a, max) / 10;
+        return 10 * Utils.nextInt(a, b + 1);
+    }
+
     public void doDial(User us, int itemID, int degree) {
+        // Tỉ trọng loại quà đọc từ cấu hình admin mỗi lượt quay (đổi
+        // ở trang admin là ăn ngay, không cần khởi động lại server).
+        RandomCollection<Byte> rt = new RandomCollection<>();
+        int wSum = 0;
+        int wI = avatar.admin.GameSettings.wheelWeightItem();
+        int wX = avatar.admin.GameSettings.wheelWeightXu();
+        int wP = avatar.admin.GameSettings.wheelWeightXp();
+        int wL = avatar.admin.GameSettings.wheelWeightLuong();
+        if (wI > 0) { rt.add(wI, ITEM); wSum += wI; }
+        if (wX > 0) { rt.add(wX, XU); wSum += wX; }
+        if (wP > 0) { rt.add(wP, XP); wSum += wP; }
+        if (wL > 0) { rt.add(wL, LUONG); wSum += wL; }
         List<Gift> gifts = new ArrayList<>();
         for (int i = 0; i < 3; i++) {
-            byte type = randomType.next();
+            byte type = wSum > 0 ? rt.next() : randomType.next();
             Gift gift = new Gift();
             gift.setType((byte) type);
 
@@ -122,26 +140,30 @@ public class DialLucky {
                     item.setExpired(-1);
                     gift.setExpireDay(-1);
                 } else {
-                    int time = Utils.getRandomInArray(new int[]{3, 7, 15, 30});
+                    int time = Utils.getRandomInArray(
+                        avatar.admin.GameSettings.wheelExpireDays());
                     item.setExpired(System.currentTimeMillis() + (86400000L * time));
                     gift.setExpireDay(time);
                 }
                 us.addItemToChests(item);
 
             } else if (type == XU) {
-                int xu = Utils.nextInt(1, 300) * 10;
+                int xu = step10(avatar.admin.GameSettings.wheelXuMin(),
+                                avatar.admin.GameSettings.wheelXuMax());
 
                 gift.setXu(xu);
                 us.updateXu(xu);
                 us.getAvatarService().updateMoney(0);
             } else if (type == XP) {
-                int xp = Utils.nextInt(1, 10) * 10;
+                int xp = step10(avatar.admin.GameSettings.wheelXpMin(),
+                                avatar.admin.GameSettings.wheelXpMax());
                 gift.setXp(xp);
                 us.addExp(xp);
             } else if (type == LUONG) {
                 // [PORT sửa] fan để trống nhánh này (trúng loại Lượng mà
-                // không nhận được gì) — thưởng 1–3 lượng như các loại khác.
-                int luong = Utils.nextInt(1, 3);
+                // không nhận được gì) — thưởng lượng theo thang cấu hình.
+                int luong = Utils.nextInt(avatar.admin.GameSettings.wheelLuongMin(),
+                                          avatar.admin.GameSettings.wheelLuongMax() + 1);
                 gift.setLuong(luong);
                 us.updateLuong(luong);
                 us.getAvatarService().updateMoney(0);

@@ -135,6 +135,28 @@
     <section id="sec-wheel" class="sec hidden">
       <h2>Vòng quay may mắn</h2>
       <div class="panel">
+        <h3>Cấu hình vòng quay</h3>
+        <div class="grid-form">
+          <label>Giá quay bằng Xu <input id="wcfgPriceXu" type="number" min="0"></label>
+          <label>Giá quay bằng Lượng <input id="wcfgPriceLuong" type="number" min="0"></label>
+          <label>Tỉ trọng quà Đồ <input id="wcfgWItem" type="number" min="0"></label>
+          <label>Tỉ trọng quà Xu <input id="wcfgWXu" type="number" min="0"></label>
+          <label>Tỉ trọng quà XP <input id="wcfgWXp" type="number" min="0"></label>
+          <label>Tỉ trọng quà Lượng <input id="wcfgWLuong" type="number" min="0"></label>
+          <label>Quà Xu — nhỏ nhất <input id="wcfgXuMin" type="number" min="0"></label>
+          <label>Quà Xu — lớn nhất <input id="wcfgXuMax" type="number" min="0"></label>
+          <label>Quà XP — nhỏ nhất <input id="wcfgXpMin" type="number" min="0"></label>
+          <label>Quà XP — lớn nhất <input id="wcfgXpMax" type="number" min="0"></label>
+          <label>Quà Lượng — nhỏ nhất <input id="wcfgLuongMin" type="number" min="0"></label>
+          <label>Quà Lượng — lớn nhất <input id="wcfgLuongMax" type="number" min="0"></label>
+          <label>Mốc hạn dùng quà đồ (ngày, cách nhau dấu phẩy) <input id="wcfgExpireDays" type="text"></label>
+        </div>
+        <div class="row-form" style="margin-top:10px">
+          <button id="wcfgSave" class="btn primary">Lưu cấu hình</button>
+        </div>
+        <p class="muted">Giá quay hiện ngay trong menu của NPC Quay Số trong game. Tỉ trọng loại quà: càng cao càng dễ ra loại đó (đặt 0 là tắt hẳn loại quà đó). Quà Xu/XP lăn theo nấc 10 trong khoảng đã đặt. Bật/tắt cả vòng quay ở mục Bật/Tắt tính năng.</p>
+      </div>
+      <div class="panel">
         <h3>Thêm ô quà</h3>
         <div class="row-form">
           <input id="newWheelItem" type="number" placeholder="ID vật phẩm quà">

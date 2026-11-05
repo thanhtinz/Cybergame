@@ -67,7 +67,8 @@ public class NpcHandler {
                     us.getAvatarService().serverDialog("Bạn phải có ít nhất 3 ô trống trong rương đồ");
                     return;
                 }
-                if (us.getXu() < 25000) {
+                // Giá quay cấu hình ở trang admin (mục Vòng quay).
+                if (us.getXu() < avatar.admin.GameSettings.wheelPriceXu()) {
                     us.getAvatarService().serverDialog("Bạn không đủ xu!");
                     return;
                 }
@@ -77,7 +78,7 @@ public class NpcHandler {
                     us.getAvatarService().serverDialog("Bạn phải có ít nhất 3 ô trống trong rương đồ");
                     return;
                 }
-                if (us.getLuong() < 5) {
+                if (us.getLuong() < avatar.admin.GameSettings.wheelPriceLuong()) {
                     us.getAvatarService().serverDialog("Bạn không đủ lượng!!");
                     return;
                 }
@@ -525,15 +526,18 @@ public class NpcHandler {
 //                        break;
 //                    }
                 case NpcName.QUAY_SO: {
+                    // Nhãn giá lấy từ cấu hình admin (mục Vòng quay).
+                    String lblLuong = avatar.admin.GameSettings.wheelPriceLuong() + " lượng";
+                    String lblXu = java.text.NumberFormat.getInstance(
+                        new java.util.Locale("vi", "VN")).format(
+                        avatar.admin.GameSettings.wheelPriceXu()) + " xu";
                     List<Menu> qs = new ArrayList<>();
                     Menu quaySo1 = Menu.builder().name("Quay số").menus(
                                     List.of(
-                                            Menu.builder().name("5 lượng").action(() -> {
-                                                System.out.println("Action for 5 lượng triggered");
+                                            Menu.builder().name(lblLuong).action(() -> {
                                                 handleDiaLucky(us, DialLuckyManager.LUONG);
                                             }).build(),
-                                            Menu.builder().name("25.000 xu").action(() -> {
-                                                System.out.println("Action for 15.000 xu triggered");
+                                            Menu.builder().name(lblXu).action(() -> {
                                                 handleDiaLucky(us, DialLuckyManager.XU);
                                             }).build(),
                                             Menu.builder().name("Q.S miễn phí").action(() -> {
@@ -549,7 +553,7 @@ public class NpcHandler {
                     qs.add(quaySo1);
                     qs.add(Menu.builder().name("Xem hướng dẫn").action(() -> {
                         System.out.println("Action for Xem hướng dẫn triggered");
-                        us.getAvatarService().customTab("Hướng dẫn", "Để tham gia quay số bạn phải có ít nhất 5 lượng hoặc 25 ngàn xu trong tài khoản và 3 ô trống trong rương\n Bạn sẽ nhận được danh sách những món đồ đặc biệt mà bạn muốn quay. Những món đồ đặc biệt này bạn sẽ không thể tìm thấy trong bất cứ shop nào của thành phố.\n Sau khi chọn được món đồ muốn quay bạn sẽ bắt đầu chỉnh vòng quay để quay\n Khi quay bạn giữ phím 5 để chỉnh lực quay sau đó thả ra để bắt đầu quay\n Khi quay bạn sẽ có cơ hội trúng từ 1 đến 3 món quà\n Quà của bạn nhận được có thể là vật phẩm bất kì, xu, hoặc điểm kinh nghiệm\n Bạn có thể quay được những bộ đồ bán bằng lượng như đồ hiệp sĩ, pháp sư...\n Tuy nhiên vật phẩm bạn quay được sẽ có hạn sử dụng trong một số ngày nhất định.\n Nếu bạn quay được đúng món đồ mà bạn đã chọn thì bạn sẽ được sở hữu món đồ đó vĩnh viễn.\n Hãy thử vận may để sở hữu các món đồ cực khủng nào !!!");
+                        us.getAvatarService().customTab("Hướng dẫn", "Để tham gia quay số bạn phải có ít nhất " + avatar.admin.GameSettings.wheelPriceLuong() + " lượng hoặc " + java.text.NumberFormat.getInstance(new java.util.Locale("vi", "VN")).format(avatar.admin.GameSettings.wheelPriceXu()) + " xu trong tài khoản và 3 ô trống trong rương\n Bạn sẽ nhận được danh sách những món đồ đặc biệt mà bạn muốn quay. Những món đồ đặc biệt này bạn sẽ không thể tìm thấy trong bất cứ shop nào của thành phố.\n Sau khi chọn được món đồ muốn quay bạn sẽ bắt đầu chỉnh vòng quay để quay\n Khi quay bạn giữ phím 5 để chỉnh lực quay sau đó thả ra để bắt đầu quay\n Khi quay bạn sẽ có cơ hội trúng từ 1 đến 3 món quà\n Quà của bạn nhận được có thể là vật phẩm bất kì, xu, hoặc điểm kinh nghiệm\n Bạn có thể quay được những bộ đồ bán bằng lượng như đồ hiệp sĩ, pháp sư...\n Tuy nhiên vật phẩm bạn quay được sẽ có hạn sử dụng trong một số ngày nhất định.\n Nếu bạn quay được đúng món đồ mà bạn đã chọn thì bạn sẽ được sở hữu món đồ đó vĩnh viễn.\n Hãy thử vận may để sở hữu các món đồ cực khủng nào !!!");
                     }).build());
                     qs.add(Menu.builder().name("Thoát").build());
                     us.setMenus(qs);

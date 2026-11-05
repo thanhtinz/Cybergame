@@ -329,6 +329,10 @@ public class Session implements ISession {
                 this.setHandler(new HomeMsgHandler(this));
                 break;
             }
+            case 12: {
+                this.setHandler(new RaceMsgHandler(this));
+                break;
+            }
             default: {
                 setHandler(new MessageHandler(this));
                 break;
@@ -2113,17 +2117,20 @@ public void NhanThuongEventXuBoss() throws IOException {
                 user.removeItem(593, 1);
             }
             if (dl.getType() == DialLuckyManager.XU) {
-                // [PORT sửa] fan check 15.000 nhưng trừ 25.000 — khớp giá menu
-                if (user.getXu() < 25000) {
+                // Giá quay cấu hình ở trang admin (mục Vòng quay);
+                // [PORT sửa] fan check 15.000 nhưng trừ 25.000.
+                int priceXu = avatar.admin.GameSettings.wheelPriceXu();
+                if (user.getXu() < priceXu) {
                     return;
                 }
-                user.updateXu(-25000);
+                user.updateXu(-priceXu);
             }
             if (dl.getType() == DialLuckyManager.LUONG) {
-                if (user.getLuong() < 5) {
+                int priceLuong = avatar.admin.GameSettings.wheelPriceLuong();
+                if (user.getLuong() < priceLuong) {
                     return;
                 }
-                user.updateLuong(-5);
+                user.updateLuong(-priceLuong);
             }
             getAvatarService().updateMoney(0);
             dl.doDial(user, partId, degree);

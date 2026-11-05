@@ -249,6 +249,8 @@ public class AdminServer {
                 case "/api/npcs/create": npcCreate(ex); break;
                 case "/api/npcs/delete": npcDelete(ex); break;
                 case "/api/wheel": wheel(ex); break;
+                case "/api/wheel/config": wheelConfig(ex); break;
+                case "/api/wheel/config/save": wheelConfigSave(ex); break;
                 case "/api/wheel/update": wheelUpdate(ex); break;
                 case "/api/wheel/create": wheelCreate(ex); break;
                 case "/api/wheel/delete": wheelDelete(ex); break;
@@ -738,6 +740,78 @@ public class AdminServer {
         }
         o.put("rows", arr);
         sendJson(ex, 200, o);
+    }
+
+    /** Cấu hình số của vòng quay (giá, tỉ trọng loại quà, thang quà) —
+     *  lưu ở bảng settings qua GameSettings, game đọc trực tiếp. */
+    private static void wheelConfig(HttpExchange ex) throws Exception {
+        JSONObject o = ok();
+        o.put("priceXu", GameSettings.wheelPriceXu());
+        o.put("priceLuong", GameSettings.wheelPriceLuong());
+        o.put("weightItem", GameSettings.wheelWeightItem());
+        o.put("weightXu", GameSettings.wheelWeightXu());
+        o.put("weightXp", GameSettings.wheelWeightXp());
+        o.put("weightLuong", GameSettings.wheelWeightLuong());
+        o.put("xuMin", GameSettings.wheelXuMin());
+        o.put("xuMax", GameSettings.wheelXuMax());
+        o.put("xpMin", GameSettings.wheelXpMin());
+        o.put("xpMax", GameSettings.wheelXpMax());
+        o.put("luongMin", GameSettings.wheelLuongMin());
+        o.put("luongMax", GameSettings.wheelLuongMax());
+        StringBuilder days = new StringBuilder();
+        for (int d : GameSettings.wheelExpireDays()) {
+            if (days.length() > 0) days.append(",");
+            days.append(d);
+        }
+        o.put("expireDays", days.toString());
+        sendJson(ex, 200, o);
+    }
+
+    private static void wheelConfigSave(HttpExchange ex) throws Exception {
+        JSONObject body = readJson(ex);
+        int priceXu = (int) num(body, "priceXu", -1);
+        int priceLuong = (int) num(body, "priceLuong", -1);
+        int wItem = (int) num(body, "weightItem", -1);
+        int wXu = (int) num(body, "weightXu", -1);
+        int wXp = (int) num(body, "weightXp", -1);
+        int wLuong = (int) num(body, "weightLuong", -1);
+        int xuMin = (int) num(body, "xuMin", -1);
+        int xuMax = (int) num(body, "xuMax", -1);
+        int xpMin = (int) num(body, "xpMin", -1);
+        int xpMax = (int) num(body, "xpMax", -1);
+        int luongMin = (int) num(body, "luongMin", -1);
+        int luongMax = (int) num(body, "luongMax", -1);
+        String expireDays = str(body, "expireDays", "").trim();
+        int[] nums = {priceXu, priceLuong, wItem, wXu, wXp, wLuong,
+                      xuMin, xuMax, xpMin, xpMax, luongMin, luongMax};
+        for (int v : nums) {
+            if (v < 0) throw new IllegalArgumentException("Mọi giá trị phải là số >= 0");
+        }
+        if (wItem + wXu + wXp + wLuong <= 0) {
+            throw new IllegalArgumentException("Tổng tỉ trọng loại quà phải > 0");
+        }
+        if (xuMax < xuMin || xpMax < xpMin || luongMax < luongMin) {
+            throw new IllegalArgumentException("Thang quà: giá trị Đến phải >= Từ");
+        }
+        // Kiểm tra danh sách mốc hạn dùng: các số nguyên > 0, cách nhau dấu phẩy.
+        for (String p : expireDays.split(",")) {
+            int d = Integer.parseInt(p.trim());
+            if (d <= 0) throw new IllegalArgumentException("Mốc hạn dùng phải > 0");
+        }
+        GameSettings.setInt("wheel.price_xu", priceXu);
+        GameSettings.setInt("wheel.price_luong", priceLuong);
+        GameSettings.setInt("wheel.weight_item", wItem);
+        GameSettings.setInt("wheel.weight_xu", wXu);
+        GameSettings.setInt("wheel.weight_xp", wXp);
+        GameSettings.setInt("wheel.weight_luong", wLuong);
+        GameSettings.setInt("wheel.xu_min", xuMin);
+        GameSettings.setInt("wheel.xu_max", xuMax);
+        GameSettings.setInt("wheel.xp_min", xpMin);
+        GameSettings.setInt("wheel.xp_max", xpMax);
+        GameSettings.setInt("wheel.luong_min", luongMin);
+        GameSettings.setInt("wheel.luong_max", luongMax);
+        GameSettings.set("wheel.expire_days", expireDays);
+        sendJson(ex, 200, ok());
     }
 
     private static void wheelUpdate(HttpExchange ex) throws Exception {
