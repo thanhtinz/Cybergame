@@ -6011,7 +6011,7 @@ public class WorldScreen extends ScreenAdapter {
             // tab Cặp Đôi: nút hành động (Chia tay) ở đáy tab
             if (charVariant == 3 && charTab == 2 && partnerName != null
                     && x >= px + CP_W / 2f - 90 && x <= px + CP_W / 2f + 90
-                    && y >= py + 14 && y <= py + 58) {
+                    && y >= py + 4 && y <= py + 44) {
                 weddingLocalSelect(2);
                 return;
             }
@@ -9247,18 +9247,23 @@ public class WorldScreen extends ScreenAdapter {
      *  partnerDate, partnerActName/Id = lệnh Chia tay 37). */
     private void drawCharCoupleTab(float px, float py) {
         float cx = px + CP_W / 2f;
-        // sân khấu đôi — cặp doll đối xứng qua tim ở giữa
+        // BỐ CỤC THEO GỐC (MyInfoScr.paint của Pack5 — bản chính
+        // 3.4.4 tách thành widget CommandCouple), style kính:
+        // sân khấu nền board, doll mình bên TRÁI, doll đối tác bên
+        // PHẢI đối mặt vào (gốc: friend.direct = LEFT); chưa có
+        // người yêu thì chỗ đối tác chỉ có bóng shadow trống.
         float stY = py + 190;
         batch.draw(Ui.roundedRect((int) (CP_W - 48), 184, 14,
             new Color(0.10f, 0.16f, 0.23f, 0.9f), GLASS_RIM), px + 24, stY);
+        float floorY = stY + 12;
         if (partnerName == null || partnerDoll == null) {
-            Ui.centered(batch, Ui.fontSmall, "Độc thân", cx, stY + 172,
-                new Color(1f, 1f, 1f, 0.55f));
             batch.setColor(0f, 0f, 0f, 0.30f);
-            batch.draw(circleTexture(), cx - 48, stY + 4, 96, 15);
+            batch.draw(circleTexture(), cx - 110 - 48, stY + 4, 96, 15);
+            batch.setColor(0f, 0f, 0f, 0.16f);
+            batch.draw(circleTexture(), cx + 110 - 48, stY + 4, 96, 15);
             batch.setColor(Color.WHITE);
             game.dollRenderer.draw(batch, playerDoll, playerAnim.frameIndex(),
-                cx, stY + 10, 2.8f, false);
+                cx - 110, floorY, 2.8f, false);
             Ui.centered(batch, Ui.fontSmall, "Bạn chưa có người yêu", cx, py + 150,
                 Color.WHITE);
             Ui.centered(batch, Ui.fontTiny,
@@ -9266,58 +9271,41 @@ public class WorldScreen extends ScreenAdapter {
                 new Color(1f, 1f, 1f, 0.6f));
             return;
         }
-        // dòng "Người yêu: <tên>" màu HỒNG trên đỉnh sân khấu —
-        // dòng này trước ở header panel, Tín lệnh chuyển hẳn
-        // sang tab Cặp Đôi (không dùng tên quan hệ vàng nữa)
-        Ui.centered(batch, Ui.fontSmall, "Người yêu: " + partnerName,
-            cx, stY + 174, new Color(1f, 0.75f, 0.85f, 1f));
         batch.setColor(0f, 0f, 0f, 0.30f);
-        batch.draw(circleTexture(), cx - 120 - 48, stY + 4, 96, 15);
-        batch.draw(circleTexture(), cx + 120 - 48, stY + 4, 96, 15);
+        batch.draw(circleTexture(), cx - 110 - 48, stY + 4, 96, 15);
+        batch.draw(circleTexture(), cx + 110 - 48, stY + 4, 96, 15);
         batch.setColor(Color.WHITE);
         game.dollRenderer.draw(batch, playerDoll, playerAnim.frameIndex(),
-            cx - 120, stY + 10, 2.8f, false);
+            cx - 110, floorY, 2.8f, false);
         game.dollRenderer.draw(batch, partnerDoll, playerAnim.frameIndex(),
-            cx + 120, stY + 10, 2.8f, true);
-        Ui.faIcon(batch, Ui.fa30, Ui.FA_HEART, cx, stY + 100,
+            cx + 110, floorY, 2.8f, true);
+        // DƯỚI sân khấu, xếp dọc ở giữa như gốc: dòng người yêu
+        // hồng (vị trí tenQuanHe của gốc) -> trái tim (imgTraiTim)
+        // -> ngày hẹn hò (dateDay) -> cấp đôi "lv + per%" + thanh
+        // tiến độ (imgThanh của gốc) -> nút lệnh (commandList)
+        Ui.centered(batch, Ui.fontSmall, "Người yêu: " + partnerName,
+            cx, py + 170, new Color(1f, 0.75f, 0.85f, 1f));
+        Ui.faIcon(batch, Ui.fa20, Ui.FA_HEART, cx, py + 142,
             new Color(1f, 0.45f, 0.60f, 1f));
-        if (partnerSlogan != null && !partnerSlogan.isEmpty()) {
-            Ui.centered(batch, Ui.fontTiny, partnerSlogan, cx, stY + 58,
-                new Color(1f, 1f, 1f, 0.75f));
-        }
-        // phía dưới sân khấu CHỈ còn 2 dòng theo lệnh Tín: Ngày
-        // hẹn hò + Cấp đôi (bỏ Bạn đời / Quan hệ). Nhãn căn phải
-        // về cột px+236, giá trị từ px+252.
-        float ry0 = py + 150;
-        layout.setText(Ui.fontSmall, "Ngày hẹn hò:");
-        Ui.fontSmall.setColor(1f, 1f, 1f, 0.62f);
-        Ui.fontSmall.draw(batch, "Ngày hẹn hò:", px + 236 - layout.width, ry0);
-        Ui.fontSmall.setColor(Color.WHITE);
-        Ui.fontSmall.draw(batch, partnerDate != null ? partnerDate : "—", px + 252, ry0);
-        // cấp đôi + thanh tiến độ (mép phải thanh cố định px+560)
-        float ry = py + 102;
-        String lvTxt = partnerLv <= 0 ? "—" : ("Cấp " + partnerLv);
-        layout.setText(Ui.fontSmall, "Cấp đôi:");
-        Ui.fontSmall.setColor(1f, 1f, 1f, 0.62f);
-        Ui.fontSmall.draw(batch, "Cấp đôi:", px + 236 - layout.width, ry);
-        Ui.fontSmall.setColor(Color.WHITE);
-        Ui.fontSmall.draw(batch, lvTxt, px + 252, ry);
-        float barX = px + 252 + Ui.textWidth(Ui.fontSmall, lvTxt) + 18;
-        float barW = px + 560 - barX;
+        Ui.centered(batch, Ui.fontSmall,
+            "Ngày hẹn hò: " + (partnerDate != null ? partnerDate : "—"),
+            cx, py + 112, new Color(1f, 1f, 1f, 0.92f));
+        Ui.centered(batch, Ui.fontSmall,
+            "Cấp đôi: " + partnerLv + " + " + partnerPct + "%",
+            cx, py + 86, new Color(1f, 1f, 1f, 0.92f));
+        float barW = 320;
         batch.draw(Ui.roundedRect((int) barW, 14, 7, new Color(0f, 0f, 0f, 0.5f),
-            GLASS_RIM), barX, ry - 12);
+            GLASS_RIM), cx - barW / 2f, py + 48);
         if (partnerPct > 0) {
             batch.draw(Ui.roundedRect(Math.max(14, (int) (barW * partnerPct / 100)), 14, 7,
-                new Color(0.95f, 0.45f, 0.60f, 1f), null), barX, ry - 12);
+                new Color(0.95f, 0.45f, 0.60f, 1f), null), cx - barW / 2f, py + 48);
         }
-        Ui.fontTiny.setColor(1f, 1f, 1f, 0.85f);
-        Ui.fontTiny.draw(batch, partnerPct + "%", px + 568, ry);
         // nút hành động: lệnh do server gửi (mặc định "Chia tay")
-        batch.draw(Ui.roundedRect(180, 44, 12, Ui.BTN_CLOSE, GLASS_RIM),
-            cx - 90, py + 14);
+        batch.draw(Ui.roundedRect(180, 40, 12, Ui.BTN_CLOSE, GLASS_RIM),
+            cx - 90, py + 4);
         Ui.centered(batch, Ui.fontSmall,
             partnerActName != null ? partnerActName : "Chia tay",
-            cx, py + 43, Color.WHITE);
+            cx, py + 33, Color.WHITE);
     }
 
     private void drawCharTitleGrid(float px, float py) {
