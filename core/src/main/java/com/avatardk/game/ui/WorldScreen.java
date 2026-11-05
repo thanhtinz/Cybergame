@@ -9266,9 +9266,8 @@ public class WorldScreen extends ScreenAdapter {
                 new Color(1f, 1f, 1f, 0.6f));
             return;
         }
-        Ui.centered(batch, Ui.fontSmall,
-            partnerRel != null && !partnerRel.isEmpty() ? partnerRel : "Người yêu",
-            cx, stY + 174, new Color(1f, 0.85f, 0.38f, 1f));
+        // (đã bỏ tiêu đề quan hệ vàng trên sân khấu theo lệnh Tín —
+        // tên quan hệ chỉ còn ở dòng "Quan hệ:" phía dưới)
         batch.setColor(0f, 0f, 0f, 0.30f);
         batch.draw(circleTexture(), cx - 120 - 48, stY + 4, 96, 15);
         batch.draw(circleTexture(), cx + 120 - 48, stY + 4, 96, 15);
@@ -9283,24 +9282,17 @@ public class WorldScreen extends ScreenAdapter {
             Ui.centered(batch, Ui.fontTiny, partnerSlogan, cx, stY + 58,
                 new Color(1f, 1f, 1f, 0.75f));
         }
-        // 4 dòng thông tin: nhãn căn phải về cột px+236, giá trị từ
-        // px+252 — khối nằm cân giữa panel
-        String[][] rows = {
-            {partnerLv <= 0 ? "Người yêu:" : "Bạn đời:", partnerName},
-            {"Quan hệ:", partnerRel != null ? partnerRel : "—"},
-            {"Ngày hẹn hò:", partnerDate != null ? partnerDate : "—"},
-        };
-        for (int i = 0; i < rows.length; i++) {
-            float ry = py + 166 - i * 30;
-            layout.setText(Ui.fontSmall, rows[i][0]);
-            Ui.fontSmall.setColor(1f, 1f, 1f, 0.62f);
-            Ui.fontSmall.draw(batch, rows[i][0], px + 236 - layout.width, ry);
-            Ui.fontSmall.setColor(i == 1
-                ? new Color(1f, 0.85f, 0.38f, 1f) : Color.WHITE);
-            Ui.fontSmall.draw(batch, rows[i][1], px + 252, ry);
-        }
+        // phía dưới sân khấu CHỈ còn 2 dòng theo lệnh Tín: Ngày
+        // hẹn hò + Cấp đôi (bỏ Bạn đời / Quan hệ). Nhãn căn phải
+        // về cột px+236, giá trị từ px+252.
+        float ry0 = py + 150;
+        layout.setText(Ui.fontSmall, "Ngày hẹn hò:");
+        Ui.fontSmall.setColor(1f, 1f, 1f, 0.62f);
+        Ui.fontSmall.draw(batch, "Ngày hẹn hò:", px + 236 - layout.width, ry0);
+        Ui.fontSmall.setColor(Color.WHITE);
+        Ui.fontSmall.draw(batch, partnerDate != null ? partnerDate : "—", px + 252, ry0);
         // cấp đôi + thanh tiến độ (mép phải thanh cố định px+560)
-        float ry = py + 166 - 3 * 30;
+        float ry = py + 102;
         String lvTxt = partnerLv <= 0 ? "—" : ("Cấp " + partnerLv);
         layout.setText(Ui.fontSmall, "Cấp đôi:");
         Ui.fontSmall.setColor(1f, 1f, 1f, 0.62f);
