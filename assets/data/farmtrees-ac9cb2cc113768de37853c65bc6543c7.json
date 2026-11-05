@@ -1,0 +1,1823 @@
+{
+ "trees": [
+  {
+   "id": 0,
+   "name": "Cà chua",
+   "minutes": 240,
+   "quantity": 75,
+   "seedXu": 10,
+   "seedLuong": 0,
+   "productId": 0,
+   "productPrice": 3,
+   "lv": 0,
+   "img": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    37
+   ],
+   "phase": [
+    0,
+    24
+   ]
+  },
+  {
+   "id": 1,
+   "name": "Cà rốt",
+   "minutes": 360,
+   "quantity": 108,
+   "seedXu": 10,
+   "seedLuong": 0,
+   "productId": 1,
+   "productPrice": 3,
+   "lv": 0,
+   "img": [
+    0,
+    7,
+    8,
+    9,
+    10,
+    11,
+    12,
+    38
+   ],
+   "phase": [
+    0,
+    24
+   ]
+  },
+  {
+   "id": 2,
+   "name": "Khóm",
+   "minutes": 600,
+   "quantity": 165,
+   "seedXu": 10,
+   "seedLuong": 0,
+   "productId": 2,
+   "productPrice": 3,
+   "lv": 0,
+   "img": [
+    0,
+    13,
+    14,
+    15,
+    16,
+    17,
+    18,
+    39
+   ],
+   "phase": [
+    0,
+    24
+   ]
+  },
+  {
+   "id": 3,
+   "name": "Dưa Hấu",
+   "minutes": 480,
+   "quantity": 138,
+   "seedXu": 10,
+   "seedLuong": 0,
+   "productId": 3,
+   "productPrice": 3,
+   "lv": 0,
+   "img": [
+    0,
+    19,
+    20,
+    21,
+    22,
+    23,
+    24,
+    40
+   ],
+   "phase": [
+    0,
+    24
+   ]
+  },
+  {
+   "id": 4,
+   "name": "Nho",
+   "minutes": 960,
+   "quantity": 240,
+   "seedXu": 10,
+   "seedLuong": 0,
+   "productId": 4,
+   "productPrice": 3,
+   "lv": 0,
+   "img": [
+    0,
+    25,
+    26,
+    27,
+    28,
+    29,
+    30,
+    41
+   ],
+   "phase": [
+    0,
+    24
+   ]
+  },
+  {
+   "id": 5,
+   "name": "Hoa Hồng",
+   "minutes": 120,
+   "quantity": 45,
+   "seedXu": 10,
+   "seedLuong": 0,
+   "productId": 5,
+   "productPrice": 3,
+   "lv": 0,
+   "img": [
+    0,
+    31,
+    32,
+    33,
+    34,
+    35,
+    36,
+    42
+   ],
+   "phase": [
+    0,
+    24
+   ]
+  },
+  {
+   "id": 6,
+   "name": "Lúa",
+   "minutes": 2880,
+   "quantity": 720,
+   "seedXu": 10,
+   "seedLuong": 0,
+   "productId": 6,
+   "productPrice": 3,
+   "lv": 0,
+   "img": [
+    44,
+    45,
+    46,
+    47,
+    48,
+    49,
+    50,
+    43
+   ],
+   "phase": [
+    0,
+    24
+   ]
+  },
+  {
+   "id": 7,
+   "name": "Xoài",
+   "minutes": 1440,
+   "quantity": 360,
+   "seedXu": 10,
+   "seedLuong": 0,
+   "productId": 7,
+   "productPrice": 3,
+   "lv": 0,
+   "img": [
+    0,
+    52,
+    53,
+    54,
+    55,
+    56,
+    57,
+    51
+   ],
+   "phase": [
+    0,
+    24
+   ]
+  },
+  {
+   "id": 8,
+   "name": "Thanh Long",
+   "minutes": 720,
+   "quantity": 189,
+   "seedXu": 10,
+   "seedLuong": 0,
+   "productId": 8,
+   "productPrice": 3,
+   "lv": 0,
+   "img": [
+    0,
+    59,
+    60,
+    61,
+    62,
+    63,
+    64,
+    58
+   ],
+   "phase": [
+    0,
+    24
+   ]
+  },
+  {
+   "id": 9,
+   "name": "Hoa Hướng Dương",
+   "minutes": 720,
+   "quantity": 189,
+   "seedXu": 10,
+   "seedLuong": 0,
+   "productId": 9,
+   "productPrice": 3,
+   "lv": 0,
+   "img": [
+    0,
+    66,
+    67,
+    68,
+    69,
+    70,
+    71,
+    65
+   ],
+   "phase": [
+    0,
+    24
+   ]
+  },
+  {
+   "id": 10,
+   "name": "Hoa tulip",
+   "minutes": 360,
+   "quantity": 108,
+   "seedXu": 10,
+   "seedLuong": 0,
+   "productId": 10,
+   "productPrice": 3,
+   "lv": 0,
+   "img": [
+    73,
+    74,
+    75,
+    76,
+    77,
+    78,
+    79,
+    72
+   ],
+   "phase": [
+    0,
+    24
+   ]
+  },
+  {
+   "id": 30,
+   "name": "Bắp",
+   "minutes": 1440,
+   "quantity": 360,
+   "seedXu": 10,
+   "seedLuong": 0,
+   "productId": 200,
+   "productPrice": 3,
+   "lv": 1,
+   "img": [
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8
+   ],
+   "phase": null
+  },
+  {
+   "id": 31,
+   "name": "Nha đam",
+   "minutes": 120,
+   "quantity": 1345,
+   "seedXu": 0,
+   "seedLuong": 1,
+   "productId": 201,
+   "productPrice": 3,
+   "lv": 2,
+   "img": [
+    9,
+    10,
+    11,
+    12,
+    13,
+    14,
+    15,
+    16
+   ],
+   "phase": null
+  },
+  {
+   "id": 32,
+   "name": "Dưa Leo",
+   "minutes": 2880,
+   "quantity": 720,
+   "seedXu": 10,
+   "seedLuong": 0,
+   "productId": 202,
+   "productPrice": 3,
+   "lv": 1,
+   "img": [
+    17,
+    18,
+    19,
+    20,
+    21,
+    22,
+    23,
+    24
+   ],
+   "phase": null
+  },
+  {
+   "id": 33,
+   "name": "Cà Tím",
+   "minutes": 480,
+   "quantity": 138,
+   "seedXu": 10,
+   "seedLuong": 0,
+   "productId": 203,
+   "productPrice": 3,
+   "lv": 1,
+   "img": [
+    25,
+    26,
+    27,
+    28,
+    29,
+    30,
+    31,
+    32
+   ],
+   "phase": null
+  },
+  {
+   "id": 34,
+   "name": "Tỏi",
+   "minutes": 240,
+   "quantity": 75,
+   "seedXu": 10,
+   "seedLuong": 0,
+   "productId": 204,
+   "productPrice": 3,
+   "lv": 1,
+   "img": [
+    33,
+    34,
+    35,
+    36,
+    37,
+    38,
+    39,
+    40
+   ],
+   "phase": null
+  },
+  {
+   "id": 35,
+   "name": "Dâu Tây",
+   "minutes": 300,
+   "quantity": 97,
+   "seedXu": 10,
+   "seedLuong": 0,
+   "productId": 248,
+   "productPrice": 3,
+   "lv": 1,
+   "img": [
+    119,
+    120,
+    121,
+    122,
+    123,
+    124,
+    125,
+    126
+   ],
+   "phase": null
+  },
+  {
+   "id": 36,
+   "name": "Chuối",
+   "minutes": 660,
+   "quantity": 180,
+   "seedXu": 10,
+   "seedLuong": 0,
+   "productId": 249,
+   "productPrice": 3,
+   "lv": 1,
+   "img": [
+    127,
+    128,
+    129,
+    130,
+    131,
+    132,
+    133,
+    134
+   ],
+   "phase": null
+  },
+  {
+   "id": 37,
+   "name": "Đào",
+   "minutes": 2880,
+   "quantity": 1000,
+   "seedXu": 10,
+   "seedLuong": 0,
+   "productId": 252,
+   "productPrice": 3,
+   "lv": 2,
+   "img": [
+    149,
+    150,
+    151,
+    152,
+    153,
+    154,
+    155,
+    156
+   ],
+   "phase": null
+  },
+  {
+   "id": 38,
+   "name": "Vải",
+   "minutes": 4320,
+   "quantity": 1500,
+   "seedXu": 10,
+   "seedLuong": 0,
+   "productId": 253,
+   "productPrice": 3,
+   "lv": 2,
+   "img": [
+    157,
+    157,
+    159,
+    160,
+    161,
+    162,
+    163,
+    164
+   ],
+   "phase": null
+  },
+  {
+   "id": 39,
+   "name": "Cúc Chuồn Chuồn",
+   "minutes": 180,
+   "quantity": 62,
+   "seedXu": 10,
+   "seedLuong": 0,
+   "productId": 266,
+   "productPrice": 3,
+   "lv": 1,
+   "img": [
+    165,
+    166,
+    167,
+    168,
+    169,
+    170,
+    171,
+    172
+   ],
+   "phase": null
+  },
+  {
+   "id": 40,
+   "name": "Sen",
+   "minutes": 480,
+   "quantity": 140,
+   "seedXu": 10,
+   "seedLuong": 0,
+   "productId": 267,
+   "productPrice": 3,
+   "lv": 1,
+   "img": [
+    173,
+    174,
+    175,
+    176,
+    177,
+    178,
+    179,
+    180
+   ],
+   "phase": null
+  },
+  {
+   "id": 41,
+   "name": "Bí Ngô",
+   "minutes": 120,
+   "quantity": 80,
+   "seedXu": 10,
+   "seedLuong": 0,
+   "productId": 270,
+   "productPrice": 3,
+   "lv": 1,
+   "img": [
+    331,
+    332,
+    333,
+    334,
+    335,
+    336,
+    337,
+    330
+   ],
+   "phase": null
+  },
+  {
+   "id": 42,
+   "name": "Khoai Tây",
+   "minutes": 360,
+   "quantity": 120,
+   "seedXu": 10,
+   "seedLuong": 0,
+   "productId": 271,
+   "productPrice": 3,
+   "lv": 2,
+   "img": [
+    338,
+    339,
+    340,
+    341,
+    342,
+    343,
+    344,
+    345
+   ],
+   "phase": null
+  },
+  {
+   "id": 43,
+   "name": "Cây ớt",
+   "minutes": 60,
+   "quantity": 45,
+   "seedXu": 10,
+   "seedLuong": 0,
+   "productId": 286,
+   "productPrice": 3,
+   "lv": 1,
+   "img": [
+    360,
+    361,
+    362,
+    363,
+    364,
+    365,
+    366,
+    367
+   ],
+   "phase": null
+  }
+ ],
+ "animals": [
+  {
+   "species": 50,
+   "name": "Gà",
+   "priceXu": 500,
+   "priceLuong": -1,
+   "harvestHours": 24,
+   "priceProduct": 30,
+   "area": 1,
+   "iconID": 310,
+   "idImg": [
+    297,
+    298,
+    299
+   ],
+   "des": "Thời gian lớn : 1 ngày - Bán : 950 xu - 1 đơn vị nông trại - Sản phẩm : 20 trứng gà sau mỗi 6 giờ - Giá sản phẩm 10 xu / Trứng Gà - Thời gian sống: 7 ngày\r\n"
+  },
+  {
+   "species": 51,
+   "name": "Bò",
+   "priceXu": 0,
+   "priceLuong": 5,
+   "harvestHours": 72,
+   "priceProduct": 60,
+   "area": 2,
+   "iconID": 311,
+   "idImg": [
+    300,
+    301,
+    302
+   ],
+   "des": "Thời gian lớn : 3 ngày - Bán : 2000 xu - 3 đơn vị nông trại - Sản phẩm : 30 sữa bò sau mỗi 6 giờ - Giá sản phẩm 20 xu / Sữa Bò - Thời gian sống: 30 ngày"
+  },
+  {
+   "species": 52,
+   "name": "Heo",
+   "priceXu": 1000,
+   "priceLuong": -1,
+   "harvestHours": 48,
+   "priceProduct": 0,
+   "area": 2,
+   "iconID": 312,
+   "idImg": [
+    303,
+    304,
+    305
+   ],
+   "des": "Thời gian lớn : 2 ngày - Bán : 2000 xu - 2 đơn vị nông trại- Không  có sản phẩm - Thời gian sống: 20 ngày"
+  },
+  {
+   "species": 53,
+   "name": "Chó",
+   "priceXu": 0,
+   "priceLuong": 1,
+   "harvestHours": 1,
+   "priceProduct": 0,
+   "area": 3,
+   "iconID": 313,
+   "idImg": [
+    306,
+    306,
+    306
+   ],
+   "des": "Giữ nhà - 1 đơn vị nông trại - Thời gian sống: 15 ngày"
+  },
+  {
+   "species": 54,
+   "name": "Cá chép",
+   "priceXu": 5000,
+   "priceLuong": -1,
+   "harvestHours": 72,
+   "priceProduct": 0,
+   "area": 4,
+   "iconID": 314,
+   "idImg": [
+    309,
+    329,
+    330
+   ],
+   "des": "Thời gian lớn : 3 ngày - Bán : 10000 xu - 1 đơn vị hồ cá - Không có sản phẩm - Thời gian sống: 30 ngày"
+  },
+  {
+   "species": 55,
+   "name": "Cừu",
+   "priceXu": 0,
+   "priceLuong": 2,
+   "harvestHours": 48,
+   "priceProduct": 90,
+   "area": 2,
+   "iconID": 1024,
+   "idImg": [
+    1014,
+    1015,
+    1016
+   ],
+   "des": "Thời gian lớn : 2 ngày - Bán : 1500 xu - 3 đơn vị nông trại - Sản phẩm : 20 lông cừu sau mỗi 12 giờ - Giá sản phẩm 30 xu / Lông Cừu - Thời gian sống: 10 ngày"
+  },
+  {
+   "species": 56,
+   "name": "Vịt",
+   "priceXu": 600,
+   "priceLuong": -1,
+   "harvestHours": 48,
+   "priceProduct": 30,
+   "area": 1,
+   "iconID": 1025,
+   "idImg": [
+    1019,
+    1020,
+    1021
+   ],
+   "des": "Thời gian lớn : 2 ngày - Bán : 1200 xu - 1 đơn vị nông trại - Sản phẩm : 20 trứng vịt sau mỗi 6 giờ - Giá sản phẩm 10 xu / Trứng Vịt - Thời gian sống: 7 ngày"
+  },
+  {
+   "species": 58,
+   "name": "Trâu",
+   "priceXu": 1000,
+   "priceLuong": -1,
+   "harvestHours": 72,
+   "priceProduct": 0,
+   "area": 2,
+   "iconID": 1224,
+   "idImg": [
+    1225,
+    1226,
+    1227
+   ],
+   "des": "Thời gian lớn : 3 ngày - Bán : 3000 xu - 2 đơn vị nông trại- Không  có sản phẩm - Thời gian sống: 30 ngày"
+  },
+  {
+   "species": 59,
+   "name": "Rùa",
+   "priceXu": 2000,
+   "priceLuong": -1,
+   "harvestHours": 24,
+   "priceProduct": 0,
+   "area": 4,
+   "iconID": 1249,
+   "idImg": [
+    1246,
+    1247,
+    1248
+   ],
+   "des": "Thời gian lớn : 1 ngày - Bán : 5000 xu - 1 đơn vị hồ cá - Không có sản phẩm - Thời gian sống: 15 ngày"
+  }
+ ],
+ "products": {
+  "0": {
+   "name": "Cà chua",
+   "priceXu": 3
+  },
+  "1": {
+   "name": "Cà rốt",
+   "priceXu": 3
+  },
+  "2": {
+   "name": "Khóm",
+   "priceXu": 3
+  },
+  "3": {
+   "name": "Dưa Hấu",
+   "priceXu": 3
+  },
+  "4": {
+   "name": "Nho",
+   "priceXu": 3
+  },
+  "5": {
+   "name": "Hoa Hồng",
+   "priceXu": 3
+  },
+  "6": {
+   "name": "Lúa",
+   "priceXu": 3
+  },
+  "7": {
+   "name": "Xoài",
+   "priceXu": 3
+  },
+  "8": {
+   "name": "Thanh Long",
+   "priceXu": 3
+  },
+  "9": {
+   "name": "Hoa Hướng Dương",
+   "priceXu": 3
+  },
+  "10": {
+   "name": "Hoa tulip",
+   "priceXu": 3
+  },
+  "200": {
+   "name": "Bắp",
+   "priceXu": 3,
+   "img": 8
+  },
+  "201": {
+   "name": "Nha đam",
+   "priceXu": 3,
+   "img": 16
+  },
+  "202": {
+   "name": "Dưa Leo",
+   "priceXu": 3,
+   "img": 24
+  },
+  "203": {
+   "name": "Cà Tím",
+   "priceXu": 3,
+   "img": 32
+  },
+  "204": {
+   "name": "Tỏi",
+   "priceXu": 3,
+   "img": 40
+  },
+  "248": {
+   "name": "Dâu Tây",
+   "priceXu": 3,
+   "img": 126
+  },
+  "249": {
+   "name": "Chuối",
+   "priceXu": 3,
+   "img": 134
+  },
+  "252": {
+   "name": "Đào",
+   "priceXu": 3,
+   "img": 156
+  },
+  "253": {
+   "name": "Vải",
+   "priceXu": 3,
+   "img": 164
+  },
+  "266": {
+   "name": "Cúc Chuồn Chuồn",
+   "priceXu": 3,
+   "img": 172
+  },
+  "267": {
+   "name": "Sen",
+   "priceXu": 3,
+   "img": 180
+  },
+  "270": {
+   "name": "Bí Ngô",
+   "priceXu": 3,
+   "img": 330
+  },
+  "271": {
+   "name": "Khoai Tây",
+   "priceXu": 3,
+   "img": 345
+  },
+  "286": {
+   "name": "Cây ớt",
+   "priceXu": 3,
+   "img": 367
+  },
+  "212": {
+   "name": "Sữa chua Khế",
+   "priceXu": 12096,
+   "img": 58
+  },
+  "211": {
+   "name": "Gỏi xoài",
+   "priceXu": 7920,
+   "img": 57
+  },
+  "210": {
+   "name": "Nước ép trái cây",
+   "priceXu": 6030,
+   "img": 56
+  },
+  "209": {
+   "name": "Cơm cà rốt",
+   "priceXu": 8244,
+   "img": 55
+  },
+  "208": {
+   "name": "Cơm trứng ",
+   "priceXu": 8040,
+   "img": 54
+  },
+  "207": {
+   "name": "Cơm",
+   "priceXu": 6211,
+   "img": 53
+  },
+  "206": {
+   "name": "Bánh sữa",
+   "priceXu": 6160,
+   "img": 51
+  },
+  "205": {
+   "name": "Bánh Trứng",
+   "priceXu": 5880,
+   "img": 52
+  },
+  "213": {
+   "name": "Trái cây dằm",
+   "priceXu": 5418,
+   "img": 59
+  },
+  "214": {
+   "name": "Tinh dầu hướng dương",
+   "priceXu": 10908,
+   "img": 60
+  },
+  "215": {
+   "name": "Quả Khế",
+   "priceXu": 10,
+   "img": 46
+  },
+  "216": {
+   "name": "Nước hoa",
+   "priceXu": 32000,
+   "img": 66
+  },
+  "217": {
+   "name": "Sữa chua trái cây",
+   "priceXu": 30000,
+   "img": 67
+  },
+  "218": {
+   "name": "Trái cây dĩa",
+   "priceXu": 8000,
+   "img": 68
+  },
+  "219": {
+   "name": "Trái cây ly",
+   "priceXu": 5724,
+   "img": 69
+  },
+  "220": {
+   "name": "Salad khế",
+   "priceXu": 4560,
+   "img": 70
+  },
+  "235": {
+   "name": "Bánh nướng",
+   "priceXu": 0,
+   "img": 106
+  },
+  "233": {
+   "name": "Dây tơ xanh",
+   "priceXu": 0,
+   "img": 104
+  },
+  "234": {
+   "name": "Dây tơ sắc màu",
+   "priceXu": 0,
+   "img": 105
+  },
+  "232": {
+   "name": "Dây tơ hồng",
+   "priceXu": 0,
+   "img": 103
+  },
+  "231": {
+   "name": "Bánh Sinh Nhật Hạnh Phúc",
+   "priceXu": 0,
+   "img": 102
+  },
+  "230": {
+   "name": "Bánh Sinh Nhật Vui vẻ",
+   "priceXu": 0,
+   "img": 102
+  },
+  "229": {
+   "name": "Ngôi sao hy vọng",
+   "priceXu": 0,
+   "img": 101
+  },
+  "236": {
+   "name": "Bánh dẻo",
+   "priceXu": 0,
+   "img": 107
+  },
+  "237": {
+   "name": "Hộp Bánh Trung Thu",
+   "priceXu": 0,
+   "img": 108
+  },
+  "238": {
+   "name": "Bánh Củi Giáng Sinh",
+   "priceXu": 0,
+   "img": 109
+  },
+  "239": {
+   "name": "Cánh Gà",
+   "priceXu": 0,
+   "img": 110
+  },
+  "240": {
+   "name": "Đùi Gà",
+   "priceXu": 0,
+   "img": 111
+  },
+  "241": {
+   "name": "Gà Tây",
+   "priceXu": 0,
+   "img": 112
+  },
+  "221": {
+   "name": "Thịt heo",
+   "priceXu": 0,
+   "img": 92
+  },
+  "222": {
+   "name": "Bột Mì",
+   "priceXu": 0,
+   "img": 93
+  },
+  "223": {
+   "name": "Đậu xanh",
+   "priceXu": 0,
+   "img": 94
+  },
+  "224": {
+   "name": "Lá dong",
+   "priceXu": 0,
+   "img": 97
+  },
+  "225": {
+   "name": "Bánh chưng",
+   "priceXu": 0,
+   "img": 95
+  },
+  "242": {
+   "name": "Huy hiệu ánh sáng",
+   "priceXu": 0,
+   "img": 113
+  },
+  "243": {
+   "name": "Thập tự ánh sáng",
+   "priceXu": 0,
+   "img": 114
+  },
+  "244": {
+   "name": "Mãng Cầu",
+   "priceXu": 0,
+   "img": 115
+  },
+  "245": {
+   "name": "Dừa",
+   "priceXu": 0,
+   "img": 116
+  },
+  "246": {
+   "name": "Đu đủ",
+   "priceXu": 0,
+   "img": 117
+  },
+  "247": {
+   "name": "Sung",
+   "priceXu": 0,
+   "img": 118
+  },
+  "250": {
+   "name": "đường cát",
+   "priceXu": 0,
+   "img": 135
+  },
+  "251": {
+   "name": "Công thức làm bánh",
+   "priceXu": 0,
+   "img": 136
+  },
+  "254": {
+   "name": "Thịt bò",
+   "priceXu": 0,
+   "img": 137
+  },
+  "255": {
+   "name": "Thịt cá",
+   "priceXu": 0,
+   "img": 141
+  },
+  "256": {
+   "name": "Bánh Xèo",
+   "priceXu": 30000,
+   "img": 138
+  },
+  "257": {
+   "name": "Bò viên",
+   "priceXu": 20000,
+   "img": 139
+  },
+  "258": {
+   "name": "Cá viên",
+   "priceXu": 10000,
+   "img": 140
+  },
+  "259": {
+   "name": "Chè khúc bạch",
+   "priceXu": 25000,
+   "img": 142
+  },
+  "260": {
+   "name": "Hột vịt lộn",
+   "priceXu": 5000,
+   "img": 143
+  },
+  "261": {
+   "name": "Kem chiên",
+   "priceXu": 12500,
+   "img": 144
+  },
+  "262": {
+   "name": "Kem tươi",
+   "priceXu": 18000,
+   "img": 145
+  },
+  "263": {
+   "name": "Pizza",
+   "priceXu": 6464,
+   "img": 146
+  },
+  "264": {
+   "name": "Trà đào",
+   "priceXu": 7000,
+   "img": 147
+  },
+  "265": {
+   "name": "Trà sữa trái cây",
+   "priceXu": 17000,
+   "img": 148
+  },
+  "268": {
+   "name": "Đường Cát",
+   "priceXu": 0,
+   "img": 326
+  },
+  "269": {
+   "name": "Bông Tuyết Trắng",
+   "priceXu": 0,
+   "img": 327
+  },
+  "272": {
+   "name": "Nước ép dưa hấu",
+   "priceXu": 10000,
+   "img": 346
+  },
+  "273": {
+   "name": "Phô mai",
+   "priceXu": 32000,
+   "img": 347
+  },
+  "274": {
+   "name": "Khoai tây chiên",
+   "priceXu": 20000,
+   "img": 348
+  },
+  "275": {
+   "name": "Bắp Chiên Bơ",
+   "priceXu": 19000,
+   "img": 349
+  },
+  "276": {
+   "name": "Gà nguyên con",
+   "priceXu": 0,
+   "img": 350
+  },
+  "277": {
+   "name": "Gà Luộc",
+   "priceXu": 0,
+   "img": 351
+  },
+  "278": {
+   "name": "Gà bó xôi",
+   "priceXu": 0,
+   "img": 352
+  },
+  "279": {
+   "name": "Mai rùa may mắn",
+   "priceXu": 0,
+   "img": 353
+  },
+  "280": {
+   "name": "Baba om chuối",
+   "priceXu": 0,
+   "img": 354
+  },
+  "281": {
+   "name": "Tương Cà Chua",
+   "priceXu": 20000,
+   "img": 355
+  },
+  "282": {
+   "name": "Thịt ba chỉ",
+   "priceXu": 0,
+   "img": 356
+  },
+  "283": {
+   "name": "Cá chép tươi sống",
+   "priceXu": 0,
+   "img": 357
+  },
+  "284": {
+   "name": "Heo Quay Ngũ Vị",
+   "priceXu": 0,
+   "img": 358
+  },
+  "285": {
+   "name": "Cá chép om dưa",
+   "priceXu": 0,
+   "img": 359
+  },
+  "287": {
+   "name": "Tương ớt",
+   "priceXu": 3000,
+   "img": 368
+  },
+  "50": {
+   "name": "Gà",
+   "priceXu": 30,
+   "img": 331,
+   "animal": 1
+  },
+  "51": {
+   "name": "Bò",
+   "priceXu": 60,
+   "img": 332,
+   "animal": 1
+  },
+  "55": {
+   "name": "Cừu",
+   "priceXu": 90,
+   "img": 1018,
+   "animal": 1
+  },
+  "56": {
+   "name": "Vịt",
+   "priceXu": 30,
+   "img": 1023,
+   "animal": 1
+  },
+  "288": {
+   "name": "Mật Ong",
+   "priceXu": 120,
+   "img": 368
+  }
+ },
+ "items": [
+  {
+   "id": 111,
+   "img": 235,
+   "des": "Phân bón trung cấp",
+   "priceXu": 7,
+   "priceLuong": -1,
+   "type": 0,
+   "action": 2
+  },
+  {
+   "id": 112,
+   "img": 197,
+   "des": "Phân bón siêu cấp",
+   "priceXu": 10,
+   "priceLuong": -1,
+   "type": 0,
+   "action": 2
+  },
+  {
+   "id": 113,
+   "img": 198,
+   "des": "Phân bón giảm 15 phút",
+   "priceXu": 20,
+   "priceLuong": -1,
+   "type": 0,
+   "action": 1
+  },
+  {
+   "id": 114,
+   "img": 199,
+   "des": "Phân bón giảm 30 phút",
+   "priceXu": 30,
+   "priceLuong": -1,
+   "type": 0,
+   "action": 1
+  },
+  {
+   "id": 115,
+   "img": 200,
+   "des": "Phân bón giảm 60 phút",
+   "priceXu": -1,
+   "priceLuong": 1,
+   "type": 0,
+   "action": 1
+  },
+  {
+   "id": 116,
+   "img": 322,
+   "des": "Thức ăn thủy sản",
+   "priceXu": 1,
+   "priceLuong": -1,
+   "type": 4,
+   "action": 5
+  },
+  {
+   "id": 117,
+   "img": 322,
+   "des": "Thức ăn gia cầm",
+   "priceXu": 1,
+   "priceLuong": -1,
+   "type": 1,
+   "action": 5
+  },
+  {
+   "id": 118,
+   "img": 324,
+   "des": "Thức ăn gia súc",
+   "priceXu": 1,
+   "priceLuong": -1,
+   "type": 2,
+   "action": 5
+  },
+  {
+   "id": 119,
+   "img": 325,
+   "des": "Thưc ăn cho chó",
+   "priceXu": 1,
+   "priceLuong": -1,
+   "type": 3,
+   "action": 5
+  },
+  {
+   "id": 120,
+   "img": 321,
+   "des": "Thuốc cúm",
+   "priceXu": 10,
+   "priceLuong": -1,
+   "type": 100,
+   "action": 4
+  },
+  {
+   "id": 121,
+   "img": 320,
+   "des": "Thuốc tiêu chảy",
+   "priceXu": 10,
+   "priceLuong": -1,
+   "type": 100,
+   "action": 4
+  },
+  {
+   "id": 122,
+   "img": 319,
+   "des": "Thuốc bổ",
+   "priceXu": 25,
+   "priceLuong": -1,
+   "type": 101,
+   "action": 6
+  },
+  {
+   "id": 123,
+   "img": 318,
+   "des": "Thuốc diệt cỏ",
+   "priceXu": 5,
+   "priceLuong": -1,
+   "type": 0,
+   "action": 3
+  },
+  {
+   "id": 124,
+   "img": 317,
+   "des": "Thuốc trừ sâu",
+   "priceXu": 5,
+   "priceLuong": -1,
+   "type": 0,
+   "action": 7
+  }
+ ],
+ "foods": [
+  {
+   "ID": 1,
+   "text": "Bánh Trứng",
+   "productID": 205,
+   "cookTime": 60,
+   "materials": [
+    [
+     50,
+     12
+    ],
+    [
+     6,
+     720
+    ]
+   ]
+  },
+  {
+   "ID": 2,
+   "text": "Bánh sữa",
+   "productID": 206,
+   "cookTime": 60,
+   "materials": [
+    [
+     51,
+     20
+    ],
+    [
+     6,
+     720
+    ]
+   ]
+  },
+  {
+   "ID": 3,
+   "text": "Cơm",
+   "productID": 207,
+   "cookTime": 30,
+   "materials": [
+    [
+     6,
+     1440
+    ]
+   ]
+  },
+  {
+   "ID": 4,
+   "text": "Cơm Trứng",
+   "productID": 208,
+   "cookTime": 60,
+   "materials": [
+    [
+     6,
+     1440
+    ],
+    [
+     50,
+     12
+    ]
+   ]
+  },
+  {
+   "ID": 5,
+   "text": "Cơm Cà rốt",
+   "productID": 209,
+   "cookTime": 60,
+   "materials": [
+    [
+     6,
+     1440
+    ],
+    [
+     1,
+     108
+    ]
+   ]
+  },
+  {
+   "ID": 6,
+   "text": "Nước ép trái cây",
+   "productID": 210,
+   "cookTime": 60,
+   "materials": [
+    [
+     2,
+     338
+    ],
+    [
+     4,
+     480
+    ]
+   ]
+  },
+  {
+   "ID": 7,
+   "text": "Gỏi xoài",
+   "productID": 211,
+   "cookTime": 60,
+   "materials": [
+    [
+     7,
+     1440
+    ]
+   ]
+  },
+  {
+   "ID": 8,
+   "text": "Sửa chua Khế",
+   "productID": 212,
+   "cookTime": 60,
+   "materials": [
+    [
+     51,
+     72
+    ],
+    [
+     215,
+     96
+    ]
+   ]
+  },
+  {
+   "ID": 9,
+   "text": "Trái cây dầm",
+   "productID": 213,
+   "cookTime": 60,
+   "materials": [
+    [
+     3,
+     276
+    ],
+    [
+     2,
+     330
+    ]
+   ]
+  },
+  {
+   "ID": 10,
+   "text": "Tinh dầu hướng  dương",
+   "productID": 214,
+   "cookTime": 180,
+   "materials": [
+    [
+     9,
+     756
+    ]
+   ]
+  },
+  {
+   "ID": 11,
+   "text": "Nước Hoa",
+   "productID": 216,
+   "cookTime": 4320,
+   "materials": [
+    [
+     10,
+     324
+    ],
+    [
+     5,
+     145
+    ],
+    [
+     9,
+     378
+    ]
+   ]
+  },
+  {
+   "ID": 12,
+   "text": "Sữa chua trái cây",
+   "productID": 217,
+   "cookTime": 1440,
+   "materials": [
+    [
+     212,
+     1
+    ],
+    [
+     218,
+     1
+    ]
+   ]
+  },
+  {
+   "ID": 13,
+   "text": "Trái cây dĩa",
+   "productID": 218,
+   "cookTime": 60,
+   "materials": [
+    [
+     8,
+     378
+    ],
+    [
+     2,
+     330
+    ],
+    [
+     3,
+     276
+    ],
+    [
+     7,
+     720
+    ]
+   ]
+  },
+  {
+   "ID": 14,
+   "text": "Salad khế",
+   "productID": 220,
+   "cookTime": 60,
+   "materials": [
+    [
+     215,
+     240
+    ]
+   ]
+  },
+  {
+   "ID": 19,
+   "text": "Hột vịt lộn",
+   "productID": 260,
+   "cookTime": 30,
+   "materials": [
+    [
+     56,
+     100
+    ]
+   ]
+  },
+  {
+   "ID": 18,
+   "text": "Kem Tươi",
+   "productID": 262,
+   "cookTime": 180,
+   "materials": [
+    [
+     51,
+     100
+    ]
+   ]
+  },
+  {
+   "ID": 17,
+   "text": "Trà sữa trái cây",
+   "productID": 265,
+   "cookTime": 60,
+   "materials": [
+    [
+     218,
+     1
+    ],
+    [
+     51,
+     50
+    ]
+   ]
+  },
+  {
+   "ID": 16,
+   "text": "Chè khúc bạch",
+   "productID": 259,
+   "cookTime": 120,
+   "materials": [
+    [
+     253,
+     500
+    ],
+    [
+     51,
+     50
+    ],
+    [
+     262,
+     1
+    ]
+   ]
+  },
+  {
+   "ID": 15,
+   "text": "Trà Đào",
+   "productID": 264,
+   "cookTime": 120,
+   "materials": [
+    [
+     252,
+     1000
+    ]
+   ]
+  },
+  {
+   "ID": 20,
+   "text": "Kem chiên",
+   "productID": 261,
+   "cookTime": 30,
+   "materials": [
+    [
+     262,
+     1
+    ]
+   ]
+  },
+  {
+   "ID": 22,
+   "text": "Bò viên",
+   "productID": 257,
+   "cookTime": 30,
+   "materials": [
+    [
+     254,
+     2
+    ]
+   ]
+  },
+  {
+   "ID": 23,
+   "text": "Cá viên",
+   "productID": 258,
+   "cookTime": 30,
+   "materials": [
+    [
+     255,
+     2
+    ]
+   ]
+  },
+  {
+   "ID": 24,
+   "text": "Bành xèo",
+   "productID": 256,
+   "cookTime": 240,
+   "materials": [
+    [
+     6,
+     2000
+    ],
+    [
+     50,
+     100
+    ],
+    [
+     221,
+     5
+    ]
+   ]
+  },
+  {
+   "ID": 25,
+   "text": "Pizza",
+   "productID": 263,
+   "cookTime": 1440,
+   "materials": [
+    [
+     6,
+     5000
+    ],
+    [
+     221,
+     5
+    ],
+    [
+     254,
+     1
+    ],
+    [
+     255,
+     1
+    ],
+    [
+     50,
+     200
+    ]
+   ]
+  },
+  {
+   "ID": 26,
+   "text": "Nước ép dưa hấu",
+   "productID": 272,
+   "cookTime": 120,
+   "materials": [
+    [
+     3,
+     1000
+    ]
+   ]
+  },
+  {
+   "ID": 27,
+   "text": "Phô mai",
+   "productID": 273,
+   "cookTime": 240,
+   "materials": [
+    [
+     51,
+     100
+    ],
+    [
+     50,
+     400
+    ]
+   ]
+  },
+  {
+   "ID": 28,
+   "text": "Khoai Tây Chiên",
+   "productID": 274,
+   "cookTime": 60,
+   "materials": [
+    [
+     271,
+     500
+    ],
+    [
+     50,
+     100
+    ]
+   ]
+  },
+  {
+   "ID": 29,
+   "text": "Bắp Chiên Bơ",
+   "productID": 275,
+   "cookTime": 60,
+   "materials": [
+    [
+     200,
+     1500
+    ],
+    [
+     50,
+     300
+    ]
+   ]
+  },
+  {
+   "ID": 30,
+   "text": "Tương Cà Chua",
+   "productID": 281,
+   "cookTime": 360,
+   "materials": [
+    [
+     0,
+     1000
+    ]
+   ]
+  },
+  {
+   "ID": 33,
+   "text": "Tương ớt",
+   "productID": 287,
+   "cookTime": 30,
+   "materials": [
+    [
+     286,
+     500
+    ]
+   ]
+  }
+ ]
+}
