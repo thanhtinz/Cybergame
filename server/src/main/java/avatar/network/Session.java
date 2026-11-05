@@ -2113,7 +2113,8 @@ public void NhanThuongEventXuBoss() throws IOException {
                 user.removeItem(593, 1);
             }
             if (dl.getType() == DialLuckyManager.XU) {
-                if (user.getXu() < 15000) {
+                // [PORT sửa] fan check 15.000 nhưng trừ 25.000 — khớp giá menu
+                if (user.getXu() < 25000) {
                     return;
                 }
                 user.updateXu(-25000);

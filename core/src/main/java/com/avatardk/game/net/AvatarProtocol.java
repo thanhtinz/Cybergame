@@ -105,6 +105,13 @@ public final class AvatarProtocol {
      *  các short idPart} — danh sách hàng do server quyết (Cmd.OPEN_SHOP
      *  của gốc, tới sau khi chọn mục shop trong menu NPC cửa hàng). */
     public static final byte OPEN_SHOP = -49;
+    /** Vòng quay may mắn (DialLucky của gốc): C→S {short idPart đã chọn,
+     *  short lực 0..180}; S→C phát cả khu {int idUser, short lực, byte số
+     *  quà, mỗi quà: byte type (1 item {short idPart, byte ngày hạn, −1 =
+     *  vĩnh viễn} · 2 {int xu} · 3 {int xp} · 4 {int lượng})}. Mở danh sách
+     *  quà qua OPEN_SHOP idShop=100 từ menu NPC 185 (server trừ tiền theo
+     *  loại quay đã chọn ở menu: 5 lượng / 25.000 xu / vé item 593). */
+    public static final byte DIAL_LUCKY = -64;
 
     // ----- Câu cá (đợt mini-game, docs/minigame-spec.md §1; số lệnh
     // DƯƠNG của Cmd gốc trong ngữ cảnh park) -----

@@ -204,8 +204,21 @@ public class CasinoMsgHandler extends MessageHandler {
         byte roomID = rd.readByte();
         byte boardID = rd.readByte();
         String pass = rd.readUTF();
-        BoardInfo board = BoardManager.getInstance().find(boardID);
-        if (board == null) return;
+        BoardInfo board;
+        if (boardID == -1) {
+            // [PORT] Tạo bàn mới: bản gốc không có gói tạo bàn riêng (vào
+            // bàn trống là thành chủ bàn); bản port cho client gửi
+            // boardID −1, server cấp một bàn trắng mới rồi vào ngay.
+            board = BoardManager.getInstance().createBoard();
+            if (board == null) {
+                us.getAvatarService().serverDialog("Đã đạt số bàn tối đa — hãy vào một bàn có sẵn");
+                return;
+            }
+            boardID = board.boardID;
+        } else {
+            board = BoardManager.getInstance().find(boardID);
+            if (board == null) return;
+        }
 
         // Đang ở bàn khác thì rời bàn đó trước.
         BoardInfo other = BoardManager.getInstance().findUserBoard(us);
@@ -322,6 +335,7 @@ public class CasinoMsgHandler extends MessageHandler {
                 board.turnSeat = -1;
                 board.seatSnap = null;
                 board.setPlaying(false);
+                BoardManager.getInstance().cleanupEmptyDynamic(board);
                 return;
             }
             if (notify) {

@@ -1171,6 +1171,33 @@ public class ScreenshotMain {
                         }
                         if (frame == 15) {
                             shot("shot-casino-result.png");
+                            stage = 122; frame = 0;
+                        }
+                        break;
+                    case 122: // Vòng quay: danh sách quà chọn món
+                        if (frame == 1) {
+                            world.debugDialPrizes();
+                        }
+                        if (frame == 15) {
+                            shot("shot-dial-prizes.png");
+                            stage = 123; frame = 0;
+                        }
+                        break;
+                    case 123: // Vòng quay: màn quay chỉnh lực
+                        if (frame == 1) {
+                            world.debugDial();
+                        }
+                        if (frame == 15) {
+                            shot("shot-dial.png");
+                            stage = 124; frame = 0;
+                        }
+                        break;
+                    case 124: // Vòng quay: kết quả 3 quà
+                        if (frame == 1) {
+                            world.debugDialResult();
+                        }
+                        if (frame == 15) {
+                            shot("shot-dial-result.png");
                             stage = 121; frame = 0;
                         }
                         break;

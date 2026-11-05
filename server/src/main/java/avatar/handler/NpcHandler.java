@@ -55,10 +55,8 @@ public class NpcHandler {
                     return;
                 }
                 Item itm = us.findItemInChests(593);
-                if (itm.getQuantity() <=0 || itm.getQuantity() > 1998)
-                {
-                    return;
-                }
+                // [PORT sửa] fan gọi getQuantity() TRƯỚC khi kiểm tra null → NPE
+                // khi người chơi không có vé; đổi thứ tự: null/số lượng trước.
                 if (itm == null || itm.getQuantity() <= 0) {
                     us.getAvatarService().serverDialog("Bạn không có Vé quay số miễn phí!");
                     return;

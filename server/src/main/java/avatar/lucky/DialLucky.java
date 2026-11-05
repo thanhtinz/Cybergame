@@ -139,6 +139,12 @@ public class DialLucky {
                 gift.setXp(xp);
                 us.addExp(xp);
             } else if (type == LUONG) {
+                // [PORT sửa] fan để trống nhánh này (trúng loại Lượng mà
+                // không nhận được gì) — thưởng 1–3 lượng như các loại khác.
+                int luong = Utils.nextInt(1, 3);
+                gift.setLuong(luong);
+                us.updateLuong(luong);
+                us.getAvatarService().updateMoney(0);
             }
 
             gifts.add(gift);

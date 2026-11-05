@@ -327,6 +327,8 @@ public class WorldScreen extends ScreenAdapter {
         float floatDx;
         int fishId = -1;
         float flyT = -1f;
+        PaperDoll dollRod;      // doll gắn thêm cần để vẽ khi người này câu
+        PaperDoll dollRodBase;  // doll gốc lúc dựng dollRod (đổi là dựng lại)
     }
     private final java.util.Map<Integer, RemoteFish> remoteFish = new java.util.HashMap<>();
     private static final byte[] FISH_IMG_PAD = {3, 2, 1, 1, 4, 1, 3, 3, 1, 3};
@@ -3792,13 +3794,36 @@ public class WorldScreen extends ScreenAdapter {
                     // n×short idPart} — mở panel shop theo danh sách này;
                     // danh sách đồ câu (NPC Thợ câu) mở panel đồ câu riêng
                     java.io.DataInputStream r = m.reader();
-                    r.readByte();
+                    int idShop = r.readByte();
                     String shopName = r.readUTF();
                     int n = r.readShort();
                     java.util.List<Integer> ids = new ArrayList<>();
                     for (int i = 0; i < n; i++) ids.add((int) r.readShort());
-                    if (isFishShopList(ids)) openFishShop(ids);
+                    if (idShop == 100) openDialPrizes(ids, shopName);
+                    else if (isFishShopList(ids)) openFishShop(ids);
                     else openShopFromServer(ids, shopName);
+                    break;
+                }
+                case AvatarProtocol.DIAL_LUCKY: {
+                    // gói −64 S→C phát cả khu: {int idUser, short lực,
+                    // byte số quà, mỗi quà theo type} — xem AvatarProtocol
+                    java.io.DataInputStream r = m.reader();
+                    int uid = r.readInt();
+                    int power = r.readShort();
+                    int n = r.readByte();
+                    List<DlGift> gifts = new ArrayList<>();
+                    for (int i = 0; i < n; i++) {
+                        DlGift g = new DlGift();
+                        g.type = r.readByte();
+                        if (g.type == 1) {
+                            g.partId = r.readShort();
+                            g.expireDay = r.readByte();
+                        } else {
+                            g.amount = r.readInt();
+                        }
+                        gifts.add(g);
+                    }
+                    handleDialBroadcast(uid, power, gifts);
                     break;
                 }
                 case AvatarProtocol.BUY_ITEM: {
@@ -5384,6 +5409,18 @@ public class WorldScreen extends ScreenAdapter {
                     aiHoldL = aiHoldR = false;
                     return true;
                 }
+                if (pointer == dlPointer) {
+                    // thả nút GIỮ ĐỂ QUAY của vòng quay: lực > 5 thì quay
+                    dlPointer = -1;
+                    if (dlOpen && dlHolding) {
+                        dlHolding = false;
+                        if (dlPhase == 0) {
+                            if (dlKim > 95f) dlSendSpin();
+                            else dlKim = 90f;
+                        }
+                    }
+                    return true;
+                }
                 if (pointer == tcPointer) {
                     tcPointer = -1;
                     if (tcOpen && tcDragIdx >= 0) {
@@ -5547,6 +5584,9 @@ public class WorldScreen extends ScreenAdapter {
         if (mgTouch(x, y, pointer)) return;
         // casino (phòng/bàn/Bầu Cua) là modal khi đang mở
         if (casinoTouch(x, y, pointer)) return;
+        // vòng quay may mắn: panel chọn quà + màn quay là modal
+        if (dlPrizeTouch(x, y)) return;
+        if (dlTouch(x, y, pointer)) return;
         // hộp hỏi thoát về thành phố (ô cổng 9/12/17) là lớp trên cùng
         if (exitConfirmTouch(x, y)) return;
         // hộp xác nhận nâng cấp rương (−90) là modal trên cùng
@@ -6002,6 +6042,49 @@ public class WorldScreen extends ScreenAdapter {
         applyAction(13);
     }
 
+    // ----- Cần câu hiển thị: doll gốc chỉ có cần khi người chơi ĐEO cần;
+    // lúc câu mà doll chưa có cần (bản chơi thử offline, hoặc cần nằm trong
+    // balo) thì gắn thêm cần vào doll VẼ — đúng hình gốc: nhân vật ngồi câu
+    // tay cầm cần, dây câu từ đầu cần ra phao. Server vẫn kiểm tra cần
+    // đang đeo như gốc, đây chỉ là lớp hiển thị. -----
+    private static final int[] ROD_IDS = {442, 445, 446};
+
+    private static boolean partsHasRod(List<Integer> parts) {
+        for (int id : parts) {
+            if (id == 442 || id == 445 || id == 446) return true;
+        }
+        return false;
+    }
+
+    private int bestRodICarry() {
+        for (int cand : new int[]{446, 445, 442}) {
+            for (InvItem it : bagItems) if (it.partId == cand) return cand;
+            for (InvItem it : chestItems) if (it.partId == cand) return cand;
+            for (InvItem it : chestConItems) if (it.partId == cand) return cand;
+        }
+        return 442;
+    }
+
+    /** Doll gắn thêm cần; null nếu doll đã có cần (dùng doll thường). */
+    private PaperDoll dollWithRod(List<Integer> parts, int rodId) {
+        if (partsHasRod(parts)) return null;
+        List<Integer> ps = new ArrayList<>(parts);
+        ps.add(rodId);
+        return game.newDoll(ps);
+    }
+
+    private PaperDoll fishDoll;
+    private final List<Integer> fishDollParts = new ArrayList<>();
+
+    private PaperDoll playerFishDoll() {
+        if (fishDoll == null || !fishDollParts.equals(playerParts)) {
+            fishDollParts.clear();
+            fishDollParts.addAll(playerParts);
+            fishDoll = dollWithRod(playerParts, bestRodICarry());
+        }
+        return fishDoll != null ? fishDoll : playerDoll;
+    }
+
     /** Dọn trạng thái câu phía máy mình (không gửi gói). */
     private void fishStandUpLocal() {
         fishState = FISH_NONE;
@@ -6195,6 +6278,7 @@ public class WorldScreen extends ScreenAdapter {
             RemoteFigure f = remotes.get(e.getKey());
             if (f == null) continue;
             RemoteFish rf = e.getValue();
+            if (rf.state == FISH_SEATED) continue; // ngồi chờ, chưa quăng
             drawFishGearFor(f.feetX, f.feetY, f.anim.facingLeft, rf.floatDx, false);
             if (rf.flyT >= 0f && rf.fishId > 0) {
                 drawPartIcon(rf.fishId, f.feetX, f.feetY + 118 + rf.flyT * 54, 46);
@@ -6205,7 +6289,11 @@ public class WorldScreen extends ScreenAdapter {
     private void drawFishGearFor(float feetX, float feetY, boolean left,
             float floatDx, boolean bite) {
         float dir = left ? -1 : 1;
-        float tipX = feetX + dir * 58, tipY = feetY + 112;
+        // đầu cần đo theo sprite cần thật trên doll (frame ngồi câu:
+        // img 761 tại dx 7 dy −18; frame giật cá cần vồng cao hơn) —
+        // trước đây để (58, +112) nên dây bắt đầu từ giữa không trung.
+        float tipX = feetX + dir * (bite ? 46 : 50);
+        float tipY = feetY + (bite ? 58 : 38);
         float flX = feetX + floatDx * AvatarDkGame.HD;
         float bob = (float) Math.sin(netTime * 2.2f + feetX) * 2.5f;
         float flY = feetY + 10 + (bite ? -5 : bob);
@@ -6254,7 +6342,10 @@ public class WorldScreen extends ScreenAdapter {
     private static final float FISH_BAR_W = 560, FISH_BAR_H = 64;
 
     private float fishBarX() { return (Ui.W - FISH_BAR_W) / 2f; }
-    private float fishBarY() { return CHAT_Y + chatH + 12; }
+    // Thanh trạng thái câu để ở TRÊN-GIỮA: để ở giữa-dưới như trước thì
+    // nó che đúng vùng nước trước mặt người câu (phao + dây khuất sau
+    // thanh — bắt gặp khi soi ảnh câu cá 2026-11-04).
+    private float fishBarY() { return Ui.H - 168; }
     // Đệm mũi tên QTE nằm ĐÚNG vị trí joystick (chủ dự án chốt
     // 2026-11-03): đang câu thì joystick biến thành đệm mũi tên,
     // không sinh nút nổi mới ở giữa màn hình nữa.
@@ -7435,6 +7526,7 @@ public class WorldScreen extends ScreenAdapter {
         houseBuyOpen = false;
         housePayOpen = false;
         guideOpen = false;
+        dlPrizeOpen = false;
     }
 
     private void openMsgPanel() {
@@ -9608,6 +9700,7 @@ public class WorldScreen extends ScreenAdapter {
         if (boardLatch > 0f) boardLatch -= dt;
         if (portalLatch > 0f) portalLatch -= dt;
         csUpdate();
+        dlUpdate(dt);
         // cổng cửa hàng farm ở farmway (type 52): đã vào farm + có dữ liệu
         // thì mở panel cửa hàng như gốc (FarmScr.doOpenCuaHang)
         if (portalFarmShopPending && farmIn && farm != null && farm.joined) {
@@ -9907,12 +10000,31 @@ public class WorldScreen extends ScreenAdapter {
                 case DrawItem.REMOTE:
                     // tên người chơi khác màu xanh nhạt (NPC vàng, mình đỏ);
                     // đang nhảy thì hình (và bong bóng) nâng lên theo cung nhảy
-                    drawFigure(it.remote.doll, it.remote.anim, it.remote.feetX,
+                    PaperDoll rdoll = it.remote.doll;
+                    RemoteFish rfish = remoteFish.get(it.remote.info.id);
+                    if (rfish == null && (it.remote.pose == 13 || it.remote.pose == 2)) {
+                        // đang ngồi câu (chưa quăng): tạo mục theo dõi để
+                        // gắn cần hiển thị; state SEATED = chưa vẽ dây/phao
+                        rfish = new RemoteFish();
+                        rfish.state = FISH_SEATED;
+                        rfish.floatDx = (it.remote.anim.facingLeft ? -1 : 1) * 90;
+                        remoteFish.put(it.remote.info.id, rfish);
+                    }
+                    if (rfish != null) {
+                        if (rfish.dollRodBase != it.remote.doll) {
+                            List<Integer> ps = new ArrayList<>();
+                            for (int pid : it.remote.info.wearing) ps.add(pid);
+                            rfish.dollRod = dollWithRod(ps, 442);
+                            rfish.dollRodBase = it.remote.doll;
+                        }
+                        if (rfish.dollRod != null) rdoll = rfish.dollRod;
+                    }
+                    drawFigure(rdoll, it.remote.anim, it.remote.feetX,
                         it.remote.feetY + it.remote.jumpOffY(),
                         com.avatardk.game.data.GameSettings.showName ? it.remote.info.name : null,
                         new Color(0.55f, 0.9f, 1f, 1f));
                     if (it.remote.bubble != null) {
-                        drawBubble(it.remote.doll, it.remote.anim, it.remote.feetX,
+                        drawBubble(rdoll, it.remote.anim, it.remote.feetX,
                             it.remote.feetY + it.remote.jumpOffY(), it.remote.bubble);
                     }
                     break;
@@ -10006,10 +10118,11 @@ public class WorldScreen extends ScreenAdapter {
                     break;
                 }
                 default: // PLAYER
-                    drawFigure(playerDoll, playerAnim, playerFeetX,
+                    PaperDoll pdoll = fishState != FISH_NONE ? playerFishDoll() : playerDoll;
+                    drawFigure(pdoll, playerAnim, playerFeetX,
                         playerFeetY + jumpOffsetY(playerJumpT), displayName, true);
                     if (chatBubble != null) {
-                        drawBubble(playerDoll, playerAnim, playerFeetX,
+                        drawBubble(pdoll, playerAnim, playerFeetX,
                             playerFeetY + jumpOffsetY(playerJumpT), chatBubble);
                     }
                     break;
@@ -10020,6 +10133,7 @@ public class WorldScreen extends ScreenAdapter {
         if (busPhase > 0) {
             batch.draw(busTex, busX * AvatarDkGame.HD - busTex.getWidth() / 2f, 2f);
         }
+        drawFlyTexts();
         drawActFx(playerFeetX, playerFeetY);
         drawFishingGear(playerFeetX, playerFeetY);
         batch.end();
@@ -10198,6 +10312,8 @@ public class WorldScreen extends ScreenAdapter {
         // panel mua nội thất ở SB_HOUSE)
         if (sbOpen) drawShopBillCommon();
         if (casinoIn || csPending) drawCasino();
+        if (dlPrizeOpen) drawDialPrizes();
+        if (dlOpen) drawDial();
         if (chestUpConfirmOpen) drawChestUpConfirm();
         batch.end();
     }
@@ -12167,6 +12283,7 @@ public class WorldScreen extends ScreenAdapter {
     private final java.util.List<CsRoom> csRooms = new ArrayList<>();
     private static class CsBoardInfo { int id, n, max, money; boolean pass, playing; }
     private final java.util.List<CsBoardInfo> csBoards = new ArrayList<>();
+    private int csBoardPage;
     private int csRoomId = 43;
 
     private static class CsSeat {
@@ -12693,6 +12810,49 @@ public class WorldScreen extends ScreenAdapter {
         csPhase = 3;
     }
 
+    // ---------- Vòng quay may mắn: harness chụp kiểm chứng ----------
+    public void debugDialPrizes() {
+        java.util.List<Integer> ids = new ArrayList<>();
+        int[] sample = {125, 309, 310, 442, 445, 500, 501, 502, 503, 504, 505, 506,
+            507, 508, 509, 510, 511, 512, 513, 514, 515, 516, 517, 518};
+        for (int id : sample) {
+            if (game.data.part(id) != null) ids.add(id);
+        }
+        if (ids.size() < 6) {
+            for (int id = 0; id < 700 && ids.size() < 18; id++) {
+                if (game.data.part(id) != null && !ids.contains(id)) ids.add(id);
+            }
+        }
+        openDialPrizes(ids, "Quay số");
+    }
+
+    public void debugDial() {
+        dlOpenScreen(503);
+        dlKim = 205;
+    }
+
+    public void debugDialResult() {
+        dlOpenScreen(503);
+        dlGifts.clear();
+        DlGift g1 = new DlGift();
+        g1.type = 1;
+        g1.partId = 503;
+        g1.expireDay = 7;
+        dlGifts.add(g1);
+        DlGift g2 = new DlGift();
+        g2.type = 2;
+        g2.amount = 1500;
+        dlGifts.add(g2);
+        DlGift g3 = new DlGift();
+        g3.type = 3;
+        g3.amount = 60;
+        dlGifts.add(g3);
+        dlPhase = 3;
+        dlSpinTotal = 1260;
+        dlStopMs = System.currentTimeMillis() - 2200;
+        dlBurstDone[0] = dlBurstDone[1] = dlBurstDone[2] = true;
+    }
+
     // ---------- Casino: vẽ + chạm ----------
     private static final float CS_PX = 16f, CS_PY = 16f, CS_PW = 1248f, CS_PH = 688f;
 
@@ -12794,10 +12954,14 @@ public class WorldScreen extends ScreenAdapter {
     }
 
     private void drawCsBoards() {
-        csPanelBase("Casino — Bầu Cua", "Phòng " + csRoomId + " · chọn một bàn");
+        csPanelBase("Casino — Bầu Cua", "Phòng " + csRoomId + " · chọn một bàn hoặc tự tạo bàn");
+        int pages = Math.max(1, (csBoards.size() + 5) / 6);
+        if (csBoardPage >= pages) csBoardPage = pages - 1;
         float cw = 380, chh = 160, gx = 46, gyTop = 340, gyBot = 160;
-        for (int i = 0; i < csBoards.size() && i < 6; i++) {
-            CsBoardInfo b = csBoards.get(i);
+        for (int i = 0; i < 6; i++) {
+            int bi = csBoardPage * 6 + i;
+            if (bi >= csBoards.size()) break;
+            CsBoardInfo b = csBoards.get(bi);
             float cx = gx + (i % 3) * (cw + 24);
             float cy = (i / 3 == 0) ? gyTop : gyBot;
             float cTop = cy + chh;
@@ -12833,6 +12997,18 @@ public class WorldScreen extends ScreenAdapter {
         }
         csButton(CS_PX + 24, CS_PY + 24, 150, 48, "Phòng", 0);
         csButton(CS_PX + CS_PW - 174, CS_PY + 24, 150, 48, "Thoát", 2);
+        // [PORT] Tự tạo bàn: gốc không có gói tạo bàn riêng (vào bàn trống
+        // là thành chủ bàn) — nút này nhờ server cấp một bàn trắng mới
+        // (JOIN_BOARD với id −1) rồi vào ngay làm chủ bàn.
+        csButton(CS_PX + (CS_PW - 240) / 2f, CS_PY + 24, 240, 48, "Tạo bàn mới", 1);
+        if (pages > 1) {
+            csButton(CS_PX + CS_PW / 2f - 190, CS_PY + 24, 48, 48, "<",
+                csBoardPage > 0 ? 0 : 3);
+            csButton(CS_PX + CS_PW / 2f + 142, CS_PY + 24, 48, 48, ">",
+                csBoardPage < pages - 1 ? 0 : 3);
+            Ui.centered(batch, Ui.fontTiny, "Trang " + (csBoardPage + 1) + "/" + pages,
+                640, CS_PY + 88, new Color(0.85f, 0.92f, 1f, 0.9f));
+        }
     }
 
     private float[] csSeatPos(int seat) {
@@ -13153,9 +13329,37 @@ public class WorldScreen extends ScreenAdapter {
                 csExitCasino();
                 return true;
             }
+            float createX = CS_PX + (CS_PW - 240) / 2f;
+            if (x >= createX && x <= createX + 240 && y >= CS_PY + 24 && y <= CS_PY + 72) {
+                // [PORT] tạo bàn mới: JOIN_BOARD với board −1
+                Msg j = new Msg(CS_JOIN_BOARD);
+                try {
+                    j.writer().writeByte(csRoomId);
+                    j.writer().writeByte(-1);
+                    j.writer().writeUTF("");
+                } catch (Exception ignored) {
+                }
+                csSend(j);
+                return true;
+            }
+            int pages = Math.max(1, (csBoards.size() + 5) / 6);
+            if (pages > 1) {
+                if (x >= CS_PX + CS_PW / 2f - 190 && x <= CS_PX + CS_PW / 2f - 142
+                        && y >= CS_PY + 24 && y <= CS_PY + 72) {
+                    if (csBoardPage > 0) csBoardPage--;
+                    return true;
+                }
+                if (x >= CS_PX + CS_PW / 2f + 142 && x <= CS_PX + CS_PW / 2f + 190
+                        && y >= CS_PY + 24 && y <= CS_PY + 72) {
+                    if (csBoardPage < pages - 1) csBoardPage++;
+                    return true;
+                }
+            }
             float cw = 380, chh = 160;
-            for (int i = 0; i < csBoards.size() && i < 6; i++) {
-                CsBoardInfo b = csBoards.get(i);
+            for (int i = 0; i < 6; i++) {
+                int bi = csBoardPage * 6 + i;
+                if (bi >= csBoards.size()) break;
+                CsBoardInfo b = csBoards.get(bi);
                 float cx = 46 + (i % 3) * (cw + 24);
                 float cy = (i / 3 == 0) ? 340 : 160;
                 if (x >= cx && x <= cx + cw && y >= cy && y <= cy + chh) {
@@ -13345,6 +13549,518 @@ public class WorldScreen extends ScreenAdapter {
         if (x >= 650 && x <= 800 && y >= 282 && y <= 334) {
             csKickSheet = false;
             csKickSeat = -1;
+        }
+    }
+
+    // ================= VÒNG QUAY MAY MẮN (DialLucky, docs/diallucky-spec.md)
+    // Gốc: NPC 185 → menu giá → OPEN_SHOP −49 idShop 100 (danh sách quà) →
+    // chọn 1 món → màn quay (giữ chỉnh lực, quay) → gói −64 hai chiều.
+    // [PORT bố cục] gốc đặt tâm vòng ở mép phải màn hình dọc; bản ngang đặt
+    // tâm tại (880, 370) để trọn nửa vòng lọt màn hình. [PORT cảm ứng] nút
+    // GIỮ ĐỂ QUAY: giữ = lực tăng, thả = quay ngay với lực đó.
+    private static final class DlGift {
+        int type, partId, expireDay, amount;
+    }
+    private static final class DlFly {
+        int userId, type, partId, amount, idx;
+        long startMs;
+    }
+    private static final class DlSpark {
+        float x, y, vx, vy;
+        long startMs;
+        int seed;
+    }
+    private static final float DL_CX = 880f, DL_CY = 370f, DL_R = 180f;
+    private static final float[] DL_GIFT_ANGLES = {150f, 180f, 210f};
+    private boolean dlPrizeOpen;
+    private final List<Integer> dlPrizeIds = new ArrayList<>();
+    private int dlPrizePage;
+    private String dlPrizeTitle = "Quay số";
+    private boolean dlOpen;
+    private int dlPart;
+    private float dlKim = 90f;
+    private boolean dlHolding;
+    private int dlPointer = -1;
+    private int dlPhase; // 0 chỉnh lực · 1 chờ server · 2 đang quay · 3 hiện quà
+    private final List<DlGift> dlGifts = new ArrayList<>();
+    private long dlSpinStartMs, dlStopMs;
+    private float dlSpinDurMs = 3000f, dlSpinTotal = 1080f;
+    private final boolean[] dlBurstDone = new boolean[3];
+    private Texture dlTexC, dlTexCb, dlTexDot, dlTexQ, dlTexSq;
+    private final List<TextureRegion> dlSparkFrames = new ArrayList<>();
+    private final List<DlSpark> dlSparks = new ArrayList<>();
+    private final List<DlFly> dlFlies = new ArrayList<>();
+    private final java.util.Random dlRnd = new java.util.Random();
+
+    private void dlEnsureTex() {
+        if (dlTexC != null) return;
+        dlTexC = game.texture("diallucky/c.png");
+        dlTexCb = game.texture("diallucky/cb.png");
+        dlTexDot = game.texture("diallucky/dot.png");
+        dlTexQ = game.texture("diallucky/q.png");
+        dlTexSq = game.texture("diallucky/sq.png");
+        Texture st = game.texture("diallucky/st.png");
+        if (st != null) {
+            // st: dải dọc 4 frame pháo hoa 22×22 (FrameImage gốc)
+            for (int i = 0; i < 4; i++) {
+                dlSparkFrames.add(new TextureRegion(st, 0, i * 22, 22, 22));
+            }
+        }
+    }
+
+    private void openDialPrizes(List<Integer> ids, String title) {
+        closeOtherPanels();
+        dlPrizeIds.clear();
+        dlPrizeIds.addAll(ids);
+        dlPrizeTitle = title == null || title.isEmpty() ? "Quay số" : title;
+        dlPrizePage = 0;
+        dlPrizeOpen = true;
+    }
+
+    private void dlOpenScreen(int partId) {
+        dlPrizeOpen = false;
+        dlPart = partId;
+        dlKim = 90f;
+        dlHolding = false;
+        dlPhase = 0;
+        dlGifts.clear();
+        dlSparks.clear();
+        dlOpen = true;
+    }
+
+    private void dlCloseScreen() {
+        dlOpen = false;
+        dlHolding = false;
+        dlPointer = -1;
+    }
+
+    private void dlSendSpin() {
+        Msg m = new Msg(AvatarProtocol.DIAL_LUCKY);
+        try {
+            m.writer().writeShort(dlPart);
+            m.writer().writeShort((int) (dlKim - 90f));
+        } catch (Exception ignored) {
+        }
+        csSend(m);
+        dlPhase = 1;
+    }
+
+    /** Gói −64 S→C phát cả khu: mình thì chạy vòng quay, người khác thì
+     *  chữ bay trên đầu doll của họ (đúng gốc setItemBay). */
+    private void handleDialBroadcast(int idUser, int power, List<DlGift> gifts) {
+        if (idUser == ownId() && dlOpen && dlPhase == 1) {
+            dlGifts.clear();
+            dlGifts.addAll(gifts);
+            dlSpinTotal = 1080f + power * 2f;
+            dlSpinDurMs = 3000f + power * 8f;
+            dlSpinStartMs = System.currentTimeMillis();
+            dlBurstDone[0] = dlBurstDone[1] = dlBurstDone[2] = false;
+            dlPhase = 2;
+            return;
+        }
+        long now = System.currentTimeMillis();
+        for (int i = 0; i < gifts.size(); i++) {
+            DlGift g = gifts.get(i);
+            DlFly f = new DlFly();
+            f.userId = idUser;
+            f.type = g.type;
+            f.partId = g.partId;
+            f.amount = g.amount;
+            f.idx = i;
+            f.startMs = now + 1200L + i * 500L; // gốc: delay 100+degree+20 tick
+            dlFlies.add(f);
+        }
+    }
+
+    private float dlCurrentOff() {
+        if (dlPhase == 2) {
+            float t = (System.currentTimeMillis() - dlSpinStartMs) / dlSpinDurMs;
+            if (t > 1f) t = 1f;
+            float e = 1f - (1f - t) * (1f - t) * (1f - t);
+            return -dlSpinTotal * e;
+        }
+        return dlPhase == 3 ? -dlSpinTotal : 0f;
+    }
+
+    private int dlRevealedCount() {
+        if (dlPhase != 3) return 0;
+        long el = System.currentTimeMillis() - dlStopMs;
+        int n = 0;
+        for (int k = 0; k < dlGifts.size(); k++) {
+            if (el > (k + 1) * 500L) n++;
+        }
+        return n;
+    }
+
+    private void dlBurst(float x, float y, int n) {
+        long now = System.currentTimeMillis();
+        for (int i = 0; i < n; i++) {
+            DlSpark s = new DlSpark();
+            s.x = x;
+            s.y = y;
+            int dir = i % 2 == 0 ? 1 : -1;
+            s.vx = dir * dlRnd.nextInt(80) / 10f * 14f;
+            s.vy = -dlRnd.nextInt(70) / 10f * 14f;
+            s.startMs = now;
+            s.seed = dlRnd.nextInt(1000);
+            dlSparks.add(s);
+        }
+    }
+
+    private void dlUpdate(float dt) {
+        if (dlOpen && dlPhase == 0 && dlHolding) {
+            dlKim = Math.min(270f, dlKim + 170f * dt);
+        }
+        if (dlOpen && dlPhase == 2) {
+            // pháo hoa lác đác ở các ô cầu khi vòng quay nhanh (gốc)
+            if (dlRnd.nextFloat() < dt * 7f) {
+                float a = 82f + dlRnd.nextInt(197);
+                double rad = Math.toRadians(a + dlCurrentOff());
+                dlBurst(DL_CX + (float) (DL_R * Math.cos(rad)),
+                    DL_CY + (float) (DL_R * Math.sin(rad)), 4);
+            }
+            if (System.currentTimeMillis() - dlSpinStartMs >= dlSpinDurMs) {
+                dlPhase = 3;
+                dlStopMs = System.currentTimeMillis();
+            }
+        }
+        if (dlOpen && dlPhase == 3) {
+            long el = System.currentTimeMillis() - dlStopMs;
+            for (int k = 0; k < dlGifts.size() && k < 3; k++) {
+                if (!dlBurstDone[k] && el > (k + 1) * 500L) {
+                    dlBurstDone[k] = true;
+                    double rad = Math.toRadians(DL_GIFT_ANGLES[k]);
+                    dlBurst(DL_CX + (float) (DL_R * Math.cos(rad)),
+                        DL_CY + (float) (DL_R * Math.sin(rad)), 10);
+                }
+            }
+        }
+        long now = System.currentTimeMillis();
+        for (int i = dlSparks.size() - 1; i >= 0; i--) {
+            DlSpark s = dlSparks.get(i);
+            float t = (now - s.startMs) / 1000f;
+            if (t > 1.05f) dlSparks.remove(i);
+        }
+    }
+
+    private String dlGiftText(DlGift g) {
+        switch (g.type) {
+            case 2: return "+" + fmtMoney(g.amount) + " xu";
+            case 3: return "+" + g.amount + " xp";
+            case 4: return "+" + g.amount + " lượng";
+            default: return "";
+        }
+    }
+
+    private void drawDlGift(DlGift g, float cx, float cy) {
+        if (g.type == 1) {
+            drawPartIcon(g.partId, cx - 26, cy - 26, 52);
+            String ex = g.expireDay < 0 ? "Vĩnh viễn" : g.expireDay + " ngày";
+            Ui.fontTiny.setColor(1f, 0.95f, 0.6f, 1f);
+            layout.setText(Ui.fontTiny, ex);
+            Ui.fontTiny.draw(batch, ex, cx - layout.width / 2f, cy - 34);
+        } else {
+            String lab = g.type == 2 ? "Xu" : g.type == 3 ? "xp" : "Lượng";
+            Ui.fontSmall.setColor(1f, 0.85f, 0.3f, 1f);
+            layout.setText(Ui.fontSmall, lab);
+            Ui.fontSmall.draw(batch, lab, cx - layout.width / 2f, cy + 16);
+            String val = g.type == 2 ? fmtMoney(g.amount) : "" + g.amount;
+            Ui.fontSmall.setColor(1f, 1f, 1f, 1f);
+            layout.setText(Ui.fontSmall, val);
+            Ui.fontSmall.draw(batch, val, cx - layout.width / 2f, cy - 12);
+        }
+        Ui.fontSmall.setColor(1f, 1f, 1f, 1f);
+    }
+
+    private void drawDial() {
+        dlEnsureTex();
+        batch.setColor(0f, 0f, 0f, 0.45f);
+        batch.draw(whiteTex, 0, 0, Ui.W, Ui.H);
+        batch.setColor(Color.WHITE);
+        float off = dlCurrentOff();
+        int revealed = dlRevealedCount();
+        // đĩa nửa mặt trời sau vòng (tâm tại DL_CX−64, DL_CY như gốc)
+        if (dlTexSq != null) batch.draw(dlTexSq, DL_CX - 128, DL_CY - 124);
+        // lớp cầu nền
+        for (int i = 0; i < 12; i++) {
+            float a = (off + i * 30f) % 360f;
+            if (a < 0) a += 360f;
+            if (a < 82f || a > 278f) continue;
+            double rad = Math.toRadians(a);
+            float px = DL_CX + (float) (DL_R * Math.cos(rad));
+            float py = DL_CY + (float) (DL_R * Math.sin(rad));
+            if (dlTexCb != null) batch.draw(dlTexCb, px - 34, py - 33);
+        }
+        // lớp dấu ? / quà + vòng kính
+        for (int i = 0; i < 12; i++) {
+            float a = (off + i * 30f) % 360f;
+            if (a < 0) a += 360f;
+            if (a < 82f || a > 278f) continue;
+            double rad = Math.toRadians(a);
+            float px = DL_CX + (float) (DL_R * Math.cos(rad));
+            float py = DL_CY + (float) (DL_R * Math.sin(rad));
+            int gi = -1;
+            if (dlPhase == 3) {
+                for (int k = 0; k < 3 && k < dlGifts.size(); k++) {
+                    if (Math.abs(a - DL_GIFT_ANGLES[k]) < 0.6f) gi = k;
+                }
+            }
+            if (gi >= 0 && gi < revealed) {
+                drawDlGift(dlGifts.get(gi), px, py);
+            } else if (dlTexQ != null) {
+                batch.draw(dlTexQ, px - 14, py - 21);
+            }
+            if (dlTexC != null) batch.draw(dlTexC, px - 34, py - 33);
+        }
+        // kim chỉnh lực
+        double krad = Math.toRadians(dlKim);
+        float kx = DL_CX + (float) (90 * Math.cos(krad));
+        float ky = DL_CY + (float) (90 * Math.sin(krad));
+        if (dlTexDot != null) batch.draw(dlTexDot, kx - 11, ky - 11);
+        // pháo hoa (gốc: hạt có vx giảm dần, vy tăng = rơi xuống)
+        if (!dlSparkFrames.isEmpty()) {
+            long now = System.currentTimeMillis();
+            for (DlSpark s : dlSparks) {
+                float t = (now - s.startMs) / 1000f;
+                if (t < 0 || t > 1.05f) continue;
+                float px = s.x + s.vx * t;
+                float py = s.y + s.vy * t + 260f * t * t;
+                int fr = Math.min(3, (int) (t * 5f));
+                batch.draw(dlSparkFrames.get(fr), px - 11, py - 11);
+            }
+        }
+        // thẻ món đã chọn + lực (bên trái)
+        batch.draw(Ui.roundedRect(430, 208, 16, GLASS_FILL_DARK, GLASS_RIM), 36, 452);
+        com.avatardk.game.data.PartData pd = game.data.part(dlPart);
+        drawPartIcon(dlPart, 94, 592, 76); // drawPartIcon lấy TÂM làm gốc
+        Ui.fontTitle.setColor(1f, 0.85f, 0.3f, 1f);
+        Ui.fontTitle.draw(batch, pd != null ? pd.name : ("Món #" + dlPart), 148, 632);
+        Ui.fontSmall.setColor(0.85f, 0.92f, 1f, 1f);
+        Ui.fontSmall.draw(batch, "Món bạn đã chọn để quay", 148, 600);
+        Ui.fontSmall.setColor(1f, 1f, 1f, 0.95f);
+        Ui.fontSmall.draw(batch, "Quay trúng đúng món này: sở hữu vĩnh viễn.", 56, 540);
+        Ui.fontSmall.draw(batch, "Mỗi lượt quay nhận 3 món quà bất kỳ:", 56, 512);
+        Ui.fontSmall.draw(batch, "đồ, xu hoặc điểm kinh nghiệm.", 56, 486);
+        // nút + trạng thái theo pha
+        if (dlPhase == 0) {
+            int power = (int) (dlKim - 90f);
+            Ui.font.setColor(1f, 0.85f, 0.3f, 1f);
+            String pw = "Lực quay: " + power + " / 180";
+            layout.setText(Ui.font, pw);
+            Ui.font.draw(batch, pw, 36 + (430 - layout.width) / 2f, 428);
+            if (dlHolding) {
+                batch.draw(Ui.roundedRect(330, 76, 16, new Color(0.9f, 0.45f, 0.1f, 1f), GLASS_RIM), 86, 316);
+            } else {
+                batch.draw(Ui.gradientRect(330, 76, 16, EntryUi.ORANGE_TOP, EntryUi.ORANGE_BOT), 86, 316);
+            }
+            Ui.fontTitle.setColor(1f, 1f, 1f, 1f);
+            String bl = dlHolding ? "THẢ RA ĐỂ QUAY" : "GIỮ ĐỂ QUAY";
+            layout.setText(Ui.fontTitle, bl);
+            Ui.fontTitle.draw(batch, bl, 86 + (330 - layout.width) / 2f, 316 + 50);
+            Ui.fontSmall.setColor(0.85f, 0.92f, 1f, 0.9f);
+            String hint = "Giữ nút để kim chạy tới lực mong muốn,";
+            layout.setText(Ui.fontSmall, hint);
+            Ui.fontSmall.draw(batch, hint, 36 + (430 - layout.width) / 2f, 282);
+            String hint2 = "thả tay ra là vòng quay bắt đầu.";
+            layout.setText(Ui.fontSmall, hint2);
+            Ui.fontSmall.draw(batch, hint2, 36 + (430 - layout.width) / 2f, 256);
+        } else if (dlPhase == 1 || dlPhase == 2) {
+            Ui.font.setColor(1f, 0.85f, 0.3f, 1f);
+            String st = dlPhase == 1 ? "Đang quay..." : "Vòng quay đang chạy...";
+            layout.setText(Ui.font, st);
+            Ui.font.draw(batch, st, 36 + (430 - layout.width) / 2f, 356);
+        } else if (revealed >= dlGifts.size()) {
+            StringBuilder sb = new StringBuilder("Bạn nhận được: ");
+            for (int i = 0; i < dlGifts.size(); i++) {
+                DlGift g = dlGifts.get(i);
+                if (i > 0) sb.append(" · ");
+                if (g.type == 1) {
+                    com.avatardk.game.data.PartData gp = game.data.part(g.partId);
+                    sb.append(gp != null ? gp.name : ("Món #" + g.partId));
+                } else {
+                    sb.append(dlGiftText(g));
+                }
+            }
+            Ui.fontSmall.setColor(1f, 0.95f, 0.7f, 1f);
+            List<String> lines = wrapText(sb.toString(), Ui.fontSmall, 400);
+            for (int i = 0; i < lines.size() && i < 3; i++) {
+                Ui.fontSmall.draw(batch, lines.get(i), 56, 428 - i * 26);
+            }
+            csButton(56, 300, 190, 64, "Quay tiếp", 1);
+            csButton(262, 300, 150, 64, "Đóng", 0);
+        } else {
+            Ui.font.setColor(1f, 0.85f, 0.3f, 1f);
+            String st = "Đang mở quà...";
+            layout.setText(Ui.font, st);
+            Ui.font.draw(batch, st, 36 + (430 - layout.width) / 2f, 356);
+        }
+        // nút đóng chuẩn (chỉ khi không quay)
+        if (dlPhase == 0 || (dlPhase == 3 && revealed >= dlGifts.size())) {
+            batch.draw(Ui.roundedRect(36, 36, 10, Ui.BTN_CLOSE, GLASS_RIM), Ui.W - 70, Ui.H - 70);
+            Ui.faIcon(batch, Ui.fa20, Ui.FA_XMARK, Ui.W - 52, Ui.H - 52, new Color(1f, 1f, 1f, 0.9f));
+        }
+        Ui.font.setColor(1f, 1f, 1f, 1f);
+    }
+
+    private boolean dlTouch(float x, float y, int pointer) {
+        if (!dlOpen) return false;
+        int revealed = dlRevealedCount();
+        boolean canClose = dlPhase == 0 || (dlPhase == 3 && revealed >= dlGifts.size());
+        if (canClose && x >= Ui.W - 88 && x <= Ui.W - 34 && y >= Ui.H - 88 && y <= Ui.H - 34) {
+            dlCloseScreen();
+            return true;
+        }
+        if (dlPhase == 0 && x >= 86 && x <= 416 && y >= 316 && y <= 392) {
+            dlHolding = true;
+            dlPointer = pointer;
+            return true;
+        }
+        if (dlPhase == 3 && revealed >= dlGifts.size()) {
+            if (x >= 56 && x <= 246 && y >= 300 && y <= 364) { // Quay tiếp
+                dlKim = 90f;
+                dlPhase = 0;
+                dlGifts.clear();
+                return true;
+            }
+            if (x >= 262 && x <= 412 && y >= 300 && y <= 364) { // Đóng
+                dlCloseScreen();
+                return true;
+            }
+        }
+        return true; // modal: nuốt mọi chạm
+    }
+
+    // ----- Panel chọn quà của vòng quay (thay PopupShop của gốc) -----
+    private static final float DLP_W = 920f, DLP_H = 600f;
+    private static final float DLP_X = (Ui.W - DLP_W) / 2f, DLP_Y = (Ui.H - DLP_H) / 2f;
+
+    private void drawDialPrizes() {
+        float px = DLP_X, py = DLP_Y, pw = DLP_W, ph = DLP_H, top = py + ph;
+        batch.setColor(0f, 0f, 0f, 0.45f);
+        batch.draw(whiteTex, 0, 0, Ui.W, Ui.H);
+        batch.setColor(Color.WHITE);
+        batch.draw(Ui.roundedRect((int) pw, (int) ph, 18, GLASS_FILL_DARK, GLASS_RIM), px, py);
+        Ui.fontTitle.setColor(1f, 0.85f, 0.3f, 1f);
+        Ui.fontTitle.draw(batch, dlPrizeTitle, px + 28, top - 30);
+        Ui.fontSmall.setColor(0.85f, 0.92f, 1f, 1f);
+        Ui.fontSmall.draw(batch, "Chọn một món đồ để quay — trúng đúng món đã chọn là được vĩnh viễn",
+            px + 28, top - 62);
+        batch.draw(Ui.roundedRect(36, 36, 10, Ui.BTN_CLOSE, GLASS_RIM), px + pw - 54, top - 54);
+        Ui.faIcon(batch, Ui.fa20, Ui.FA_XMARK, px + pw - 36, top - 36, new Color(1f, 1f, 1f, 0.9f));
+        int per = 18;
+        int pages = Math.max(1, (dlPrizeIds.size() + per - 1) / per);
+        if (dlPrizePage >= pages) dlPrizePage = pages - 1;
+        float cw = 138f, chh = 132f, gx = 10f, gy = 12f;
+        float gx0 = px + (pw - (6 * cw + 5 * gx)) / 2f;
+        float gTop = top - 96f;
+        for (int i = 0; i < per; i++) {
+            int idx = dlPrizePage * per + i;
+            if (idx >= dlPrizeIds.size()) break;
+            int partId = dlPrizeIds.get(idx);
+            int col = i % 6, row = i / 6;
+            float cx = gx0 + col * (cw + gx);
+            float cyy = gTop - (row + 1) * chh - row * gy;
+            batch.draw(Ui.roundedRect((int) cw, (int) chh, 12, new Color(0.13f, 0.2f, 0.3f, 0.9f), GLASS_RIM), cx, cyy);
+            drawPartIcon(partId, cx + cw / 2f - 28, cyy + chh - 76, 56);
+            com.avatardk.game.data.PartData pd = game.data.part(partId);
+            Ui.fontTiny.setColor(1f, 1f, 1f, 0.95f);
+            String nm = truncTo(Ui.fontTiny, pd != null ? pd.name : ("#" + partId), cw - 12);
+            layout.setText(Ui.fontTiny, nm);
+            Ui.fontTiny.draw(batch, nm, cx + (cw - layout.width) / 2f, cyy + 34);
+        }
+        if (pages > 1) {
+            csButton(px + 28, py + 20, 130, 48, "< Trước", dlPrizePage > 0 ? 0 : 3);
+            csButton(px + pw - 158, py + 20, 130, 48, "Sau >", dlPrizePage < pages - 1 ? 0 : 3);
+            Ui.fontSmall.setColor(0.85f, 0.92f, 1f, 1f);
+            String pg = "Trang " + (dlPrizePage + 1) + "/" + pages;
+            layout.setText(Ui.fontSmall, pg);
+            Ui.fontSmall.draw(batch, pg, px + (pw - layout.width) / 2f, py + 44);
+        }
+        Ui.fontSmall.setColor(1f, 1f, 1f, 1f);
+    }
+
+    private boolean dlPrizeTouch(float x, float y) {
+        if (!dlPrizeOpen) return false;
+        float px = DLP_X, py = DLP_Y, pw = DLP_W, ph = DLP_H, top = py + ph;
+        if (x >= px + pw - 72 && x <= px + pw && y >= top - 72 && y <= top) {
+            dlPrizeOpen = false;
+            return true;
+        }
+        int per = 18;
+        int pages = Math.max(1, (dlPrizeIds.size() + per - 1) / per);
+        float cw = 138f, chh = 132f, gx = 10f, gy = 12f;
+        float gx0 = px + (pw - (6 * cw + 5 * gx)) / 2f;
+        float gTop = top - 96f;
+        for (int i = 0; i < per; i++) {
+            int idx = dlPrizePage * per + i;
+            if (idx >= dlPrizeIds.size()) break;
+            int col = i % 6, row = i / 6;
+            float cx = gx0 + col * (cw + gx);
+            float cyy = gTop - (row + 1) * chh - row * gy;
+            if (x >= cx && x <= cx + cw && y >= cyy && y <= cyy + chh) {
+                dlOpenScreen(dlPrizeIds.get(idx));
+                return true;
+            }
+        }
+        if (pages > 1) {
+            if (x >= px + 28 && x <= px + 158 && y >= py + 20 && y <= py + 68 && dlPrizePage > 0) {
+                dlPrizePage--;
+                return true;
+            }
+            if (x >= px + pw - 158 && x <= px + pw - 28 && y >= py + 20 && y <= py + 68
+                && dlPrizePage < pages - 1) {
+                dlPrizePage++;
+                return true;
+            }
+        }
+        return true; // modal
+    }
+
+    /** Chữ bay quà quay số trên đầu người chơi (gốc setItemBay) — vẽ
+     *  trong không gian thế giới sau các figure. */
+    private void drawFlyTexts() {
+        if (dlFlies.isEmpty()) return;
+        long now = System.currentTimeMillis();
+        for (int i = dlFlies.size() - 1; i >= 0; i--) {
+            DlFly f = dlFlies.get(i);
+            float age = (now - f.startMs) / 1000f;
+            if (age < 0) continue;
+            if (age > 1.6f) {
+                dlFlies.remove(i);
+                continue;
+            }
+            float fx, fy;
+            if (f.userId == ownId()) {
+                fx = playerX * AvatarDkGame.HD;
+                fy = mapBottomPx - playerY * AvatarDkGame.HD;
+            } else {
+                RemoteFigure rf = remotes.get(f.userId);
+                if (rf == null) continue;
+                fx = rf.feetX;
+                fy = rf.feetY;
+            }
+            float rise = age * 46f;
+            float alpha = age > 1.2f ? (1.6f - age) / 0.4f : 1f;
+            if (f.type == 1) {
+                batch.setColor(1f, 1f, 1f, alpha);
+                drawPartIcon(f.partId, fx - 15, fy + 148 + rise, 30);
+                batch.setColor(Color.WHITE);
+            } else {
+                String t = dlFlyText(f);
+                Ui.fontSmall.setColor(1f, 0.9f, 0.4f, alpha);
+                layout.setText(Ui.fontSmall, t);
+                Ui.fontSmall.draw(batch, t, fx - layout.width / 2f, fy + 168 + rise);
+            }
+        }
+        Ui.fontSmall.setColor(1f, 1f, 1f, 1f);
+    }
+
+    private String dlFlyText(DlFly f) {
+        switch (f.type) {
+            case 2: return "+" + fmtMoney(f.amount) + " xu";
+            case 3: return "+" + f.amount + " xp";
+            case 4: return "+" + f.amount + " lượng";
+            default: return "";
         }
     }
 

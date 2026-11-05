@@ -66,6 +66,40 @@ public class BoardManager {
         }
     }
 
+    /** [PORT] Tạo bàn mới, id chạy tiếp sau bàn lớn nhất hiện có.
+     *  Tối đa 30 bàn tất cả; quá thì trả null. */
+    public BoardInfo createBoard() {
+        synchronized (this) {
+            if (boardList.size() >= 30) {
+                return null;
+            }
+            int next = 0;
+            for (BoardInfo b : boardList) {
+                next = Math.max(next, b.boardID + 1);
+            }
+            BoardInfo board = new BoardInfo();
+            board.boardID = (byte) next;
+            board.nPlayer = 0;
+            board.maxPlayer = 5;
+            board.isPass = false;
+            board.isPlaying = false;
+            board.money = 0;
+            board.strMoney = "1000";
+            boardList.add(board);
+            System.out.println("create board : " + board.boardID);
+            return board;
+        }
+    }
+
+    /** [PORT] Bàn tự tạo (id >= 6) đã trống thì dọn khỏi danh sách. */
+    public void cleanupEmptyDynamic(BoardInfo board) {
+        synchronized (this) {
+            if (board != null && board.boardID >= 6 && board.presentCount() == 0) {
+                boardList.remove(board);
+            }
+        }
+    }
+
     public BoardInfo findUserBoard(User user) {
         synchronized (this) {
             for (BoardInfo board : boardList) {
