@@ -1198,6 +1198,33 @@ public class ScreenshotMain {
                         }
                         if (frame == 15) {
                             shot("shot-dial-result.png");
+                            stage = 126; frame = 0;
+                        }
+                        break;
+                    case 126: // Đua thú: panel đặt cược (map 108, sim offline)
+                        if (frame == 1) {
+                            world.debugRaceBet();
+                        }
+                        if (frame == 25) {
+                            shot("shot-race-bet.png");
+                            stage = 127; frame = 0;
+                        }
+                        break;
+                    case 127: // Đua thú: giữa chặng đua
+                        if (frame == 1) {
+                            world.debugRaceRun();
+                        }
+                        if (frame == 25) {
+                            shot("shot-race-run.png");
+                            stage = 128; frame = 0;
+                        }
+                        break;
+                    case 128: // Đua thú: phiếu thắng
+                        if (frame == 1) {
+                            world.debugRaceWin();
+                        }
+                        if (frame == 15) {
+                            shot("shot-race-win.png");
                             stage = 121; frame = 0;
                         }
                         break;

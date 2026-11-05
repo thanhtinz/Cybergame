@@ -3100,6 +3100,9 @@ public class WorldScreen extends ScreenAdapter {
             } else {
                 addChatLog(TAB_SYSTEM, null, "Mất kết nối — không gửi được tin nhắn riêng.", true);
             }
+        } else if (raceIn) {
+            // ở trường đua: chat đi qua gói đua 9 như gốc
+            raceSendChat(msg);
         } else if (online()) {
             try {
                 AvatarProtocol.chatPark(game.connection, msg);
@@ -3338,6 +3341,11 @@ public class WorldScreen extends ScreenAdapter {
             // (51, 60, 61...) nên phải rẽ TRƯỚC khi đang ở casino.
             if ((casinoIn || csPending) && isCasinoCmd(m.command)) {
                 handleCasinoMsg(m);
+                return;
+            }
+            // Luồng đua thú (handler 12): lệnh 1/2/5/8/9/10 riêng của đua.
+            if (raceIn && isRaceCmd(m.command)) {
+                handleRaceMsg(m);
                 return;
             }
             switch (m.command) {
@@ -5587,6 +5595,8 @@ public class WorldScreen extends ScreenAdapter {
         // vòng quay may mắn: panel chọn quà + màn quay là modal
         if (dlPrizeTouch(x, y)) return;
         if (dlTouch(x, y, pointer)) return;
+        // trường đua: panel cược + hộp thoại đua
+        if (raceTouch(x, y)) return;
         // hộp hỏi thoát về thành phố (ô cổng 9/12/17) là lớp trên cùng
         if (exitConfirmTouch(x, y)) return;
         // hộp xác nhận nâng cấp rương (−90) là modal trên cùng
@@ -9701,6 +9711,7 @@ public class WorldScreen extends ScreenAdapter {
         if (portalLatch > 0f) portalLatch -= dt;
         csUpdate();
         dlUpdate(dt);
+        raceUpdate(dt);
         // cổng cửa hàng farm ở farmway (type 52): đã vào farm + có dữ liệu
         // thì mở panel cửa hàng như gốc (FarmScr.doOpenCuaHang)
         if (portalFarmShopPending && farmIn && farm != null && farm.joined) {
@@ -9752,6 +9763,7 @@ public class WorldScreen extends ScreenAdapter {
         updateBus(dt);
         // đang ngồi trên xe buýt vào trạm: khóa di chuyển cho tới khi xe dừng
         if (busPhase == 1) { mx = 0f; my = 0f; }
+        if (raceIn) { mx = 0f; my = 0f; } // trường đua: đứng xem, không tự đi
         float len = (float) Math.hypot(mx, my);
         boolean moving = len > 0.01f;
         // đang ngồi câu thì khoá di chuyển; cố đi (trừ lúc cá đang cắn
@@ -9861,6 +9873,10 @@ public class WorldScreen extends ScreenAdapter {
         // thì camera nhảy tới điểm trạm như AvCamera của gốc (Bus.setBus)
         float focusX = (busPhase == 1 && mapDef.stopX >= 0)
             ? mapDef.stopX * AvatarDkGame.HD : playerFeetX;
+        // trường đua: camera bám thú đang focus như AvCamera của gốc
+        if (raceIn && racePets[raceFocus] != null) {
+            focusX = racePets[raceFocus].x * AvatarDkGame.HD;
+        }
         float camX = MathUtils.clamp(focusX, Ui.W / 2f, Math.max(Ui.W / 2f, worldW - Ui.W / 2f));
         // Camera dọc theo AvCamera của gốc: mặc định NEO ĐÁY map vào đáy màn hình
         // (yTo = Hmap*w - hCan). Ngoại lệ căn giữa dọc: TYPEMAP 57/58/59 (client
@@ -10118,6 +10134,7 @@ public class WorldScreen extends ScreenAdapter {
                     break;
                 }
                 default: // PLAYER
+                    if (raceIn) break; // trường đua: mình là khán giả (vẽ ở drawRacePets)
                     PaperDoll pdoll = fishState != FISH_NONE ? playerFishDoll() : playerDoll;
                     drawFigure(pdoll, playerAnim, playerFeetX,
                         playerFeetY + jumpOffsetY(playerJumpT), displayName, true);
@@ -10133,6 +10150,7 @@ public class WorldScreen extends ScreenAdapter {
         if (busPhase > 0) {
             batch.draw(busTex, busX * AvatarDkGame.HD - busTex.getWidth() / 2f, 2f);
         }
+        if (raceIn) drawRacePets();
         drawFlyTexts();
         drawActFx(playerFeetX, playerFeetY);
         drawFishingGear(playerFeetX, playerFeetY);
@@ -10314,6 +10332,7 @@ public class WorldScreen extends ScreenAdapter {
         if (casinoIn || csPending) drawCasino();
         if (dlPrizeOpen) drawDialPrizes();
         if (dlOpen) drawDial();
+        if (raceIn) drawRace();
         if (chestUpConfirmOpen) drawChestUpConfirm();
         batch.end();
     }
@@ -12061,6 +12080,25 @@ public class WorldScreen extends ScreenAdapter {
 
     /** Sang map kề qua mép đường: spawnX âm = lùi từ mép phải vào. */
     private void gotoMap(int mapId, float spawnX, float spawnY) {
+        // Trường đua (map 108): vào = bật chế độ đua, rời map = thoát đua
+        if (raceIn && mapId != 108) {
+            raceIn = false;
+            raceLocal = false;
+            raceWinOpen = raceHistOpen = raceDcOpen = raceExitConfirm = false;
+            if (online()) {
+                try {
+                    Msg h = new Msg(AvatarProtocol.GET_HANDLER);
+                    h.writer().writeByte(9);
+                    game.connection.send(h);
+                } catch (Exception ignored) {
+                }
+            }
+        }
+        if (mapId == 108 && !raceIn) {
+            raceReturnMap = mapDef != null ? mapDef.id : 10;
+            raceReturnX = playerX;
+            raceReturnY = playerY;
+        }
         loadMap(findMap(mapId));
         playerX = spawnX < 0 ? worldW / AvatarDkGame.HD + spawnX : spawnX;
         playerY = spawnY;
@@ -12080,6 +12118,7 @@ public class WorldScreen extends ScreenAdapter {
             }
         }
         edgeCd = 1.2f;
+        if (mapId == 108 && !raceIn) startRaceMode();
     }
 
     // ===== Cổng LinkMap của bản chính 3.4.4 (docs/maps-344-audit.md §2.3) =====
@@ -13550,6 +13589,920 @@ public class WorldScreen extends ScreenAdapter {
             csKickSheet = false;
             csKickSeat = -1;
         }
+    }
+
+    // ================= ĐUA THÚ (Race, docs/race-spec.md) =================
+    // Gốc: vào trường đua (map 108) → GET_HANDLER 12 → gói 1 xin trạng
+    // thái. Handler đua có lệnh riêng 1/2/5/8/9/10 (trùng số lệnh park
+    // nên rẽ nhánh khi raceIn, như casino). Chặng chạy bằng đoạn tốc độ
+    // (numTick, vTick) ở 20 tick/giây, hạng về đích tính theo thứ tự
+    // hết đoạn như PetRace.update của gốc. [PORT] chơi thử offline thì
+    // mô phỏng ngay trong máy (cùng luật với RaceService phía server).
+    private static final int[] RACE_PET_IMG = {313, 310, 312, 1024, 1025, 1224};
+    private static final String[] RACE_PET_NAME = {
+        "Tia Chớp", "Gà Bay", "Heo Hồng", "Cừu Mây", "Vịt Vàng", "Trâu Đất"};
+    private static final int[] RACE_MONEY = {
+        100, 500, 1000, 2000, 5000, 10000, 20000, 30000, 50000};
+    private static final int RACE_TRACK_SD = 2866;
+    private static final float[] RACE_LANE_Y = {214, 189, 164, 139, 114, 89};
+
+    private static final class RacePet {
+        int id, rate, img, money;
+        int x = 20;                 // SD như gốc (vẽ nhân HD)
+        int[] segN, segV;
+        int segIdx, segLeft, action;
+        int waterT = -1, fireT = -1, teT = 9, dustIdx;
+        int winRank;                // 0 = chưa về, 1..6 thứ hạng
+        boolean done() { return segN == null || segIdx >= segN.length; }
+    }
+
+    private boolean raceIn;
+    private int racePhase;          // 0 mở cược · 1 đang chạy · 2 nghỉ
+    private final RacePet[] racePets = new RacePet[6];
+    private int raceTimeRemain, raceTimeStart;
+    private float raceSecAcc;
+    private int raceCountStart, raceNWin = 1, raceTick;
+    private float raceTickAcc;
+    private boolean raceEnded;
+    private int raceFocus = 2;
+    private int raceSel;
+    private boolean raceInfoLoaded;
+    private String raceInfoName = "";
+    private int raceInfoImg, raceInfoWin, raceInfoRate, raceInfoForm, raceInfoHealth;
+    private final int[] raceMyStake = new int[6];
+    private boolean raceDcOpen;
+    private int raceDcPet;
+    private boolean raceWinOpen;
+    private String raceWinName = "";
+    private int raceWinPet, raceWinRate, raceWinStake, raceWinAn, raceWinThue, raceWinNhan;
+    private boolean raceHistOpen;
+    private final java.util.List<Integer> raceHistIcons = new ArrayList<>();
+    private final java.util.List<String> raceHistTimes = new ArrayList<>();
+    private boolean raceExitConfirm;
+    private int raceReturnMap = 10;
+    private float raceReturnX = 500, raceReturnY = 90;
+    // mô phỏng offline [PORT]
+    private boolean raceLocal;
+    private long raceLocalPhaseEndMs;
+    private final java.util.Random raceRnd = new java.util.Random();
+    private final byte[] raceLocalForm = new byte[6];
+    private final byte[] raceLocalHealth = new byte[6];
+    private final int[] raceLocalWins = new int[6];
+    private final int[] raceLocalRaces = new int[6];
+
+    private static boolean isRaceCmd(int cmd) {
+        return cmd == 1 || cmd == 2 || cmd == 5 || cmd == 8 || cmd == 9 || cmd == 10;
+    }
+
+    private void raceSend(Msg m) {
+        if (!online()) return;
+        try {
+            game.connection.send(m);
+        } catch (Exception ignored) {
+        }
+    }
+
+    /** Vào chế độ đua (gọi khi đặt chân tới map 108). */
+    private void startRaceMode() {
+        raceIn = true;
+        racePhase = 0;
+        raceEnded = false;
+        raceWinOpen = raceHistOpen = raceDcOpen = raceExitConfirm = false;
+        java.util.Arrays.fill(raceMyStake, 0);
+        closeOtherPanels();
+        // dọn hẳn các màn hình toàn cảnh của hệ khác (casino/vòng quay)
+        // để không vẽ chồng lên trường đua
+        casinoIn = false;
+        csPending = false;
+        dlOpen = false;
+        typing = false;
+        if (online()) {
+            raceLocal = false;
+            try {
+                Msg h = new Msg(AvatarProtocol.GET_HANDLER);
+                h.writer().writeByte(12);
+                game.connection.send(h);
+                raceSend(new Msg((byte) 1));
+            } catch (Exception ignored) {
+            }
+        } else {
+            raceLocal = true;
+            raceLocalStartBetting();
+        }
+    }
+
+    /** Thoát chế độ đua, về map trước khi vào. */
+    private void exitRaceMode() {
+        if (online()) {
+            try {
+                Msg h = new Msg(AvatarProtocol.GET_HANDLER);
+                h.writer().writeByte(9);
+                game.connection.send(h);
+            } catch (Exception ignored) {
+            }
+        }
+        raceIn = false;
+        raceLocal = false;
+        raceWinOpen = raceHistOpen = raceDcOpen = raceExitConfirm = false;
+        gotoMap(raceReturnMap, raceReturnX, raceReturnY);
+    }
+
+    private int raceMyStakeTotal() {
+        int s = 0;
+        for (int v : raceMyStake) s += v;
+        return s;
+    }
+
+    // ---------- nhận gói (handler 12) ----------
+
+    private void handleRaceMsg(Msg m) {
+        try {
+            java.io.DataInputStream r = m.reader();
+            switch (m.command) {
+                case 1: {
+                    int mode = r.readByte();
+                    if (mode == 0) {
+                        for (int i = 0; i < 6; i++) {
+                            RacePet p = new RacePet();
+                            p.id = r.readByte();
+                            p.rate = r.readByte();
+                            p.img = r.readShort();
+                            r.readShort(); // idIcon
+                            racePets[p.id] = p;
+                        }
+                        raceTimeRemain = r.readShort();
+                        racePhase = 0;
+                        raceEnded = false;
+                        raceInfoLoaded = false;
+                        raceSel = 0;
+                        raceRequestInfo(0);
+                    } else {
+                        boolean present = r.readBoolean();
+                        if (present) {
+                            for (int i = 0; i < 6; i++) {
+                                RacePet p = racePets[i];
+                                if (p == null) {
+                                    p = new RacePet();
+                                    p.id = i;
+                                    p.img = RACE_PET_IMG[i];
+                                    racePets[i] = p;
+                                }
+                                raceReadSegments(r, p);
+                            }
+                            raceTimeRemain = r.readShort();
+                            raceTimeStart = r.readShort();
+                            raceBeginRun(48, 0);
+                        } else {
+                            for (int i = 0; i < 6; i++) {
+                                RacePet p = new RacePet();
+                                p.id = r.readByte();
+                                p.img = r.readShort();
+                                raceReadSegments(r, p);
+                                racePets[p.id] = p;
+                            }
+                            raceTimeRemain = r.readShort();
+                            raceTimeStart = r.readShort();
+                            int ff = Math.max(0, (raceTimeStart - raceTimeRemain) * 20);
+                            raceBeginRun(0, Math.min(ff, 4000));
+                        }
+                    }
+                    break;
+                }
+                case 2: {
+                    raceInfoImg = r.readShort();
+                    raceInfoName = r.readUTF();
+                    raceInfoWin = r.readShort();
+                    raceInfoRate = r.readByte();
+                    raceInfoForm = r.readByte();
+                    raceInfoHealth = r.readByte();
+                    raceInfoLoaded = true;
+                    break;
+                }
+                case 5: {
+                    int pet = r.readByte();
+                    int pool = r.readInt();
+                    if (pet >= 0 && pet < 6 && racePets[pet] != null) {
+                        racePets[pet].money = pool;
+                        raceFocus = pet;
+                    }
+                    raceDcOpen = false;
+                    break;
+                }
+                case 8: {
+                    raceHistIcons.clear();
+                    raceHistTimes.clear();
+                    int n = r.readByte();
+                    for (int i = 0; i < n; i++) {
+                        raceHistIcons.add((int) r.readShort());
+                        raceHistTimes.add(r.readUTF());
+                    }
+                    if (n > 0) raceHistOpen = true;
+                    else addChatLog(TAB_SYSTEM, null, "Chưa có lịch sử đua.", true);
+                    break;
+                }
+                case 9: {
+                    addChatLog(TAB_NEARBY, "Trường đua", r.readUTF(), false);
+                    break;
+                }
+                case 10: {
+                    raceWinPet = r.readByte();
+                    raceWinName = r.readUTF();
+                    raceWinRate = r.readByte();
+                    raceWinStake = r.readInt();
+                    raceWinAn = r.readInt();
+                    raceWinThue = r.readInt();
+                    raceWinNhan = r.readInt();
+                    raceWinOpen = true;
+                    break;
+                }
+                default:
+                    break;
+            }
+        } catch (Exception ignored) {
+        }
+    }
+
+    private void raceReadSegments(java.io.DataInputStream r, RacePet p)
+            throws java.io.IOException {
+        int n = r.readUnsignedByte();
+        p.segN = new int[n];
+        p.segV = new int[n];
+        for (int i = 0; i < n; i++) {
+            p.segN[i] = r.readShort();
+            p.segV[i] = r.readShort();
+        }
+    }
+
+    private void raceBeginRun(int countStart, int fastForwardTicks) {
+        racePhase = 1;
+        raceEnded = false;
+        raceNWin = 1;
+        raceTick = 0;
+        raceCountStart = countStart;
+        raceTickAcc = 0;
+        for (RacePet p : racePets) {
+            if (p == null) continue;
+            p.x = 20;
+            p.segIdx = 0;
+            p.segLeft = p.segN != null && p.segN.length > 0 ? p.segN[0] : 0;
+            p.action = 0;
+            p.winRank = 0;
+            p.waterT = -1;
+            p.fireT = -1;
+            p.teT = 9;
+        }
+        for (int t = 0; t < fastForwardTicks; t++) raceTickOnce();
+    }
+
+    private void raceRequestInfo(int pet) {
+        raceSel = pet;
+        raceInfoLoaded = false;
+        if (raceLocal) {
+            RacePet p = racePets[pet];
+            raceInfoImg = p != null ? p.img : RACE_PET_IMG[pet];
+            raceInfoName = RACE_PET_NAME[pet];
+            raceInfoWin = raceLocalRaces[pet] > 0
+                ? raceLocalWins[pet] * 100 / raceLocalRaces[pet] : 0;
+            raceInfoRate = p != null ? p.rate : 0;
+            raceInfoForm = raceLocalForm[pet];
+            raceInfoHealth = raceLocalHealth[pet];
+            raceInfoLoaded = true;
+            return;
+        }
+        try {
+            Msg m = new Msg((byte) 2);
+            m.writer().writeByte(pet);
+            raceSend(m);
+        } catch (Exception ignored) {
+        }
+    }
+
+    private void racePlaceBet(int pet, int money) {
+        if (racePhase != 0) return;
+        if (raceLocal) {
+            if (myXu < money) {
+                addChatLog(TAB_SYSTEM, null, "Không đủ xu để đặt cược.", true);
+                return;
+            }
+            myXu -= money;
+            raceMyStake[pet] += money;
+            if (racePets[pet] != null) racePets[pet].money += money;
+            raceDcOpen = false;
+            raceFocus = pet;
+            return;
+        }
+        raceMyStake[pet] += money;
+        try {
+            Msg m = new Msg((byte) 5);
+            m.writer().writeByte(pet);
+            m.writer().writeInt(money);
+            raceSend(m);
+        } catch (Exception ignored) {
+        }
+    }
+
+    private void raceRequestHistory() {
+        if (raceLocal) {
+            if (raceHistIcons.isEmpty()) {
+                addChatLog(TAB_SYSTEM, null, "Chưa có lịch sử đua.", true);
+            } else {
+                raceHistOpen = true;
+            }
+            return;
+        }
+        raceSend(new Msg((byte) 8));
+    }
+
+    private void raceSendChat(String text) {
+        if (raceLocal) {
+            addChatLog(TAB_NEARBY, "Trường đua", text, false);
+            return;
+        }
+        try {
+            Msg m = new Msg((byte) 9);
+            m.writer().writeUTF(text);
+            raceSend(m);
+        } catch (Exception ignored) {
+        }
+    }
+
+    // ---------- cập nhật ----------
+
+    private void raceUpdate(float dt) {
+        if (!raceIn) return;
+        raceSecAcc += dt;
+        while (raceSecAcc >= 1f) {
+            raceSecAcc -= 1f;
+            if (racePhase == 0 && raceTimeRemain > 0) raceTimeRemain--;
+            if (racePhase != 0 && raceTimeStart > 0) raceTimeStart--;
+        }
+        if (racePhase == 1 && !raceEnded) {
+            raceTickAcc += dt * 1000f;
+            while (raceTickAcc >= 50f) {
+                raceTickAcc -= 50f;
+                raceTickOnce();
+                if (raceEnded) break;
+            }
+        }
+        if (raceLocal) raceLocalUpdate();
+    }
+
+    /** Một tick 1/20 giây — mô phỏng đúng PetRace.update của gốc. */
+    private void raceTickOnce() {
+        raceTick++;
+        if (raceCountStart > 0) {
+            raceCountStart--;
+            return;
+        }
+        boolean allDone = true;
+        for (RacePet p : racePets) {
+            if (p == null || p.segN == null) continue;
+            p.dustIdx = (p.dustIdx + 1) % 10;
+            if (p.teT < 9) p.teT++;
+            if (p.waterT >= 0) p.waterT--;
+            if (p.fireT >= 0) p.fireT--;
+            if (!p.done()) {
+                allDone = false;
+                int v = p.segV[p.segIdx];
+                p.x += v;
+                p.action = v == 0 ? 2 : 1;
+                if (--p.segLeft <= 0) {
+                    p.segIdx++;
+                    if (!p.done()) {
+                        p.segLeft = p.segN[p.segIdx];
+                        int nv = p.segV[p.segIdx];
+                        if (nv == 0 && p.teT == 9) p.teT = 0;
+                        else if (nv == 2 && p.waterT < 0) p.waterT = 20;
+                        else if (nv == 5 && p.fireT < 0) p.fireT = 20;
+                    }
+                }
+            } else {
+                p.action = 0;
+                if (p.segV != null && p.segV.length > 0) {
+                    p.x += p.segV[p.segV.length - 1];
+                }
+                if (p.winRank == 0) p.winRank = raceNWin++;
+            }
+        }
+        if (allDone && racePhase == 1) {
+            raceEnded = true;
+            if (raceLocal) raceLocalSettle();
+        }
+    }
+
+    // ---------- mô phỏng offline [PORT] ----------
+
+    private void raceLocalStartBetting() {
+        for (int i = 0; i < 6; i++) {
+            RacePet p = new RacePet();
+            p.id = i;
+            p.img = RACE_PET_IMG[i];
+            p.rate = 2 + raceRnd.nextInt(5);
+            racePets[i] = p;
+            raceLocalForm[i] = (byte) raceRnd.nextInt(3);
+            raceLocalHealth[i] = (byte) raceRnd.nextInt(3);
+        }
+        // pool khán giả giả lập cho bản chơi thử thêm sinh động
+        for (int k = 0; k < 3; k++) {
+            racePets[raceRnd.nextInt(6)].money += 100 * (1 + raceRnd.nextInt(20));
+        }
+        java.util.Arrays.fill(raceMyStake, 0);
+        racePhase = 0;
+        raceEnded = false;
+        raceTimeRemain = 60;
+        raceLocalPhaseEndMs = System.currentTimeMillis() + 60_000;
+        raceRequestInfo(0);
+    }
+
+    private void raceLocalStartRace() {
+        for (int i = 0; i < 6; i++) {
+            RacePet p = racePets[i];
+            int strength = (7 - p.rate) + raceLocalForm[i] + raceLocalHealth[i];
+            double center = 2.2 + strength * 0.33;
+            java.util.List<Integer> nums = new ArrayList<>();
+            java.util.List<Integer> vs = new ArrayList<>();
+            int covered = 0;
+            while (covered < RACE_TRACK_SD) {
+                int len = 15 + raceRnd.nextInt(50);
+                int v;
+                if (raceRnd.nextInt(100) < 8) {
+                    v = 0;
+                    len = 10 + raceRnd.nextInt(16);
+                } else {
+                    v = (int) Math.round(center + (raceRnd.nextDouble() * 3 - 1.5));
+                    v = Math.max(1, Math.min(6, v));
+                }
+                nums.add(len);
+                vs.add(v);
+                covered += v * len;
+            }
+            p.segN = nums.stream().mapToInt(Integer::intValue).toArray();
+            p.segV = vs.stream().mapToInt(Integer::intValue).toArray();
+        }
+        int total = 0;
+        for (RacePet p : racePets) {
+            int s = 0;
+            for (int n : p.segN) s += n;
+            total = Math.max(total, s);
+        }
+        raceTimeStart = total / 20 + 8;
+        raceBeginRun(48, 0);
+        raceLocalPhaseEndMs = System.currentTimeMillis() + total * 50L + 1500;
+    }
+
+    private void raceLocalSettle() {
+        int winner = -1;
+        for (RacePet p : racePets) {
+            if (p != null && p.winRank == 1) winner = p.id;
+        }
+        if (winner < 0) return;
+        for (int i = 0; i < 6; i++) raceLocalRaces[i]++;
+        raceLocalWins[winner]++;
+        raceHistIcons.add(0, RACE_PET_IMG[winner]);
+        raceHistTimes.add(0, new java.text.SimpleDateFormat("HH:mm dd/MM")
+            .format(new java.util.Date()));
+        while (raceHistIcons.size() > 10) {
+            raceHistIcons.remove(raceHistIcons.size() - 1);
+            raceHistTimes.remove(raceHistTimes.size() - 1);
+        }
+        int stake = raceMyStake[winner];
+        if (stake > 0) {
+            RacePet wp = racePets[winner];
+            int an = stake * wp.rate;
+            int thue = an / 10;
+            raceWinPet = winner;
+            raceWinName = RACE_PET_NAME[winner];
+            raceWinRate = wp.rate;
+            raceWinStake = stake;
+            raceWinAn = an;
+            raceWinThue = thue;
+            raceWinNhan = an - thue;
+            myXu += raceWinNhan;
+            raceWinOpen = true;
+        }
+        racePhase = 2;
+        raceTimeStart = 8;
+        raceLocalPhaseEndMs = System.currentTimeMillis() + 8000;
+    }
+
+    private void raceLocalUpdate() {
+        long now = System.currentTimeMillis();
+        if (racePhase == 0 && now >= raceLocalPhaseEndMs) {
+            raceLocalStartRace();
+        } else if (racePhase == 2 && now >= raceLocalPhaseEndMs) {
+            raceLocalStartBetting();
+        }
+    }
+
+    // ---------- vẽ thú trên đường đua (không gian thế giới) ----------
+
+    private Texture raceTex(String name) {
+        return game.texture("race/" + name + ".png");
+    }
+
+    private void drawRacePets() {
+        // người chơi đứng xem ở sát đường đua như khán giả (gốc cho
+        // avatar bám đáy camera; bản port đặt ở bãi cỏ đầu đường đua)
+        drawFigure(playerDoll, playerAnim, 150, 26, displayName, true);
+        long now = System.currentTimeMillis();
+        for (int lane = 5; lane >= 0; lane--) {
+            RacePet p = racePets[lane];
+            if (p == null) continue;
+            Texture tex = house.imgTexture(p.img);
+            float feetX = p.x * AvatarDkGame.HD;
+            float feetY = RACE_LANE_Y[lane];
+            if (tex != null) {
+                float h = 54;
+                float w = h * tex.getWidth() / Math.max(1, tex.getHeight());
+                if (w > 76) { h = h * 76 / w; w = 76; }
+                float bob = p.action == 1 ? Math.abs((float) Math.sin(now / 90.0 + lane)) * 3.5f : 0f;
+                batch.draw(tex, feetX - w / 2f, feetY + bob, w, h);
+                // hiệu ứng gốc: nước (v=2), lửa + bụi (v=5), tè (v=0)
+                if (p.waterT >= 0) {
+                    Texture wt = raceTex("28");
+                    batch.draw(wt, feetX + w / 2f - 15, feetY + h - 6, 30, 32);
+                }
+                if (p.fireT >= 0) {
+                    Texture ft = raceTex("29");
+                    batch.draw(ft, feetX + w / 2f - 14, feetY + h - 4, 28, 30);
+                    Texture dt = raceTex("bui/d0" + (p.dustIdx / 2));
+                    batch.draw(dt, feetX - w / 2f - 5, feetY, dt.getWidth(), dt.getHeight());
+                }
+                if (p.action == 2 && p.teT < 9) {
+                    Texture tt = raceTex("bui/w" + (p.teT / 3));
+                    batch.draw(tt, feetX - tt.getWidth() / 2f, feetY, tt.getWidth(), tt.getHeight());
+                }
+                if (racePhase == 1 && p.money > 0) {
+                    String s = fmtMoney(p.money);
+                    Ui.fontTiny.setColor(1f, 1f, 1f, 0.95f);
+                    layout.setText(Ui.fontTiny, s);
+                    Ui.fontTiny.draw(batch, s, feetX - w / 2f - 8 - layout.width,
+                        feetY + 34);
+                }
+                if (p.winRank > 0) {
+                    String s = "#" + p.winRank;
+                    Ui.fontSmall.setColor(1f, 0.85f, 0.25f, 1f);
+                    layout.setText(Ui.fontSmall, s);
+                    Ui.fontSmall.draw(batch, s, feetX - layout.width / 2f, feetY + 84);
+                }
+            }
+            if (lane == raceFocus && racePhase == 1) {
+                float ay = feetY + 108 + (float) Math.sin(now / 180.0) * 4f;
+                Ui.faIcon(batch, Ui.fa20, Ui.FA_ARROW_DOWN, feetX, ay + 10,
+                    new Color(1f, 0.8f, 0.2f, 1f));
+            }
+        }
+    }
+
+    // ---------- vẽ giao diện đua (HUD) ----------
+
+    private static final float RC_PX = 150, RC_PY = 56, RC_PW = 980, RC_PH = 608;
+
+    private void drawRace() {
+        // nút Lịch sử / Thoát ở góc phải trên (dưới nút burger)
+        csButton(Ui.W - 176, Ui.H - 128, 150, 48, "Lịch sử", 0);
+        csButton(Ui.W - 176, Ui.H - 188, 150, 48, "Thoát", 2);
+        if (racePhase == 0) drawRaceBetPanel();
+        if (racePhase == 1 && raceCountStart > 0) {
+            Texture cd = house.imgTexture(1065);
+            if (cd != null) {
+                int frame = 3 - raceCountStart / 12;
+                if (frame < 0) frame = 0;
+                if (frame > 3) frame = 3;
+                TextureRegion reg = new TextureRegion(cd, 0, frame * 42, 76, 42);
+                batch.draw(reg, 640 - 76, 330, 152, 84);
+            }
+        }
+        if (racePhase == 1 && raceEnded) {
+            String s = "Chặng sau mở cược sau " + raceTimeStart + " giây";
+            Ui.fontSmall.setColor(1f, 1f, 1f, 1f);
+            layout.setText(Ui.fontSmall, s);
+            batch.draw(Ui.roundedRect((int) (layout.width + 44), 44, 12, GLASS_FILL_DARK, GLASS_RIM),
+                640 - (layout.width + 44) / 2f, Ui.H - 118);
+            Ui.fontSmall.draw(batch, s, 640 - layout.width / 2f, Ui.H - 90);
+        }
+        if (raceDcOpen) drawRaceDcSheet();
+        if (raceWinOpen) drawRaceWinDialog();
+        if (raceHistOpen) drawRaceHistory();
+        if (raceExitConfirm) drawRaceExitConfirm();
+    }
+
+    private void drawRaceBetPanel() {
+        float px = RC_PX, py = RC_PY, pw = RC_PW, ph = RC_PH;
+        float top = py + ph;
+        batch.draw(Ui.roundedRect((int) pw, (int) ph, 18,
+            new Color(0.07f, 0.11f, 0.17f, 0.98f), GLASS_RIM), px, py);
+        Ui.fontTitle.setColor(1f, 0.85f, 0.3f, 1f);
+        Ui.fontTitle.draw(batch, "Đua thú — Đặt cược", px + 28, top - 24);
+        String remain = "Còn " + raceTimeRemain + "s";
+        Ui.fontSmall.setColor(1f, 1f, 1f, 0.95f);
+        layout.setText(Ui.fontSmall, remain);
+        Ui.fontSmall.draw(batch, remain, px + pw - 190 - layout.width, top - 30);
+        // hàng chờ trạng thái trước khi có đội hình
+        if (racePets[0] == null) {
+            Ui.font.setColor(1f, 1f, 1f, 0.9f);
+            Ui.font.draw(batch, "Đang chờ trường đua...", px + 40, top - 120);
+            return;
+        }
+        // ---- cột thông tin thú đang chọn (trái) ----
+        float ix = px + 24, iw = 330;
+        float iy = top - 108;
+        if (raceInfoLoaded) {
+            Texture tex = house.imgTexture(raceInfoImg);
+            if (tex != null) {
+                float h = 110;
+                float w = h * tex.getWidth() / Math.max(1, tex.getHeight());
+                if (w > 170) { h = h * 170 / w; w = 170; }
+                batch.draw(tex, ix + iw / 2f - w / 2f, iy - h, w, h);
+            }
+            Ui.font.setColor(1f, 0.9f, 0.4f, 1f);
+            layout.setText(Ui.font, raceInfoName);
+            Ui.font.draw(batch, raceInfoName, ix + iw / 2f - layout.width / 2f, iy - 128);
+            String[][] rows = {
+                {"Thắng", raceInfoWin + "%"},
+                {"Tỉ lệ", "X" + raceInfoRate},
+                {"Phong độ", new String[]{"Thấp", "Thường", "Cao"}[Math.min(2, Math.max(0, raceInfoForm))]},
+                {"Sức khỏe", new String[]{"Thấp", "Thường", "Cao"}[Math.min(2, Math.max(0, raceInfoHealth))]},
+                {"Bạn đã cược", fmtMoney(raceMyStake[raceSel]) + " xu"},
+            };
+            float ry = iy - 168;
+            for (String[] row : rows) {
+                Ui.fontSmall.setColor(0.75f, 0.85f, 1f, 1f);
+                Ui.fontSmall.draw(batch, row[0], ix + 6, ry);
+                Ui.fontSmall.setColor(1f, 1f, 1f, 1f);
+                layout.setText(Ui.fontSmall, row[1]);
+                Ui.fontSmall.draw(batch, row[1], ix + iw - 6 - layout.width, ry);
+                ry -= 34;
+            }
+        } else {
+            Ui.fontSmall.setColor(1f, 1f, 1f, 0.8f);
+            Ui.fontSmall.draw(batch, "Đang tải thông tin thú...", ix + 6, iy - 60);
+        }
+        // đồng hồ + tiền của mình ở đáy cột trái
+        Texture timeTex = raceTex("popup/time");
+        if (timeTex != null) {
+            TextureRegion reg = new TextureRegion(timeTex, 0, 0, 28, 28);
+            batch.draw(reg, ix + 4, py + 62, 28, 28);
+        }
+        Ui.fontSmall.setColor(1f, 1f, 1f, 1f);
+        Ui.fontSmall.draw(batch, raceTimeRemain + " giây", ix + 42, py + 84);
+        Ui.fontSmall.setColor(1f, 0.85f, 0.35f, 1f);
+        Ui.fontSmall.draw(batch, "Xu của bạn: " + fmtMoney(myXu), ix + 4, py + 40);
+        // ---- 6 hàng thú (phải) ----
+        float rx = px + 386, rw = pw - 386 - 24;
+        for (int i = 0; i < 6; i++) {
+            RacePet p = racePets[i];
+            if (p == null) continue;
+            float ryTop = top - 108 - i * 84f;
+            float ryBot = ryTop - 76;
+            if (i == raceSel) {
+                batch.draw(Ui.roundedRect((int) rw, 80, 12,
+                    new Color(1f, 0.75f, 0.25f, 0.16f),
+                    new Color(1f, 0.75f, 0.25f, 0.65f)), rx, ryBot - 2);
+            }
+            Texture tex = house.imgTexture(p.img);
+            if (tex != null) {
+                float h = 62;
+                float w = h * tex.getWidth() / Math.max(1, tex.getHeight());
+                if (w > 84) { h = h * 84 / w; w = 84; }
+                batch.draw(tex, rx + 42 - w / 2f, ryBot + 8, w, h);
+            }
+            Ui.fontTiny.setColor(1f, 0.85f, 0.3f, 1f);
+            String rate = "X" + p.rate;
+            layout.setText(Ui.fontTiny, rate);
+            Ui.fontTiny.draw(batch, rate, rx + 42 - layout.width / 2f, ryBot + 2);
+            csButton(rx + 104, ryBot + 8, 220, 60,
+                p.money > 0 ? fmtMoney(p.money) : "Đặt cược", p.money > 0 ? 0 : 1);
+            if (raceMyStake[i] > 0) {
+                Ui.fontTiny.setColor(0.6f, 1f, 0.6f, 1f);
+                Ui.fontTiny.draw(batch, "của bạn " + fmtMoney(raceMyStake[i]),
+                    rx + 336, ryBot + 34);
+            }
+        }
+    }
+
+    private void drawRaceDcSheet() {
+        float w = 580, h = 420, x = (Ui.W - w) / 2f, y = (Ui.H - h) / 2f;
+        float top = y + h;
+        batch.draw(Ui.roundedRect((int) w, (int) h, 18, GLASS_FILL_DARK, GLASS_RIM), x, y);
+        RacePet p = racePets[raceDcPet];
+        Ui.fontTitle.setColor(1f, 0.85f, 0.3f, 1f);
+        String title = "Đặt cược" + (p != null ? " — " + RACE_PET_NAME[raceDcPet] : "");
+        layout.setText(Ui.fontTitle, title);
+        Ui.fontTitle.draw(batch, title, 640 - layout.width / 2f, top - 22);
+        for (int i = 0; i < 9; i++) {
+            float bx = x + 30 + (i % 3) * 178f;
+            float by = top - 130 - (i / 3) * 84f;
+            csButton(bx, by, 160, 64, fmtMoney(RACE_MONEY[i]), 1);
+        }
+        csButton(x + w - 170, y + 22, 140, 52, "Huỷ", 0);
+    }
+
+    private void drawRaceWinDialog() {
+        float w = 560, h = 470, x = (Ui.W - w) / 2f, y = (Ui.H - h) / 2f;
+        float top = y + h;
+        batch.draw(Ui.roundedRect((int) w, (int) h, 18, GLASS_FILL_DARK, GLASS_RIM), x, y);
+        Ui.font.setColor(1f, 1f, 1f, 0.95f);
+        String t1 = "Thú đua chiến thắng";
+        layout.setText(Ui.font, t1);
+        Ui.font.draw(batch, t1, 640 - layout.width / 2f, top - 34);
+        Ui.fontTitle.setColor(1f, 0.85f, 0.3f, 1f);
+        layout.setText(Ui.fontTitle, raceWinName);
+        Ui.fontTitle.draw(batch, raceWinName, 640 - layout.width / 2f, top - 66);
+        Texture tex = house.imgTexture(RACE_PET_IMG[raceWinPet]);
+        if (tex != null) {
+            float hh = 110;
+            float ww = hh * tex.getWidth() / Math.max(1, tex.getHeight());
+            if (ww > 190) { hh = hh * 190 / ww; ww = 190; }
+            batch.draw(tex, 640 - ww / 2f, top - 216, ww, hh);
+        }
+        String[][] rows = {
+            {"Tiền cược:", fmtMoney(raceWinStake)},
+            {"Tiền ăn:", fmtMoney(raceWinAn)},
+            {"Tiền thuế:", fmtMoney(raceWinThue)},
+            {"Tiền nhận được:", fmtMoney(raceWinNhan)},
+        };
+        float ry = top - 252;
+        for (String[] row : rows) {
+            Ui.fontSmall.setColor(0.8f, 0.88f, 1f, 1f);
+            Ui.fontSmall.draw(batch, row[0], x + 48, ry);
+            Ui.fontSmall.setColor(1f, 1f, 1f, 1f);
+            layout.setText(Ui.fontSmall, row[1]);
+            Ui.fontSmall.draw(batch, row[1], x + w - 48 - layout.width, ry);
+            ry -= 36;
+        }
+        csButton(640 - 90, y + 22, 180, 56, "Đóng", 1);
+    }
+
+    private void drawRaceHistory() {
+        float w = 480, h = 480, x = (Ui.W - w) / 2f, y = (Ui.H - h) / 2f;
+        float top = y + h;
+        batch.draw(Ui.roundedRect((int) w, (int) h, 18, GLASS_FILL_DARK, GLASS_RIM), x, y);
+        Ui.fontTitle.setColor(1f, 0.85f, 0.3f, 1f);
+        Ui.fontTitle.draw(batch, "Lịch sử đua", x + 28, top - 22);
+        batch.draw(Ui.roundedRect(36, 36, 10, Ui.BTN_CLOSE, GLASS_RIM),
+            x + w - 54, top - 54);
+        Ui.faIcon(batch, Ui.fa20, Ui.FA_XMARK, x + w - 36, top - 36,
+            new Color(1f, 1f, 1f, 0.9f));
+        float ry = top - 92;
+        for (int i = 0; i < raceHistIcons.size(); i++) {
+            Texture tex = house.imgTexture(raceHistIcons.get(i));
+            if (tex != null) {
+                float hh = 34;
+                float ww = hh * tex.getWidth() / Math.max(1, tex.getHeight());
+                batch.draw(tex, x + 40 - ww / 2f, ry - 26, ww, hh);
+            }
+            Ui.fontSmall.setColor(1f, 1f, 1f, 1f);
+            Ui.fontSmall.draw(batch, raceHistTimes.get(i), x + 84, ry);
+            String nm = racePetNameByImg(raceHistIcons.get(i));
+            if (nm != null) {
+                Ui.fontSmall.setColor(1f, 0.9f, 0.5f, 1f);
+                layout.setText(Ui.fontSmall, nm);
+                Ui.fontSmall.draw(batch, nm, x + w - 36 - layout.width, ry);
+            }
+            ry -= 40;
+            if (ry < y + 40) break;
+        }
+    }
+
+    private String racePetNameByImg(int img) {
+        for (int i = 0; i < 6; i++) {
+            if (RACE_PET_IMG[i] == img) return RACE_PET_NAME[i];
+        }
+        return null;
+    }
+
+    private void drawRaceExitConfirm() {
+        float w = 620, h = 240, x = (Ui.W - w) / 2f, y = (Ui.H - h) / 2f;
+        float top = y + h;
+        batch.draw(Ui.roundedRect((int) w, (int) h, 18, GLASS_FILL_DARK, GLASS_RIM), x, y);
+        String msg = raceMyStakeTotal() > 0
+            ? "Bạn có muốn thoát không (nếu có đặt cược bạn sẽ mất tiền cược)?"
+            : "Bạn có muốn thoát không?";
+        Ui.font.setColor(1f, 1f, 1f, 1f);
+        java.util.List<String> lines = wrapText(msg, Ui.font, w - 72);
+        float ly = top - 52;
+        for (String line : lines) {
+            layout.setText(Ui.font, line);
+            Ui.font.draw(batch, line, 640 - layout.width / 2f, ly);
+            ly -= 32;
+        }
+        csButton(x + 60, y + 26, 200, 56, "Thoát", 2);
+        csButton(x + w - 260, y + 26, 200, 56, "Ở lại", 0);
+    }
+
+    // ---------- chạm ----------
+
+    private boolean raceTouch(float x, float y) {
+        if (!raceIn) return false;
+        float top;
+        if (raceExitConfirm) {
+            float w = 620, h = 240, px = (Ui.W - w) / 2f, py = (Ui.H - h) / 2f;
+            if (x >= px + 60 && x <= px + 260 && y >= py + 26 && y <= py + 82) {
+                raceExitConfirm = false;
+                exitRaceMode();
+                return true;
+            }
+            if (x >= px + w - 260 && x <= px + w - 60 && y >= py + 26 && y <= py + 82) {
+                raceExitConfirm = false;
+                return true;
+            }
+            return true;
+        }
+        if (raceWinOpen) {
+            if (x >= 640 - 90 && x <= 640 + 90 && y >= (Ui.H - 470) / 2f + 22
+                    && y <= (Ui.H - 470) / 2f + 78) {
+                raceWinOpen = false;
+            }
+            return true;
+        }
+        if (raceHistOpen) {
+            float w = 480, h = 480, px = (Ui.W - w) / 2f, py = (Ui.H - h) / 2f;
+            top = py + h;
+            if (x >= px + w - 72 && x <= px + w && y >= top - 72 && y <= top) {
+                raceHistOpen = false;
+                return true;
+            }
+            if (x >= px && x <= px + w && y >= py && y <= top) return true;
+            raceHistOpen = false;
+            return true;
+        }
+        if (raceDcOpen) {
+            float w = 580, h = 420, px = (Ui.W - w) / 2f, py = (Ui.H - h) / 2f;
+            top = py + h;
+            for (int i = 0; i < 9; i++) {
+                float bx = px + 30 + (i % 3) * 178f;
+                float by = top - 130 - (i / 3) * 84f;
+                if (x >= bx && x <= bx + 160 && y >= by && y <= by + 64) {
+                    racePlaceBet(raceDcPet, RACE_MONEY[i]);
+                    return true;
+                }
+            }
+            if (x >= px + w - 170 && x <= px + w - 30 && y >= py + 22 && y <= py + 74) {
+                raceDcOpen = false;
+                return true;
+            }
+            return true;
+        }
+        // nút Lịch sử / Thoát
+        if (x >= Ui.W - 176 && x <= Ui.W - 26 && y >= Ui.H - 128 && y <= Ui.H - 80) {
+            raceRequestHistory();
+            return true;
+        }
+        if (x >= Ui.W - 176 && x <= Ui.W - 26 && y >= Ui.H - 188 && y <= Ui.H - 140) {
+            raceExitConfirm = true;
+            return true;
+        }
+        if (racePhase == 0 && racePets[0] != null) {
+            float px = RC_PX, py = RC_PY, pw = RC_PW, ph = RC_PH;
+            top = py + ph;
+            if (x >= px && x <= px + pw && y >= py && y <= top) {
+                float rx = px + 386;
+                for (int i = 0; i < 6; i++) {
+                    float ryTop = top - 108 - i * 84f;
+                    float ryBot = ryTop - 76;
+                    if (x >= rx && x <= rx + 92 && y >= ryBot && y <= ryTop) {
+                        raceRequestInfo(i);
+                        return true;
+                    }
+                    if (x >= rx + 104 && x <= rx + 324 && y >= ryBot + 8 && y <= ryBot + 68) {
+                        raceDcPet = i;
+                        raceSel = i;
+                        raceRequestInfo(i);
+                        raceDcOpen = true;
+                        return true;
+                    }
+                }
+                return true;
+            }
+        }
+        return racePhase == 0;
+    }
+
+    // ---------- harness chụp kiểm chứng (chỉ ScreenshotMain dùng) ----------
+
+    public void debugRaceBet() {
+        myXu = 500000;
+        gotoMap(108, 60, 60);
+        raceRequestInfo(2);
+        racePlaceBet(2, 5000);
+    }
+
+    public void debugRaceRun() {
+        if (!raceIn) debugRaceBet();
+        raceLocalStartRace();
+        for (int i = 0; i < 150; i++) raceTickOnce();
+    }
+
+    public void debugRaceWin() {
+        raceWinPet = 1;
+        raceWinName = RACE_PET_NAME[1];
+        raceWinRate = 3;
+        raceWinStake = 5000;
+        raceWinAn = 15000;
+        raceWinThue = 1500;
+        raceWinNhan = 13500;
+        raceWinOpen = true;
     }
 
     // ================= VÒNG QUAY MAY MẮN (DialLucky, docs/diallucky-spec.md)
