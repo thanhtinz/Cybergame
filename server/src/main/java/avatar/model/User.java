@@ -1858,6 +1858,44 @@ public class User {
         }
     }
 
+    /** Món đang thử đồ (chỉ RAM, không lưu DB) — gói −100. */
+    public int previewPartId = 0;
+
+    /** Thử đồ: nhận {short partId} (0 = cởi). Kiểm tra part + giới
+     *  như mặc đồ thật, rồi phát cho cả khu; wearing thật không đổi. */
+    public void applyPreview(Message ms) {
+        try {
+            short partId = ms.reader().readShort();
+            if (partId == 0) {
+                clearPreview();
+                return;
+            }
+            avatar.item.Part part =
+                avatar.item.PartManager.getInstance().findPartById(partId);
+            if (part == null) return;
+            int g = part.getGender();
+            if ((g == 1 || g == 2) && this.gender != g) {
+                getService().serverDialog("Giới tính không phù hợp");
+                return;
+            }
+            this.previewPartId = partId;
+            if (getMapService() != null) {
+                getMapService().previewPart(getId(), partId);
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+    /** Cởi đồ thử (nếu đang thử): phát gói −100 {id, 0} cho cả khu. */
+    public void clearPreview() {
+        if (previewPartId == 0) return;
+        previewPartId = 0;
+        if (getMapService() != null) {
+            getMapService().previewPart(getId(), (short) 0);
+        }
+    }
+
     public void usingItem(Message ms) {
         try {
             short itemID = ms.reader().readShort();

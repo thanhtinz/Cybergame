@@ -159,6 +159,15 @@ public class MessageHandler implements IMessageHandler {
                     case Cmd.USING_PART: {
                         if (this.client.user != null) {
                             this.client.user.usingItem(mss);
+                            // mặc/cất đồ thật là thôi thử đồ
+                            this.client.user.clearPreview();
+                            break;
+                        }
+                        break;
+                    }
+                    case Cmd.PREVIEW_ITEM: {
+                        if (this.client.user != null) {
+                            this.client.user.applyPreview(mss);
                             break;
                         }
                         break;

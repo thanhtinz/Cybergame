@@ -180,6 +180,22 @@ public class MapService extends Service {
         }
     }
 
+    /** Thử đồ [PORT theo APPLY_PREVIEW_ITEM của bản chính]: phát cho
+     *  cả khu gói −100 {int userID, short partID} (0 = cởi đồ thử).
+     *  Chỉ hiển thị tạm — wearing thật và DB không đổi. */
+    public void previewPart(int userID, short partID) {
+        try {
+            Message ms = new Message(Cmd.PREVIEW_ITEM);
+            DataOutputStream ds = ms.writer();
+            ds.writeInt(userID);
+            ds.writeShort(partID);
+            ds.flush();
+            sendMessage(ms);
+        } catch (IOException ex) {
+            logger.error("previewPart()", ex);
+        }
+    }
+
     public void usingPart(int userID, short itemID) {
         try {
             Message ms = new Message(Cmd.USING_PART);

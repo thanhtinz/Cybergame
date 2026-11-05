@@ -355,6 +355,7 @@ public class WorldScreen extends ScreenAdapter {
         int pose = 0;         // tư thế hành động đang giữ (gói 57 byte < 100)
         float jumpT = -1f;    // tiến trình cú nhảy của người này
         PaperDoll wedDoll;    // doll cưới tạm (tạo lười khi vào lễ)
+        int previewPart;      // món đang thử đồ (gói −100), 0 = không
 
         float jumpOffY() { return jumpOffsetY(jumpT); }
     }
@@ -573,6 +574,7 @@ public class WorldScreen extends ScreenAdapter {
             }
         }
         playerDoll = game.newDoll(parts);
+        previewSelf = 0;
         if (playerFeel != 4) applyFeelLocal(playerFeel);
         addChatLog(TAB_SYSTEM, null, "Đăng nhập thành công: " + p.username
             + " (cấp " + p.levelMain + ")", true);
@@ -2859,7 +2861,7 @@ public class WorldScreen extends ScreenAdapter {
         if (!replaced) parts.add(feelId);
         playerParts.clear();
         playerParts.addAll(parts);
-        playerDoll = game.newDoll(parts);
+        rebuildSelfDoll();
     }
 
     /** Chọn biểu cảm từ sheet: đổi hình của mình + gửi gói 57 để cả khu
@@ -3912,6 +3914,24 @@ public class WorldScreen extends ScreenAdapter {
                     bagPanel = true;
                     break;
                 }
+                case AvatarProtocol.PREVIEW_ITEM: {
+                    // gói −100: {int id người, short idPart} — thử đồ
+                    // tạm (0 = cởi); chỉ đổi hiển thị doll
+                    java.io.DataInputStream r = m.reader();
+                    int uid = r.readInt();
+                    int partId = r.readShort();
+                    if (uid == ownId()) {
+                        previewSelf = partId;
+                        rebuildSelfDoll();
+                    } else {
+                        RemoteFigure f = remotes.get(uid);
+                        if (f != null) {
+                            f.previewPart = partId;
+                            refreshRemoteDoll(f);
+                        }
+                    }
+                    break;
+                }
                 case AvatarProtocol.USING_PART: {
                     // gói −48: {int id người, short idPart} — đảo trạng
                     // thái mặc của part đó trên nhân vật tương ứng
@@ -3937,7 +3957,7 @@ public class WorldScreen extends ScreenAdapter {
                     if (uid == ownId()) {
                         if (playerParts.remove((Integer) partId)) {
                             wornExpire.remove(partId);
-                            playerDoll = game.newDoll(playerParts);
+                            rebuildSelfDoll();
                         }
                         removeInvItem(bagItems, partId);
                         removeInvItem(chestConItems, partId);
@@ -5223,6 +5243,10 @@ public class WorldScreen extends ScreenAdapter {
                 pendingArea = null;
                 joinedClientMap = mapDef.id;
                 remotes.clear();
+                if (previewSelf != 0) {
+                    previewSelf = 0;
+                    rebuildSelfDoll();
+                }
                 lastSentX = Integer.MIN_VALUE;
             } catch (IOException e) {
                 // thử lại ở frame sau
@@ -9255,7 +9279,7 @@ public class WorldScreen extends ScreenAdapter {
             playerParts.add(partId);
             if (exp != null) wornExpire.put(partId, exp);
         }
-        playerDoll = game.newDoll(playerParts);
+        rebuildSelfDoll();
     }
 
     /** Gói −48 cho người chơi khác: đảo trạng thái mặc trên doll của họ. */
@@ -9278,7 +9302,49 @@ public class WorldScreen extends ScreenAdapter {
             parts.add(partId);
         }
         f.info.wearing = parts.stream().mapToInt(Integer::intValue).toArray();
+        refreshRemoteDoll(f);
+    }
+
+    /** Dựng lại doll của một người chơi khác: wearing thật + món
+     *  đang thử (previewPart) thay part cùng zOrder nếu có. */
+    private void refreshRemoteDoll(RemoteFigure f) {
+        java.util.List<Integer> parts = new ArrayList<>();
+        for (int id : f.info.wearing) parts.add(id);
+        if (f.previewPart != 0) {
+            com.avatardk.game.data.PartData np = game.data.part(f.previewPart);
+            if (np != null) {
+                for (int i = parts.size() - 1; i >= 0; i--) {
+                    com.avatardk.game.data.PartData op = game.data.part(parts.get(i));
+                    if (op != null && op.id != f.previewPart
+                            && op.zorder == np.zorder) {
+                        parts.remove(i);
+                    }
+                }
+                if (!parts.contains(f.previewPart)) parts.add(f.previewPart);
+            }
+        }
         f.doll = game.newDoll(parts);
+    }
+
+    /** Dựng lại doll của mình, gộp món đang thử (previewSelf) thay
+     *  part cùng zOrder — chỉ hiển thị, không đụng playerParts. */
+    private void rebuildSelfDoll() {
+        if (previewSelf == 0) {
+            playerDoll = game.newDoll(playerParts);
+            return;
+        }
+        java.util.List<Integer> parts = new java.util.ArrayList<>(playerParts);
+        com.avatardk.game.data.PartData np = game.data.part(previewSelf);
+        if (np != null) {
+            for (int i = parts.size() - 1; i >= 0; i--) {
+                com.avatardk.game.data.PartData op = game.data.part(parts.get(i));
+                if (op != null && op.id != previewSelf && op.zorder == np.zorder) {
+                    parts.remove(i);
+                }
+            }
+            if (!parts.contains(previewSelf)) parts.add(previewSelf);
+        }
+        playerDoll = game.newDoll(parts);
     }
 
     /** Gói −36 cho người chơi khác: tháo part khỏi doll của họ. */
@@ -9372,7 +9438,7 @@ public class WorldScreen extends ScreenAdapter {
                     if (worn) {
                         if (playerParts.remove((Integer) part)) {
                             wornExpire.remove(part);
-                            playerDoll = game.newDoll(playerParts);
+                            rebuildSelfDoll();
                         }
                     } else {
                         removeInvItem(bagItems, part);
@@ -22885,6 +22951,12 @@ public class WorldScreen extends ScreenAdapter {
         crOpen = false;
         txOpen = false;
         aiOpen = false;
+        snOpen = false;
+        dailyOpen = false;
+        auctionOpen = false;
+        marketOpen = false;
+        tradeOpen = false;
+        farm2Open = false;
         mgInviteIn = null;
     }
 
@@ -22974,6 +23046,9 @@ public class WorldScreen extends ScreenAdapter {
     // gốc luôn trừ Xu), tự mặc món mới, món cũ cùng loại trả về giỏ,
     // phát −48 cho cả khu; tiền cập nhật qua gói −24/−33.
     private boolean shopOpen = false;
+    /** Món đang THỬ ĐỒ (preview, gói −100): chỉ hiển thị tạm trên
+     *  doll, không nằm trong playerParts/bagItems. 0 = không thử. */
+    private int previewSelf;
     private PaperDoll shopTryDoll;
     private String shopTitle = "Cửa hàng";
     private int shopTab = 0;
@@ -23489,15 +23564,29 @@ public class WorldScreen extends ScreenAdapter {
         }
         boolean afford = total > 0 && bal >= total;
         if (afford) {
-            batch.draw(Ui.gradientRect((int) (cw - 48), 54, 12,
+            batch.draw(Ui.gradientRect(284, 54, 12,
                 EntryUi.ORANGE_TOP, EntryUi.ORANGE_BOT), cx + 24, cy + 24);
         } else {
-            batch.draw(Ui.roundedRect((int) (cw - 48), 54, 12,
+            batch.draw(Ui.roundedRect(284, 54, 12,
                 new Color(0f, 0f, 0f, 0.35f), GLASS_RIM), cx + 24, cy + 24);
         }
         Ui.centered(batch, Ui.font, afford ? "Mua ngay" : "Không đủ tiền",
-            cx + cw / 2f, cy + 24 + 36,
+            cx + 24 + 142, cy + 24 + 36,
             afford ? Color.WHITE : new Color(1f, 1f, 1f, 0.45f));
+        // nút Thử đồ (bản chính có APPLY_PREVIEW_ITEM): mặc tạm món
+        // lên nhân vật trong map cho cả khu thấy, không tốn tiền;
+        // bấm lại khi đang thử chính món này = cởi đồ thử. Đồ sai
+        // giới thì xám như ô bị khoá ở lưới shop.
+        boolean wrongGender = sel.gender != 0 && game.player != null
+            && game.player.gender != 0 && sel.gender != game.player.gender;
+        boolean tryingThis = previewSelf == sel.id;
+        batch.draw(Ui.roundedRect(284, 54, 12,
+            wrongGender ? new Color(0f, 0f, 0f, 0.35f)
+                : tryingThis ? new Color(0.20f, 0.45f, 0.65f, 1f) : Ui.BTN_CANCEL,
+            GLASS_RIM), cx + cw - 308, cy + 24);
+        Ui.centered(batch, Ui.font, tryingThis ? "Đang thử — cởi ra" : "Thử đồ",
+            cx + cw - 308 + 142, cy + 24 + 36,
+            wrongGender ? new Color(1f, 1f, 1f, 0.35f) : Color.WHITE);
     }
 
     /** Một nút chọn dạng pill trong hoá đơn: bị khoá (món không bán
@@ -23534,7 +23623,32 @@ public class WorldScreen extends ScreenAdapter {
             return;
         }
         if (sel == null) { billOpen = false; return; }
-        if (y >= cy + 24 && y <= cy + 78 && x >= cx + 24 && x <= cx + cw - 24) {
+        if (y >= cy + 24 && y <= cy + 78 && x >= cx + cw - 308 && x <= cx + cw - 24) {
+            // nút Thử đồ: gửi −100 (online) hoặc áp cục bộ (offline);
+            // đang thử chính món này thì gửi 0 để cởi
+            boolean wrongGender = sel.gender != 0 && game.player != null
+                && game.player.gender != 0 && sel.gender != game.player.gender;
+            if (!wrongGender) {
+                int target = previewSelf == sel.id ? 0 : sel.id;
+                if (game.connection != null && online()) {
+                    try {
+                        AvatarProtocol.applyPreview(game.connection, target);
+                    } catch (Exception ignored) {
+                    }
+                } else {
+                    previewSelf = target;
+                    rebuildSelfDoll();
+                }
+                if (target != 0) {
+                    addChatLog(TAB_SYSTEM, null, "Đang thử đồ: " + sel.name
+                        + " — mặc đồ thật hoặc mua đồ là thôi thử.", true);
+                }
+                billOpen = false;
+                shopOpen = false;
+            }
+            return;
+        }
+        if (y >= cy + 24 && y <= cy + 78 && x >= cx + 24 && x <= cx + 308) {
             int total = billTotal(sel);
             int bal = billCur == 2 ? myLuong : myXu;
             if (total > 0 && bal >= total && game.connection != null) {
@@ -23591,6 +23705,27 @@ public class WorldScreen extends ScreenAdapter {
         shopNewFlow = true;
         myXu = 100000;
         openBill();
+    }
+
+    /** Sân khấu chụp THỬ ĐỒ: hoá đơn món 2173 có nút Thử đồ. */
+    public void debugPreviewBill() {
+        debugCloseHubGames();
+        closeOtherPanels();
+        debugOpenShop(0, 2173);
+        shopNewFlow = true;
+        myXu = 100000;
+        openBill();
+    }
+
+    /** Sân khấu chụp THỬ ĐỒ: nhân vật trong map đang thử món 2173
+     *  (áp cục bộ như khi server phát gói −100 của chính mình). */
+    public void debugPreviewWear() {
+        debugCloseHubGames();
+        shopOpen = false;
+        billOpen = false;
+        weddingOn = false; // stage cưới trước để lại doll cưới tạm
+        previewSelf = 2173;
+        rebuildSelfDoll();
     }
 
     /** Sân khấu chụp: mở shop thật tại một tab và chọn sẵn một món theo id. */

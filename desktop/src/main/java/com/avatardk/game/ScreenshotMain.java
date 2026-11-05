@@ -1405,6 +1405,24 @@ public class ScreenshotMain {
                         }
                         if (frame == 15) {
                             shot("shot-snake-end.png");
+                            stage = 148; frame = 0;
+                        }
+                        break;
+                    case 148: // Thử đồ: hoá đơn shop có nút Thử đồ
+                        if (frame == 1) {
+                            world.debugPreviewBill();
+                        }
+                        if (frame == 15) {
+                            shot("shot-preview-bill.png");
+                            stage = 149; frame = 0;
+                        }
+                        break;
+                    case 149: // Thử đồ: nhân vật trong map đang mặc món thử
+                        if (frame == 1) {
+                            world.debugPreviewWear();
+                        }
+                        if (frame == 15) {
+                            shot("shot-preview-wear.png");
                             stage = 121; frame = 0;
                         }
                         break;

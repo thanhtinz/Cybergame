@@ -65,6 +65,10 @@ public final class AvatarProtocol {
      *  từ đang mặc); S→C {int id người, short idPart} phát cả zone, bên
      *  nhận tự đảo trạng thái mặc của part đó (Cmd.USING_PART của gốc). */
     public static final byte USING_PART = -48;
+    /** Thử đồ (bản chính: APPLY_PREVIEW_ITEM): gửi {short partId},
+     *  server phát lại cho cả khu {int userId, short partId};
+     *  partId 0 = cởi đồ thử. Chỉ hiển thị tạm, không lưu. */
+    public static final byte PREVIEW_ITEM = -100;
     /** Xoá đồ: C→S {short idPart, byte type} (1 = trong giỏ, 0 = đang mặc);
      *  S→C {int id người, short idPart} (Cmd.REMOVE_ITEM của gốc). */
     public static final byte REMOVE_ITEM = -36;
@@ -438,6 +442,13 @@ public final class AvatarProtocol {
     public static void requestContainer(GameConnection conn, int id) throws IOException {
         Msg m = new Msg(CONTAINER);
         m.writer().writeInt(id);
+        conn.send(m);
+    }
+
+    /** Thử đồ / cởi đồ thử (gói −100): {short partId} (0 = cởi). */
+    public static void applyPreview(GameConnection conn, int partId) throws IOException {
+        Msg m = new Msg(PREVIEW_ITEM);
+        m.writer().writeShort(partId);
         conn.send(m);
     }
 
