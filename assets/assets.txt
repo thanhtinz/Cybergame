@@ -735,6 +735,13 @@ i:minigame/BG_Box_2.png:minigame/BG_Box_2-506c159d264348a7ec2643995c983cbf.png:2
 i:minigame/BG_Box_3.png:minigame/BG_Box_3-232669e10dcf5e6b2fad53a1118f8c08.png:2066:image/png:1
 i:minigame/BG_Box_4.png:minigame/BG_Box_4-698ba177e10b8a6003b00505e7f6da2d.png:373:image/png:1
 i:minigame/BG_Box_5.png:minigame/BG_Box_5-6119cca5e9345a9e61df10d0f45dd576.png:385:image/png:1
+d:diallucky:diallucky:0:application/unknown:1
+i:diallucky/c.png:diallucky/c-d1039780cbd3988f4dbd502eba37ac07.png:593:image/png:1
+i:diallucky/cb.png:diallucky/cb-440d73e85015662c8df1855ad8848ce6.png:472:image/png:1
+i:diallucky/dot.png:diallucky/dot-05440693671450f21a647b81cd205ddb.png:287:image/png:1
+i:diallucky/q.png:diallucky/q-9e5002cfacc34b01d2ff4788c24f8527.png:273:image/png:1
+i:diallucky/sq.png:diallucky/sq-9cd79ab58d19a921213d23be75eeb104.png:1144:image/png:1
+i:diallucky/st.png:diallucky/st-389d1d5e10ad7dbbeff27b7897038d8d.png:323:image/png:1
 t:com/badlogic/gdx/graphics/g3d/particles/particles.fragment.glsl:particles.fragment-b90524761fdf09b0a836056d590c30b8.glsl:820:application/unknown:1
 t:com/badlogic/gdx/graphics/g3d/particles/particles.vertex.glsl:particles.vertex-f25b8b2fae10b9bfa09bfdd484923148.glsl:2886:application/unknown:1
 t:com/badlogic/gdx/graphics/g3d/shaders/default.fragment.glsl:default.fragment-e1c018bd48044c8b67c7bbc53145e540.glsl:5874:application/unknown:1
