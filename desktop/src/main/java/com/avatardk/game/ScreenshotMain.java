@@ -1423,6 +1423,24 @@ public class ScreenshotMain {
                         }
                         if (frame == 15) {
                             shot("shot-preview-wear.png");
+                            stage = 150; frame = 0;
+                        }
+                        break;
+                    case 150: // Rương phụ: panel song song Giỏ | Rương phụ
+                        if (frame == 1) {
+                            world.debugOpenBoxPanel();
+                        }
+                        if (frame == 15) {
+                            shot("shot-box.png");
+                            stage = 151; frame = 0;
+                        }
+                        break;
+                    case 151: // Rương phụ đang khoá + form mật khẩu
+                        if (frame == 1) {
+                            world.debugOpenBoxLocked();
+                        }
+                        if (frame == 15) {
+                            shot("shot-box-lock.png");
                             stage = 121; frame = 0;
                         }
                         break;

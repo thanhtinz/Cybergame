@@ -4037,6 +4037,44 @@ public class WorldScreen extends ScreenAdapter {
                     }
                     break;
                 }
+                case AvatarProtocol.BOX: {
+                    // gói −118 STATE: {sub, hasPass, unlocked, level,
+                    // slot, chestSlot} + nếu unlocked: list rương phụ
+                    // rồi list giỏ; số món = -1 là gói HỎI giá nâng cấp
+                    java.io.DataInputStream r = m.reader();
+                    r.readByte(); // sub STATE
+                    boxHasPass = r.readByte() != 0;
+                    boxUnlocked = r.readByte() != 0;
+                    boxLevel = r.readByte() & 0xFF;
+                    boxCapacity = r.readByte() & 0xFF;
+                    bagCapacity = r.readByte() & 0xFF;
+                    if (boxUnlocked) {
+                        int n = r.readShort();
+                        if (n == -1) {
+                            confirmAction = 7;
+                            confirmText = r.readUTF();
+                        } else {
+                            boxItems.clear();
+                            for (int i = 0; i < n; i++) {
+                                boxItems.add(new InvItem(r.readShort(), r.readByte(), r.readUTF()));
+                            }
+                            int n2 = r.readShort();
+                            chestConItems.clear();
+                            bagItems.clear();
+                            for (int i = 0; i < n2; i++) {
+                                InvItem it = new InvItem(r.readShort(), r.readByte(), r.readUTF());
+                                chestConItems.add(it);
+                                bagItems.add(it);
+                            }
+                            if (boxSel >= boxItems.size()) boxSel = Math.max(0, boxItems.size() - 1);
+                            // mở khoá/đặt/đổi mật khẩu xong: đóng form
+                            if (boxPassOpen) closeBoxPassForm();
+                        }
+                    } else if (chestPanel && chestMode == 1 && !boxPassOpen) {
+                        openBoxPassForm(0);
+                    }
+                    break;
+                }
                 case AvatarProtocol.CUSTOM_CHEST: {
                     // gói −87: giỏ + rương nhà -> mở panel rương (gốc:
                     // HouseScr.onCustomChest)
@@ -4084,6 +4122,9 @@ public class WorldScreen extends ScreenAdapter {
                     addChatLog(TAB_SYSTEM, null, dlg, true);
                     if (passFormOpen) {
                         setPassStatus(dlg, dlg.contains("thành công") ? 1 : 2);
+                    }
+                    if (boxPassOpen) {
+                        setBoxPassStatus(dlg, 2);
                     }
                     break;
                 }
@@ -5352,6 +5393,17 @@ public class WorldScreen extends ScreenAdapter {
                     }
                     return true;
                 }
+                if (boxPassOpen) {
+                    StringBuilder b = boxPassFields[boxPassFocus];
+                    if (c == '\b') {
+                        if (b.length() > 0) b.deleteCharAt(b.length() - 1);
+                    } else if (c == '\r' || c == '\n') {
+                        submitBoxPassForm();
+                    } else if (c >= 32 && b.length() < 24) {
+                        b.append(c);
+                    }
+                    return true;
+                }
                 if (passFormOpen) {
                     StringBuilder b = passFields[passFocus];
                     if (c == '\b') {
@@ -5694,6 +5746,10 @@ public class WorldScreen extends ScreenAdapter {
         // form Đổi mật khẩu đang mở là lớp trên cùng (modal, nuốt mọi chạm)
         if (passFormOpen) {
             passFormTouch(x, y);
+            return;
+        }
+        if (boxPassOpen) {
+            boxPassTouch(x, y);
             return;
         }
         // hộp nhập server mở (TEXT_BOX) là lớp trên cùng
@@ -9155,6 +9211,12 @@ public class WorldScreen extends ScreenAdapter {
     private final java.util.List<InvItem> bagItems = new ArrayList<>();      // giỏ (gói −47)
     private final java.util.List<InvItem> chestConItems = new ArrayList<>(); // giỏ (gói −87)
     private final java.util.List<InvItem> chestItems = new ArrayList<>();    // rương nhà (gói −87)
+    // Rương phụ cá nhân [PORT BoxScr, gói −118]: panel song song dùng
+    // chung khung rương nhà, chestMode phân biệt phía phải
+    private int chestMode = 0; // 0 = rương nhà, 1 = rương phụ
+    private final java.util.List<InvItem> boxItems = new ArrayList<>();
+    private int boxCapacity = 10, boxLevel = 1, boxSel = 0;
+    private boolean boxHasPass = false, boxUnlocked = true;
     /** Hạn dùng của đồ đang mặc theo partId (từ gói đăng nhập + khi mặc từ giỏ). */
     private final java.util.Map<Integer, String> wornExpire = new java.util.HashMap<>();
     private int bagCapacity = 20, chestCapacity = 20, chestLevel = 1;
@@ -9236,6 +9298,7 @@ public class WorldScreen extends ScreenAdapter {
 
     /** Mở rương nhà từ menu: xin dữ liệu rương (gói −87). */
     public void openChest() {
+        chestMode = 0;
         if (!online()) {
             addChatLog(TAB_SYSTEM, null, "Đăng nhập để dùng rương đồ.", true);
             return;
@@ -9244,6 +9307,27 @@ public class WorldScreen extends ScreenAdapter {
             AvatarProtocol.requestChest(game.connection);
         } catch (IOException e) {
             addChatLog(TAB_SYSTEM, null, "Không mở được rương đồ (mất kết nối?).", true);
+        }
+    }
+
+    /** Mở RƯƠNG PHỤ [PORT]: panel song song phía phải là rương phụ;
+     *  xin STATE (gói −118) và nạp phía giỏ bằng gói −87 nếu cần. */
+    public void openBox() {
+        if (!online()) {
+            addChatLog(TAB_SYSTEM, null, "Đăng nhập để dùng rương phụ.", true);
+            return;
+        }
+        chestMode = 1;
+        bagPanel = false;
+        chestPanel = true;
+        boxSel = 0;
+        try {
+            if (chestConItems.isEmpty()) {
+                AvatarProtocol.requestChest(game.connection);
+            }
+            AvatarProtocol.boxOpen(game.connection);
+        } catch (IOException e) {
+            addChatLog(TAB_SYSTEM, null, "Không mở được rương phụ (mất kết nối?).", true);
         }
     }
 
@@ -9389,14 +9473,18 @@ public class WorldScreen extends ScreenAdapter {
      *  side chỉ dùng cho rương: 0 = nút ở panel Giỏ, 1 = ở panel Rương. */
     private void invActionTapped(boolean chest, int btn, int side) {
         if (chest) {
-            java.util.List<InvItem> items = side == 0 ? chestConItems : chestItems;
-            int sel = side == 0 ? conSel : homeSel;
+            boolean boxSideA = side == 1 && chestMode == 1;
+            java.util.List<InvItem> items = side == 0 ? chestConItems
+                : boxSideA ? boxItems : chestItems;
+            int sel = side == 0 ? conSel : boxSideA ? boxSel : homeSel;
             if (sel < 0 || sel >= items.size()) return;
-            confirmAction = 4;
+            confirmAction = chestMode == 1 ? 5 : 4;
             confirmSide = side;
             confirmPart = items.get(sel).partId;
             confirmIndex = sel;
-            confirmText = side == 0 ? "Bỏ vào rương ?" : "Bỏ vào giỏ đồ ?";
+            confirmText = side == 0
+                ? (chestMode == 1 ? "Bỏ vào rương phụ ?" : "Bỏ vào rương ?")
+                : "Bỏ vào giỏ đồ ?";
             return;
         }
         java.util.List<InvItem> items = invList(false);
@@ -9450,6 +9538,12 @@ public class WorldScreen extends ScreenAdapter {
                 case 4:
                     AvatarProtocol.transChest(game.connection, confirmSide, index, part);
                     break;
+                case 5:
+                    AvatarProtocol.boxTrans(game.connection, confirmSide, part);
+                    break;
+                case 7:
+                    AvatarProtocol.boxUpgrade(game.connection, 1);
+                    break;
                 default:
                     break;
             }
@@ -9475,10 +9569,12 @@ public class WorldScreen extends ScreenAdapter {
         batch.draw(Ui.roundedRect(36, 36, 10, Ui.BTN_CLOSE, GLASS_RIM), px + INV_W - 54, py + INV_H - 54);
         Ui.faIcon(batch, Ui.fa20, Ui.FA_XMARK, px + INV_W - 36, py + INV_H - 36,
             new Color(0.9f, 0.93f, 1f, 1f));
-        // tabs; cuối hàng tab là sức chứa của phía đang xem
-        String[] tabs = {"Giỏ đồ", "Đang mặc"};
+        // tabs; cuối hàng tab là sức chứa của phía đang xem.
+        // Tab 3 "Rương phụ" không phải tab nội dung mà là nút chuyển
+        // sang panel rương song song (chestMode = 1, gói −118).
+        String[] tabs = {"Giỏ đồ", "Đang mặc", "Rương phụ"};
         float tabY = py + INV_H - 108;
-        for (int i = 0; i < 2; i++) {
+        for (int i = 0; i < 3; i++) {
             float tx = px + 28 + i * 162;
             boolean act = i == bagTab;
             batch.draw(Ui.roundedRect(150, 38, 12,
@@ -9557,21 +9653,26 @@ public class WorldScreen extends ScreenAdapter {
         if (confirmText != null) drawInvConfirm();
     }
 
-    /** Một phía của panel rương song song: side 0 = Giỏ đồ, 1 = Rương đồ. */
+    /** Một phía của panel rương song song: side 0 = Giỏ đồ,
+     *  1 = Rương đồ (chestMode 0) hoặc Rương phụ (chestMode 1). */
     private void drawChestSide(float px, int side) {
-        java.util.List<InvItem> items = side == 0 ? chestConItems : chestItems;
-        int sel = side == 0 ? conSel : homeSel;
+        boolean boxSide = side == 1 && chestMode == 1;
+        java.util.List<InvItem> items = side == 0 ? chestConItems
+            : boxSide ? boxItems : chestItems;
+        int sel = side == 0 ? conSel : boxSide ? boxSel : homeSel;
         if (sel >= items.size()) sel = Math.max(0, items.size() - 1);
-        if (side == 0) conSel = sel; else homeSel = sel;
+        if (side == 0) conSel = sel;
+        else if (boxSide) boxSel = sel;
+        else homeSel = sel;
         float py = CH_PY;
         batch.draw(Ui.roundedRect((int) CH_PW, (int) CH_PH, 18,
             new Color(0.07f, 0.11f, 0.17f, 0.97f), GLASS_RIM), px, py);
         // hàng tiêu đề: tên + (rương: huy hiệu cấp) + sức chứa canh phải
-        String title = side == 0 ? "Giỏ đồ" : "Rương đồ";
+        String title = side == 0 ? "Giỏ đồ" : boxSide ? "Rương phụ" : "Rương đồ";
         Ui.font.setColor(1f, 0.85f, 0.38f, 1f);
         Ui.font.draw(batch, title, px + 28, py + CH_PH - 24);
         if (side == 1) {
-            String badge = "Cấp " + chestLevel;
+            String badge = "Cấp " + (boxSide ? boxLevel : chestLevel);
             float bw = Ui.textWidth(Ui.fontSmall, badge) + 30;
             float tw = Ui.textWidth(Ui.font, title);
             float bx = px + 28 + tw + 16, byy = py + CH_PH - 48;
@@ -9579,7 +9680,7 @@ public class WorldScreen extends ScreenAdapter {
             Ui.centered(batch, Ui.fontSmall, badge, bx + bw / 2f, byy + 22, Color.WHITE);
         }
         String cap = "Sức chứa: " + items.size() + "/"
-            + (side == 0 ? bagCapacity : chestCapacity) + " ô";
+            + (side == 0 ? bagCapacity : boxSide ? boxCapacity : chestCapacity) + " ô";
         layout.setText(Ui.fontSmall, cap);
         Ui.fontSmall.setColor(1f, 1f, 1f, 0.85f);
         Ui.fontSmall.draw(batch, cap, px + CH_PW - 70 - layout.width, py + CH_PH - 24);
@@ -9598,14 +9699,33 @@ public class WorldScreen extends ScreenAdapter {
                 isSel ? new Color(1f, 0.78f, 0.30f, 1f) : GLASS_RIM), cx, cy);
             if (has) drawPartIcon(items.get(idx).partId, cx + cell / 2f, cy + cell / 2f, 58);
         }
+        // rương phụ đang khoá: phủ khoá lên lưới, không có thanh dưới
+        if (boxSide && !boxUnlocked) {
+            Ui.faIcon(batch, Ui.fa30, Ui.FA_LOCK, px + CH_PW / 2f, py + CH_PH - 250,
+                new Color(1f, 0.85f, 0.45f, 1f));
+            Ui.centered(batch, Ui.fontSmall, "Rương đang khoá",
+                px + CH_PW / 2f, py + CH_PH - 300, new Color(1f, 1f, 1f, 0.9f));
+            Ui.centered(batch, Ui.fontTiny, "Nhập mật khẩu để mở rương phụ",
+                px + CH_PW / 2f, py + CH_PH - 330, new Color(1f, 1f, 1f, 0.65f));
+            return;
+        }
         // thanh dưới: món đang chọn + nút Di chuyển (mũi tên chỉ hướng sang panel kia)
         float by = py + 22;
         batch.draw(Ui.roundedRect((int) CH_PW - 56, 66, 12, new Color(0f, 0f, 0f, 0.30f), GLASS_RIM), px + 28, by);
-        if (side == 1) {
+        if (side == 1 && !boxSide) {
             // nút Nâng cấp rương nhà (gói −90 của gốc) — luôn hiện ở phía rương
             float ubx = px + CH_PW - 28 - 132 - 122 + 12;
             batch.draw(Ui.roundedRect(110, 40, 10, Ui.BTN_CANCEL, GLASS_RIM), ubx, by + 13);
             Ui.centered(batch, Ui.fontSmall, "Nâng cấp", ubx + 55, by + 39, Color.WHITE);
+        }
+        if (boxSide) {
+            // hai nút phụ của rương phụ: Nâng cấp + Mật khẩu
+            float ubxB = px + CH_PW - 28 - 132 - 112 + 12;
+            float pbx = ubxB - 112;
+            batch.draw(Ui.roundedRect(100, 40, 10, Ui.BTN_CANCEL, GLASS_RIM), ubxB, by + 13);
+            Ui.centered(batch, Ui.fontSmall, "Nâng cấp", ubxB + 50, by + 39, Color.WHITE);
+            batch.draw(Ui.roundedRect(100, 40, 10, Ui.BTN_CANCEL, GLASS_RIM), pbx, by + 13);
+            Ui.centered(batch, Ui.fontSmall, "Mật khẩu", pbx + 50, by + 39, Color.WHITE);
         }
         if (items.isEmpty()) {
             Ui.centered(batch, Ui.fontSmall, "Chưa có món nào", px + CH_PW / 2f, by + 41,
@@ -9615,8 +9735,15 @@ public class WorldScreen extends ScreenAdapter {
         InvItem cur = items.get(sel);
         drawPartIcon(cur.partId, px + 66, by + 33, 44);
         com.avatardk.game.data.PartData pd = game.data.part(cur.partId);
+        // tên món phải dừng trước nút trái nhất của phía này, tên dài
+        // bị cắt thay vì đè lên nút (nút Mật khẩu của rương phụ là
+        // biên hẹp nhất)
+        float nameMax = side == 0 ? 346f
+            : boxSide ? (CH_PW - 28 - 132 - 112 + 12 - 112) - 100 - 10
+            : 224f;
         Ui.fontSmall.setColor(1f, 1f, 1f, 0.96f);
-        Ui.fontSmall.draw(batch, pd != null ? pd.name : ("Vật phẩm #" + cur.partId), px + 100, by + 44);
+        Ui.fontSmall.draw(batch, truncTo(Ui.fontSmall,
+            pd != null ? pd.name : ("Vật phẩm #" + cur.partId), nameMax), px + 100, by + 44);
         Ui.fontTiny.setColor(1f, 1f, 1f, 0.72f);
         String exp = cur.expire == null || cur.expire.isEmpty() ? "Vĩnh viễn" : cur.expire;
         Ui.fontTiny.draw(batch, "Hạn dùng: " + exp, px + 100, by + 20);
@@ -9674,13 +9801,17 @@ public class WorldScreen extends ScreenAdapter {
             bagPanel = false;
             return;
         }
-        // tabs
+        // tabs (tab 3 = mở Rương phụ)
         float tabY = py + INV_H - 108;
-        for (int i = 0; i < 2; i++) {
+        for (int i = 0; i < 3; i++) {
             float tx = px + 28 + i * 162;
             if (x >= tx && x <= tx + 150 && y >= tabY && y <= tabY + 38) {
-                bagTab = i;
-                bagSel = 0;
+                if (i == 2) {
+                    openBox();
+                } else {
+                    bagTab = i;
+                    bagSel = 0;
+                }
                 return;
             }
         }
@@ -9726,8 +9857,10 @@ public class WorldScreen extends ScreenAdapter {
             float px = CH_X0 + side * (CH_PW + CH_GAP);
             if (x < px || x > px + CH_PW || y < py || y > py + CH_PH) continue;
             inside = true;
-            java.util.List<InvItem> items = side == 0 ? chestConItems : chestItems;
-            int sel = side == 0 ? conSel : homeSel;
+            boolean boxSideT = side == 1 && chestMode == 1;
+            java.util.List<InvItem> items = side == 0 ? chestConItems
+                : boxSideT ? boxItems : chestItems;
+            int sel = side == 0 ? conSel : boxSideT ? boxSel : homeSel;
             // lưới ô 6 × 3
             float gridTop = py + CH_PH - 128;
             int cols = 6, cell = 84, gap = 8;
@@ -9738,7 +9871,9 @@ public class WorldScreen extends ScreenAdapter {
                 float cy = gridTop - (row + 1) * cell - row * gap;
                 if (x >= cx && x <= cx + cell && y >= cy && y <= cy + cell) {
                     if (idx < items.size()) {
-                        if (side == 0) conSel = idx; else homeSel = idx;
+                        if (side == 0) conSel = idx;
+                        else if (boxSideT) boxSel = idx;
+                        else homeSel = idx;
                     }
                     return;
                 }
@@ -9752,20 +9887,30 @@ public class WorldScreen extends ScreenAdapter {
                     return;
                 }
             }
-            // nút Nâng cấp ở phía rương nhà: hỏi giá nâng cấp (gói −90 {0})
+            // nút Nâng cấp + Mật khẩu ở phía rương (nhà −90 / phụ −118)
             if (side == 1) {
                 float by = py + 22;
                 float ubx = px + CH_PW - 28 - 132 - 122 + 12;
                 if (x >= ubx && x <= ubx + 110 && y >= by + 13 && y <= by + 53) {
                     if (online()) {
                         try {
-                            AvatarProtocol.upgradeChest(game.connection, 0);
+                            if (boxSideT) AvatarProtocol.boxUpgrade(game.connection, 0);
+                            else AvatarProtocol.upgradeChest(game.connection, 0);
                         } catch (IOException ignored) {
                         }
                     } else {
                         addChatLog(TAB_SYSTEM, null, "Đăng nhập để nâng cấp rương.", true);
                     }
                     return;
+                }
+                if (boxSideT) {
+                    // nút Mật khẩu (nút Nâng cấp đã xử ở nhánh chung
+                    // ngay trên, cùng toạ độ bản vẽ của rương phụ)
+                    float pbx = px + CH_PW - 28 - 132 - 112 + 12 - 112;
+                    if (x >= pbx && x <= pbx + 100 && y >= by + 13 && y <= by + 53) {
+                        openBoxPassForm(boxHasPass ? 2 : 1);
+                        return;
+                    }
                 }
             }
             return; // trong panel: nuốt chạm
@@ -10539,6 +10684,7 @@ public class WorldScreen extends ScreenAdapter {
         drawTradeInviteBox();
         if (friendOpen) drawFriendPanel();
         if (passFormOpen) drawPassFormPanel();
+        if (boxPassOpen) drawBoxPassPanel();
         if (giftFormOpen) drawGiftFormPanel();
         if (tbOpen) drawTextBoxPanel();
         drawFishingBar();
@@ -11202,6 +11348,168 @@ public class WorldScreen extends ScreenAdapter {
             setPassStatus("Đang đổi mật khẩu…", 0);
         } catch (IOException e) {
             setPassStatus("Không gửi được (mất kết nối?).", 2);
+        }
+    }
+
+    // ---------- Form MẬT KHẨU RƯƠNG PHỤ [PORT] (gói −118) ----------
+    // Cùng khuôn với form đổi mật khẩu tài khoản ở trên. Chế độ:
+    // 0 = Mở khoá (1 ô), 1 = Đặt mật khẩu (2 ô), 2 = Đổi (3 ô;
+    // để trống mật khẩu mới = gỡ mật khẩu khỏi rương).
+    private boolean boxPassOpen = false;
+    private int boxPassMode = 0, boxPassFocus = 0;
+    private final StringBuilder[] boxPassFields =
+        {new StringBuilder(), new StringBuilder(), new StringBuilder()};
+    private String boxPassStatus = null;
+    private int boxPassStatusKind = 0;
+    private static final float BP_PW = 560f;
+    private static final float BP_PX = (Ui.W - BP_PW) / 2f;
+
+    private int boxPassCount() { return boxPassMode == 0 ? 1 : boxPassMode == 1 ? 2 : 3; }
+    private float boxPassH() { return 150f + boxPassCount() * 92f + 110f; }
+    private float boxPassPy() { return (Ui.H - boxPassH()) / 2f; }
+    private float boxPassBoxY(int i) { return boxPassPy() + boxPassH() - 168 - i * 92; }
+    private String boxPassTitle() {
+        return boxPassMode == 0 ? "Mở khoá rương phụ"
+            : boxPassMode == 1 ? "Đặt mật khẩu rương" : "Đổi mật khẩu rương";
+    }
+    private String boxPassBtn() {
+        return boxPassMode == 0 ? "Mở khoá"
+            : boxPassMode == 1 ? "Đặt mật khẩu" : "Đổi mật khẩu";
+    }
+    private String boxPassLabel(int i) {
+        if (boxPassMode == 0) return "Mật khẩu rương";
+        if (boxPassMode == 1) return i == 0 ? "Mật khẩu mới" : "Nhập lại mật khẩu";
+        return PASS_LABELS[i];
+    }
+
+    private void setBoxPassStatus(String s, int kind) {
+        boxPassStatus = s;
+        boxPassStatusKind = kind;
+    }
+
+    private void openBoxPassForm(int mode) {
+        boxPassMode = mode;
+        boxPassOpen = true;
+        boxPassFocus = 0;
+        boxPassStatus = mode == 2
+            ? "Để trống mật khẩu mới để gỡ mật khẩu khỏi rương." : null;
+        boxPassStatusKind = 0;
+        for (StringBuilder b : boxPassFields) b.setLength(0);
+    }
+
+    private void closeBoxPassForm() {
+        boxPassOpen = false;
+        Gdx.input.setOnscreenKeyboardVisible(false);
+    }
+
+    private void drawBoxPassPanel() {
+        float ph = boxPassH(), py = boxPassPy();
+        batch.setColor(0f, 0f, 0f, 0.45f);
+        batch.draw(whiteTex, 0, 0, Ui.W, Ui.H);
+        batch.setColor(Color.WHITE);
+        batch.draw(Ui.roundedRect((int) BP_PW, (int) ph, 16, GLASS_FILL_DARK, GLASS_RIM),
+            BP_PX, py);
+        Ui.font.setColor(1f, 0.85f, 0.38f, 1f);
+        Ui.font.draw(batch, boxPassTitle(), BP_PX + 26, py + ph - 30);
+        batch.draw(Ui.roundedRect(36, 36, 10, Ui.BTN_CLOSE, GLASS_RIM),
+            BP_PX + BP_PW - 54, py + ph - 54);
+        Ui.faIcon(batch, Ui.fa20, Ui.FA_XMARK, BP_PX + BP_PW - 36, py + ph - 36,
+            new Color(1f, 1f, 1f, 0.9f));
+        for (int i = 0; i < boxPassCount(); i++) {
+            float by = boxPassBoxY(i);
+            SoftInput.register("world.boxpass" + i,
+                SoftInput.of(boxPassFields[i], 24, () -> { SoftInput.hide(); submitBoxPassForm(); }),
+                true, true, BP_PX + 26, by, BP_PW - 52, 54, 16);
+            Ui.fontSmall.setColor(1f, 1f, 1f, 0.85f);
+            Ui.fontSmall.draw(batch, boxPassLabel(i), BP_PX + 26, by + 80);
+            boolean focused = boxPassFocus == i;
+            batch.draw(Ui.roundedRect((int) BP_PW - 52, 54, 12,
+                new Color(0.10f, 0.13f, 0.22f, 0.97f),
+                focused ? new Color(1f, 0.62f, 0.25f, 1f) : GLASS_RIM),
+                BP_PX + 26, by);
+            StringBuilder dots = new StringBuilder();
+            for (int d = 0; d < boxPassFields[i].length(); d++) dots.append('\u2022');
+            Ui.font.setColor(1f, 1f, 1f, 0.95f);
+            Ui.font.draw(batch, dots.toString(), BP_PX + 42, by + 37);
+            if (focused && (System.currentTimeMillis() / 500) % 2 == 0) {
+                layout.setText(Ui.font, dots.toString());
+                batch.setColor(1f, 1f, 1f, 0.85f);
+                batch.draw(whiteTex, BP_PX + 44 + layout.width, by + 14, 3, 26);
+                batch.setColor(Color.WHITE);
+            }
+        }
+        if (boxPassStatus != null) {
+            Color sc = boxPassStatusKind == 1 ? new Color(0.55f, 0.95f, 0.60f, 1f)
+                : boxPassStatusKind == 2 ? new Color(1f, 0.45f, 0.40f, 1f)
+                : new Color(1f, 1f, 1f, 0.65f);
+            Ui.centered(batch, Ui.fontSmall, boxPassStatus, BP_PX + BP_PW / 2f, py + 104, sc);
+        }
+        float bw = 240, bh = 56, bx = BP_PX + (BP_PW - bw) / 2f, by = py + 26;
+        batch.draw(Ui.gradientRect((int) bw, (int) bh, 14, EntryUi.ORANGE_TOP, EntryUi.ORANGE_BOT), bx, by);
+        Ui.centered(batch, Ui.font, boxPassBtn(), BP_PX + BP_PW / 2f, by + 37,
+            new Color(1f, 1f, 1f, 1f));
+    }
+
+    private void boxPassTouch(float x, float y) {
+        float ph = boxPassH(), py = boxPassPy();
+        if (x >= BP_PX + BP_PW - 54 && x <= BP_PX + BP_PW - 18
+                && y >= py + ph - 54 && y <= py + ph - 18) {
+            closeBoxPassForm();
+            return;
+        }
+        float bw = 240, bh = 56, bx = BP_PX + (BP_PW - bw) / 2f, by = py + 26;
+        if (x >= bx && x <= bx + bw && y >= by && y <= by + bh) {
+            submitBoxPassForm();
+            return;
+        }
+        for (int i = 0; i < boxPassCount(); i++) {
+            float fby = boxPassBoxY(i);
+            if (x >= BP_PX + 26 && x <= BP_PX + BP_PW - 26 && y >= fby && y <= fby + 54) {
+                boxPassFocus = i;
+                Gdx.input.setOnscreenKeyboardVisible(true);
+                return;
+            }
+        }
+        if (x < BP_PX || x > BP_PX + BP_PW || y < py || y > py + ph) {
+            closeBoxPassForm();
+        }
+    }
+
+    private void submitBoxPassForm() {
+        if (!online()) { setBoxPassStatus("Chưa kết nối máy chủ.", 2); return; }
+        try {
+            if (boxPassMode == 0) {
+                String pass = boxPassFields[0].toString();
+                if (pass.isEmpty()) { setBoxPassStatus("Bạn chưa nhập mật khẩu", 2); return; }
+                AvatarProtocol.boxUnlock(game.connection, pass);
+                setBoxPassStatus("Đang mở khoá…", 0);
+            } else if (boxPassMode == 1) {
+                String newP = boxPassFields[0].toString();
+                String cf = boxPassFields[1].toString();
+                if (newP.isEmpty()) { setBoxPassStatus("Xin nhập mật khẩu mới.", 2); return; }
+                if (cf.isEmpty()) { setBoxPassStatus("Bạn chưa nhập lại mật khẩu", 2); return; }
+                if (!newP.equals(cf)) { setBoxPassStatus("Hai mật khẩu không giống nhau.", 2); return; }
+                if (newP.length() < 4) { setBoxPassStatus("Mật khẩu phải có ít nhất 4 ký tự.", 2); return; }
+                AvatarProtocol.boxSetPass(game.connection, newP);
+                setBoxPassStatus("Đang đặt mật khẩu…", 0);
+            } else {
+                String oldP = boxPassFields[0].toString();
+                String newP = boxPassFields[1].toString();
+                String cf = boxPassFields[2].toString();
+                if (oldP.isEmpty()) { setBoxPassStatus("Xin nhập mật khẩu hiện tại.", 2); return; }
+                if (newP.isEmpty() && cf.isEmpty()) {
+                    AvatarProtocol.boxChangePass(game.connection, oldP, "");
+                    setBoxPassStatus("Đang gỡ mật khẩu…", 0);
+                    return;
+                }
+                if (!newP.equals(cf)) { setBoxPassStatus("Hai mật khẩu mới phải giống nhau.", 2); return; }
+                if (newP.equals(oldP)) { setBoxPassStatus("Mật khẩu mới phải khác mật khẩu cũ.", 2); return; }
+                if (newP.length() < 4) { setBoxPassStatus("Mật khẩu mới phải có ít nhất 4 ký tự.", 2); return; }
+                AvatarProtocol.boxChangePass(game.connection, oldP, newP);
+                setBoxPassStatus("Đang đổi mật khẩu…", 0);
+            }
+        } catch (IOException e) {
+            setBoxPassStatus("Không gửi được (mất kết nối?).", 2);
         }
     }
 
@@ -22952,6 +23260,7 @@ public class WorldScreen extends ScreenAdapter {
         txOpen = false;
         aiOpen = false;
         snOpen = false;
+        boxPassOpen = false;
         dailyOpen = false;
         auctionOpen = false;
         marketOpen = false;
@@ -23705,6 +24014,36 @@ public class WorldScreen extends ScreenAdapter {
         shopNewFlow = true;
         myXu = 100000;
         openBill();
+    }
+
+    /** Sân khấu chụp RƯƠNG PHỤ: panel song song Giỏ | Rương phụ
+     *  (đã mở khoá, cấp 2, có sẵn đồ hai phía). */
+    public void debugOpenBoxPanel() {
+        debugCloseHubGames();
+        closeOtherPanels();
+        int[] con = {701, 693, 314, 93};
+        int[] ids = {98, 494, 116, 605};
+        chestConItems.clear();
+        for (int id : con) chestConItems.add(new InvItem(id, 0, "Vĩnh viễn"));
+        boxItems.clear();
+        for (int id : ids) boxItems.add(new InvItem(id, 0, "Vĩnh viễn"));
+        bagCapacity = 20;
+        boxCapacity = 15;
+        boxLevel = 2;
+        boxHasPass = true;
+        boxUnlocked = true;
+        conSel = 0;
+        boxSel = 1;
+        chestMode = 1;
+        bagPanel = false;
+        chestPanel = true;
+    }
+
+    /** Sân khấu chụp RƯƠNG PHỤ ĐANG KHOÁ + form nhập mật khẩu. */
+    public void debugOpenBoxLocked() {
+        debugOpenBoxPanel();
+        boxUnlocked = false;
+        openBoxPassForm(0);
     }
 
     /** Sân khấu chụp THỬ ĐỒ: hoá đơn món 2173 có nút Thử đồ. */

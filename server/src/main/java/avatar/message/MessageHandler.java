@@ -165,6 +165,13 @@ public class MessageHandler implements IMessageHandler {
                         }
                         break;
                     }
+                    case Cmd.BOX: {
+                        if (this.client.user != null) {
+                            new avatar.service.BoxService(this.client).onMessage(mss);
+                            break;
+                        }
+                        break;
+                    }
                     case Cmd.PREVIEW_ITEM: {
                         if (this.client.user != null) {
                             this.client.user.applyPreview(mss);

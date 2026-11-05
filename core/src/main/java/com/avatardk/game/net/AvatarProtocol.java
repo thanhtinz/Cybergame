@@ -69,6 +69,11 @@ public final class AvatarProtocol {
      *  server phát lại cho cả khu {int userId, short partId};
      *  partId 0 = cởi đồ thử. Chỉ hiển thị tạm, không lưu. */
     public static final byte PREVIEW_ITEM = -100;
+    /** Rương phụ cá nhân [PORT theo BoxScr bản chính]: phong bì
+     *  −118, byte sub đầu: 0 OPEN · 1 UNLOCK {UTF} · 2 SETPASS {UTF} ·
+     *  3 CHANGEPASS {UTF cũ, UTF mới} · 4 TRANS {byte hướng, short id}
+     *  · 5 UPGRADE {byte 0 hỏi/1 xác nhận} · 10 STATE (S->C). */
+    public static final byte BOX = -118;
     /** Xoá đồ: C→S {short idPart, byte type} (1 = trong giỏ, 0 = đang mặc);
      *  S→C {int id người, short idPart} (Cmd.REMOVE_ITEM của gốc). */
     public static final byte REMOVE_ITEM = -36;
@@ -442,6 +447,56 @@ public final class AvatarProtocol {
     public static void requestContainer(GameConnection conn, int id) throws IOException {
         Msg m = new Msg(CONTAINER);
         m.writer().writeInt(id);
+        conn.send(m);
+    }
+
+    public static void boxOpen(GameConnection conn) throws IOException {
+        Msg m = new Msg(BOX);
+        m.writer().writeByte(0);
+        conn.send(m);
+    }
+
+    public static void boxUnlock(GameConnection conn, String pass) throws IOException {
+        Msg m = new Msg(BOX);
+        java.io.DataOutputStream w = m.writer();
+        w.writeByte(1);
+        w.writeUTF(pass);
+        conn.send(m);
+    }
+
+    public static void boxSetPass(GameConnection conn, String pass) throws IOException {
+        Msg m = new Msg(BOX);
+        java.io.DataOutputStream w = m.writer();
+        w.writeByte(2);
+        w.writeUTF(pass);
+        conn.send(m);
+    }
+
+    public static void boxChangePass(GameConnection conn, String oldPass, String newPass)
+            throws IOException {
+        Msg m = new Msg(BOX);
+        java.io.DataOutputStream w = m.writer();
+        w.writeByte(3);
+        w.writeUTF(oldPass);
+        w.writeUTF(newPass);
+        conn.send(m);
+    }
+
+    /** Chuyển đồ giỏ <-> rương phụ: dir 0 = giỏ -> rương, 1 = ngược lại. */
+    public static void boxTrans(GameConnection conn, int dir, int partId) throws IOException {
+        Msg m = new Msg(BOX);
+        java.io.DataOutputStream w = m.writer();
+        w.writeByte(4);
+        w.writeByte(dir);
+        w.writeShort(partId);
+        conn.send(m);
+    }
+
+    public static void boxUpgrade(GameConnection conn, int type) throws IOException {
+        Msg m = new Msg(BOX);
+        java.io.DataOutputStream w = m.writer();
+        w.writeByte(5);
+        w.writeByte(type);
         conn.send(m);
     }
 

@@ -189,6 +189,7 @@ public class Session implements ISession {
                 // [PORT Hub MiniGame] dọn bàn mini-game của người thoát.
                 avatar.minigame.MiniGameService.leaveRoomStatic(this.user, true);
                 avatar.service.MarketTradeService.onUserGone(this.user);
+                avatar.service.BoxService.onUserGone(this.user);
                 this.user.close();
                 UserManager.getInstance().remove(user);
             }
