@@ -40,7 +40,7 @@ public class PartData {
 
     public PartData(int id, String name, int zorder, int gender, int level, int icon,
                     int coin, int gold, int sell, int expiredDay, int type) {
-        this.id = id; this.name = name; this.zorder = zorder;
+        this.id = id; this.name = fixNameSpacing(name); this.zorder = zorder;
         this.gender = gender; this.level = level; this.icon = icon;
         this.coin = coin; this.gold = gold; this.sell = sell;
         this.expiredDay = expiredDay; this.type = type;
@@ -49,4 +49,20 @@ public class PartData {
     /** Part động (id >= 2000): ảnh do server stream riêng (APartInfo.paintAvatar rẽ nhánh
      *  IDPart >= 2000 -> AvatarData.getImagePart), không có trong atlas offline. */
     public boolean isDynamic() { return id >= 2000; }
+
+    /** Tên món trong dữ liệu gốc dính "(30 ngày)" liền vào chữ trước
+     *  (1.429 món) — chèn dấu cách khi hiển thị cho khỏi dính chữ. */
+    private static String fixNameSpacing(String n) {
+        if (n == null) return null;
+        StringBuilder sb = new StringBuilder(n.length() + 4);
+        for (int i = 0; i < n.length(); i++) {
+            char c = n.charAt(i);
+            if (c == '(' && sb.length() > 0
+                    && sb.charAt(sb.length() - 1) != ' ') {
+                sb.append(' ');
+            }
+            sb.append(c);
+        }
+        return sb.toString();
+    }
 }

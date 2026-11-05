@@ -6013,8 +6013,8 @@ public class WorldScreen extends ScreenAdapter {
                     }
                 }
                 java.util.List<TitleDef> defs = titleListEffective();
-                float cw = 292, chh = 74, gapX = 8, gapY = 8;
-                float gridTop = py + 356;
+                float cw = 292, chh = 78, gapX = 8, gapY = 7;
+                float gridTop = py + 368;
                 int fromI = titlePage * TITLE_PER_PAGE;
                 for (int i = fromI; i < defs.size() && i < fromI + TITLE_PER_PAGE; i++) {
                     TitleDef d = defs.get(i);
@@ -9250,8 +9250,8 @@ public class WorldScreen extends ScreenAdapter {
         int pages = Math.max(1, (defs.size() + TITLE_PER_PAGE - 1) / TITLE_PER_PAGE);
         if (titlePage >= pages) titlePage = pages - 1;
         if (titlePage < 0) titlePage = 0;
-        float cw = 292, chh = 74, gapX = 8, gapY = 8;
-        float gridTop = py + 356;
+        float cw = 292, chh = 78, gapX = 8, gapY = 7;
+        float gridTop = py + 368;
         int from = titlePage * TITLE_PER_PAGE;
         int to = Math.min(defs.size(), from + TITLE_PER_PAGE);
         for (int i = from; i < to; i++) {
@@ -9285,14 +9285,16 @@ public class WorldScreen extends ScreenAdapter {
                 layout.setText(Ui.fontSmall, d.name);
                 Ui.fontSmall.draw(batch, d.name, cx + (cw - layout.width) / 2f, cy + chh - 14);
             }
-            Ui.fontTiny.setColor(1f, 1f, 1f, ownedT ? 0.70f : 0.42f);
-            Ui.fontTiny.draw(batch, truncTo(Ui.fontTiny, d.req, cw - 124), cx + 12, cy + 15);
             String tag = equipped ? "Đang đeo" : ownedT ? "Đeo" : "Chưa có";
+            Ui.fontTiny.setColor(1f, 1f, 1f, ownedT ? 0.70f : 0.42f);
+            Ui.fontTiny.draw(batch,
+                truncTo(Ui.fontTiny, d.req, cw - 24), cx + 12, cy + 33);
+            layout.setText(Ui.fontTiny, tag);
             Color tagC = equipped ? new Color(1f, 0.85f, 0.38f, 1f)
                 : ownedT ? new Color(0.55f, 0.95f, 0.65f, 1f) : new Color(1f, 1f, 1f, 0.4f);
             layout.setText(Ui.fontTiny, tag);
             Ui.fontTiny.setColor(tagC);
-            Ui.fontTiny.draw(batch, tag, cx + cw - 12 - layout.width, cy + 15);
+            Ui.fontTiny.draw(batch, tag, cx + cw - 12 - layout.width, cy + 14);
         }
         // hàng phân trang
         if (pages > 1) {
@@ -10021,17 +10023,17 @@ public class WorldScreen extends ScreenAdapter {
     private void drawClosetGrid(float px, float py,
             java.util.List<InvItem> items, int sel) {
         float tabY = py + INV_H - 108;
-        // hàng lọc
-        String[] filters = {"Tất cả", "Áo", "Quần", "Tóc", "Nón",
-            "Trang sức", "Phương tiện", "Khác"};
-        float fy = tabY - 46, fw = 76, fh = 30, fgap = 5;
-        for (int i = 0; i < filters.length; i++) {
-            float fx = px + 28 + i * (fw + fgap);
+        // hàng lọc: chip co theo độ rộng chữ thật (như tab Shop)
+        // để nhãn dài ("Phương tiện") không bị cắt chữ
+        float fy = tabY - 46, fh = 30;
+        for (int i = 0; i < CLOSET_FILTERS.length; i++) {
+            float[] rc = closetChipRect(i, px);
+            float fx = rc[0], fw = rc[1];
             boolean act = closetFilter == i - 1;
             batch.draw(Ui.roundedRect((int) fw, (int) fh, 10,
                 act ? new Color(0.25f, 0.45f, 0.65f, 0.95f) : new Color(0f, 0f, 0f, 0.30f),
                 GLASS_RIM), fx, fy);
-            Ui.centered(batch, Ui.fontTiny, truncTo(Ui.fontTiny, filters[i], fw - 8),
+            Ui.centered(batch, Ui.fontTiny, CLOSET_FILTERS[i],
                 fx + fw / 2f, fy + 20,
                 act ? Color.WHITE : new Color(1f, 1f, 1f, 0.65f));
         }
@@ -10071,9 +10073,9 @@ public class WorldScreen extends ScreenAdapter {
             if (has) {
                 drawPartIcon(items.get(gi).partId, cx + cell / 2f, cy + cell / 2f, 58);
                 if (worn) {
-                    batch.draw(Ui.roundedRect(40, 18, 6,
-                        new Color(0.20f, 0.55f, 0.28f, 0.95f), GLASS_RIM), cx + 5, cy + cell - 23);
-                    Ui.centered(batch, Ui.fontTiny, "Mặc", cx + 25, cy + cell - 10, Color.WHITE);
+                    batch.draw(Ui.roundedRect(44, 22, 6,
+                        new Color(0.20f, 0.55f, 0.28f, 0.95f), GLASS_RIM), cx + 4, cy + cell - 25);
+                    Ui.centered(batch, Ui.fontTiny, "Mặc", cx + 26, cy + cell - 11, Color.WHITE);
                 }
             }
         }
@@ -10090,6 +10092,19 @@ public class WorldScreen extends ScreenAdapter {
                 gx + (cols * cell + (cols - 1) * gap) / 2f, py2 + 21,
                 new Color(1f, 1f, 1f, 0.85f));
         }
+    }
+
+    private static final String[] CLOSET_FILTERS = {"Tất cả", "Áo",
+        "Quần", "Tóc", "Nón", "Trang sức", "Phương tiện", "Khác"};
+
+    /** Rect của chip lọc Tủ đồ thứ i: x tuyệt đối + bề ngang theo chữ. */
+    private float[] closetChipRect(int i, float px) {
+        float x = px + 24;
+        for (int k = 0; k < i; k++) {
+            x += Ui.textWidth(Ui.fontTiny, CLOSET_FILTERS[k]) + 18 + 6;
+        }
+        return new float[]{x,
+            Ui.textWidth(Ui.fontTiny, CLOSET_FILTERS[i]) + 18};
     }
 
     /** Dựng doll xem trước của tủ: bộ đang mặc gộp món đang chọn
@@ -10230,17 +10245,17 @@ public class WorldScreen extends ScreenAdapter {
         String[] tabs = {"Giỏ đồ", "Tủ đồ", "Rương phụ"};
         float tabY = py + INV_H - 108;
         for (int i = 0; i < 3; i++) {
-            float tx = px + 28 + i * 162;
+            float tx = px + 28 + i * 158;
             boolean act = i == bagTab;
-            batch.draw(Ui.roundedRect(150, 38, 12,
+            batch.draw(Ui.roundedRect(146, 38, 12,
                 act ? new Color(0.25f, 0.45f, 0.65f, 0.95f) : new Color(0f, 0f, 0f, 0.30f), GLASS_RIM), tx, tabY);
-            Ui.centered(batch, Ui.fontSmall, tabs[i], tx + 75, tabY + 25,
+            Ui.centered(batch, Ui.fontSmall, tabs[i], tx + 73, tabY + 25,
                 act ? Color.WHITE : new Color(1f, 1f, 1f, 0.65f));
         }
         if (bagTab == 1) {
             // tab Tủ đồ: cuối hàng tab là nút SẮP XẾP (xoay 3 chế độ)
             String[] sortNames = {"Mặc định", "Tên A-Z", "Hạn dùng"};
-            float sw = 196;
+            float sw = 182;
             batch.draw(Ui.roundedRect((int) sw, 38, 12, Ui.BTN_CANCEL, GLASS_RIM),
                 px + INV_W - 28 - sw, tabY);
             Ui.centered(batch, Ui.fontSmall, "Sắp xếp: " + sortNames[closetSort],
@@ -10560,8 +10575,8 @@ public class WorldScreen extends ScreenAdapter {
         // tabs (tab 3 = mở Rương phụ)
         float tabY = py + INV_H - 108;
         for (int i = 0; i < 3; i++) {
-            float tx = px + 28 + i * 162;
-            if (x >= tx && x <= tx + 150 && y >= tabY && y <= tabY + 38) {
+            float tx = px + 28 + i * 158;
+            if (x >= tx && x <= tx + 146 && y >= tabY && y <= tabY + 38) {
                 if (i == 2) {
                     openBox();
                 } else {
@@ -10574,7 +10589,7 @@ public class WorldScreen extends ScreenAdapter {
         java.util.List<InvItem> items = invList(false);
         if (bagTab == 1) {
             // nút Sắp xếp ở cuối hàng tab
-            float sw = 196;
+            float sw = 182;
             if (x >= px + INV_W - 28 - sw && x <= px + INV_W - 28
                     && y >= tabY && y <= tabY + 38) {
                 closetSort = (closetSort + 1) % 3;
@@ -10582,10 +10597,11 @@ public class WorldScreen extends ScreenAdapter {
                 bagSel = 0;
                 return;
             }
-            // hàng chip Lọc
-            float fy = tabY - 46, fw = 76, fh = 30, fgap = 5;
+            // hàng chip Lọc (khớp drawClosetGrid qua closetChipRect)
+            float fy = tabY - 46, fh = 30;
             for (int i = 0; i < 8; i++) {
-                float fx = px + 28 + i * (fw + fgap);
+                float[] rc = closetChipRect(i, px);
+                float fx = rc[0], fw = rc[1];
                 if (x >= fx && x <= fx + fw && y >= fy && y <= fy + fh) {
                     closetFilter = i - 1;
                     closetPage = 0;
@@ -17661,38 +17677,38 @@ public class WorldScreen extends ScreenAdapter {
                 }
             }
             Ui.centered(batch, Ui.fontSmall, truncTo(Ui.fontSmall, seat.name, 150),
-                cx, 368, seat.id == csOwnerId
+                cx, 372, seat.id == csOwnerId
                     ? new Color(1f, 0.85f, 0.38f, 1f) : Color.WHITE);
             Ui.centered(batch, Ui.fontTiny, fmtMoney(seat.xu) + " xu",
-                cx, 346, new Color(1f, 1f, 1f, 0.7f));
+                cx, 348, new Color(1f, 1f, 1f, 0.7f));
             // thanh HP / MP (theo ghế ván Diamond)
             int si = dmIds[0] == seat.id ? 0 : dmIds[1] == seat.id ? 1 : -1;
             if (si >= 0 && (dmPlaying || dmFinished)) {
                 float bw = 170, bx = cx - bw / 2f;
-                batch.draw(Ui.roundedRect((int) bw, 16, 6,
-                    new Color(0f, 0f, 0f, 0.55f), GLASS_RIM), bx, 306);
+                batch.draw(Ui.roundedRect((int) bw, 18, 6,
+                    new Color(0f, 0f, 0f, 0.55f), GLASS_RIM), bx, 308);
                 float hpf = Math.max(0, dmHp[si]) / 100f;
                 if (hpf > 0) {
-                    batch.draw(Ui.roundedRect(Math.max(10, (int) (bw * hpf)), 16, 6,
-                        new Color(0.85f, 0.25f, 0.25f, 1f), null), bx, 306);
+                    batch.draw(Ui.roundedRect(Math.max(10, (int) (bw * hpf)), 18, 6,
+                        new Color(0.85f, 0.25f, 0.25f, 1f), null), bx, 308);
                 }
                 Ui.centered(batch, Ui.fontTiny, "HP " + Math.max(0, dmHp[si]) + "/100",
-                    cx, 319, Color.WHITE);
-                batch.draw(Ui.roundedRect((int) bw, 12, 6,
-                    new Color(0f, 0f, 0f, 0.55f), GLASS_RIM), bx, 288);
+                    cx, 323, Color.WHITE);
+                batch.draw(Ui.roundedRect((int) bw, 16, 6,
+                    new Color(0f, 0f, 0f, 0.55f), GLASS_RIM), bx, 284);
                 float mpf = Math.max(0, Math.min(dmMaxMp[si], dmMp[si]))
                     / (float) Math.max(1, dmMaxMp[si]);
                 if (mpf > 0) {
-                    batch.draw(Ui.roundedRect(Math.max(10, (int) (bw * mpf)), 12, 6,
-                        new Color(0.25f, 0.50f, 0.95f, 1f), null), bx, 288);
+                    batch.draw(Ui.roundedRect(Math.max(10, (int) (bw * mpf)), 16, 6,
+                        new Color(0.25f, 0.50f, 0.95f, 1f), null), bx, 284);
                 }
                 Ui.centered(batch, Ui.fontTiny, "MP " + Math.max(0, dmMp[si]),
                     cx, 298, Color.WHITE);
                 if (dmShieldTex != null) {
-                    batch.draw(dmShieldTex, bx, 262, 20, 20);
+                    batch.draw(dmShieldTex, bx, 256, 20, 20);
                 }
                 Ui.fontTiny.setColor(1f, 1f, 1f, 0.85f);
-                Ui.fontTiny.draw(batch, "Khiên " + dmDef[si], bx + 26, 276);
+                Ui.fontTiny.draw(batch, "Khiên " + dmDef[si], bx + 26, 270);
             }
             if (dmFinished && si >= 0 && dmDelta[si] != 0) {
                 Ui.centered(batch, Ui.font, (dmDelta[si] > 0 ? "+" : "-")
