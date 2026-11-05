@@ -9448,16 +9448,6 @@ public class WorldScreen extends ScreenAdapter {
         // chọn nhìn như LIỀN một khối với khung
         batch.draw(Ui.roundedRect((int) (CP_W - 24), 380, 16,
             new Color(0.05f, 0.09f, 0.15f, 0.55f), GLASS_RIM), px + 12, py + 4);
-        // PLAQUE tiêu đề nổi giữa mép trên panel như mockup
-        batch.draw(Ui.roundedRect(360, 46, 12,
-            new Color(0.15f, 0.31f, 0.60f, 0.98f), new Color(0.55f, 0.75f, 1f, 1f)),
-            pcx - 180, py + CP_H - 23);
-        Ui.faIcon(batch, Ui.fa20, Ui.FA_STAR, pcx - 152, py + CP_H,
-            new Color(0.78f, 0.90f, 1f, 1f));
-        Ui.faIcon(batch, Ui.fa20, Ui.FA_STAR, pcx + 152, py + CP_H,
-            new Color(0.78f, 0.90f, 1f, 1f));
-        Ui.centered(batch, Ui.font, "Thông Tin Nhân Vật", pcx, py + CP_H + 10,
-            Color.WHITE);
         int[] st = charStats();
         // header: avatar tròn + tên + cấp
         float avCx = px + 62, avCy = py + CP_H - 52;
@@ -9498,7 +9488,7 @@ public class WorldScreen extends ScreenAdapter {
         Ui.centered(batch, Ui.fontTiny, "Lv", px + 133, avCy - 18,
             new Color(0.30f, 0.16f, 0.02f, 1f));
         Ui.fontSmall.setColor(1f, 1f, 1f, 0.92f);
-        Ui.fontSmall.draw(batch, st != null ? "Cấp " + st[0] : "—", px + 162, avCy - 18);
+        Ui.fontSmall.draw(batch, st != null ? "" + st[0] : "—", px + 162, avCy - 18);
         // phía trên dòng người yêu: ngày vào game (đuôi mở rộng gói −22),
         // canh phải thẳng hàng với dòng người yêu ở dưới
         if (selfJoinDate != null) {
