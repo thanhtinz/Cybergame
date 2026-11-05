@@ -45,7 +45,7 @@ public final class AvatarProtocol {
     public static final byte MAIL_READ = -109;
     public static final byte MAIL_CLAIM = -110;
     public static final byte MAIL_CLAIM_ALL = -111;
-    public static final byte MAIL_DELETE_READ = -112;
+    public static final byte MAIL_DELETE_READ = -114; // doi tu -112 (ban chinh danh cho CLAN) 2026-11-04
     /** Gửi lời mời kết bạn: {int id người nhận} (Cmd.AVATAR_REQUEST_ADD_FRIEND). */
     public static final byte REQUEST_ADD_FRIEND = -21;
     /** Xin/xem thông tin nhân vật: C→S {int id}; S→C {int id, byte cấp,
@@ -579,6 +579,165 @@ public final class AvatarProtocol {
     /** Xong lượt câu (gói 85, rỗng): dọn cá/phao phía mọi người. */
     public static void fishDone(GameConnection conn) throws IOException {
         conn.send(new Msg(FISH_DONE));
+    }
+
+    // ===== Clan đầy đủ (bản chính 3.4.4; docs/clan-spec.md) =====
+    // Phong bì CLAN: {byte sub, ...}. Số lệnh chính −112 đúng bản chính;
+    // lệnh con theo thứ tự khai báo Cmd_Message của bản chính.
+    public static final byte CLAN = -112;
+    public static final int CL_REGIS = 0, CL_INFO = 1, CL_LIST = 2,
+        CL_REQUEST_JOIN = 3, CL_LIST_REQUEST = 4, CL_ACCEPT = 5,
+        CL_DENY = 6, CL_OUT = 7, CL_KICK = 8, CL_CHAT = 9,
+        CL_BLOCK_CHAT = 10, CL_DONATION = 11, CL_CHECK_INFO = 12,
+        CL_CHECK_CREATE = 13, CL_NOTIFY = 14, CL_LEVEL_INFO = 15,
+        CL_LEVEL_UP = 16, CL_SET_DEPUTY = 17, CL_FIRE_DEPUTY = 18,
+        CL_LIST_QUEST = 20, CL_INFO_QUEST = 21, CL_SUBMIT_QUEST = 22,
+        CL_SUBMIT_ITEM = 23, CL_QUEST_DONE = 24, CL_LIST_NEW = 25,
+        CL_SET_PLAYER = 26, CL_REQ_ITEMS = 27, CL_ITEM_OWN = 28,
+        CL_BUY_ITEM = 29, CL_RECEIVE = 30, CL_INVITE = 31;
+
+    public static Msg clanMsg(int sub) throws IOException {
+        Msg m = new Msg(CLAN);
+        m.writer().writeByte(sub);
+        return m;
+    }
+
+    public static void clanInfo(GameConnection conn) throws IOException {
+        conn.send(clanMsg(CL_INFO));
+    }
+
+    public static void clanList(GameConnection conn, boolean newest) throws IOException {
+        if (newest) {
+            conn.send(clanMsg(CL_LIST_NEW));
+        } else {
+            Msg m = clanMsg(CL_LIST);
+            m.writer().writeByte(0);
+            conn.send(m);
+        }
+    }
+
+    public static void clanCreate(GameConnection conn, String name, String slogan, int icon)
+            throws IOException {
+        Msg m = clanMsg(CL_REGIS);
+        DataOutputStream w = m.writer();
+        w.writeUTF(name);
+        w.writeUTF(slogan);
+        w.writeShort(icon);
+        conn.send(m);
+    }
+
+    public static void clanRequestJoin(GameConnection conn, int clanId, boolean viaInvite)
+            throws IOException {
+        Msg m = clanMsg(CL_REQUEST_JOIN);
+        DataOutputStream w = m.writer();
+        w.writeInt(clanId);
+        w.writeByte(viaInvite ? 1 : 0);
+        conn.send(m);
+    }
+
+    public static void clanListRequest(GameConnection conn) throws IOException {
+        conn.send(clanMsg(CL_LIST_REQUEST));
+    }
+
+    public static void clanAccept(GameConnection conn, int userId, boolean ok) throws IOException {
+        Msg m = clanMsg(ok ? CL_ACCEPT : CL_DENY);
+        m.writer().writeInt(userId);
+        conn.send(m);
+    }
+
+    public static void clanOut(GameConnection conn) throws IOException {
+        conn.send(clanMsg(CL_OUT));
+    }
+
+    public static void clanKick(GameConnection conn, int userId) throws IOException {
+        Msg m = clanMsg(CL_KICK);
+        m.writer().writeInt(userId);
+        conn.send(m);
+    }
+
+    public static void clanChat(GameConnection conn, String text) throws IOException {
+        Msg m = clanMsg(CL_CHAT);
+        m.writer().writeUTF(text);
+        conn.send(m);
+    }
+
+    public static void clanBlockChat(GameConnection conn, int userId, boolean block)
+            throws IOException {
+        Msg m = clanMsg(CL_BLOCK_CHAT);
+        DataOutputStream w = m.writer();
+        w.writeInt(userId);
+        w.writeBoolean(block);
+        conn.send(m);
+    }
+
+    public static void clanDonate(GameConnection conn, int xu, int luong) throws IOException {
+        Msg m = clanMsg(CL_DONATION);
+        DataOutputStream w = m.writer();
+        w.writeInt(xu);
+        w.writeInt(luong);
+        conn.send(m);
+    }
+
+    public static void clanCheckInfo(GameConnection conn, int clanId) throws IOException {
+        Msg m = clanMsg(CL_CHECK_INFO);
+        m.writer().writeInt(clanId);
+        conn.send(m);
+    }
+
+    public static void clanLevelInfo(GameConnection conn) throws IOException {
+        conn.send(clanMsg(CL_LEVEL_INFO));
+    }
+
+    public static void clanLevelUp(GameConnection conn) throws IOException {
+        conn.send(clanMsg(CL_LEVEL_UP));
+    }
+
+    public static void clanDeputy(GameConnection conn, int userId, boolean set) throws IOException {
+        Msg m = clanMsg(set ? CL_SET_DEPUTY : CL_FIRE_DEPUTY);
+        m.writer().writeInt(userId);
+        conn.send(m);
+    }
+
+    public static void clanQuests(GameConnection conn) throws IOException {
+        conn.send(clanMsg(CL_LIST_QUEST));
+    }
+
+    public static void clanSubmitQuest(GameConnection conn, int questId) throws IOException {
+        Msg m = clanMsg(CL_SUBMIT_QUEST);
+        m.writer().writeByte(questId);
+        conn.send(m);
+    }
+
+    public static void clanSubmitItem(GameConnection conn, int questId) throws IOException {
+        Msg m = clanMsg(CL_SUBMIT_ITEM);
+        m.writer().writeByte(questId);
+        conn.send(m);
+    }
+
+    public static void clanShop(GameConnection conn) throws IOException {
+        conn.send(clanMsg(CL_REQ_ITEMS));
+    }
+
+    public static void clanOwn(GameConnection conn) throws IOException {
+        conn.send(clanMsg(CL_ITEM_OWN));
+    }
+
+    public static void clanBuyItem(GameConnection conn, int partId) throws IOException {
+        Msg m = clanMsg(CL_BUY_ITEM);
+        m.writer().writeShort(partId);
+        conn.send(m);
+    }
+
+    public static void clanReceive(GameConnection conn, int ownId) throws IOException {
+        Msg m = clanMsg(CL_RECEIVE);
+        m.writer().writeInt(ownId);
+        conn.send(m);
+    }
+
+    public static void clanInvite(GameConnection conn, String playerName) throws IOException {
+        Msg m = clanMsg(CL_INVITE);
+        m.writer().writeUTF(playerName);
+        conn.send(m);
     }
 
     // ===== Hub MiniGame + Tàu Chiến (bản chính 3.4.4; docs/tauchien-hub-spec.md) =====

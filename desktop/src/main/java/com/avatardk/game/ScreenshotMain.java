@@ -1279,6 +1279,42 @@ public class ScreenshotMain {
                     case 133: // Lễ cưới ở lễ đường: dâu/rể đồ cưới + nhẫn
                         if (frame == 20) {
                             shot("shot-wedding.png");
+                            stage = 134; frame = 0;
+                        }
+                        break;
+                    case 134: // Panel clan: tab Thành viên (đã có clan)
+                        if (frame == 1) {
+                            world.debugClan();
+                        }
+                        if (frame == 15) {
+                            shot("shot-clan.png");
+                            stage = 135; frame = 0;
+                        }
+                        break;
+                    case 135: // Panel clan: tab Nhiệm vụ
+                        if (frame == 1) {
+                            world.debugClanQuest();
+                        }
+                        if (frame == 15) {
+                            shot("shot-clan-quest.png");
+                            stage = 136; frame = 0;
+                        }
+                        break;
+                    case 136: // Panel clan: tab Cửa hàng
+                        if (frame == 1) {
+                            world.debugClanShop();
+                        }
+                        if (frame == 15) {
+                            shot("shot-clan-shop.png");
+                            stage = 137; frame = 0;
+                        }
+                        break;
+                    case 137: // Panel clan: danh sách (chưa có clan)
+                        if (frame == 1) {
+                            world.debugClanList();
+                        }
+                        if (frame == 15) {
+                            shot("shot-clan-list.png");
                             stage = 121; frame = 0;
                         }
                         break;

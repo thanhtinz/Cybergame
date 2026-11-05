@@ -763,7 +763,7 @@ public class WorldScreen extends ScreenAdapter {
     private static final String[][] MENU_ITEMS = {
         {"50", "Map"}, {"msg0", "Thư"}, {"balo", "Balo"},
         {"40", "Bạn bè"}, {"20", "Cá nhân"}, {"gear", "Cài đặt"},
-        {"music", "Nhạc"}, {"minigame", "Mini game"},
+        {"music", "Nhạc"}, {"minigame", "Mini game"}, {"41", "Clan"},
     };
     private static final float MENU_PX = Ui.W - 330f, MENU_PW = 312f;
     private static final float MENU_HEADER = 40f, MENU_CELL = 96f, MENU_CELL_H = 92f;
@@ -3726,6 +3726,11 @@ public class WorldScreen extends ScreenAdapter {
                     handleMiniGamePacket(m);
                     break;
                 }
+                case AvatarProtocol.CLAN: {
+                    // phong bì clan {-112}: {byte sub,...} (docs/clan-spec.md)
+                    handleClanPacket(m);
+                    break;
+                }
                 case AvatarProtocol.FISH_START: {
                     // gói 86 trả lời bắt đầu câu: {bool ok, UTF lỗi}
                     java.io.DataInputStream r = m.reader();
@@ -5609,6 +5614,8 @@ public class WorldScreen extends ScreenAdapter {
         // hộp hỏi thoát về thành phố (ô cổng 9/12/17) là lớp trên cùng
         if (exitConfirmTouch(x, y)) return;
         if (weddingConfirmTouch(x, y)) return;
+        // panel clan + hộp lời mời clan
+        if (clanTouch(x, y)) return;
         // hộp xác nhận nâng cấp rương (−90) là modal trên cùng
         if (chestUpTouch(x, y)) return;
         // hoá đơn mua chung là lớp trên cùng (mở đè cả panel nhà —
@@ -5897,6 +5904,8 @@ public class WorldScreen extends ScreenAdapter {
                             musicOpen = true;
                         } else if (i == 7) {
                             openMiniGameHub();
+                        } else if (i == 8) {
+                            openClanPanel();
                         } else {
                             addChatLog(TAB_SYSTEM, null, "Tính năng " + MENU_ITEMS[i][1] + " đang được port ở đợt tiếp theo.", true);
                         }
@@ -7558,6 +7567,7 @@ public class WorldScreen extends ScreenAdapter {
         housePayOpen = false;
         guideOpen = false;
         dlPrizeOpen = false;
+        clanOpen = false;
     }
 
     private void openMsgPanel() {
@@ -10389,6 +10399,7 @@ public class WorldScreen extends ScreenAdapter {
         if (musicOpen) drawMusicPanel();
         if (msgOpen) drawMsgPanel();
         if (mailOpen) drawMailPanel();
+        if (clanOpen) drawClanPanel();
         if (friendOpen) drawFriendPanel();
         if (passFormOpen) drawPassFormPanel();
         if (giftFormOpen) drawGiftFormPanel();
@@ -12024,6 +12035,1176 @@ public class WorldScreen extends ScreenAdapter {
         } else if (i == 1) {
             openGuide("Hướng dẫn", LAI_BUON_GUIDE);
         }
+    }
+
+    // ---------- CLAN (gói −112, docs/clan-spec.md) ----------
+    // Panel clan đầy đủ theo bản chính: danh sách/tạo clan, thành
+    // viên + phó chủ, xin vào, góp quỹ, cấp clan, nhiệm vụ, shop clan.
+    private static class ClMember {
+        int id; String name = ""; int role; int points;
+        boolean online; boolean blocked;
+    }
+    private static class ClListItem {
+        int id; String name = ""; String slogan = ""; int icon;
+        int level; int cur; int max; int xu; int luong;
+    }
+    private static class ClQuest {
+        int id; String name = ""; int diff; int needPart; int needQty;
+        int rewardXu; int rewardPoint;
+    }
+    private static class ClShopItem {
+        int partId; int priceXu; int priceLuong; int days; int lvReq;
+    }
+    private static class ClOwnItem {
+        int ownId; int partId; int days; boolean received;
+    }
+
+    private boolean clanOpen = false;
+    private int clanTab = 0;         // có clan: 0 TV, 1 NV, 2 Shop, 3 Đồ, 4 Quỹ, 5 Xin vào
+    private boolean clanHas = false; // mình đã có clan chưa
+    private int clanId = -1;
+    private String clanName = "", clanSlogan = "";
+    private int clanIcon = 0, clanLevel = 1, clanExp = 0, clanExpNeed = 1000;
+    private int clanFundXu = 0, clanFundLuong = 0;
+    private int clanRole = 0, clanMemCount = 0, clanMaxMem = 30;
+    private int clanMyPoints = 0, clanMyDonXu = 0, clanMyDonLuong = 0;
+    private final java.util.List<ClMember> clanMembers = new java.util.ArrayList<>();
+    private final java.util.List<ClListItem> clanListData = new java.util.ArrayList<>();
+    private boolean clanListNewest = false;
+    private final java.util.List<ClMember> clanRequests = new java.util.ArrayList<>();
+    private final java.util.List<ClQuest> clanQuests = new java.util.ArrayList<>();
+    private int clanQuestActive = 0, clanQuestProgress = 0;
+    private final java.util.List<ClShopItem> clanShopItems = new java.util.ArrayList<>();
+    private final java.util.List<ClOwnItem> clanOwnItems = new java.util.ArrayList<>();
+    private int clanPage = 0;
+    private int clanDonXu = 0, clanDonLuong = 0;
+    private boolean clanOutArm = false;
+    private long clanOutArmAt = 0;
+    private int[] clanLevelInfo = null; // level, exp, need, costXu, costLuong, maxNext, depNext
+    private ClListItem clanCheck = null; // clan đang xem chi tiết (chưa vào)
+    private int clanCheckOwner = 0;
+    private String clanCheckOwnerName = "";
+    private final StringBuilder clanNameField = new StringBuilder();
+    private final StringBuilder clanSloganField = new StringBuilder();
+    private final StringBuilder clanInviteField = new StringBuilder();
+    private final StringBuilder clanChatField = new StringBuilder();
+    private int clanCreateIcon = 2;
+    private static final int[] CLAN_ICONS = {2, 310, 311, 312, 313, 314, 331, 332, 842, 843, 844};
+    // Lời mời vào clan đang chờ trả lời (NOTIFY kind 6)
+    private int clanInviteId = -1;
+    private String clanInviteText = "";
+    // Icon clan của chính mình (SET_PLAYER_CLAN)
+    private int myClanIdSv = -1, myClanIconSv = -1;
+    // Nhật ký chat clan trong panel
+    private final java.util.List<String> clanChatLog = new java.util.ArrayList<>();
+
+    private static final float CL_PW = 920, CL_PH = 600;
+    private static final float CL_PX = (1280 - CL_PW) / 2f, CL_PY = (720 - CL_PH) / 2f;
+
+    private void openClanPanel() {
+        closeOtherPanels();
+        clanOpen = true;
+        clanTab = 0;
+        clanPage = 0;
+        clanCheck = null;
+        if (!online()) {
+            addChatLog(TAB_SYSTEM, null, "Clan cần chơi online — bản chơi thử không có.", true);
+            clanOpen = false;
+            return;
+        }
+        try {
+            AvatarProtocol.clanInfo(game.connection);
+            AvatarProtocol.clanList(game.connection, false);
+        } catch (java.io.IOException e) { }
+    }
+
+    private void clanSendTabData() {
+        try {
+            if (!clanHas) {
+                AvatarProtocol.clanList(game.connection, clanListNewest);
+            } else if (clanTab == 1) {
+                AvatarProtocol.clanQuests(game.connection);
+            } else if (clanTab == 2) {
+                AvatarProtocol.clanShop(game.connection);
+            } else if (clanTab == 3) {
+                AvatarProtocol.clanOwn(game.connection);
+            } else if (clanTab == 4) {
+                AvatarProtocol.clanLevelInfo(game.connection);
+            } else if (clanTab == 5) {
+                AvatarProtocol.clanListRequest(game.connection);
+            }
+        } catch (java.io.IOException e) { }
+    }
+
+    private void handleClanPacket(Msg m) {
+        try {
+            java.io.DataInputStream r = m.reader();
+            if (r.available() < 1) return;
+            int sub = r.readByte();
+            switch (sub) {
+                case AvatarProtocol.CL_INFO: {
+                    boolean has = r.readBoolean();
+                    clanHas = has;
+                    clanMembers.clear();
+                    if (has) {
+                        clanId = r.readInt();
+                        clanName = r.readUTF();
+                        clanSlogan = r.readUTF();
+                        clanIcon = r.readShort();
+                        clanLevel = r.readByte();
+                        clanExp = r.readInt();
+                        clanExpNeed = r.readInt();
+                        clanFundXu = r.readInt();
+                        clanFundLuong = r.readInt();
+                        clanRole = r.readByte();
+                        clanMemCount = r.readByte();
+                        clanMaxMem = r.readByte();
+                        clanMyPoints = r.readInt();
+                        clanMyDonXu = r.readInt();
+                        clanMyDonLuong = r.readInt();
+                        int n = r.readByte();
+                        for (int i = 0; i < n; i++) {
+                            ClMember mb = new ClMember();
+                            mb.id = r.readInt();
+                            mb.name = r.readUTF();
+                            mb.role = r.readByte();
+                            mb.points = r.readInt();
+                            mb.online = r.readBoolean();
+                            mb.blocked = r.readBoolean();
+                            clanMembers.add(mb);
+                        }
+                        if (clanOpen) clanSendTabData();
+                    }
+                    break;
+                }
+                case AvatarProtocol.CL_LIST:
+                case AvatarProtocol.CL_LIST_NEW: {
+                    clanListData.clear();
+                    int n = r.readByte();
+                    for (int i = 0; i < n; i++) {
+                        ClListItem it = new ClListItem();
+                        it.id = r.readInt();
+                        it.name = r.readUTF();
+                        it.slogan = r.readUTF();
+                        it.icon = r.readShort();
+                        it.level = r.readByte();
+                        it.cur = r.readByte();
+                        it.max = r.readByte();
+                        it.xu = r.readInt();
+                        it.luong = r.readInt();
+                        clanListData.add(it);
+                    }
+                    break;
+                }
+                case AvatarProtocol.CL_LIST_REQUEST: {
+                    clanRequests.clear();
+                    int n = r.readByte();
+                    for (int i = 0; i < n; i++) {
+                        ClMember mb = new ClMember();
+                        mb.id = r.readInt();
+                        mb.name = r.readUTF();
+                        clanRequests.add(mb);
+                    }
+                    break;
+                }
+                case AvatarProtocol.CL_CHECK_INFO: {
+                    ClListItem it = new ClListItem();
+                    it.id = r.readInt();
+                    it.name = r.readUTF();
+                    it.slogan = r.readUTF();
+                    it.icon = r.readShort();
+                    it.level = r.readByte();
+                    it.cur = r.readByte();
+                    it.max = r.readByte();
+                    it.xu = r.readInt();
+                    it.luong = r.readInt();
+                    clanCheckOwnerName = r.readUTF();
+                    clanCheck = it;
+                    break;
+                }
+                case AvatarProtocol.CL_LEVEL_INFO: {
+                    clanLevelInfo = new int[]{r.readByte(), r.readInt(), r.readInt(),
+                        r.readInt(), r.readInt(), r.readByte(), r.readByte()};
+                    break;
+                }
+                case AvatarProtocol.CL_LIST_QUEST: {
+                    clanQuestActive = r.readByte();
+                    clanQuestProgress = r.readShort();
+                    clanQuests.clear();
+                    int n = r.readByte();
+                    for (int i = 0; i < n; i++) {
+                        ClQuest q = new ClQuest();
+                        q.id = r.readByte();
+                        q.name = r.readUTF();
+                        q.diff = r.readByte();
+                        q.needPart = r.readShort();
+                        q.needQty = r.readByte();
+                        q.rewardXu = r.readInt();
+                        q.rewardPoint = r.readInt();
+                        clanQuests.add(q);
+                    }
+                    break;
+                }
+                case AvatarProtocol.CL_REQ_ITEMS: {
+                    clanShopItems.clear();
+                    int n = r.readByte();
+                    for (int i = 0; i < n; i++) {
+                        ClShopItem s = new ClShopItem();
+                        s.partId = r.readShort();
+                        s.priceXu = r.readInt();
+                        s.priceLuong = r.readInt();
+                        s.days = r.readByte();
+                        s.lvReq = r.readByte();
+                        clanShopItems.add(s);
+                    }
+                    break;
+                }
+                case AvatarProtocol.CL_ITEM_OWN: {
+                    clanOwnItems.clear();
+                    int n = r.readByte();
+                    for (int i = 0; i < n; i++) {
+                        ClOwnItem o = new ClOwnItem();
+                        o.ownId = r.readInt();
+                        o.partId = r.readShort();
+                        o.days = r.readInt();
+                        o.received = r.readBoolean();
+                        clanOwnItems.add(o);
+                    }
+                    break;
+                }
+                case AvatarProtocol.CL_CHAT: {
+                    int fromId = r.readInt();
+                    String fromName = r.readUTF();
+                    String text = r.readUTF();
+                    clanChatLog.add(fromName + ": " + text);
+                    while (clanChatLog.size() > 30) clanChatLog.remove(0);
+                    addChatLog(TAB_SYSTEM, null, "[Clan] " + fromName + ": " + text, true);
+                    break;
+                }
+                case AvatarProtocol.CL_QUEST_DONE: {
+                    int qid = r.readByte();
+                    int rx = r.readInt();
+                    int rp = r.readInt();
+                    addChatLog(TAB_SYSTEM, null,
+                        "Nhiệm vụ clan hoàn thành! Quỹ +" + fmtMoney(rx)
+                            + " xu, điểm clan +" + rp + ".", true);
+                    if (clanOpen) {
+                        try {
+                            AvatarProtocol.clanInfo(game.connection);
+                            AvatarProtocol.clanQuests(game.connection);
+                        } catch (java.io.IOException e) { }
+                    }
+                    break;
+                }
+                case AvatarProtocol.CL_NOTIFY: {
+                    int kind = r.readByte();
+                    String text = r.readUTF();
+                    if (kind == 6 && r.available() >= 4) {
+                        clanInviteId = r.readInt();
+                        clanInviteText = text;
+                    } else {
+                        addChatLog(TAB_SYSTEM, null, "[Clan] " + text, true);
+                    }
+                    if (clanOpen) {
+                        try { AvatarProtocol.clanInfo(game.connection); }
+                        catch (java.io.IOException e) { }
+                    }
+                    break;
+                }
+                case AvatarProtocol.CL_SET_PLAYER: {
+                    myClanIdSv = r.readInt();
+                    myClanIconSv = r.readShort();
+                    break;
+                }
+                case AvatarProtocol.CL_CHECK_CREATE: {
+                    boolean ok = r.readBoolean();
+                    String text = r.readUTF();
+                    addChatLog(TAB_SYSTEM, null, text, true);
+                    break;
+                }
+                default: break;
+            }
+        } catch (Exception e) { }
+    }
+
+    private String clanRoleName(int role) {
+        return role == 2 ? "Chủ bang" : (role == 1 ? "Phó chủ" : "Thành viên");
+    }
+
+    private static final String[] CLAN_TABS = {
+        "Thành viên", "Nhiệm vụ", "Cửa hàng", "Đồ clan", "Quỹ + Cấp", "Chat clan", "Xin vào"
+    };
+
+    private void drawClanPanel() {
+        float px = CL_PX, py = CL_PY, pw = CL_PW, ph = CL_PH;
+        batch.setColor(0f, 0f, 0f, 0.55f);
+        batch.draw(whiteTex, 0, 0, Ui.W, Ui.H);
+        batch.setColor(Color.WHITE);
+        batch.draw(Ui.roundedRect((int) pw, (int) ph, 18, GLASS_FILL_DARK, GLASS_RIM), px, py);
+        // nút đóng chuẩn
+        batch.draw(Ui.roundedRect(36, 36, 10, Ui.BTN_CLOSE, null), px + pw - 54, py + ph - 54);
+        Ui.faIcon(batch, Ui.fa20, Ui.FA_XMARK, px + pw - 36, py + ph - 36, Color.WHITE);
+        float top = py + ph;
+
+        if (!clanHas) {
+            Ui.font.setColor(1f, 0.85f, 0.35f, 1f);
+            Ui.font.draw(batch, "Clan / Bang hội", px + 28, top - 26);
+            Ui.font.setColor(Color.WHITE);
+            // 2 tab: Danh sách / Tạo clan
+            clanBtn(px + 28, top - 108, 170, 42, "Danh sách clan", clanTab == 0 ? 1 : 0);
+            clanBtn(px + 210, top - 108, 170, 42, "Tạo clan", clanTab == 1 ? 1 : 0);
+            if (clanTab == 0) drawClanListTab(px, py, pw, top - 128);
+            else drawClanCreateTab(px, py, pw, top - 128);
+            if (clanCheck != null) drawClanCheck(px, py, pw, ph);
+            return;
+        }
+
+        // Header clan của mình
+        clanIconDraw(clanIcon, px + 58, top - 62, 68);
+        Ui.font.setColor(1f, 0.85f, 0.35f, 1f);
+        Ui.font.draw(batch, truncTo(Ui.font, clanName, 420), px + 104, top - 38);
+        Ui.font.setColor(Color.WHITE);
+        Ui.fontSmall.setColor(0.85f, 0.92f, 1f, 1f);
+        Ui.fontSmall.draw(batch,
+            "Cấp " + clanLevel + " · " + clanRoleName(clanRole) + " · Điểm clan "
+                + fmtMoney(clanExp) + "/" + fmtMoney(clanExpNeed),
+            px + 104, top - 66);
+        Ui.fontSmall.draw(batch,
+            "Quỹ: " + fmtMoney(clanFundXu) + " xu · " + fmtMoney(clanFundLuong)
+                + " lượng · Thành viên " + clanMemCount + "/" + clanMaxMem,
+            px + 104, top - 92);
+        Ui.fontSmall.setColor(Color.WHITE);
+        String slogan = truncTo(Ui.fontSmall, clanSlogan, 400);
+        Ui.fontSmall.setColor(1f, 0.9f, 0.6f, 1f);
+        Ui.fontSmall.draw(batch, slogan, px + 560, top - 66);
+        Ui.fontSmall.setColor(Color.WHITE);
+
+        // Hàng tab
+        int nTabs = clanRole >= 1 ? 7 : 6;
+        float tabW = 124, tabY = top - 152;
+        for (int i = 0; i < nTabs; i++) {
+            clanBtn(px + 28 + i * (tabW + 6), tabY, tabW, 42, CLAN_TABS[i], clanTab == i ? 1 : 0);
+        }
+        float contentTop = tabY - 16;
+        switch (clanTab) {
+            case 0: drawClanMembersTab(px, py, contentTop); break;
+            case 1: drawClanQuestTab(px, py, contentTop); break;
+            case 2: drawClanShopTab(px, py, contentTop); break;
+            case 3: drawClanOwnTab(px, py, contentTop); break;
+            case 4: drawClanFundTab(px, py, contentTop); break;
+            case 5: drawClanChatTab(px, py, contentTop); break;
+            case 6: drawClanRequestTab(px, py, contentTop); break;
+            default: break;
+        }
+        if (clanInviteId >= 0) drawClanInviteBox();
+    }
+
+    private void drawClanPager(float px, float py, int total, int perPage) {
+        int pages = Math.max(1, (total + perPage - 1) / perPage);
+        if (clanPage >= pages) clanPage = pages - 1;
+        if (clanPage < 0) clanPage = 0;
+        clanBtn(px + CL_PW - 300, py + 14, 84, 38, "< Trước", clanPage > 0 ? 0 : 3);
+        Ui.centered(batch, Ui.fontSmall, (clanPage + 1) + "/" + pages,
+            px + CL_PW - 150, py + 40, Color.WHITE);
+        clanBtn(px + CL_PW - 116, py + 14, 84, 38, "Sau >", clanPage < pages - 1 ? 0 : 3);
+    }
+
+    private void drawClanListTab(float px, float py, float pw, float contentTop) {
+        clanBtn(px + pw - 330, contentTop - 44, 140, 40,
+            "Cấp cao", !clanListNewest ? 1 : 0);
+        clanBtn(px + pw - 178, contentTop - 44, 140, 40,
+            "Mới nhất", clanListNewest ? 1 : 0);
+        float y = contentTop - 58;
+        int perPage = 6;
+        int start = clanPage * perPage;
+        for (int i = start; i < Math.min(clanListData.size(), start + perPage); i++) {
+            ClListItem it = clanListData.get(i);
+            float ry = y - 64;
+            batch.draw(Ui.roundedRect((int) (pw - 56), 58, 10,
+                new com.badlogic.gdx.graphics.Color(1f, 1f, 1f, 0.07f), null), px + 28, ry);
+            clanIconDraw(it.icon, px + 66, ry + 29, 42);
+            Ui.font.setColor(Color.WHITE);
+            Ui.font.draw(batch, truncTo(Ui.font, it.name, 300), px + 100, ry + 42);
+            Ui.fontSmall.setColor(0.85f, 0.92f, 1f, 1f);
+            Ui.fontSmall.draw(batch,
+                "Cấp " + it.level + " · " + it.cur + "/" + it.max + " thành viên · "
+                    + truncTo(Ui.fontSmall, it.slogan, 330),
+                px + 100, ry + 18);
+            Ui.fontSmall.setColor(Color.WHITE);
+            clanBtn(px + pw - 150, ry + 10, 100, 38, "Xem", 0);
+            y = ry;
+        }
+        if (clanListData.isEmpty()) {
+            Ui.centered(batch, Ui.font, "Chưa có clan nào.", px + pw / 2f, contentTop - 130, Color.WHITE);
+        }
+        drawClanPager(px, py, clanListData.size(), perPage);
+    }
+
+    private void drawClanCheck(float px, float py, float pw, float ph) {
+        float w = 520, h = 330, x = px + (pw - w) / 2f, y = py + (ph - h) / 2f;
+        batch.setColor(0f, 0f, 0f, 0.45f);
+        batch.draw(whiteTex, px, py, pw, ph);
+        batch.setColor(Color.WHITE);
+        batch.draw(Ui.roundedRect((int) w, (int) h, 16,
+            new com.badlogic.gdx.graphics.Color(0.07f, 0.11f, 0.17f, 0.99f), GLASS_RIM), x, y);
+        clanIconDraw(clanCheck.icon, x + 60, y + h - 62, 64);
+        Ui.font.setColor(1f, 0.85f, 0.35f, 1f);
+        Ui.font.draw(batch, truncTo(Ui.font, clanCheck.name, 340), x + 104, y + h - 44);
+        Ui.font.setColor(Color.WHITE);
+        Ui.fontSmall.setColor(0.9f, 0.95f, 1f, 1f);
+        float ly = y + h - 108;
+        Ui.fontSmall.draw(batch, "Chủ bang: " + clanCheckOwnerName, x + 32, ly); ly -= 32;
+        Ui.fontSmall.draw(batch, "Cấp clan: " + clanLevelOf(clanCheck), x + 32, ly); ly -= 32;
+        Ui.fontSmall.draw(batch, "Thành viên: " + clanCheck.cur + "/" + clanCheck.max, x + 32, ly); ly -= 32;
+        Ui.fontSmall.draw(batch, "Quỹ: " + fmtMoney(clanCheck.xu) + " xu · "
+            + fmtMoney(clanCheck.luong) + " lượng", x + 32, ly); ly -= 32;
+        Ui.fontSmall.draw(batch, "Khẩu hiệu: " + truncTo(Ui.fontSmall, clanCheck.slogan, 380), x + 32, ly);
+        Ui.fontSmall.setColor(Color.WHITE);
+        clanBtn(x + 40, y + 28, 200, 48, "Xin gia nhập", 1);
+        clanBtn(x + w - 240, y + 28, 200, 48, "Đóng", 0);
+    }
+
+    private int clanLevelOf(ClListItem it) { return it.level; }
+
+    private void drawClanCreateTab(float px, float py, float pw, float contentTop) {
+        float x = px + 60;
+        Ui.fontSmall.setColor(0.85f, 0.92f, 1f, 1f);
+        Ui.fontSmall.draw(batch, "Tên clan (3–20 ký tự):", x, contentTop - 16);
+        Ui.fontSmall.setColor(Color.WHITE);
+        float fy = contentTop - 84;
+        batch.draw(Ui.roundedRect(560, 54, 12,
+            new com.badlogic.gdx.graphics.Color(0.10f, 0.13f, 0.22f, 0.97f),
+            new com.badlogic.gdx.graphics.Color(1f, 0.62f, 0.25f, 1f)), x, fy);
+        SoftInput.register("clan.name",
+            SoftInput.of(clanNameField, 20, () -> SoftInput.hide()),
+            false, true, x, fy, 560, 54, 12);
+        Ui.font.setColor(Color.WHITE);
+        Ui.font.draw(batch, clanNameField.toString(), x + 16, fy + 36);
+        clanBtn(x + 580, fy + 3, 150, 48, "Kiểm tra", 0);
+
+        Ui.fontSmall.setColor(0.85f, 0.92f, 1f, 1f);
+        Ui.fontSmall.draw(batch, "Khẩu hiệu / thông báo clan:", x, fy - 26);
+        Ui.fontSmall.setColor(Color.WHITE);
+        float sy = fy - 94;
+        batch.draw(Ui.roundedRect(560, 54, 12,
+            new com.badlogic.gdx.graphics.Color(0.10f, 0.13f, 0.22f, 0.97f),
+            new com.badlogic.gdx.graphics.Color(1f, 0.62f, 0.25f, 1f)), x, sy);
+        SoftInput.register("clan.slogan",
+            SoftInput.of(clanSloganField, 60, () -> SoftInput.hide()),
+            false, true, x, sy, 560, 54, 12);
+        Ui.font.draw(batch, clanSloganField.toString(), x + 16, sy + 36);
+
+        Ui.fontSmall.setColor(0.85f, 0.92f, 1f, 1f);
+        Ui.fontSmall.draw(batch, "Chọn biểu tượng clan:", x, sy - 28);
+        Ui.fontSmall.setColor(Color.WHITE);
+        float iy = sy - 96;
+        for (int i = 0; i < CLAN_ICONS.length; i++) {
+            float ix = x + i * 68;
+            boolean sel = clanCreateIcon == CLAN_ICONS[i];
+            batch.draw(Ui.roundedRect(60, 60, 10,
+                sel ? new com.badlogic.gdx.graphics.Color(0.95f, 0.55f, 0.15f, 0.55f)
+                    : new com.badlogic.gdx.graphics.Color(1f, 1f, 1f, 0.08f), null), ix, iy);
+            clanIconDraw(CLAN_ICONS[i], ix + 30, iy + 30, 44);
+        }
+        Ui.fontSmall.setColor(1f, 0.9f, 0.6f, 1f);
+        Ui.fontSmall.draw(batch, "Phí tạo clan: 100.000 xu (trừ vào tài khoản của bạn).",
+            x, iy - 34);
+        Ui.fontSmall.setColor(Color.WHITE);
+        clanBtn(x, iy - 100, 220, 52, "Tạo clan", 1);
+    }
+
+    private void drawClanMembersTab(float px, float py, float contentTop) {
+        float y = contentTop;
+        int perPage = 6;
+        int start = clanPage * perPage;
+        for (int i = start; i < Math.min(clanMembers.size(), start + perPage); i++) {
+            ClMember mb = clanMembers.get(i);
+            float ry = y - 56;
+            batch.draw(Ui.roundedRect((int) (CL_PW - 56), 52, 10,
+                new com.badlogic.gdx.graphics.Color(1f, 1f, 1f, 0.07f), null), px + 28, ry);
+            batch.draw(Ui.roundedRect(12, 12, 6,
+                mb.online ? new com.badlogic.gdx.graphics.Color(0.3f, 0.9f, 0.4f, 1f)
+                    : new com.badlogic.gdx.graphics.Color(0.5f, 0.5f, 0.55f, 1f), null),
+                px + 44, ry + 20);
+            Ui.font.setColor(Color.WHITE);
+            Ui.font.draw(batch, truncTo(Ui.font, mb.name, 240), px + 68, ry + 38);
+            Ui.fontSmall.setColor(1f, 0.85f, 0.35f, 1f);
+            Ui.fontSmall.draw(batch, clanRoleName(mb.role), px + 330, ry + 34);
+            Ui.fontSmall.setColor(0.85f, 0.92f, 1f, 1f);
+            Ui.fontSmall.draw(batch, "Điểm: " + fmtMoney(mb.points), px + 460, ry + 34);
+            Ui.fontSmall.setColor(Color.WHITE);
+            boolean selfRow = mb.id == ownId();
+            if (!selfRow && clanRole == 2 && mb.role == 0) {
+                clanBtn(px + CL_PW - 356, ry + 8, 104, 36, "Lên phó", 0);
+            }
+            if (!selfRow && clanRole == 2 && mb.role == 1) {
+                clanBtn(px + CL_PW - 356, ry + 8, 104, 36, "Hạ phó", 0);
+            }
+            if (!selfRow && clanRole >= 1 && mb.role < clanRole) {
+                clanBtn(px + CL_PW - 240, ry + 8, 84, 36, mb.blocked ? "Mở chat" : "Chặn", 0);
+                clanBtn(px + CL_PW - 144, ry + 8, 84, 36, "Trục xuất", 2);
+            }
+            y = ry;
+        }
+        // hàng mời + rời clan
+        float by = py + 62;
+        if (clanRole >= 1) {
+            batch.draw(Ui.roundedRect(300, 44, 10,
+                new com.badlogic.gdx.graphics.Color(0.10f, 0.13f, 0.22f, 0.97f), null),
+                px + 28, by);
+            SoftInput.register("clan.invite",
+                SoftInput.of(clanInviteField, 20, () -> SoftInput.hide()),
+                false, true, px + 28, by, 300, 44, 10);
+            Ui.fontSmall.setColor(Color.WHITE);
+            String inv = clanInviteField.length() == 0 ? "Tên người chơi…" : clanInviteField.toString();
+            Ui.fontSmall.draw(batch, inv, px + 42, by + 29);
+            clanBtn(px + 340, by, 110, 44, "Mời vào", 1);
+        }
+        clanBtn(px + CL_PW - 250, by, 190, 44,
+            clanOutArm ? "Chắc chắn?" : (clanRole == 2 ? "Giải tán clan" : "Rời clan"), 2);
+        drawClanPager(px, py, clanMembers.size(), perPage);
+    }
+
+    private void drawClanQuestTab(float px, float py, float contentTop) {
+        float y = contentTop;
+        for (ClQuest q : clanQuests) {
+            float ry = y - 62;
+            boolean active = clanQuestActive == q.id;
+            batch.draw(Ui.roundedRect((int) (CL_PW - 56), 58, 10,
+                active ? new com.badlogic.gdx.graphics.Color(0.95f, 0.55f, 0.15f, 0.20f)
+                    : new com.badlogic.gdx.graphics.Color(1f, 1f, 1f, 0.07f), null), px + 28, ry);
+            drawPartIcon(q.needPart, px + 66, ry + 29, 40);
+            Ui.font.setColor(Color.WHITE);
+            Ui.font.draw(batch, truncTo(Ui.font, q.name, 330), px + 100, ry + 42);
+            Ui.fontSmall.setColor(0.85f, 0.92f, 1f, 1f);
+            String partName = "";
+            com.avatardk.game.data.PartData pd = game.data.part(q.needPart);
+            if (pd != null) partName = pd.name;
+            Ui.fontSmall.draw(batch,
+                "Nộp: " + partName + " ×" + q.needQty
+                    + (active ? " · Đã nộp " + clanQuestProgress + "/" + q.needQty : "")
+                    + " · Thưởng: " + fmtMoney(q.rewardXu) + " xu quỹ, +" + q.rewardPoint + " điểm",
+                px + 100, ry + 18);
+            Ui.fontSmall.setColor(Color.WHITE);
+            if (active) {
+                clanBtn(px + CL_PW - 168, ry + 10, 110, 38, "Nộp đồ", 1);
+            } else if (clanQuestActive == 0) {
+                clanBtn(px + CL_PW - 168, ry + 10, 110, 38, "Nhận", 0);
+            } else {
+                clanBtn(px + CL_PW - 168, ry + 10, 110, 38, "Đang bận", 3);
+            }
+            y = ry;
+        }
+        if (clanQuests.isEmpty()) {
+            Ui.centered(batch, Ui.font, "Đang tải nhiệm vụ…", px + CL_PW / 2f, contentTop - 100, Color.WHITE);
+        }
+    }
+
+    private void drawClanShopTab(float px, float py, float contentTop) {
+        float y = contentTop;
+        int perPage = 5;
+        int start = clanPage * perPage;
+        for (int i = start; i < Math.min(clanShopItems.size(), start + perPage); i++) {
+            ClShopItem s = clanShopItems.get(i);
+            float ry = y - 66;
+            batch.draw(Ui.roundedRect((int) (CL_PW - 56), 62, 10,
+                new com.badlogic.gdx.graphics.Color(1f, 1f, 1f, 0.07f), null), px + 28, ry);
+            drawPartIcon(s.partId, px + 66, ry + 31, 44);
+            com.avatardk.game.data.PartData pd = game.data.part(s.partId);
+            Ui.font.setColor(Color.WHITE);
+            Ui.font.draw(batch, pd != null ? truncTo(Ui.font, pd.name, 300) : ("Món " + s.partId),
+                px + 100, ry + 44);
+            Ui.fontSmall.setColor(0.85f, 0.92f, 1f, 1f);
+            String price = s.priceXu > 0 ? fmtMoney(s.priceXu) + " xu quỹ" : fmtMoney(s.priceLuong) + " lượng quỹ";
+            Ui.fontSmall.draw(batch,
+                price + " · " + (s.days == 0 ? "Vĩnh viễn" : s.days + " ngày") + " · Cần clan cấp " + s.lvReq,
+                px + 100, ry + 20);
+            Ui.fontSmall.setColor(Color.WHITE);
+            boolean enoughLv = clanLevel >= s.lvReq;
+            boolean enoughFund = clanFundXu >= s.priceXu && clanFundLuong >= s.priceLuong;
+            clanBtn(px + CL_PW - 168, ry + 12, 110, 38, "Mua",
+                enoughLv && enoughFund ? 1 : 3);
+            y = ry;
+        }
+        Ui.fontSmall.setColor(1f, 0.9f, 0.6f, 1f);
+        Ui.fontSmall.draw(batch, "Mua bằng QUỸ clan — đồ vào tab Đồ clan, bấm Nhận để lấy về rương.",
+            px + 28, py + 66);
+        Ui.fontSmall.setColor(Color.WHITE);
+        drawClanPager(px, py, clanShopItems.size(), perPage);
+    }
+
+    private void drawClanOwnTab(float px, float py, float contentTop) {
+        float y = contentTop;
+        int shown = 0;
+        for (ClOwnItem o : clanOwnItems) {
+            if (o.received) continue;
+            float ry = y - 62;
+            batch.draw(Ui.roundedRect((int) (CL_PW - 56), 58, 10,
+                new com.badlogic.gdx.graphics.Color(1f, 1f, 1f, 0.07f), null), px + 28, ry);
+            drawPartIcon(o.partId, px + 66, ry + 29, 44);
+            com.avatardk.game.data.PartData pd = game.data.part(o.partId);
+            Ui.font.setColor(Color.WHITE);
+            Ui.font.draw(batch, pd != null ? truncTo(Ui.font, pd.name, 400) : ("Món " + o.partId),
+                px + 100, ry + 40);
+            Ui.fontSmall.setColor(0.85f, 0.92f, 1f, 1f);
+            Ui.fontSmall.draw(batch, o.days == 0 ? "Vĩnh viễn" : "Hạn dùng " + o.days + " ngày",
+                px + 100, ry + 17);
+            Ui.fontSmall.setColor(Color.WHITE);
+            clanBtn(px + CL_PW - 168, ry + 10, 110, 38, "Nhận", 1);
+            y = ry;
+            shown++;
+        }
+        if (shown == 0) {
+            Ui.centered(batch, Ui.font, "Chưa có đồ clan chờ nhận.", px + CL_PW / 2f, contentTop - 100, Color.WHITE);
+        }
+    }
+
+    private void drawClanFundTab(float px, float py, float contentTop) {
+        float x = px + 40;
+        Ui.font.setColor(Color.WHITE);
+        Ui.font.draw(batch, "Góp quỹ clan", x, contentTop - 10);
+        Ui.fontSmall.setColor(0.85f, 0.92f, 1f, 1f);
+        Ui.fontSmall.draw(batch, "Bạn đã góp: " + fmtMoney(clanMyDonXu) + " xu · "
+            + fmtMoney(clanMyDonLuong) + " lượng", x, contentTop - 40);
+        Ui.fontSmall.setColor(Color.WHITE);
+        // hàng chọn mức góp
+        float ry = contentTop - 96;
+        Ui.fontSmall.draw(batch, "Xu góp:", x, ry + 24);
+        int[] xuSteps = {10000, 50000, 100000};
+        for (int i = 0; i < xuSteps.length; i++) {
+            clanBtn(x + 130 + i * 150, ry, 138, 42, "+" + fmtMoney(xuSteps[i]),
+                clanDonXu == xuSteps[i] ? 1 : 0);
+        }
+        float ry2 = ry - 62;
+        Ui.fontSmall.draw(batch, "Lượng góp:", x, ry2 + 24);
+        int[] lgSteps = {10, 50, 100};
+        for (int i = 0; i < lgSteps.length; i++) {
+            clanBtn(x + 130 + i * 150, ry2, 138, 42, "+" + lgSteps[i],
+                clanDonLuong == lgSteps[i] ? 1 : 0);
+        }
+        clanBtn(x, ry2 - 70, 200, 48, "Góp quỹ", clanDonXu > 0 || clanDonLuong > 0 ? 1 : 3);
+        // khối cấp clan
+        float ly = ry2 - 150;
+        Ui.font.draw(batch, "Cấp clan", x, ly);
+        if (clanLevelInfo != null) {
+            Ui.fontSmall.setColor(0.85f, 0.92f, 1f, 1f);
+            Ui.fontSmall.draw(batch, "Hiện tại: cấp " + clanLevelInfo[0] + " · Điểm "
+                + fmtMoney(clanLevelInfo[1]) + "/" + fmtMoney(clanLevelInfo[2]), x, ly - 30);
+            Ui.fontSmall.draw(batch, "Lên cấp cần: " + fmtMoney(clanLevelInfo[3]) + " xu quỹ + "
+                + fmtMoney(clanLevelInfo[4]) + " lượng quỹ · Tối đa " + clanLevelInfo[5]
+                + " thành viên, " + clanLevelInfo[6] + " phó chủ", x, ly - 58);
+            Ui.fontSmall.setColor(Color.WHITE);
+            boolean canUp = clanRole >= 1 && clanLevelInfo[1] >= clanLevelInfo[2]
+                && clanFundXu >= clanLevelInfo[3] && clanFundLuong >= clanLevelInfo[4];
+            clanBtn(x, ly - 122, 220, 48, "Nâng cấp clan", canUp ? 1 : 3);
+        }
+    }
+
+    private void drawClanChatTab(float px, float py, float contentTop) {
+        float x = px + 28, w = CL_PW - 56;
+        float logTop = contentTop - 6;
+        batch.draw(Ui.roundedRect((int) w, 300, 12,
+            new com.badlogic.gdx.graphics.Color(0.05f, 0.07f, 0.11f, 0.85f), null), x, logTop - 300);
+        Ui.fontSmall.setColor(Color.WHITE);
+        int n = clanChatLog.size();
+        for (int i = 0; i < Math.min(13, n); i++) {
+            String line = clanChatLog.get(n - 1 - i);
+            Ui.fontSmall.draw(batch, truncTo(Ui.fontSmall, line, 800), x + 16, logTop - 28 - i * 22);
+        }
+        if (n == 0) {
+            Ui.fontSmall.setColor(0.8f, 0.85f, 0.95f, 1f);
+            Ui.fontSmall.draw(batch, "Chưa có tin nhắn clan.", x + 16, logTop - 28);
+            Ui.fontSmall.setColor(Color.WHITE);
+        }
+        float iy = logTop - 356;
+        batch.draw(Ui.roundedRect(660, 48, 10,
+            new com.badlogic.gdx.graphics.Color(0.10f, 0.13f, 0.22f, 0.97f), null), x, iy);
+        SoftInput.register("clan.chat",
+            SoftInput.of(clanChatField, 120, () -> { SoftInput.hide(); clanSendChat(); }),
+            false, true, x, iy, 660, 48, 10);
+        Ui.fontSmall.setColor(Color.WHITE);
+        String t = clanChatField.length() == 0 ? "Nhắn cho clan…" : clanChatField.toString();
+        Ui.fontSmall.draw(batch, t, x + 14, iy + 31);
+        clanBtn(x + 676, iy, 130, 48, "Gửi", 1);
+    }
+
+    private void drawClanRequestTab(float px, float py, float contentTop) {
+        float y = contentTop;
+        for (ClMember mb : clanRequests) {
+            float ry = y - 56;
+            batch.draw(Ui.roundedRect((int) (CL_PW - 56), 52, 10,
+                new com.badlogic.gdx.graphics.Color(1f, 1f, 1f, 0.07f), null), px + 28, ry);
+            Ui.font.setColor(Color.WHITE);
+            Ui.font.draw(batch, truncTo(Ui.font, mb.name, 380), px + 48, ry + 37);
+            clanBtn(px + CL_PW - 300, ry + 8, 110, 36, "Duyệt", 1);
+            clanBtn(px + CL_PW - 176, ry + 8, 110, 36, "Từ chối", 2);
+            y = ry;
+        }
+        if (clanRequests.isEmpty()) {
+            Ui.centered(batch, Ui.font, "Không có yêu cầu nào đang chờ.",
+                px + CL_PW / 2f, contentTop - 100, Color.WHITE);
+        }
+    }
+
+    private void drawClanInviteBox() {
+        float w = 560, h = 210, x = (1280 - w) / 2f, y = (720 - h) / 2f;
+        batch.setColor(0f, 0f, 0f, 0.45f);
+        batch.draw(whiteTex, 0, 0, Ui.W, Ui.H);
+        batch.setColor(Color.WHITE);
+        batch.draw(Ui.roundedRect((int) w, (int) h, 16,
+            new com.badlogic.gdx.graphics.Color(0.07f, 0.11f, 0.17f, 0.99f), GLASS_RIM), x, y);
+        Ui.font.setColor(1f, 0.85f, 0.35f, 1f);
+        Ui.centered(batch, Ui.font, "Lời mời vào clan", 640, y + h - 36, new com.badlogic.gdx.graphics.Color(1f, 0.85f, 0.35f, 1f));
+        Ui.font.setColor(Color.WHITE);
+        java.util.List<String> lines = wrapText(clanInviteText, Ui.fontSmall, 480);
+        float ly = y + h - 76;
+        for (String ln : lines) {
+            Ui.centered(batch, Ui.fontSmall, ln, 640, ly, Color.WHITE);
+            ly -= 24;
+        }
+        clanBtn(x + 50, y + 28, 200, 50, "Đồng ý", 1);
+        clanBtn(x + w - 250, y + 28, 200, 50, "Từ chối", 0);
+    }
+
+    private void clanSendChat() {
+        String t = clanChatField.toString().trim();
+        if (t.isEmpty()) return;
+        clanChatField.setLength(0);
+        try { AvatarProtocol.clanChat(game.connection, t); }
+        catch (java.io.IOException e) { }
+    }
+
+    private boolean inRect(float x, float y, float rx, float ry, float rw, float rh) {
+        return x >= rx && x <= rx + rw && y >= ry && y <= ry + rh;
+    }
+
+    private boolean clanTouch(float x, float y) {
+        // Hộp lời mời clan là lớp trên cùng (kể cả khi panel đóng)
+        if (clanInviteId >= 0) {
+            float w = 560, h = 210, bx = (1280 - w) / 2f, by = (720 - h) / 2f;
+            if (inRect(x, y, bx + 50, by + 28, 200, 50)) {
+                int cid = clanInviteId;
+                clanInviteId = -1;
+                try { AvatarProtocol.clanRequestJoin(game.connection, cid, true); }
+                catch (java.io.IOException e) { }
+                return true;
+            }
+            if (inRect(x, y, bx + w - 250, by + 28, 200, 50)) {
+                clanInviteId = -1;
+                return true;
+            }
+            return true;
+        }
+        if (!clanOpen) return false;
+        float px = CL_PX, py = CL_PY, pw = CL_PW, ph = CL_PH;
+        float top = py + ph;
+        // hộp xem chi tiết clan (khi chưa có clan)
+        if (clanCheck != null) {
+            float w = 520, h = 330, bx = px + (pw - w) / 2f, by = py + (ph - h) / 2f;
+            if (inRect(x, y, bx + 40, by + 28, 200, 48)) {
+                try { AvatarProtocol.clanRequestJoin(game.connection, clanCheck.id, false); }
+                catch (java.io.IOException e) { }
+                clanCheck = null;
+                return true;
+            }
+            if (inRect(x, y, bx + w - 240, by + 28, 200, 48)) {
+                clanCheck = null;
+                return true;
+            }
+            return true;
+        }
+        if (inRect(x, y, px + pw - 54, py + ph - 54, 36, 36)) {
+            clanOpen = false;
+            SoftInput.hide();
+            return true;
+        }
+        if (!inRect(x, y, px, py, pw, ph)) return true; // nuốt chạm trong vùng mờ
+        try {
+            if (!clanHas) {
+                if (inRect(x, y, px + 28, top - 108, 170, 42)) { clanTab = 0; clanPage = 0; return true; }
+                if (inRect(x, y, px + 210, top - 108, 170, 42)) { clanTab = 1; return true; }
+                float contentTop = top - 128;
+                if (clanTab == 0) {
+                    if (inRect(x, y, px + pw - 330, contentTop - 44, 140, 40)) {
+                        clanListNewest = false; clanPage = 0;
+                        AvatarProtocol.clanList(game.connection, false);
+                        return true;
+                    }
+                    if (inRect(x, y, px + pw - 178, contentTop - 44, 140, 40)) {
+                        clanListNewest = true; clanPage = 0;
+                        AvatarProtocol.clanList(game.connection, true);
+                        return true;
+                    }
+                    float yy = contentTop - 58;
+                    int perPage = 6;
+                    int start = clanPage * perPage;
+                    for (int i = start; i < Math.min(clanListData.size(), start + perPage); i++) {
+                        float ry = yy - 64;
+                        if (inRect(x, y, px + pw - 150, ry + 10, 100, 38)) {
+                            AvatarProtocol.clanCheckInfo(game.connection, clanListData.get(i).id);
+                            return true;
+                        }
+                        yy = ry;
+                    }
+                    return clanPagerTouch(x, y, clanListData.size(), perPage);
+                }
+                // tab tạo clan
+                float fx = px + 60;
+                float fy = contentTop - 84;
+                if (inRect(x, y, fx + 580, fy + 3, 150, 48)) {
+                    Msg m = AvatarProtocol.clanMsg(AvatarProtocol.CL_CHECK_CREATE);
+                    m.writer().writeUTF(clanNameField.toString().trim());
+                    game.connection.send(m);
+                    return true;
+                }
+                float sy = fy - 94;
+                float iy = sy - 96;
+                for (int i = 0; i < CLAN_ICONS.length; i++) {
+                    if (inRect(x, y, fx + i * 68, iy, 60, 60)) {
+                        clanCreateIcon = CLAN_ICONS[i];
+                        return true;
+                    }
+                }
+                if (inRect(x, y, fx, iy - 100, 220, 52)) {
+                    String nm = clanNameField.toString().trim();
+                    if (nm.length() < 3) {
+                        addChatLog(TAB_SYSTEM, null, "Tên clan phải từ 3 ký tự.", true);
+                        return true;
+                    }
+                    AvatarProtocol.clanCreate(game.connection, nm,
+                        clanSloganField.toString().trim(), clanCreateIcon);
+                    return true;
+                }
+                return true;
+            }
+            // đã có clan: hàng tab
+            int nTabs = clanRole >= 1 ? 7 : 6;
+            float tabY = top - 152;
+            for (int i = 0; i < nTabs; i++) {
+                if (inRect(x, y, px + 28 + i * 130, tabY, 124, 42)) {
+                    clanTab = i;
+                    clanPage = 0;
+                    clanSendTabData();
+                    return true;
+                }
+            }
+            float contentTop = tabY - 16;
+            switch (clanTab) {
+                case 0: return clanMembersTouch(x, y, px, py, contentTop);
+                case 1: {
+                    float yy = contentTop;
+                    for (ClQuest q : clanQuests) {
+                        float ry = yy - 62;
+                        if (inRect(x, y, px + CL_PW - 168, ry + 10, 110, 38)) {
+                            if (clanQuestActive == q.id) {
+                                AvatarProtocol.clanSubmitItem(game.connection, q.id);
+                            } else if (clanQuestActive == 0) {
+                                AvatarProtocol.clanSubmitQuest(game.connection, q.id);
+                            }
+                            return true;
+                        }
+                        yy = ry;
+                    }
+                    return true;
+                }
+                case 2: {
+                    float yy = contentTop;
+                    int perPage = 5;
+                    int start = clanPage * perPage;
+                    for (int i = start; i < Math.min(clanShopItems.size(), start + perPage); i++) {
+                        ClShopItem s = clanShopItems.get(i);
+                        float ry = yy - 66;
+                        if (inRect(x, y, px + CL_PW - 168, ry + 12, 110, 38)
+                                && clanLevel >= s.lvReq
+                                && clanFundXu >= s.priceXu && clanFundLuong >= s.priceLuong) {
+                            AvatarProtocol.clanBuyItem(game.connection, s.partId);
+                            return true;
+                        }
+                        yy = ry;
+                    }
+                    return clanPagerTouch(x, y, clanShopItems.size(), perPage);
+                }
+                case 3: {
+                    float yy = contentTop;
+                    for (ClOwnItem o : clanOwnItems) {
+                        if (o.received) continue;
+                        float ry = yy - 62;
+                        if (inRect(x, y, px + CL_PW - 168, ry + 10, 110, 38)) {
+                            AvatarProtocol.clanReceive(game.connection, o.ownId);
+                            return true;
+                        }
+                        yy = ry;
+                    }
+                    return true;
+                }
+                case 4: return clanFundTouch(x, y, px, contentTop);
+                case 5: {
+                    float iy = contentTop - 362;
+                    if (inRect(x, y, px + 28 + 676, iy, 130, 48)) {
+                        SoftInput.hide();
+                        clanSendChat();
+                        return true;
+                    }
+                    return true;
+                }
+                case 6: {
+                    float yy = contentTop;
+                    for (ClMember mb : clanRequests) {
+                        float ry = yy - 56;
+                        if (inRect(x, y, px + CL_PW - 300, ry + 8, 110, 36)) {
+                            AvatarProtocol.clanAccept(game.connection, mb.id, true);
+                            return true;
+                        }
+                        if (inRect(x, y, px + CL_PW - 176, ry + 8, 110, 36)) {
+                            AvatarProtocol.clanAccept(game.connection, mb.id, false);
+                            return true;
+                        }
+                        yy = ry;
+                    }
+                    return true;
+                }
+                default: return true;
+            }
+        } catch (java.io.IOException e) {
+            return true;
+        }
+    }
+
+    private boolean clanPagerTouch(float x, float y, int total, int perPage) {
+        int pages = Math.max(1, (total + perPage - 1) / perPage);
+        if (inRect(x, y, CL_PX + CL_PW - 300, CL_PY + 14, 84, 38) && clanPage > 0) {
+            clanPage--;
+            return true;
+        }
+        if (inRect(x, y, CL_PX + CL_PW - 116, CL_PY + 14, 84, 38) && clanPage < pages - 1) {
+            clanPage++;
+            return true;
+        }
+        return true;
+    }
+
+    private boolean clanMembersTouch(float x, float y, float px, float py, float contentTop)
+            throws java.io.IOException {
+        float yy = contentTop;
+        int perPage = 6;
+        int start = clanPage * perPage;
+        for (int i = start; i < Math.min(clanMembers.size(), start + perPage); i++) {
+            ClMember mb = clanMembers.get(i);
+            float ry = yy - 56;
+            boolean selfRow = mb.id == ownId();
+            if (!selfRow && clanRole >= 1 && mb.role < clanRole
+                    && inRect(x, y, px + CL_PW - 144, ry + 8, 84, 36)) {
+                AvatarProtocol.clanKick(game.connection, mb.id);
+                return true;
+            }
+            if (!selfRow && clanRole >= 1 && mb.role < clanRole
+                    && inRect(x, y, px + CL_PW - 240, ry + 8, 84, 36)) {
+                AvatarProtocol.clanBlockChat(game.connection, mb.id, !mb.blocked);
+                return true;
+            }
+            if (!selfRow && clanRole == 2 && mb.role != 2
+                    && inRect(x, y, px + CL_PW - 356, ry + 8, 104, 36)) {
+                AvatarProtocol.clanDeputy(game.connection, mb.id, mb.role == 0);
+                return true;
+            }
+            yy = ry;
+        }
+        float by = py + 62;
+        if (clanRole >= 1 && inRect(x, y, px + 340, by, 110, 44)) {
+            String nm = clanInviteField.toString().trim();
+            if (!nm.isEmpty()) {
+                AvatarProtocol.clanInvite(game.connection, nm);
+                clanInviteField.setLength(0);
+            }
+            return true;
+        }
+        if (inRect(x, y, px + CL_PW - 250, by, 190, 44)) {
+            long now = System.currentTimeMillis();
+            if (clanOutArm && now - clanOutArmAt < 3000) {
+                clanOutArm = false;
+                AvatarProtocol.clanOut(game.connection);
+            } else {
+                clanOutArm = true;
+                clanOutArmAt = now;
+            }
+            return true;
+        }
+        return clanPagerTouch(x, y, clanMembers.size(), perPage);
+    }
+
+    private boolean clanFundTouch(float x, float y, float px, float contentTop)
+            throws java.io.IOException {
+        float fx = px + 40;
+        float ry = contentTop - 96;
+        int[] xuSteps = {10000, 50000, 100000};
+        for (int i = 0; i < xuSteps.length; i++) {
+            if (inRect(x, y, fx + 130 + i * 150, ry, 138, 42)) {
+                clanDonXu = clanDonXu == xuSteps[i] ? 0 : xuSteps[i];
+                return true;
+            }
+        }
+        float ry2 = ry - 62;
+        int[] lgSteps = {10, 50, 100};
+        for (int i = 0; i < lgSteps.length; i++) {
+            if (inRect(x, y, fx + 130 + i * 150, ry2, 138, 42)) {
+                clanDonLuong = clanDonLuong == lgSteps[i] ? 0 : lgSteps[i];
+                return true;
+            }
+        }
+        if (inRect(x, y, fx, ry2 - 70, 200, 48) && (clanDonXu > 0 || clanDonLuong > 0)) {
+            AvatarProtocol.clanDonate(game.connection, clanDonXu, clanDonLuong);
+            clanDonXu = 0;
+            clanDonLuong = 0;
+            return true;
+        }
+        float ly = ry2 - 150;
+        if (clanLevelInfo != null && inRect(x, y, fx, ly - 122, 220, 48)) {
+            boolean canUp = clanRole >= 1 && clanLevelInfo[1] >= clanLevelInfo[2]
+                && clanFundXu >= clanLevelInfo[3] && clanFundLuong >= clanLevelInfo[4];
+            if (canUp) AvatarProtocol.clanLevelUp(game.connection);
+            return true;
+        }
+        return true;
+    }
+
+    // Harness tour: mở panel clan với dữ liệu giả (my clan + list)
+    public void debugClan() {
+        clanOpen = true;
+        clanHas = true;
+        clanId = 6;
+        clanName = "Hội Mặt Trời";
+        clanSlogan = "Vui là chính, cày là phụ";
+        clanIcon = 2;
+        clanLevel = 3;
+        clanExp = 2450;
+        clanExpNeed = 3000;
+        clanFundXu = 1250000;
+        clanFundLuong = 340;
+        clanRole = 2;
+        clanMemCount = 4;
+        clanMaxMem = 40;
+        clanMyPoints = 320;
+        clanMyDonXu = 500000;
+        clanMyDonLuong = 120;
+        clanMembers.clear();
+        Object[][] ms = {
+            {1000, "Sơn", 2, 320, true, false},
+            {1001, "Linh Chi", 1, 280, true, false},
+            {1002, "Tuấn Anh", 0, 150, false, false},
+            {1003, "Minh Ngọc", 0, 90, true, true},
+        };
+        for (Object[] a : ms) {
+            ClMember mb = new ClMember();
+            mb.id = (Integer) a[0];
+            mb.name = (String) a[1];
+            mb.role = (Integer) a[2];
+            mb.points = (Integer) a[3];
+            mb.online = (Boolean) a[4];
+            mb.blocked = (Boolean) a[5];
+            clanMembers.add(mb);
+        }
+        clanTab = 0;
+        clanPage = 0;
+    }
+
+    public void debugClanQuest() {
+        debugClan();
+        clanTab = 1;
+        clanQuestActive = 1;
+        clanQuestProgress = 1;
+        clanQuests.clear();
+        Object[][] qs = {
+            {1, "Tiếp tế cá tươi", 1, 444, 3, 25000, 120},
+            {2, "Thu gom trứng kiến", 1, 448, 5, 15000, 80},
+            {3, "Cần câu dự phòng", 2, 442, 1, 30000, 150},
+            {4, "Vé câu cá mập", 2, 460, 1, 50000, 200},
+        };
+        for (Object[] a : qs) {
+            ClQuest q = new ClQuest();
+            q.id = (Integer) a[0];
+            q.name = (String) a[1];
+            q.diff = (Integer) a[2];
+            q.needPart = (Integer) a[3];
+            q.needQty = (Integer) a[4];
+            q.rewardXu = (Integer) a[5];
+            q.rewardPoint = (Integer) a[6];
+            clanQuests.add(q);
+        }
+    }
+
+    public void debugClanShop() {
+        debugClan();
+        clanTab = 2;
+        clanShopItems.clear();
+        Object[][] ss = {
+            {2090, 200000, 0, 30, 1},
+            {2052, 150000, 0, 30, 1},
+            {2019, 0, 50, 30, 2},
+            {2343, 0, 30, 30, 2},
+            {620, 0, 120, 0, 5},
+        };
+        for (Object[] a : ss) {
+            ClShopItem s = new ClShopItem();
+            s.partId = (Integer) a[0];
+            s.priceXu = (Integer) a[1];
+            s.priceLuong = (Integer) a[2];
+            s.days = (Integer) a[3];
+            s.lvReq = (Integer) a[4];
+            clanShopItems.add(s);
+        }
+    }
+
+    public void debugClanList() {
+        clanOpen = true;
+        clanHas = false;
+        clanTab = 0;
+        clanPage = 0;
+        clanCheck = null;
+        clanListData.clear();
+        Object[][] ls = {
+            {6, "BQT", "wellcome clan bqt", 2, 5, 12, 50},
+            {9, "Hội Mặt Trời", "Vui là chính", 310, 3, 28, 40},
+            {11, "Câu Cá Pro", "Chỉ tuyển tay câu", 314, 2, 9, 35},
+            {13, "Nông Trại Vui Vẻ", "Trồng cây gây quỹ", 331, 1, 30, 30},
+        };
+        for (Object[] a : ls) {
+            ClListItem it = new ClListItem();
+            it.id = (Integer) a[0];
+            it.name = (String) a[1];
+            it.slogan = (String) a[2];
+            it.icon = (Integer) a[3];
+            it.level = (Integer) a[4];
+            it.cur = (Integer) a[5];
+            it.max = (Integer) a[6];
+            clanListData.add(it);
+        }
+    }
+
+
+
+    /** Nút trong panel clan: 1 = cam, 0 = đen, 2 = đỏ, 3 = xám khoá. */
+    private void clanBtn(float x, float y, float w, float h, String label, int style) {
+        if (style == 1) {
+            batch.draw(Ui.gradientRect((int) w, (int) h, 10,
+                EntryUi.ORANGE_TOP, EntryUi.ORANGE_BOT), x, y);
+        } else if (style == 2) {
+            batch.draw(Ui.roundedRect((int) w, (int) h, 10,
+                new com.badlogic.gdx.graphics.Color(0.55f, 0.16f, 0.16f, 1f), null), x, y);
+        } else if (style == 3) {
+            batch.draw(Ui.roundedRect((int) w, (int) h, 10,
+                new com.badlogic.gdx.graphics.Color(0.35f, 0.38f, 0.42f, 0.9f), null), x, y);
+        } else {
+            batch.draw(Ui.roundedRect((int) w, (int) h, 10, Ui.BTN_CANCEL, null), x, y);
+        }
+        Ui.centered(batch, Ui.fontSmall, label, x + w / 2f, y + h / 2f + 7, Color.WHITE);
+    }
+
+    private void clanIconDraw(int iconId, float cx, float cy, float size) {
+        com.badlogic.gdx.graphics.Texture t = house.imgTexture(iconId);
+        if (t == null) return;
+        float s = Math.min(size / t.getWidth(), size / t.getHeight());
+        float w = t.getWidth() * s, h = t.getHeight() * s;
+        batch.draw(t, cx - w / 2f, cy - h / 2f, w, h);
     }
 
     // ---------- KẾT HÔN / HẸN HÒ (gói 93 + MENU_ROTATE −83) ----------

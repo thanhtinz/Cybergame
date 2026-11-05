@@ -120,7 +120,7 @@ def main():
     print("4) nhận tất cả OK (1 thư), xu:", money["xu"])
 
     # 5) xoá thư đã đọc -> rỗng, thư ngày không đội lên lại
-    c.send(-112)
+    c.send(-114)  # MAIL_DELETE_READ doi so (ban chinh -112 = CLAN)
     letters = parse_list(recv_until(c, -108))
     assert letters == [], letters
     print("5) xoá đã đọc OK, hòm thư rỗng")
