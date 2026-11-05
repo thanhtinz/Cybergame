@@ -29,9 +29,11 @@ import avatar.network.Message;
  */
 public class RaceService {
 
-    public static final int[] PET_IMG = {313, 310, 312, 1024, 1025, 1224};
+    // Roster THẬT của gốc (docs/race-pets-research.md): sheet thân
+    // đầy đủ 5 hàng trong không gian object 1056–1061.
+    public static final int[] PET_IMG = {1056, 1057, 1058, 1059, 1060, 1061};
     public static final String[] PET_NAME = {
-        "Tia Chớp", "Gà Bay", "Heo Hồng", "Cừu Mây", "Vịt Vàng", "Trâu Đất"};
+        "Khủng Long", "Chó Siêu Nhân", "Vẹt", "Mèo", "Tuần Lộc", "PiKaChu"};
 
     /** Quãng đường đua (đơn vị SD của client gốc: xuất phát x=20,
      *  đường đua map 108 dài ~2886 SD). */

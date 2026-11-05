@@ -63,10 +63,13 @@ Một chặng toàn server, chu kỳ: **MỞ CƯỢC 60 giây → CHẠY (mô ph
 theo đoạn, ~30–40 giây) → TRẢ THƯỞNG → mở chặng mới**. Người vào sau
 nhận đúng pha hiện tại qua gói 1.
 
-- Roster 6 thú cố định (id 0–5), ảnh lấy ở không gian vật
-  (house/img): 313 "Tia Chớp" (chó), 310 "Gà Bay" (gà), 312 "Heo
-  Hồng" (heo), 1024 "Cừu Mây" (cừu), 1025 "Vịt Vàng" (vịt), 1224
-  "Trâu Đất" (trâu). idImg = idIcon = id vật đó.
+- Roster 6 thú cố định (id 0–5) — **ROSTER THẬT CỦA GỐC** (thay
+  bản tạm icon đầu vật nuôi farm bị Tín bác 2026-11-04; chi tiết ở
+  docs/race-pets-research.md): sheet thân đầy đủ 5 hàng ở không
+  gian vật (house/img) 1056 "Khủng Long", 1057 "Chó Siêu Nhân",
+  1058 "Vẹt", 1059 "Mèo", 1060 "Tuần Lộc", 1061 "PiKaChu".
+  idImg = idIcon; client cắt frame theo RACE_FRAME của gốc
+  (đứng = hàng 0–1, chạy = 2–3, nghỉ = 4).
 - Mỗi chặng: mỗi thú lăn rate (2–6), phong độ + sức khỏe (0–2) —
   hiện ở panel thông tin; tỉ lệ thắng lịch sử (numWin) lưu trong bộ
   nhớ server theo thú.

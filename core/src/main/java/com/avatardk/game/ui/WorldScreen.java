@@ -5810,8 +5810,12 @@ public class WorldScreen extends ScreenAdapter {
             else menuOpen = !menuOpen;
             return;
         }
+        // đang ở màn mini game: điều khiển thế giới (joystick/nút/chat)
+        // đã ẩn — đóng các sheet đang mở và bỏ qua chạm vào chúng
+        boolean mgScreen = inMiniGameScreen();
+        if (mgScreen) { actionOpen = false; feelOpen = false; emojiOpen = false; }
         // nút hành động (asset action0) trên vòng cung quanh nút Tương tác: mở/đóng sheet hành động
-        if (x >= ACT_BTN_X && x <= ACT_BTN_X + ACT_BTN_S && y >= ACT_BTN_Y && y <= ACT_BTN_Y + ACT_BTN_S) {
+        if (!mgScreen && x >= ACT_BTN_X && x <= ACT_BTN_X + ACT_BTN_S && y >= ACT_BTN_Y && y <= ACT_BTN_Y + ACT_BTN_S) {
             actionOpen = !actionOpen;
             if (actionOpen) feelOpen = false;
             return;
@@ -5834,7 +5838,7 @@ public class WorldScreen extends ScreenAdapter {
             return;
         }
         // nút mặt cười kế bên khung chat: mở/đóng hàng chọn biểu cảm
-        if (x >= FEEL_BTN_X && x <= FEEL_BTN_X + FEEL_BTN_S && y >= FEEL_BTN_Y && y <= FEEL_BTN_Y + FEEL_BTN_S) {
+        if (!mgScreen && x >= FEEL_BTN_X && x <= FEEL_BTN_X + FEEL_BTN_S && y >= FEEL_BTN_Y && y <= FEEL_BTN_Y + FEEL_BTN_S) {
             feelOpen = !feelOpen;
             if (feelOpen) actionOpen = false;
             return;
@@ -5898,7 +5902,7 @@ public class WorldScreen extends ScreenAdapter {
         // xích vào trong chỉ nhô ra ~12px (khớp vị trí vẽ ở drawChatFrame)
         {
             float ebX = CHAT_X + CHAT_W - 26, ebY = CHAT_Y + chatH - 26;
-            if (x >= ebX && x <= ebX + 38 && y >= ebY && y <= ebY + 38) {
+            if (!mgScreen && x >= ebX && x <= ebX + 38 && y >= ebY && y <= ebY + 38) {
                 chatExpanded = !chatExpanded;
                 return;
             }
@@ -5906,7 +5910,7 @@ public class WorldScreen extends ScreenAdapter {
         // chip tin nhắn thoại trong nhật ký: chạm để nghe / dừng nghe
         for (Object[] h : voiceHits) {
             float hx = (Float) h[0], hy = (Float) h[1], hw = (Float) h[2], hh = (Float) h[3];
-            if (x >= hx && x <= hx + hw && y >= hy && y <= hy + hh) {
+            if (!mgScreen && x >= hx && x <= hx + hw && y >= hy && y <= hy + hh) {
                 toggleVoicePlay((ChatLine) h[4]);
                 return;
             }
@@ -5930,7 +5934,7 @@ public class WorldScreen extends ScreenAdapter {
         {
             float micX = CHAT_X + CHAT_W - 8 - CHAT_SEND_W - 6 - MIC_BTN_W;
             float emojiX = micX - 6 - EMOJI_BTN_W;
-            if (x >= emojiX && x <= emojiX + EMOJI_BTN_W
+            if (!mgScreen && x >= emojiX && x <= emojiX + EMOJI_BTN_W
                     && y >= CHAT_Y + 7 && y <= CHAT_Y + 7 + CHAT_INPUT_H) {
                 emojiOpen = !emojiOpen;
                 if (emojiOpen) typing = true;
@@ -5938,7 +5942,7 @@ public class WorldScreen extends ScreenAdapter {
             }
             // nút micro: bấm GIỮ để ghi tin nhắn thoại, thả ra là gửi
             // (việc dừng/gửi xử lý ở touchUp)
-            if (x >= micX && x <= micX + MIC_BTN_W
+            if (!mgScreen && x >= micX && x <= micX + MIC_BTN_W
                     && y >= CHAT_Y + 7 && y <= CHAT_Y + 7 + CHAT_INPUT_H) {
                 startRecording();
                 return;
@@ -5952,7 +5956,7 @@ public class WorldScreen extends ScreenAdapter {
             for (int i = 0; i < CHAT_TABS.length; i++) {
                 float th = i == activeChatTab ? TAB_H_ACTIVE : TAB_H_IDLE;
                 float tabBottom = CHAT_Y + chatH - th / 2f;
-                if (x >= tx && x <= tx + tw && y >= tabBottom && y <= tabBottom + th) {
+                if (!mgScreen && x >= tx && x <= tx + tw && y >= tabBottom && y <= tabBottom + th) {
                     activeChatTab = i;
                     return;
                 }
@@ -5960,18 +5964,18 @@ public class WorldScreen extends ScreenAdapter {
             }
         }
         float sendX = CHAT_X + CHAT_W - 8 - CHAT_SEND_W;
-        if (x >= sendX && x <= sendX + CHAT_SEND_W && y >= CHAT_Y + 7 && y <= CHAT_Y + 7 + CHAT_INPUT_H) {
+        if (!mgScreen && x >= sendX && x <= sendX + CHAT_SEND_W && y >= CHAT_Y + 7 && y <= CHAT_Y + 7 + CHAT_INPUT_H) {
             if (typing) sendChat();
             return;
         }
-        if (x >= CHAT_X && x <= sendX - 6 && y >= CHAT_Y && y <= CHAT_Y + CHAT_INPUT_H + 6) {
+        if (!mgScreen && x >= CHAT_X && x <= sendX - 6 && y >= CHAT_Y && y <= CHAT_Y + CHAT_INPUT_H + 6) {
             typing = true;
             return;
         }
         // thanh câu cá + đệm QTE (khi đang câu)
         if (fishTouch(x, y)) return;
         // nút tương tác (phải dưới)
-        if (Math.hypot(x - ACT_CX, y - ACT_CY) <= ACT_R + 10) { interact(); return; }
+        if (!mgScreen && Math.hypot(x - ACT_CX, y - ACT_CY) <= ACT_R + 10) { interact(); return; }
         // chạm vào người chơi khác trên phố: mở panel tương tác của họ
         for (RemoteFigure f : remotes.values()) {
             float sx = f.feetX - lastCamX + Ui.W / 2f;
@@ -5983,7 +5987,7 @@ public class WorldScreen extends ScreenAdapter {
             }
         }
         // joystick
-        if (Math.hypot(x - JOY_CX, y - JOY_CY) <= JOY_R + 26) {
+        if (!mgScreen && Math.hypot(x - JOY_CX, y - JOY_CY) <= JOY_R + 26) {
             joyPointer = pointer;
             float dx = x - JOY_CX, dy = y - JOY_CY;
             float len = (float) Math.hypot(dx, dy);
@@ -9712,6 +9716,11 @@ public class WorldScreen extends ScreenAdapter {
         csUpdate();
         dlUpdate(dt);
         raceUpdate(dt);
+        // vào màn mini game thì huỷ trạng thái gõ chat (khung chat đã ẩn)
+        if (typing && inMiniGameScreen()) {
+            typing = false;
+            com.avatardk.game.ui.SoftInput.hide();
+        }
         // cổng cửa hàng farm ở farmway (type 52): đã vào farm + có dữ liệu
         // thì mở panel cửa hàng như gốc (FarmScr.doOpenCuaHang)
         if (portalFarmShopPending && farmIn && farm != null && farm.joined) {
@@ -9764,6 +9773,7 @@ public class WorldScreen extends ScreenAdapter {
         // đang ngồi trên xe buýt vào trạm: khóa di chuyển cho tới khi xe dừng
         if (busPhase == 1) { mx = 0f; my = 0f; }
         if (raceIn) { mx = 0f; my = 0f; } // trường đua: đứng xem, không tự đi
+        if (inMiniGameScreen()) { mx = 0f; my = 0f; } // mini game: khoá di chuyển thế giới
         float len = (float) Math.hypot(mx, my);
         boolean moving = len > 0.01f;
         // đang ngồi câu thì khoá di chuyển; cố đi (trừ lúc cá đang cắn
@@ -9821,7 +9831,8 @@ public class WorldScreen extends ScreenAdapter {
         if (chatTimer > 0) { chatTimer -= dt; if (chatTimer <= 0) chatBubble = null; }
 
         if (Gdx.input.isKeyJustPressed(Input.Keys.ENTER)) {
-            if (!typing) { typing = true; typeBuffer.setLength(0); }
+            if (inMiniGameScreen()) { typing = false; }
+            else if (!typing) { typing = true; typeBuffer.setLength(0); }
             else sendChat();
         }
         if (typing && Gdx.input.isKeyJustPressed(Input.Keys.ESCAPE)) typing = false;
@@ -10271,6 +10282,15 @@ public class WorldScreen extends ScreenAdapter {
         drawRichText(text, x + 14f, y + 27f, new Color(0.08f, 0.08f, 0.1f, 1f));
     }
 
+    /** Đang ở bất kỳ màn mini game nào: hub + 4 game của hub, casino
+     *  Bầu Cua, trường đua, vòng quay may mắn. Khi đó ẩn toàn bộ điều
+     *  khiển thế giới (joystick, nút Tương tác/Biểu cảm/Hành động, khung
+     *  chat) — lệnh của Tín 2026-11-04. */
+    private boolean inMiniGameScreen() {
+        return mgOpen || tcOpen || crOpen || txOpen || aiOpen
+            || casinoIn || csPending || raceIn || dlOpen || dlPrizeOpen;
+    }
+
     private void drawHud(float playerFeetX, float playerFeetY) {
         hudViewport.update(Gdx.graphics.getWidth(), Gdx.graphics.getHeight(), true);
         hudViewport.apply();
@@ -10281,11 +10301,13 @@ public class WorldScreen extends ScreenAdapter {
         drawHouseChip();
         drawBurger();
         if (menuOpen) drawBurgerPanel();
-        drawJoystick();
-        drawInteractButton();
-        drawChatFrame();
-        drawFeelUi();
-        drawActionUi();
+        if (!inMiniGameScreen()) {
+            drawJoystick();
+            drawInteractButton();
+            drawChatFrame();
+            drawFeelUi();
+            drawActionUi();
+        }
         if (panelPlayer != null) drawPlayerPanel();
         if (friendInviteId != 0) drawFriendInvite();
         if (charPanel) drawCharPanel();
@@ -13598,9 +13620,16 @@ public class WorldScreen extends ScreenAdapter {
     // (numTick, vTick) ở 20 tick/giây, hạng về đích tính theo thứ tự
     // hết đoạn như PetRace.update của gốc. [PORT] chơi thử offline thì
     // mô phỏng ngay trong máy (cùng luật với RaceService phía server).
-    private static final int[] RACE_PET_IMG = {313, 310, 312, 1024, 1025, 1224};
+    // Roster THẬT của gốc (docs/race-pets-research.md): sheet 5 hàng
+    // 1056–1061 trong không gian object (house/img).
+    private static final int[] RACE_PET_IMG = {1056, 1057, 1058, 1059, 1060, 1061};
     private static final String[] RACE_PET_NAME = {
-        "Tia Chớp", "Gà Bay", "Heo Hồng", "Cừu Mây", "Vịt Vàng", "Trâu Đất"};
+        "Khủng Long", "Chó Siêu Nhân", "Vẹt", "Mèo", "Tuần Lộc", "PiKaChu"};
+    // Bảng frame gốc (RaceScr.FRAME): action 0 đứng · 1 chạy · 2 nghỉ.
+    private static final int[][] RACE_FRAME = {
+        {0, 0, 0, 1, 1, 1, 0, 0, 0, 1, 1, 1},
+        {2, 2, 2, 3, 3, 3, 2, 2, 2, 3, 3, 3},
+        {4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4}};
     private static final int[] RACE_MONEY = {
         100, 500, 1000, 2000, 5000, 10000, 20000, 30000, 50000};
     private static final int RACE_TRACK_SD = 2866;
@@ -14105,23 +14134,45 @@ public class WorldScreen extends ScreenAdapter {
         return game.texture("race/" + name + ".png");
     }
 
+    /** Vẽ một frame của sheet thú đua (5 hàng, cắt theo RACE_FRAME
+     *  như PetRace.paint của gốc): neo đáy–giữa tại (cx, feetY), giữ
+     *  nguyên kích thước thật; maxW/maxH > 0 thì co tỉ lệ cho vừa hộp.
+     *  Trả chiều cao đã vẽ (0 nếu không có ảnh). */
+    private float drawRacePetFrame(int img, float cx, float feetY, int action,
+            int tableIdx, float maxW, float maxH) {
+        Texture tex = house.imgTexture(img);
+        if (tex == null) return 0;
+        int fh = tex.getHeight() / 5;
+        int row = RACE_FRAME[action][tableIdx % 12];
+        float scale = 1f;
+        if (maxW > 0 && tex.getWidth() > maxW) {
+            scale = Math.min(scale, maxW / tex.getWidth());
+        }
+        if (maxH > 0 && fh > maxH) {
+            scale = Math.min(scale, maxH / fh);
+        }
+        float w = tex.getWidth() * scale, h = fh * scale;
+        TextureRegion reg = new TextureRegion(tex, 0, row * fh, tex.getWidth(), fh);
+        batch.draw(reg, cx - w / 2f, feetY, w, h);
+        return h;
+    }
+
     private void drawRacePets() {
         // người chơi đứng xem ở sát đường đua như khán giả (gốc cho
         // avatar bám đáy camera; bản port đặt ở bãi cỏ đầu đường đua)
         drawFigure(playerDoll, playerAnim, 150, 26, displayName, true);
         long now = System.currentTimeMillis();
-        for (int lane = 5; lane >= 0; lane--) {
+        int tidx = (raceTick / 3) % 12;
+        for (int lane = 0; lane < 6; lane++) {
             RacePet p = racePets[lane];
             if (p == null) continue;
-            Texture tex = house.imgTexture(p.img);
+            Texture sheet = house.imgTexture(p.img);
             float feetX = p.x * AvatarDkGame.HD;
             float feetY = RACE_LANE_Y[lane];
-            if (tex != null) {
-                float h = 54;
-                float w = h * tex.getWidth() / Math.max(1, tex.getHeight());
-                if (w > 76) { h = h * 76 / w; w = 76; }
-                float bob = p.action == 1 ? Math.abs((float) Math.sin(now / 90.0 + lane)) * 3.5f : 0f;
-                batch.draw(tex, feetX - w / 2f, feetY + bob, w, h);
+            if (sheet != null) {
+                int fh = sheet.getHeight() / 5;
+                float w = sheet.getWidth();
+                float h = drawRacePetFrame(p.img, feetX, feetY, p.action, tidx, 0, 0);
                 // hiệu ứng gốc: nước (v=2), lửa + bụi (v=5), tè (v=0)
                 if (p.waterT >= 0) {
                     Texture wt = raceTex("28");
@@ -14148,13 +14199,13 @@ public class WorldScreen extends ScreenAdapter {
                     String s = "#" + p.winRank;
                     Ui.fontSmall.setColor(1f, 0.85f, 0.25f, 1f);
                     layout.setText(Ui.fontSmall, s);
-                    Ui.fontSmall.draw(batch, s, feetX - layout.width / 2f, feetY + 84);
+                    Ui.fontSmall.draw(batch, s, feetX - layout.width / 2f, feetY + h + 26);
                 }
-            }
-            if (lane == raceFocus && racePhase == 1) {
-                float ay = feetY + 108 + (float) Math.sin(now / 180.0) * 4f;
-                Ui.faIcon(batch, Ui.fa20, Ui.FA_ARROW_DOWN, feetX, ay + 10,
-                    new Color(1f, 0.8f, 0.2f, 1f));
+                if (lane == raceFocus && racePhase == 1) {
+                    float ay = feetY + h + 44 + (float) Math.sin(now / 180.0) * 4f;
+                    Ui.faIcon(batch, Ui.fa20, Ui.FA_ARROW_DOWN, feetX, ay + 10,
+                        new Color(1f, 0.8f, 0.2f, 1f));
+                }
             }
         }
     }
@@ -14198,7 +14249,7 @@ public class WorldScreen extends ScreenAdapter {
         batch.draw(Ui.roundedRect((int) pw, (int) ph, 18,
             new Color(0.07f, 0.11f, 0.17f, 0.98f), GLASS_RIM), px, py);
         Ui.fontTitle.setColor(1f, 0.85f, 0.3f, 1f);
-        Ui.fontTitle.draw(batch, "Đua thú — Đặt cược", px + 28, top - 24);
+        Ui.fontTitle.draw(batch, "Đua pet — Đặt cược", px + 28, top - 24);
         String remain = "Còn " + raceTimeRemain + "s";
         Ui.fontSmall.setColor(1f, 1f, 1f, 0.95f);
         layout.setText(Ui.fontSmall, remain);
@@ -14213,13 +14264,8 @@ public class WorldScreen extends ScreenAdapter {
         float ix = px + 24, iw = 330;
         float iy = top - 108;
         if (raceInfoLoaded) {
-            Texture tex = house.imgTexture(raceInfoImg);
-            if (tex != null) {
-                float h = 110;
-                float w = h * tex.getWidth() / Math.max(1, tex.getHeight());
-                if (w > 170) { h = h * 170 / w; w = 170; }
-                batch.draw(tex, ix + iw / 2f - w / 2f, iy - h, w, h);
-            }
+            drawRacePetFrame(raceInfoImg, ix + iw / 2f, iy - 110, 0,
+                (int) ((System.currentTimeMillis() / 450) % 12), 170, 110);
             Ui.font.setColor(1f, 0.9f, 0.4f, 1f);
             layout.setText(Ui.font, raceInfoName);
             Ui.font.draw(batch, raceInfoName, ix + iw / 2f - layout.width / 2f, iy - 128);
@@ -14265,13 +14311,8 @@ public class WorldScreen extends ScreenAdapter {
                     new Color(1f, 0.75f, 0.25f, 0.16f),
                     new Color(1f, 0.75f, 0.25f, 0.65f)), rx, ryBot - 2);
             }
-            Texture tex = house.imgTexture(p.img);
-            if (tex != null) {
-                float h = 62;
-                float w = h * tex.getWidth() / Math.max(1, tex.getHeight());
-                if (w > 84) { h = h * 84 / w; w = 84; }
-                batch.draw(tex, rx + 42 - w / 2f, ryBot + 8, w, h);
-            }
+            drawRacePetFrame(p.img, rx + 42, ryBot + 8, 0,
+                (int) ((System.currentTimeMillis() / 450) % 12), 84, 62);
             Ui.fontTiny.setColor(1f, 0.85f, 0.3f, 1f);
             String rate = "X" + p.rate;
             layout.setText(Ui.fontTiny, rate);
@@ -14314,13 +14355,8 @@ public class WorldScreen extends ScreenAdapter {
         Ui.fontTitle.setColor(1f, 0.85f, 0.3f, 1f);
         layout.setText(Ui.fontTitle, raceWinName);
         Ui.fontTitle.draw(batch, raceWinName, 640 - layout.width / 2f, top - 66);
-        Texture tex = house.imgTexture(RACE_PET_IMG[raceWinPet]);
-        if (tex != null) {
-            float hh = 110;
-            float ww = hh * tex.getWidth() / Math.max(1, tex.getHeight());
-            if (ww > 190) { hh = hh * 190 / ww; ww = 190; }
-            batch.draw(tex, 640 - ww / 2f, top - 216, ww, hh);
-        }
+        drawRacePetFrame(RACE_PET_IMG[raceWinPet], 640, top - 216, 0,
+            (int) ((System.currentTimeMillis() / 450) % 12), 190, 110);
         String[][] rows = {
             {"Tiền cược:", fmtMoney(raceWinStake)},
             {"Tiền ăn:", fmtMoney(raceWinAn)},
@@ -14351,12 +14387,7 @@ public class WorldScreen extends ScreenAdapter {
             new Color(1f, 1f, 1f, 0.9f));
         float ry = top - 92;
         for (int i = 0; i < raceHistIcons.size(); i++) {
-            Texture tex = house.imgTexture(raceHistIcons.get(i));
-            if (tex != null) {
-                float hh = 34;
-                float ww = hh * tex.getWidth() / Math.max(1, tex.getHeight());
-                batch.draw(tex, x + 40 - ww / 2f, ry - 26, ww, hh);
-            }
+            drawRacePetFrame(raceHistIcons.get(i), x + 40, ry - 26, 0, 0, 60, 34);
             Ui.fontSmall.setColor(1f, 1f, 1f, 1f);
             Ui.fontSmall.draw(batch, raceHistTimes.get(i), x + 84, ry);
             String nm = racePetNameByImg(raceHistIcons.get(i));
