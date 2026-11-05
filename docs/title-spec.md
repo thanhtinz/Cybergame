@@ -80,7 +80,7 @@
   (câu được cá), FarmService.treeHarvest + harvestCook. Migration 1
   lần (title_meta defs_v2): xoá player_titles + title_id cũ vì bộ
   định nghĩa đổi hẳn; quét lại cấp từ bộ đếm (bắt đầu từ 0).
-- HIỂN THỊ: trên đầu nhân vật vẽ ẢNH (rộng 118px, lọc Linear) thay
+- HIỂN THỊ: trên đầu nhân vật vẽ ẢNH (rộng 150px, lọc Linear) thay
   dòng chữ màu; thiếu ảnh mới lùi về chữ. Tab Danh hiệu: thẻ 292x74
   hiện ảnh gốc + dòng điều kiện + nhãn Đeo/Đang đeo/Chưa có, phân
   trang 8 thẻ/trang (1/3, 2/3, 3/3). Hạng "Đang đeo: ..." ở hàng tab

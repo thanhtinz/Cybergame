@@ -11447,7 +11447,7 @@ public class WorldScreen extends ScreenAdapter {
             } catch (Exception ignored) {
             }
             if (tt != null && tt.getWidth() > 0) {
-                float tw = 118f;
+                float tw = 150f;
                 float th = tw * tt.getHeight() / tt.getWidth();
                 batch.draw(tt, feetX - tw / 2f, topY + 41f, tw, th);
             } else {
