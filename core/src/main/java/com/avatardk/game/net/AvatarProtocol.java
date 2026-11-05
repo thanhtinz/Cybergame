@@ -852,6 +852,7 @@ public final class AvatarProtocol {
     public static final int MG_GAME_CARO = 3;
     public static final int MG_GAME_AINCRAD = 1;
     public static final int MG_GAME_TRUCXANH = 2;
+    public static final int MG_GAME_SNAKE = 5;
     // Aincrad subs [PORT theo tên lệnh bản chính: START/PLAYER_MOVE/
     // PLAYER_SHOW/PLAYER_REMOVE_GHOST]
     public static final int AI_START = 1, AI_PICK = 2, AI_MOVE = 3,
@@ -860,6 +861,9 @@ public final class AvatarProtocol {
     // Cờ Caro subs [PORT theo cấu trúc bản chính]
     public static final int CR_START = 1, CR_MOVE = 2, CR_MOVED = 3,
         CR_CHANGE_TURN = 4, CR_END = 5, CR_SNAPSHOT = 13, CR_SPEC_COUNT = 14;
+    // Rắn Thang (gameId 5) [PORT]
+    public static final int SN_START = 1, SN_ROLL = 2, SN_ROLLED = 3,
+        SN_CHANGE_TURN = 4, SN_END = 5, SN_SNAPSHOT = 13, SN_SPEC_COUNT = 14;
     // Trúc Xanh subs [PORT theo cấu trúc bản chính]
     public static final int TX_DEAL = 1, TX_FLIP = 2, TX_FLIP_RESULT = 3,
         TX_MATCH = 4, TX_MISS = 5, TX_CHANGE_TURN = 6, TX_END = 7,
@@ -989,6 +993,11 @@ public final class AvatarProtocol {
         m.writer().writeByte(row);
         m.writer().writeByte(col);
         conn.send(m);
+    }
+
+    /** Rắn Thang: tung xúc xắc (không tham số, server quyết định). */
+    public static void snRoll(GameConnection conn) throws IOException {
+        conn.send(mgMsg(MG_GAME_SNAKE, SN_ROLL));
     }
 
     /** Trúc Xanh: lật thẻ {byte idx} (0..29). */

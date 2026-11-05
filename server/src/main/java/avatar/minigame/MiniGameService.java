@@ -43,6 +43,21 @@ public class MiniGameService extends Service {
     public static final int GAME_CARO = 3;
     public static final int GAME_AINCRAD = 1;
     public static final int GAME_TRUCXANH = 2;
+    public static final int GAME_SNAKE = 5;
+    // Rắn Thang (Snake Ladder) [PORT theo literals bản chính]: bàn
+    // 66 ô, cặp thang/rắn "mỗi cặp 2 ô 1..66" (vd gốc: 17-34 là
+    // thang). Đáp ô có quân đối thủ: đá về đầu rắn gần nhất phía
+    // sau rồi tuột xuống đuôi; không có rắn phía sau thì về ô 1.
+    // Vượt 66 thì bật lại (luật phổ biến, bản chính không công bố).
+    public static final int SN_CELLS = 66;
+    static final java.util.Map<Integer, Integer> SN_LADDERS = new java.util.HashMap<>();
+    static final java.util.Map<Integer, Integer> SN_SNAKES = new java.util.HashMap<>();
+    static {
+        SN_LADDERS.put(4, 25); SN_LADDERS.put(9, 16); SN_LADDERS.put(17, 34);
+        SN_LADDERS.put(28, 46); SN_LADDERS.put(39, 58);
+        SN_SNAKES.put(15, 5); SN_SNAKES.put(23, 7); SN_SNAKES.put(27, 11);
+        SN_SNAKES.put(36, 18); SN_SNAKES.put(49, 30); SN_SNAKES.put(63, 42);
+    }
     // Aincrad [PORT theo docs/aincrad-research.md]: tháp 3 tầng, mỗi
     // tầng 3 cửa (1 chính + 2 phụ), đúng 1 cửa đúng — mở sai hoá ma
     // 6 giây không mở được cửa; đua đồng thời, tới EXIT tầng 3 trước
@@ -92,6 +107,10 @@ public class MiniGameService extends Service {
     static final int AI_START = 1, AI_PICK = 2, AI_MOVE = 3, AI_SHOW = 4,
             AI_GHOST_OFF = 5, AI_END = 6, AI_POS = 7, AI_SNAPSHOT = 13, AI_SPEC_COUNT = 14;
 
+    // ===== Rắn Thang: lệnh con (gameId 5) [PORT] =====
+    static final int SN_START = 1, SN_ROLL = 2, SN_ROLLED = 3,
+            SN_CHANGE_TURN = 4, SN_END = 5, SN_SNAPSHOT = 13, SN_SPEC_COUNT = 14;
+
     // Trạng thái bàn
     static final int ST_WAIT = 0, ST_PLACE = 1, ST_BATTLE = 2, ST_END = 3;
     // Ô trên bàn của một ghế (góc nhìn phát bắn vào ghế đó):
@@ -130,6 +149,8 @@ public class MiniGameService extends Service {
         final byte[] txState = new byte[TX_CARDS];
         final int[] txScores = new int[2];
         int txUp1 = -1, txUp2 = -1;
+        // Rắn Thang: ô hiện tại của 2 ghế (0 = chưa vào bàn)
+        final int[] snPos = new int[2];
         // Aincrad: tầng hiện tại (1..3), hạn ma, cửa đúng theo [ghế][tầng]
         final int[] aiFloor = {1, 1};
         final long[] aiGhostUntil = new long[2];
@@ -234,6 +255,12 @@ public class MiniGameService extends Service {
                     case TC_LEAVE: leaveRoom(me, false); break;
                     default: break;
                 }
+            } else if (gameId == GAME_SNAKE) {
+                switch (sub) {
+                    case SN_ROLL: snakeRoll(me); break;
+                    case TC_LEAVE: leaveRoom(me, false); break;
+                    default: break;
+                }
             }
         } catch (Exception ex) {
             // gói lỗi không được làm sập phiên
@@ -312,7 +339,8 @@ public class MiniGameService extends Service {
 
     private static boolean gamePlayable(int gameId) {
         return gameId == GAME_TAUCHIEN || gameId == GAME_CARO
-            || gameId == GAME_TRUCXANH || gameId == GAME_AINCRAD;
+            || gameId == GAME_TRUCXANH || gameId == GAME_AINCRAD
+            || gameId == GAME_SNAKE;
     }
 
     private void createRoom(User me, int gameId, boolean priv) throws IOException {
@@ -373,6 +401,7 @@ public class MiniGameService extends Service {
     /** Bắt đầu (hoặc bắt đầu lại) một ván theo game của bàn. */
     private void startGame(Room r) throws IOException {
         if (r.gameId == GAME_CARO) { startCaro(r); return; }
+        if (r.gameId == GAME_SNAKE) { startSnake(r); return; }
         if (r.gameId == GAME_TRUCXANH) { startTrucXanh(r); return; }
         if (r.gameId == GAME_AINCRAD) { startAincrad(r); return; }
         startPlacing(r);
@@ -562,6 +591,7 @@ public class MiniGameService extends Service {
 
     private void sendSnapshot(User u, Room r) throws IOException {
         if (r.gameId == GAME_CARO) { sendSnapshotCaro(u, r); return; }
+        if (r.gameId == GAME_SNAKE) { sendSnapshotSnake(u, r); return; }
         if (r.gameId == GAME_TRUCXANH) { sendSnapshotTx(u, r); return; }
         if (r.gameId == GAME_AINCRAD) { sendSnapshotAi(u, r); return; }
         Message m = msg(r.gameId, TC_SNAPSHOT);
@@ -712,12 +742,13 @@ public class MiniGameService extends Service {
      *  (REASON_TOO_MANY_FORFEIT = 3 của CaroGameScr gốc; ngưỡng 3 là
      *  quy ước port vì bản chính không công bố số). */
     private void onTurnTimeout(Room room) throws IOException {
-        if (room.gameId == GAME_CARO) {
+        if (room.gameId == GAME_CARO || room.gameId == GAME_SNAKE) {
             int seat = room.turn;
             room.crForfeit[seat]++;
             if (room.crForfeit[seat] >= 3) {
                 room.status = ST_END;
-                sendCaroEnd(room, 1 - seat, 3, null);
+                if (room.gameId == GAME_SNAKE) sendSnakeEnd(room, 1 - seat, 3);
+                else sendCaroEnd(room, 1 - seat, 3, null);
                 broadcastSnapshot(room);
                 return;
             }
@@ -735,6 +766,7 @@ public class MiniGameService extends Service {
         }
         room.turn = 1 - room.turn;
         int sub = room.gameId == GAME_CARO ? CR_CHANGE_TURN
+            : room.gameId == GAME_SNAKE ? SN_CHANGE_TURN
             : room.gameId == GAME_TRUCXANH ? TX_CHANGE_TURN : TC_CHANGE_TURN;
         Message m = msg(room.gameId, sub);
         m.writer().writeByte(room.turn);
@@ -847,6 +879,7 @@ public class MiniGameService extends Service {
 
     private void sendEndGame(Room r, int winner, int reason) throws IOException {
         if (r.gameId == GAME_CARO) { sendCaroEnd(r, winner, reason, null); return; }
+        if (r.gameId == GAME_SNAKE) { sendSnakeEnd(r, winner, reason); return; }
         if (r.gameId == GAME_TRUCXANH) { sendTxEnd(r, winner); return; }
         if (r.gameId == GAME_AINCRAD) { sendAiEnd(r, winner, reason); return; }
         sendEnd(r, winner, reason);
@@ -1196,6 +1229,102 @@ public class MiniGameService extends Service {
         w.writeUTF(r.seats[1] == null ? "" : r.seats[1].getDisplayName());
         w.writeByte(r.turn);
         w.write(r.caroBoard);
+        w.writeByte(r.spectators.size());
+        send(u, m);
+    }
+
+    // ================= Rắn Thang (Snake Ladder) =================
+
+    private void startSnake(Room r) throws IOException {
+        r.status = ST_BATTLE;
+        r.turn = 0;
+        r.snPos[0] = r.snPos[1] = 0;
+        r.crForfeit[0] = r.crForfeit[1] = 0;
+        r.rematch[0] = r.rematch[1] = false;
+        r.resultRecorded = false;
+        Message m = msg(r.gameId, SN_START);
+        m.writer().writeByte(0);
+        send(r.seats[0], m);
+        send(r.seats[1], m);
+        broadcastSnapshot(r);
+        armTurnTimer(r);
+    }
+
+    private void snakeRoll(User me) throws IOException {
+        Room r = roomOf(me);
+        if (r == null || r.gameId != GAME_SNAKE || r.status != ST_BATTLE) return;
+        int seat = seatOf(r, me);
+        if (seat != r.turn) return;
+        cancelTimer(r);
+        int from = r.snPos[seat];
+        int dice = 1 + java.util.concurrent.ThreadLocalRandom.current().nextInt(6);
+        int to = from + dice;
+        if (to > SN_CELLS) to = SN_CELLS - (to - SN_CELLS);
+        int kind = 0; // 0 thường · 1 leo thang · 2 tuột rắn
+        Integer lad = SN_LADDERS.get(to);
+        if (lad != null) { to = lad; kind = 1; }
+        else {
+            Integer snk = SN_SNAKES.get(to);
+            if (snk != null) { to = snk; kind = 2; }
+        }
+        r.snPos[seat] = to;
+        int opp = 1 - seat;
+        int oppTo = -1;
+        if (to != SN_CELLS && r.snPos[opp] == to && to > 0) {
+            // đá đối thủ: về đầu rắn gần nhất phía sau rồi tuột xuống đuôi
+            int head = -1;
+            for (int h : SN_SNAKES.keySet()) if (h < to && h > head) head = h;
+            oppTo = head >= 0 ? SN_SNAKES.get(head) : 1;
+            r.snPos[opp] = oppTo;
+        }
+        r.crForfeit[seat] = 0;
+        Message m = msg(r.gameId, SN_ROLLED);
+        DataOutputStream w = m.writer();
+        w.writeByte(seat);
+        w.writeByte(dice);
+        w.writeByte(from);
+        w.writeByte(to);
+        w.writeByte(kind);
+        w.writeByte(oppTo);
+        send(r.seats[0], m);
+        send(r.seats[1], m);
+        for (User s : new ArrayList<>(r.spectators)) send(s, m);
+        if (to == SN_CELLS) {
+            r.status = ST_END;
+            sendSnakeEnd(r, seat, 0);
+            broadcastSnapshot(r);
+            return;
+        }
+        r.turn = opp;
+        Message t = msg(r.gameId, SN_CHANGE_TURN);
+        t.writer().writeByte(r.turn);
+        send(r.seats[0], t);
+        send(r.seats[1], t);
+        broadcastSnapshot(r);
+        armTurnTimer(r);
+    }
+
+    private void sendSnakeEnd(Room r, int winner, int reason) throws IOException {
+        recordResult(r, winner);
+        Message m = msg(r.gameId, SN_END);
+        DataOutputStream w = m.writer();
+        w.writeByte(winner); // 0/1 ghế thắng
+        w.writeByte(reason); // 0 = tới ô 66 · 1 = đối thủ thoát · 3 = bỏ lượt quá nhiều
+        send(r.seats[0], m);
+        send(r.seats[1], m);
+        for (User s : new ArrayList<>(r.spectators)) send(s, m);
+    }
+
+    private void sendSnapshotSnake(User u, Room r) throws IOException {
+        Message m = msg(r.gameId, SN_SNAPSHOT);
+        DataOutputStream w = m.writer();
+        w.writeInt(r.id);
+        w.writeByte(r.status);
+        w.writeUTF(r.seats[0] == null ? "" : r.seats[0].getDisplayName());
+        w.writeUTF(r.seats[1] == null ? "" : r.seats[1].getDisplayName());
+        w.writeByte(r.turn);
+        w.writeByte(r.snPos[0]);
+        w.writeByte(r.snPos[1]);
         w.writeByte(r.spectators.size());
         send(u, m);
     }

@@ -1387,6 +1387,24 @@ public class ScreenshotMain {
                         }
                         if (frame == 15) {
                             shot("shot-auction.png");
+                            stage = 146; frame = 0;
+                        }
+                        break;
+                    case 146: // Rắn Thang: giữa ván
+                        if (frame == 1) {
+                            world.debugSnake();
+                        }
+                        if (frame == 15) {
+                            shot("shot-snake.png");
+                            stage = 147; frame = 0;
+                        }
+                        break;
+                    case 147: // Rắn Thang: màn kết quả
+                        if (frame == 1) {
+                            world.debugSnakeEnd();
+                        }
+                        if (frame == 15) {
+                            shot("shot-snake-end.png");
                             stage = 121; frame = 0;
                         }
                         break;
