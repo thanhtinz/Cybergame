@@ -6021,7 +6021,7 @@ public class WorldScreen extends ScreenAdapter {
                 {
                     java.util.List<TitleDef> defs0 = titleListEffective();
                     int pages = Math.max(1, (defs0.size() + 7) / 8);
-                    if (pages > 1 && y >= py + 6 && y <= py + 32) {
+                    if (pages > 1 && y >= py + 14 && y <= py + 40) {
                         if (titlePage > 0 && x >= px + 24 && x <= px + 76) {
                             titlePage--;
                             return;
@@ -6033,7 +6033,7 @@ public class WorldScreen extends ScreenAdapter {
                     }
                 }
                 java.util.List<TitleDef> defs = titleListEffective();
-                float cw = 292, chh = 78, gapX = 8, gapY = 7;
+                float cw = 292, chh = 74, gapX = 8, gapY = 6;
                 float gridTop = py + 368;
                 int fromI = titlePage * TITLE_PER_PAGE;
                 for (int i = fromI; i < defs.size() && i < fromI + TITLE_PER_PAGE; i++) {
@@ -9342,7 +9342,7 @@ public class WorldScreen extends ScreenAdapter {
         int pages = Math.max(1, (defs.size() + TITLE_PER_PAGE - 1) / TITLE_PER_PAGE);
         if (titlePage >= pages) titlePage = pages - 1;
         if (titlePage < 0) titlePage = 0;
-        float cw = 292, chh = 78, gapX = 8, gapY = 7;
+        float cw = 292, chh = 74, gapX = 8, gapY = 6;
         float gridTop = py + 368;
         int from = titlePage * TITLE_PER_PAGE;
         int to = Math.min(defs.size(), from + TITLE_PER_PAGE);
@@ -9365,10 +9365,10 @@ public class WorldScreen extends ScreenAdapter {
             } catch (Exception ignored) {
             }
             if (tt != null && tt.getWidth() > 0) {
-                float sc = Math.min(210f / tt.getWidth(), 36f / tt.getHeight());
+                float sc = Math.min(210f / tt.getWidth(), 34f / tt.getHeight());
                 float tw = tt.getWidth() * sc, th = tt.getHeight() * sc;
                 if (!ownedT) batch.setColor(1f, 1f, 1f, 0.45f);
-                batch.draw(tt, cx + (cw - tw) / 2f, cy + chh - 6 - th, tw, th);
+                batch.draw(tt, cx + (cw - tw) / 2f, cy + chh - 5 - th, tw, th);
                 batch.setColor(Color.WHITE);
             } else {
                 Color nc = TITLE_COLORS[d.color];
@@ -9378,19 +9378,21 @@ public class WorldScreen extends ScreenAdapter {
                 Ui.fontSmall.draw(batch, d.name, cx + (cw - layout.width) / 2f, cy + chh - 14);
             }
             String tag = equipped ? "Đang đeo" : ownedT ? "Đeo" : "Chưa có";
+            // điều kiện + nhãn hành động CHUNG một hàng cy+28,
+            // mực nằm trọn trong thẻ (bản cũ nhãn ở cy+14 làm
+            // chữ cưỡi lên mép dưới thẻ, bị cắt nửa)
             Ui.fontTiny.setColor(1f, 1f, 1f, ownedT ? 0.70f : 0.42f);
             Ui.fontTiny.draw(batch,
-                truncTo(Ui.fontTiny, d.req, cw - 24), cx + 12, cy + 33);
-            layout.setText(Ui.fontTiny, tag);
+                truncTo(Ui.fontTiny, d.req, cw - 104), cx + 12, cy + 28);
             Color tagC = equipped ? new Color(1f, 0.85f, 0.38f, 1f)
                 : ownedT ? new Color(0.55f, 0.95f, 0.65f, 1f) : new Color(1f, 1f, 1f, 0.4f);
             layout.setText(Ui.fontTiny, tag);
             Ui.fontTiny.setColor(tagC);
-            Ui.fontTiny.draw(batch, tag, cx + cw - 12 - layout.width, cy + 14);
+            Ui.fontTiny.draw(batch, tag, cx + cw - 12 - layout.width, cy + 28);
         }
         // hàng phân trang
         if (pages > 1) {
-            float by = py + 6;
+            float by = py + 14;
             if (titlePage > 0) {
                 batch.draw(Ui.roundedRect(52, 26, 8, new Color(0f, 0f, 0f, 0.35f), GLASS_RIM),
                     px + 24, by);
@@ -9465,10 +9467,13 @@ public class WorldScreen extends ScreenAdapter {
                 new Color(p.gender == 1 ? 0.45f : 1f, p.gender == 1 ? 0.75f : 0.55f,
                     p.gender == 1 ? 1f : 0.75f, 1f));
         }
-        Ui.faIcon(batch, Ui.fa20, Ui.FA_SHIELD_HALVED, px + 124, avCy - 25,
-            new Color(1f, 0.78f, 0.30f, 1f));
+        // huy hiệu "Lv" vàng cam thay icon khiên (lệnh Tín)
+        batch.draw(Ui.gradientRect(38, 22, 11,
+            EntryUi.ORANGE_TOP, EntryUi.ORANGE_BOT), px + 114, avCy - 36);
+        Ui.centered(batch, Ui.fontTiny, "Lv", px + 133, avCy - 18,
+            new Color(0.30f, 0.16f, 0.02f, 1f));
         Ui.fontSmall.setColor(1f, 1f, 1f, 0.92f);
-        Ui.fontSmall.draw(batch, st != null ? "Cấp " + st[0] : "—", px + 140, avCy - 18);
+        Ui.fontSmall.draw(batch, st != null ? "Cấp " + st[0] : "—", px + 162, avCy - 18);
         // phía trên dòng người yêu: ngày vào game (đuôi mở rộng gói −22),
         // canh phải thẳng hàng với dòng người yêu ở dưới
         if (selfJoinDate != null) {
@@ -9519,7 +9524,7 @@ public class WorldScreen extends ScreenAdapter {
         String[] vals = {fmtMoney(p.xu), fmtMoney(p.luong), fmtMoney(p.luongKhoa), fmtMoney(p.xeng)};
         for (int i = 0; i < 4; i++) {
             float cx = px + 24 + i * 152;
-            float cy = py + 308;
+            float cy = py + 332;
             batch.draw(Ui.roundedRect(140, 36, 10, new Color(0f, 0f, 0f, 0.35f), GLASS_RIM), cx, cy);
             batch.draw(game.texture("myinfo/icon" + icons[i] + ".png"), cx + 8, cy + 7, 22, 22);
             Ui.fontSmall.setColor(1f, 1f, 1f, 0.94f);
@@ -9536,21 +9541,21 @@ public class WorldScreen extends ScreenAdapter {
         for (int i = 0; i < 6; i++) {
             int col = i % 3, row = i / 3;
             float cx = px + 24 + col * 202;
-            float cy = py + 186 - row * 122;
-            batch.draw(Ui.roundedRect(190, 110, 10, new Color(0f, 0f, 0f, 0.30f), GLASS_RIM), cx, cy);
+            float cy = py + 176 - row * 156;
+            batch.draw(Ui.roundedRect(190, 142, 10, new Color(0f, 0f, 0f, 0.30f), GLASS_RIM), cx, cy);
             Ui.fontTiny.setColor(1f, 1f, 1f, 0.85f);
-            Ui.fontTiny.draw(batch, labels[i], cx + 12, cy + 92);
+            Ui.fontTiny.draw(batch, labels[i], cx + 12, cy + 118);
             Ui.fontTiny.setColor(1f, 1f, 1f, 0.95f);
             String vt = st == null ? "—" : (i == 0 ? st[0] + " · " + st[1] + "%" : String.valueOf(barVals[i]));
             layout.setText(Ui.fontTiny, vt);
-            Ui.fontTiny.draw(batch, vt, cx + 190 - 12 - layout.width, cy + 92);
-            batch.draw(Ui.roundedRect(166, 14, 7, new Color(0f, 0f, 0f, 0.45f), GLASS_RIM), cx + 12, cy + 30);
+            Ui.fontTiny.draw(batch, vt, cx + 190 - 12 - layout.width, cy + 118);
+            batch.draw(Ui.roundedRect(166, 16, 8, new Color(0f, 0f, 0f, 0.45f), GLASS_RIM), cx + 12, cy + 54);
             int v = MathUtils.clamp(barVals[i], 0, 100);
             if (v > 0) {
-                batch.draw(Ui.roundedRect(Math.max(14, 166 * v / 100), 14, 7, cols[i], cols[i]), cx + 12, cy + 30);
+                batch.draw(Ui.roundedRect(Math.max(16, 166 * v / 100), 16, 8, cols[i], cols[i]), cx + 12, cy + 54);
             }
             Ui.fontTiny.setColor(1f, 1f, 1f, 0.55f);
-            Ui.fontTiny.draw(batch, v + "%", cx + 12, cy + 20);
+            Ui.fontTiny.draw(batch, v + "%", cx + 12, cy + 38);
         }
     }
 
