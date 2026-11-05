@@ -128,7 +128,8 @@ public class GlobalHandler {
 
 
     private void acceptHenHo(){
-        String insertQuery = "INSERT INTO marry (idNam, idNu, level, perLevel) VALUES (?, ?, ?, ?)";
+        avatar.service.MarryService.ensureSchema();
+        String insertQuery = "INSERT INTO marry (idNam, idNu, level, perLevel, ngay) VALUES (?, ?, ?, ?, NOW())";
         int idNvNam,idNu;
         if(this.us.getGender() == 1){
             idNvNam = this.us.getId();

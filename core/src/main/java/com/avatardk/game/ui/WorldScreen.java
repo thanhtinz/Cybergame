@@ -3630,6 +3630,9 @@ public class WorldScreen extends ScreenAdapter {
                         partnerName = null;
                         partnerDoll = null;
                         partnerImgId = -1;
+                        partnerDate = null;
+                        partnerActId = -1;
+                        partnerActName = null;
                         try {
                             if (r.available() >= 4) {
                                 int pid = r.readInt();
@@ -3644,8 +3647,10 @@ public class WorldScreen extends ScreenAdapter {
                                     partnerPct = MathUtils.clamp(r.readByte(), 0, 100);
                                     partnerRel = r.readUTF();
                                     if (r.available() >= 2) {
-                                        short act = r.readShort();
-                                        if (act != -1 && r.available() > 0) r.readUTF();
+                                        partnerActId = r.readShort();
+                                        if (partnerActId != -1 && r.available() > 0) {
+                                            partnerActName = r.readUTF();
+                                        }
                                     }
                                     partnerDoll = new PaperDoll(game.data, parts);
                                 }
@@ -3662,6 +3667,15 @@ public class WorldScreen extends ScreenAdapter {
                                     String jd = r.readUTF();
                                     selfJoinDate = jd.isEmpty() ? null : jd;
                                 }
+                            }
+                        } catch (Exception ignored) {
+                        }
+                        // Đuôi 2: UTF ngày bắt đầu quan hệ (dateDay của
+                        // tab Cặp Đôi bản chính) — server port ghi cuối.
+                        try {
+                            if (r.available() >= 2) {
+                                String cd = r.readUTF();
+                                partnerDate = cd.isEmpty() ? null : cd;
                             }
                         } catch (Exception ignored) {
                         }
@@ -5978,22 +5992,28 @@ public class WorldScreen extends ScreenAdapter {
                 charPanel = false;
                 return;
             }
-            // thanh tab Thông tin | Danh hiệu (chỉ bản Cards có tab)
+            // thanh tab Thông tin | Danh hiệu | Cặp Đôi (chỉ bản Cards)
             if (charVariant == 3 && y >= py + 382 && y <= py + 414) {
-                if (x >= px + 24 && x <= px + 194) {
-                    charTab = 0;
-                    return;
-                }
-                if (x >= px + 202 && x <= px + 372) {
-                    charTab = 1;
-                    if (online()) {
-                        try {
-                            AvatarProtocol.titleList(game.connection);
-                        } catch (IOException ignored) {
+                for (int t = 0; t < CHAR_TABS.length; t++) {
+                    float[] rc = charTabRect(t, px);
+                    if (x >= rc[0] && x <= rc[0] + rc[1]) {
+                        charTab = t;
+                        if (t == 1 && online()) {
+                            try {
+                                AvatarProtocol.titleList(game.connection);
+                            } catch (IOException ignored) {
+                            }
                         }
+                        return;
                     }
-                    return;
                 }
+            }
+            // tab Cặp Đôi: nút hành động (Chia tay) ở đáy tab
+            if (charVariant == 3 && charTab == 2 && partnerName != null
+                    && x >= px + CP_W / 2f - 90 && x <= px + CP_W / 2f + 90
+                    && y >= py + 22 && y <= py + 66) {
+                weddingLocalSelect(2);
+                return;
             }
             // lưới danh hiệu khi đang ở tab Danh hiệu
             if (charVariant == 3 && charTab == 1) {
@@ -9005,6 +9025,9 @@ public class WorldScreen extends ScreenAdapter {
     private int partnerImgId = -1;
     private String selfJoinDate;
     private String partnerName, partnerRel, partnerSlogan;
+    private String partnerDate;
+    private int partnerActId = -1;
+    private String partnerActName;
     private int partnerLv, partnerPct;
     private PaperDoll partnerDoll;
 
@@ -9245,6 +9268,95 @@ public class WorldScreen extends ScreenAdapter {
      *  do để xem hiệu ứng — đeo thật vẫn tính ở server khi online. */
     private static final int TITLE_PER_PAGE = 8;
 
+    private static final String[] CHAR_TABS = {"Thông tin", "Danh hiệu", "Cặp Đôi"};
+
+    /** Rect tab panel nhân vật: x tuyệt đối + bề ngang theo độ
+     *  rộng chữ thật (như tab Shop) để 3 tab vẫn chừa chỗ cho
+     *  dòng "Đang đeo" bên phải. */
+    private float[] charTabRect(int t, float px) {
+        float x = px + 24;
+        for (int k = 0; k < t; k++) {
+            x += Ui.textWidth(Ui.fontSmall, CHAR_TABS[k]) + 36 + 10;
+        }
+        return new float[]{x, Ui.textWidth(Ui.fontSmall, CHAR_TABS[t]) + 36};
+    }
+
+    /** Tab CẶP ĐÔI [PORT theo bản chính 3.4.4: CommandCouple có
+     *  avatar + partner + dateDay + level/perLevel + commandList].
+     *  Dữ liệu lấy từ khối người yêu của gói −22 (partnerName,
+     *  partnerDoll, partnerRel = tenQuanHe, partnerLv/Pct,
+     *  partnerDate, partnerActName/Id = lệnh Chia tay 37). */
+    private void drawCharCoupleTab(float px, float py) {
+        float cx = px + CP_W / 2f;
+        // sân khấu đôi
+        float stY = py + 200;
+        batch.draw(Ui.roundedRect((int) (CP_W - 48), 174, 14,
+            new Color(0.10f, 0.16f, 0.23f, 0.9f), GLASS_RIM), px + 24, stY);
+        if (partnerName == null || partnerDoll == null) {
+            game.dollRenderer.draw(batch, playerDoll, playerAnim.frameIndex(),
+                cx, stY + 6, 2.4f, false);
+            Ui.centered(batch, Ui.fontSmall, "Độc thân", cx, stY + 164,
+                new Color(1f, 1f, 1f, 0.55f));
+            Ui.faIcon(batch, Ui.fa20, Ui.FA_HEART, cx, stY + 92,
+                new Color(1f, 1f, 1f, 0.25f));
+            Ui.centered(batch, Ui.fontSmall, "Bạn chưa có người yêu", cx, py + 160,
+                Color.WHITE);
+            Ui.centered(batch, Ui.fontTiny,
+                "Tới Khu lễ đường gặp Chủ Hôn để bắt đầu hẹn hò.", cx, py + 128,
+                new Color(1f, 1f, 1f, 0.6f));
+            return;
+        }
+        Ui.centered(batch, Ui.fontSmall,
+            partnerRel != null && !partnerRel.isEmpty() ? partnerRel : "Người yêu",
+            cx, stY + 164, new Color(1f, 0.85f, 0.38f, 1f));
+        game.dollRenderer.draw(batch, playerDoll, playerAnim.frameIndex(),
+            px + 190, stY + 6, 2.4f, false);
+        game.dollRenderer.draw(batch, partnerDoll, playerAnim.frameIndex(),
+            px + CP_W - 190, stY + 6, 2.4f, true);
+        Ui.faIcon(batch, Ui.fa20, Ui.FA_HEART, cx, stY + 92,
+            new Color(1f, 0.45f, 0.60f, 1f));
+        if (partnerSlogan != null && !partnerSlogan.isEmpty()) {
+            Ui.centered(batch, Ui.fontTiny, partnerSlogan, cx, stY + 52,
+                new Color(1f, 1f, 1f, 0.75f));
+        }
+        // dòng thông tin
+        String[][] rows = {
+            {partnerLv <= 0 ? "Người yêu:" : "Bạn đời:", partnerName},
+            {"Quan hệ:", partnerRel != null ? partnerRel : "—"},
+            {"Ngày hẹn hò:", partnerDate != null ? partnerDate : "—"},
+        };
+        for (int i = 0; i < rows.length; i++) {
+            float ry = py + 172 - i * 30;
+            Ui.fontSmall.setColor(1f, 1f, 1f, 0.62f);
+            Ui.fontSmall.draw(batch, rows[i][0], px + 40, ry);
+            Ui.fontSmall.setColor(i == 1
+                ? new Color(1f, 0.85f, 0.38f, 1f) : Color.WHITE);
+            Ui.fontSmall.draw(batch, rows[i][1], px + 190, ry);
+        }
+        // cấp đôi + thanh tiến độ
+        float ry = py + 172 - 3 * 30;
+        Ui.fontSmall.setColor(1f, 1f, 1f, 0.62f);
+        Ui.fontSmall.draw(batch, "Cấp đôi:", px + 40, ry);
+        Ui.fontSmall.setColor(Color.WHITE);
+        Ui.fontSmall.draw(batch, partnerLv <= 0 ? "—" : ("Cấp " + partnerLv),
+            px + 190, ry);
+        float barX = px + 300, barY = ry - 12;
+        batch.draw(Ui.roundedRect(220, 14, 7, new Color(0f, 0f, 0f, 0.5f),
+            GLASS_RIM), barX, barY);
+        if (partnerPct > 0) {
+            batch.draw(Ui.roundedRect(Math.max(14, 220 * partnerPct / 100), 14, 7,
+                new Color(0.95f, 0.45f, 0.60f, 1f), null), barX, barY);
+        }
+        Ui.fontTiny.setColor(1f, 1f, 1f, 0.85f);
+        Ui.fontTiny.draw(batch, partnerPct + "%", barX + 230, ry);
+        // nút hành động: lệnh do server gửi (mặc định "Chia tay")
+        batch.draw(Ui.roundedRect(180, 44, 12, Ui.BTN_CLOSE, GLASS_RIM),
+            cx - 90, py + 22);
+        Ui.centered(batch, Ui.fontSmall,
+            partnerActName != null ? partnerActName : "Chia tay",
+            cx, py + 51, Color.WHITE);
+    }
+
     private void drawCharTitleGrid(float px, float py) {
         java.util.List<TitleDef> defs = titleListEffective();
         int pages = Math.max(1, (defs.size() + TITLE_PER_PAGE - 1) / TITLE_PER_PAGE);
@@ -9380,26 +9492,33 @@ public class WorldScreen extends ScreenAdapter {
         batch.draw(Ui.roundedRect(36, 36, 10, Ui.BTN_CLOSE, GLASS_RIM), px + CP_W - 54, py + CP_H - 54);
         Ui.faIcon(batch, Ui.fa20, Ui.FA_XMARK, px + CP_W - 36, py + CP_H - 36,
             new Color(0.9f, 0.93f, 1f, 1f));
-        // THANH TAB [PORT theo ownedTitleTab của bản chính]: Thông tin | Danh hiệu
+        // THANH TAB: Thông tin | Danh hiệu | Cặp Đôi (tab 3 theo
+        // bản chính 3.4.4 — T.couple + CommandCouple). Tab co theo
+        // độ rộng chữ như tab Shop để còn chỗ cho dòng "Đang đeo".
         float tabY = py + 382;
-        String[] tabNames = {"Thông tin", "Danh hiệu"};
-        for (int t = 0; t < 2; t++) {
-            float tx = px + 24 + t * 178;
+        for (int t = 0; t < CHAR_TABS.length; t++) {
+            float[] rc = charTabRect(t, px);
             boolean act = charTab == t;
-            batch.draw(Ui.roundedRect(170, 32, 10,
+            batch.draw(Ui.roundedRect((int) rc[1], 32, 10,
                 act ? new Color(0.22f, 0.38f, 0.58f, 0.95f) : new Color(0f, 0f, 0f, 0.30f),
-                GLASS_RIM), tx, tabY);
-            Ui.centered(batch, Ui.fontSmall, tabNames[t], tx + 85, tabY + 22,
+                GLASS_RIM), rc[0], tabY);
+            Ui.centered(batch, Ui.fontSmall, CHAR_TABS[t], rc[0] + rc[1] / 2f, tabY + 22,
                 act ? Color.WHITE : new Color(1f, 1f, 1f, 0.55f));
         }
         TitleDef curT = titleDef(myTitleId);
+        float[] lastTab = charTabRect(CHAR_TABS.length - 1, px);
         String eq = truncTo(Ui.fontTiny,
-            "Đang đeo: " + (curT != null ? curT.name : "—"), 244);
+            "Đang đeo: " + (curT != null ? curT.name : "—"),
+            px + CP_W - 24 - (lastTab[0] + lastTab[1]) - 8);
         layout.setText(Ui.fontTiny, eq);
         Ui.fontTiny.setColor(1f, 0.85f, 0.38f, 1f);
         Ui.fontTiny.draw(batch, eq, px + CP_W - 24 - layout.width, tabY + 21);
         if (charTab == 1) {
             drawCharTitleGrid(px, py);
+            return;
+        }
+        if (charTab == 2) {
+            drawCharCoupleTab(px, py);
             return;
         }
         // hàng chip tiền (4 chip ngang dưới header)
@@ -25614,6 +25733,28 @@ public class WorldScreen extends ScreenAdapter {
         titlePage = 0;
         charPanel = withPanel;
         charTab = 1;
+    }
+
+    /** Sân khấu chụp TAB CẶP ĐÔI: cặp mẫu Sơn + Linh Chi, cấp 7,
+     *  tiến độ 45%, quan hệ "Cặp đôi hạnh phúc", có ngày hẹn hò. */
+    public void debugOpenCouple() {
+        debugCloseHubGames();
+        closeOtherPanels();
+        casinoIn = false;
+        csPending = false;
+        dlOpen = false;
+        partnerName = "Linh Chi";
+        partnerDoll = game.newDoll(java.util.Arrays.asList(628, 474, 0, 80, 49));
+        partnerRel = "Cặp đôi hạnh phúc";
+        partnerSlogan = "Mãi mãi bên nhau";
+        partnerLv = 7;
+        partnerPct = 45;
+        partnerDate = "14/02/2025";
+        partnerActId = 37;
+        partnerActName = "Chia tay";
+        charPanel = true;
+        charVariant = 3;
+        charTab = 2;
     }
 
     /** Sân khấu chụp TÁCH CHỒNG: panel Giỏ chọn sẵn món có số

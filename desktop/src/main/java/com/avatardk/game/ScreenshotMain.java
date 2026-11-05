@@ -1504,6 +1504,15 @@ public class ScreenshotMain {
                         }
                         if (frame == 15) {
                             shot("shot-diamond-board.png");
+                            stage = 159; frame = 0;
+                        }
+                        break;
+                    case 159: // Tab Cặp Đôi trong panel nhân vật
+                        if (frame == 1) {
+                            world.debugOpenCouple();
+                        }
+                        if (frame == 15) {
+                            shot("shot-couple.png");
                             stage = 121; frame = 0;
                         }
                         break;

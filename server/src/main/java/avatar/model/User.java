@@ -69,6 +69,7 @@ public class User {
     private List<Item> wearingMarry;
     private int levelMarry;
     private int PerLevelMarry;
+    private String marryDate = "";
 
     /** Id ẢNH icon hôn nhân vẽ cạnh tên (idWedding của client gốc):
      *  −1 độc thân · 2 hẹn hò · 1153–1157 nhẫn cưới theo cấp
@@ -1240,6 +1241,13 @@ public class User {
                                 int idNu = rs.getInt("idNu");
                                 this.levelMarry = rs.getInt("level");
                                 this.PerLevelMarry = rs.getInt("perLevel");
+                                try {
+                                    java.sql.Timestamp ng = rs.getTimestamp("ngay");
+                                    this.marryDate = ng == null ? ""
+                                        : new java.text.SimpleDateFormat("dd/MM/yyyy").format(ng);
+                                } catch (Exception ignored) {
+                                    this.marryDate = "";
+                                }
                                 // Kiểm tra xem ID người dùng hiện tại là idNam hay idNu, và lấy ID còn lại
                                 int otherId = (idNam == userId) ? idNu : idNam;
 
@@ -1255,6 +1263,19 @@ public class User {
                                             int userID = rsUser.getInt("id");
                                             this.setIdUsHenHo(userID);
                                             this.setNamehh(username);
+                                            try (PreparedStatement psP = conn.prepareStatement(
+                                                    "SELECT name FROM players WHERE user_id = ?")) {
+                                                psP.setInt(1, userID);
+                                                try (ResultSet rsP = psP.executeQuery()) {
+                                                    if (rsP.next()) {
+                                                        String dn = rsP.getString(1);
+                                                        if (dn != null && !dn.isEmpty()) {
+                                                            this.setNamehh(dn);
+                                                        }
+                                                    }
+                                                }
+                                            } catch (Exception ignored) {
+                                            }
                                             GetdataUserHenho();
                                             System.out.println("Người còn lại: " + username+ " , id = " + userID);
                                         }

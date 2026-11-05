@@ -960,6 +960,7 @@ public class AvatarService extends Service {
                 ds.writeInt(-1);
                 ds.writeShort(us.getLeverMain());
                 writeJoinDate(ds, us);
+                ds.writeUTF("");
                 ds.flush();
                 sendMessage(ms);
                 return;
@@ -972,16 +973,21 @@ public class AvatarService extends Service {
                 ds.writeShort(item.getId());
             }
 
-            ds.writeUTF(us.getTenNhan()); // Slogan
+            ds.writeUTF(us.getTenNhan() != null ? us.getTenNhan() : ""); // Slogan
             ds.writeShort(us.getImginfo()); // idImage
             ds.writeByte(us.getLevelMarry()); // Level of avatar3
             ds.writeByte(us.getPerLevelMarry()); // Percent level of avatar3
-            ds.writeUTF("text 2"); // Relationship
-            ds.writeShort(1); // num23
-            ds.writeUTF("text 3"); // Action name if num23 != -1
+            // Ten quan he (tenQuanHe) theo cap doi — ban fan de chu rac "text 2"
+            ds.writeUTF(avatar.service.MarryService.relationName(us.getLevelMarry()));
+            // Lenh hanh dong cua tab Cap Doi: IActionWedding goi
+            // doRequestCmdRotate(id) — 37 = Chia tay (MENU_ROTATE)
+            ds.writeShort(37);
+            ds.writeUTF("Chia tay");
 
             ds.writeShort(us.getLeverMain());
             writeJoinDate(ds, us);
+            // Duoi mo rong ban port: ngay bat dau quan he (dateDay)
+            ds.writeUTF(us.getMarryDate() != null ? us.getMarryDate() : "");
             ds.flush();
 
             sendMessage(ms);

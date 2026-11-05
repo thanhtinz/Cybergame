@@ -292,6 +292,8 @@ public class DailyService extends Service {
         st.claimed.add(today.getDayOfMonth());
         st.totalPoint += POINT_PER_DAY;
         save(me.getId(), st);
+        // Cap doi [PORT]: diem danh cong +10% tien do cap doi
+        MarryService.addCouplePoints(me, 10);
         result(true, "Báo danh thành công! Bạn nhận " + gift
                 + " và +" + POINT_PER_DAY + " điểm chuyên cần.");
         sendDashboard(me);
