@@ -6011,7 +6011,7 @@ public class WorldScreen extends ScreenAdapter {
             // tab Cặp Đôi: nút hành động (Chia tay) ở đáy tab
             if (charVariant == 3 && charTab == 2 && partnerName != null
                     && x >= px + CP_W / 2f - 90 && x <= px + CP_W / 2f + 90
-                    && y >= py + 22 && y <= py + 66) {
+                    && y >= py + 14 && y <= py + 58) {
                 weddingLocalSelect(2);
                 return;
             }
@@ -9124,27 +9124,16 @@ public class WorldScreen extends ScreenAdapter {
         Ui.font.setColor(1f, 0.83f, 0.38f, 1f);
         Ui.font.draw(batch, p.username, px + 24, py + 176);
         Ui.font.setColor(Color.WHITE);
-        // sân khấu doll bên phải (+ người yêu nếu gói −22 báo có)
+        // sân khấu doll bên phải — chỉ nhân vật của mình (hình cặp
+        // đôi đã chuyển hẳn sang tab Cặp Đôi theo lệnh Tín)
         float stX = px + 306, stY = py + 196, stW = 310, stH = 216;
         batch.draw(Ui.roundedRect((int) stW, (int) stH, 14, cStage, GLASS_RIM), stX, stY);
         float floorY = stY + 36;
-        boolean hasPartner = partnerDoll != null;
-        float selfCx = hasPartner ? stX + 96 : stX + stW / 2f;
-        float partCx = stX + 218;
+        float selfCx = stX + stW / 2f;
         batch.setColor(0f, 0f, 0f, 0.30f);
         batch.draw(circleTexture(), selfCx - 52, floorY - 8, 104, 16);
-        if (hasPartner) batch.draw(circleTexture(), partCx - 46, floorY - 8, 92, 15);
         batch.setColor(Color.WHITE);
         game.dollRenderer.draw(batch, playerDoll, playerAnim.frameIndex(), selfCx, floorY, 3.4f, false);
-        if (hasPartner) {
-            game.dollRenderer.draw(batch, partnerDoll, 0, partCx, floorY, 3.4f, true);
-            if (partnerRel != null && !partnerRel.isEmpty()) {
-                Ui.centered(batch, Ui.fontSmall, partnerRel, partCx, stY + stH - 14,
-                    light ? new Color(0.80f, 0.25f, 0.45f, 1f) : new Color(1f, 0.75f, 0.85f, 1f));
-            }
-            Ui.centered(batch, Ui.fontTiny, partnerName + " · Cấp " + partnerLv + " + " + partnerPct + "%",
-                partCx, stY + 18, cText);
-        }
         // đường chia + 6 thanh chỉ số (2 cột × 3 hàng) như gốc
         batch.setColor(GLASS_RIM);
         batch.draw(whiteTex, px + 24, py + 158, CP_W - 48, 2);
@@ -9214,22 +9203,8 @@ public class WorldScreen extends ScreenAdapter {
         float backX = px + CP_W - 345 - 14, backY = py + 262;
         batch.draw(game.texture("myinfo/back.png"), backX, backY, 345, 145);
         float floorY = backY + 22;
-        boolean hasPartner = partnerDoll != null;
-        float selfCx = backX + 105;
-        float partCx = backX + 262;
+        float selfCx = backX + 172;
         game.dollRenderer.draw(batch, playerDoll, playerAnim.frameIndex(), selfCx, floorY, 2.6f, false);
-        if (hasPartner) {
-            game.dollRenderer.draw(batch, partnerDoll, 0, partCx, floorY, 2.6f, true);
-            Ui.centered(batch, Ui.fontSmall, partnerRel != null ? partnerRel : "",
-                partCx, py + CP_H - 28, new Color(0.80f, 0.25f, 0.45f, 1f));
-            Ui.centered(batch, Ui.fontTiny, partnerName + " · " + partnerLv + " + " + partnerPct + "%",
-                partCx, backY + 4, blue);
-        } else {
-            // chưa có người yêu: bóng placeholder như gốc
-            batch.setColor(1f, 1f, 1f, 0.55f);
-            batch.draw(game.texture("myinfo/shadow.png"), partCx - 26, floorY - 2, 52, 84);
-            batch.setColor(Color.WHITE);
-        }
         // đường chia nâu + 6 chỉ số bằng ảnh thanh gốc
         batch.setColor(brown);
         batch.draw(whiteTex, px + 24, py + 186, CP_W - 48, 2);
@@ -9288,73 +9263,82 @@ public class WorldScreen extends ScreenAdapter {
      *  partnerDate, partnerActName/Id = lệnh Chia tay 37). */
     private void drawCharCoupleTab(float px, float py) {
         float cx = px + CP_W / 2f;
-        // sân khấu đôi
-        float stY = py + 200;
-        batch.draw(Ui.roundedRect((int) (CP_W - 48), 174, 14,
+        // sân khấu đôi — cặp doll đối xứng qua tim ở giữa
+        float stY = py + 190;
+        batch.draw(Ui.roundedRect((int) (CP_W - 48), 184, 14,
             new Color(0.10f, 0.16f, 0.23f, 0.9f), GLASS_RIM), px + 24, stY);
         if (partnerName == null || partnerDoll == null) {
-            game.dollRenderer.draw(batch, playerDoll, playerAnim.frameIndex(),
-                cx, stY + 6, 2.4f, false);
-            Ui.centered(batch, Ui.fontSmall, "Độc thân", cx, stY + 164,
+            Ui.centered(batch, Ui.fontSmall, "Độc thân", cx, stY + 172,
                 new Color(1f, 1f, 1f, 0.55f));
-            Ui.faIcon(batch, Ui.fa20, Ui.FA_HEART, cx, stY + 92,
-                new Color(1f, 1f, 1f, 0.25f));
-            Ui.centered(batch, Ui.fontSmall, "Bạn chưa có người yêu", cx, py + 160,
+            batch.setColor(0f, 0f, 0f, 0.30f);
+            batch.draw(circleTexture(), cx - 48, stY + 4, 96, 15);
+            batch.setColor(Color.WHITE);
+            game.dollRenderer.draw(batch, playerDoll, playerAnim.frameIndex(),
+                cx, stY + 10, 2.8f, false);
+            Ui.centered(batch, Ui.fontSmall, "Bạn chưa có người yêu", cx, py + 150,
                 Color.WHITE);
             Ui.centered(batch, Ui.fontTiny,
-                "Tới Khu lễ đường gặp Chủ Hôn để bắt đầu hẹn hò.", cx, py + 128,
+                "Tới Khu lễ đường gặp Chủ Hôn để bắt đầu hẹn hò.", cx, py + 118,
                 new Color(1f, 1f, 1f, 0.6f));
             return;
         }
         Ui.centered(batch, Ui.fontSmall,
             partnerRel != null && !partnerRel.isEmpty() ? partnerRel : "Người yêu",
-            cx, stY + 164, new Color(1f, 0.85f, 0.38f, 1f));
+            cx, stY + 174, new Color(1f, 0.85f, 0.38f, 1f));
+        batch.setColor(0f, 0f, 0f, 0.30f);
+        batch.draw(circleTexture(), cx - 120 - 48, stY + 4, 96, 15);
+        batch.draw(circleTexture(), cx + 120 - 48, stY + 4, 96, 15);
+        batch.setColor(Color.WHITE);
         game.dollRenderer.draw(batch, playerDoll, playerAnim.frameIndex(),
-            px + 190, stY + 6, 2.4f, false);
+            cx - 120, stY + 10, 2.8f, false);
         game.dollRenderer.draw(batch, partnerDoll, playerAnim.frameIndex(),
-            px + CP_W - 190, stY + 6, 2.4f, true);
-        Ui.faIcon(batch, Ui.fa20, Ui.FA_HEART, cx, stY + 92,
+            cx + 120, stY + 10, 2.8f, true);
+        Ui.faIcon(batch, Ui.fa30, Ui.FA_HEART, cx, stY + 100,
             new Color(1f, 0.45f, 0.60f, 1f));
         if (partnerSlogan != null && !partnerSlogan.isEmpty()) {
-            Ui.centered(batch, Ui.fontTiny, partnerSlogan, cx, stY + 52,
+            Ui.centered(batch, Ui.fontTiny, partnerSlogan, cx, stY + 58,
                 new Color(1f, 1f, 1f, 0.75f));
         }
-        // dòng thông tin
+        // 4 dòng thông tin: nhãn căn phải về cột px+236, giá trị từ
+        // px+252 — khối nằm cân giữa panel
         String[][] rows = {
             {partnerLv <= 0 ? "Người yêu:" : "Bạn đời:", partnerName},
             {"Quan hệ:", partnerRel != null ? partnerRel : "—"},
             {"Ngày hẹn hò:", partnerDate != null ? partnerDate : "—"},
         };
         for (int i = 0; i < rows.length; i++) {
-            float ry = py + 172 - i * 30;
+            float ry = py + 166 - i * 30;
+            layout.setText(Ui.fontSmall, rows[i][0]);
             Ui.fontSmall.setColor(1f, 1f, 1f, 0.62f);
-            Ui.fontSmall.draw(batch, rows[i][0], px + 40, ry);
+            Ui.fontSmall.draw(batch, rows[i][0], px + 236 - layout.width, ry);
             Ui.fontSmall.setColor(i == 1
                 ? new Color(1f, 0.85f, 0.38f, 1f) : Color.WHITE);
-            Ui.fontSmall.draw(batch, rows[i][1], px + 190, ry);
+            Ui.fontSmall.draw(batch, rows[i][1], px + 252, ry);
         }
-        // cấp đôi + thanh tiến độ
-        float ry = py + 172 - 3 * 30;
+        // cấp đôi + thanh tiến độ (mép phải thanh cố định px+560)
+        float ry = py + 166 - 3 * 30;
+        String lvTxt = partnerLv <= 0 ? "—" : ("Cấp " + partnerLv);
+        layout.setText(Ui.fontSmall, "Cấp đôi:");
         Ui.fontSmall.setColor(1f, 1f, 1f, 0.62f);
-        Ui.fontSmall.draw(batch, "Cấp đôi:", px + 40, ry);
+        Ui.fontSmall.draw(batch, "Cấp đôi:", px + 236 - layout.width, ry);
         Ui.fontSmall.setColor(Color.WHITE);
-        Ui.fontSmall.draw(batch, partnerLv <= 0 ? "—" : ("Cấp " + partnerLv),
-            px + 190, ry);
-        float barX = px + 300, barY = ry - 12;
-        batch.draw(Ui.roundedRect(220, 14, 7, new Color(0f, 0f, 0f, 0.5f),
-            GLASS_RIM), barX, barY);
+        Ui.fontSmall.draw(batch, lvTxt, px + 252, ry);
+        float barX = px + 252 + Ui.textWidth(Ui.fontSmall, lvTxt) + 18;
+        float barW = px + 560 - barX;
+        batch.draw(Ui.roundedRect((int) barW, 14, 7, new Color(0f, 0f, 0f, 0.5f),
+            GLASS_RIM), barX, ry - 12);
         if (partnerPct > 0) {
-            batch.draw(Ui.roundedRect(Math.max(14, 220 * partnerPct / 100), 14, 7,
-                new Color(0.95f, 0.45f, 0.60f, 1f), null), barX, barY);
+            batch.draw(Ui.roundedRect(Math.max(14, (int) (barW * partnerPct / 100)), 14, 7,
+                new Color(0.95f, 0.45f, 0.60f, 1f), null), barX, ry - 12);
         }
         Ui.fontTiny.setColor(1f, 1f, 1f, 0.85f);
-        Ui.fontTiny.draw(batch, partnerPct + "%", barX + 230, ry);
+        Ui.fontTiny.draw(batch, partnerPct + "%", px + 568, ry);
         // nút hành động: lệnh do server gửi (mặc định "Chia tay")
         batch.draw(Ui.roundedRect(180, 44, 12, Ui.BTN_CLOSE, GLASS_RIM),
-            cx - 90, py + 22);
+            cx - 90, py + 14);
         Ui.centered(batch, Ui.fontSmall,
             partnerActName != null ? partnerActName : "Chia tay",
-            cx, py + 51, Color.WHITE);
+            cx, py + 43, Color.WHITE);
     }
 
     private void drawCharTitleGrid(float px, float py) {
@@ -9505,14 +9489,6 @@ public class WorldScreen extends ScreenAdapter {
             Ui.centered(batch, Ui.fontSmall, CHAR_TABS[t], rc[0] + rc[1] / 2f, tabY + 22,
                 act ? Color.WHITE : new Color(1f, 1f, 1f, 0.55f));
         }
-        TitleDef curT = titleDef(myTitleId);
-        float[] lastTab = charTabRect(CHAR_TABS.length - 1, px);
-        String eq = truncTo(Ui.fontTiny,
-            "Đang đeo: " + (curT != null ? curT.name : "—"),
-            px + CP_W - 24 - (lastTab[0] + lastTab[1]) - 8);
-        layout.setText(Ui.fontTiny, eq);
-        Ui.fontTiny.setColor(1f, 0.85f, 0.38f, 1f);
-        Ui.fontTiny.draw(batch, eq, px + CP_W - 24 - layout.width, tabY + 21);
         if (charTab == 1) {
             drawCharTitleGrid(px, py);
             return;
@@ -9537,38 +9513,11 @@ public class WorldScreen extends ScreenAdapter {
         batch.draw(Ui.roundedRect((int) stW, (int) stH, 14,
             new Color(0.30f, 0.45f, 0.62f, 0.35f), GLASS_RIM), stX, stY);
         float floorY = stY + 26;
-        boolean hasPartner = partnerDoll != null;
-        float selfCx = hasPartner ? stX + 150 : stX + stW / 2f;
-        float partCx = stX + 442;
+        float selfCx = stX + stW / 2f;
         batch.setColor(0f, 0f, 0f, 0.30f);
         batch.draw(circleTexture(), selfCx - 48, floorY - 7, 96, 15);
-        if (hasPartner) batch.draw(circleTexture(), partCx - 42, floorY - 7, 84, 14);
         batch.setColor(Color.WHITE);
         game.dollRenderer.draw(batch, playerDoll, playerAnim.frameIndex(), selfCx, floorY, 2.5f, false);
-        if (hasPartner) {
-            game.dollRenderer.draw(batch, partnerDoll, 0, partCx, floorY, 2.5f, true);
-            // Giữa hai nhân vật: icon đôi (idImage của gói −22 — panel gốc
-            // cũng vẽ icon này ở giữa cặp) + tên nhẫn của đôi ở dưới icon.
-            float midX = (selfCx + partCx) / 2f;
-            float iconCy = floorY + 82;
-            com.avatardk.game.data.ImgInfo ii = partnerImgId > 0
-                ? game.data.imgById.get(partnerImgId) : null;
-            if (ii != null) {
-                Texture tex = game.texture("big/" + ii.bigId + ".png");
-                TextureRegion reg = new TextureRegion(tex,
-                    ii.x * 2, ii.y * 2, ii.w * 2, ii.h * 2);
-                float sc = 38f / Math.max(1, ii.h * 2);
-                float dw = ii.w * 2 * sc;
-                batch.draw(reg, midX - dw / 2f, iconCy - 19, dw, 38);
-            } else {
-                Ui.faIcon(batch, Ui.fa30, Ui.FA_HEART, midX, iconCy,
-                    new Color(1f, 0.45f, 0.6f, 1f));
-            }
-            if (partnerSlogan != null && !partnerSlogan.isEmpty()) {
-                Ui.centered(batch, Ui.fontTiny, partnerSlogan, midX, iconCy - 36,
-                    new Color(1f, 0.8f, 0.85f, 1f));
-            }
-        }
         // lưới 6 thẻ chỉ số 3×2
         String[] labels = {"Cấp", "Thân thiện", "Gây rối", "Sành điệu", "Vui vẻ", "Sức khỏe"};
         Color[] cols = {new Color(0.55f, 0.85f, 1f, 0.95f), new Color(0.45f, 0.9f, 0.5f, 0.95f),
