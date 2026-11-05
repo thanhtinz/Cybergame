@@ -9266,8 +9266,11 @@ public class WorldScreen extends ScreenAdapter {
                 new Color(1f, 1f, 1f, 0.6f));
             return;
         }
-        // (đã bỏ tiêu đề quan hệ vàng trên sân khấu theo lệnh Tín —
-        // tên quan hệ chỉ còn ở dòng "Quan hệ:" phía dưới)
+        // dòng "Người yêu: <tên>" màu HỒNG trên đỉnh sân khấu —
+        // dòng này trước ở header panel, Tín lệnh chuyển hẳn
+        // sang tab Cặp Đôi (không dùng tên quan hệ vàng nữa)
+        Ui.centered(batch, Ui.fontSmall, "Người yêu: " + partnerName,
+            cx, stY + 174, new Color(1f, 0.75f, 0.85f, 1f));
         batch.setColor(0f, 0f, 0f, 0.30f);
         batch.draw(circleTexture(), cx - 120 - 48, stY + 4, 96, 15);
         batch.draw(circleTexture(), cx + 120 - 48, stY + 4, 96, 15);
