@@ -1441,6 +1441,15 @@ public class ScreenshotMain {
                         }
                         if (frame == 15) {
                             shot("shot-box-lock.png");
+                            stage = 152; frame = 0;
+                        }
+                        break;
+                    case 152: // Tủ đồ: lọc + sắp xếp + doll xem trước
+                        if (frame == 1) {
+                            world.debugOpenCloset();
+                        }
+                        if (frame == 15) {
+                            shot("shot-closet.png");
                             stage = 121; frame = 0;
                         }
                         break;

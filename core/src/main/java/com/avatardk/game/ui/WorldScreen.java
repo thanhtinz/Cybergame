@@ -9217,6 +9217,15 @@ public class WorldScreen extends ScreenAdapter {
     private final java.util.List<InvItem> boxItems = new ArrayList<>();
     private int boxCapacity = 10, boxLevel = 1, boxSel = 0;
     private boolean boxHasPass = false, boxUnlocked = true;
+    // Tủ đồ [PORT theo ClosetScr bản chính]: tab 2 của panel Giỏ —
+    // gộp đang mặc + đồ mặc được trong giỏ, có LỌC theo nhóm, SẮP
+    // XẾP, doll xem trước theo món đang chọn và phân trang
+    private int closetFilter = -1; // -1 = Tất cả, 0..6 = nhóm shopCategory
+    private int closetSort = 0;    // 0 mặc định, 1 theo tên, 2 theo hạn dùng
+    private int closetPage = 0;
+    private PaperDoll closetDoll;
+    private int closetDollKey = -1;
+    private boolean confirmWorn = false;
     /** Hạn dùng của đồ đang mặc theo partId (từ gói đăng nhập + khi mặc từ giỏ). */
     private final java.util.Map<Integer, String> wornExpire = new java.util.HashMap<>();
     private int bagCapacity = 20, chestCapacity = 20, chestLevel = 1;
@@ -9264,15 +9273,66 @@ public class WorldScreen extends ScreenAdapter {
      *  Đang mặc — suy từ playerParts, lọc zOrder 30/40 như
      *  MapScr.getListYourPart của gốc. (Panel rương không dùng tab nữa:
      *  hai phía giỏ/rương hiện song song, xem drawChestPanels.) */
-    private java.util.List<InvItem> invList(boolean chest) {
-        if (bagTab == 0) return bagItems;
+    private boolean isWorn(int partId) {
+        for (int id : playerParts) if (id == partId) return true;
+        return false;
+    }
+
+    /** Số ngày còn lại trích từ chuỗi hạn dùng ("Còn 30 ngày" -> 30;
+     *  vĩnh viễn -> thật lớn để xếp cuối). */
+    private static int expireDays(String exp) {
+        if (exp == null || exp.isEmpty()) return Integer.MAX_VALUE;
+        int n = 0;
+        boolean any = false;
+        for (int i = 0; i < exp.length(); i++) {
+            char c = exp.charAt(i);
+            if (c >= '0' && c <= '9') { n = n * 10 + (c - '0'); any = true; }
+            else if (any) break;
+        }
+        return any ? n : Integer.MAX_VALUE;
+    }
+
+    /** Danh sách TỦ ĐỒ: đang mặc (trừ mặt/mắt 30/40 như tab cũ) +
+     *  đồ mặc được trong giỏ (zOrder >= 0), đã qua LỌC + SẮP XẾP. */
+    private java.util.List<InvItem> closetList() {
         java.util.List<InvItem> out = new ArrayList<>();
+        java.util.Set<Integer> seen = new java.util.HashSet<>();
         for (int id : playerParts) {
             com.avatardk.game.data.PartData pd = game.data.part(id);
             if (pd == null || pd.zorder == 30 || pd.zorder == 40) continue;
+            if (!seen.add(id)) continue;
             out.add(new InvItem(id, 0, wornExpire.get(id)));
         }
+        for (InvItem it : bagItems) {
+            com.avatardk.game.data.PartData pd = game.data.part(it.partId);
+            if (pd == null || pd.zorder < 0) continue;
+            if (!seen.add(it.partId)) continue;
+            out.add(it);
+        }
+        if (closetFilter >= 0) {
+            java.util.List<InvItem> f = new ArrayList<>();
+            for (InvItem it : out) {
+                com.avatardk.game.data.PartData pd = game.data.part(it.partId);
+                if (pd != null && shopCategory(pd) == closetFilter) f.add(it);
+            }
+            out = f;
+        }
+        if (closetSort == 1) {
+            out.sort((a, b) -> {
+                com.avatardk.game.data.PartData pa = game.data.part(a.partId);
+                com.avatardk.game.data.PartData pb = game.data.part(b.partId);
+                String na = pa != null ? pa.name : "", nb = pb != null ? pb.name : "";
+                return na.compareTo(nb);
+            });
+        } else if (closetSort == 2) {
+            out.sort((a, b) -> Integer.compare(expireDays(a.expire), expireDays(b.expire)));
+        }
         return out;
+    }
+
+    private java.util.List<InvItem> invList(boolean chest) {
+        if (bagTab == 0) return bagItems;
+        return closetList();
     }
 
     private static InvItem removeInvItem(java.util.List<InvItem> list, int partId) {
@@ -9466,7 +9526,12 @@ public class WorldScreen extends ScreenAdapter {
 
     /** Nhãn nút hành động của panel giỏ theo tab đang xem. */
     private String[] invActions(boolean chest) {
-        return bagTab == 0 ? new String[]{"Dùng", "Xoá"} : new String[]{"Cất đồ", "Xoá"};
+        if (bagTab == 0) return new String[]{"Dùng", "Xoá"};
+        java.util.List<InvItem> items = invList(false);
+        if (!items.isEmpty() && bagSel < items.size() && isWorn(items.get(bagSel).partId)) {
+            return new String[]{"Cất đồ", "Xoá"};
+        }
+        return new String[]{"Mặc", "Xoá"};
     }
 
     /** Chạm vào nút hành động: mở hộp xác nhận đúng câu hỏi của gốc.
@@ -9493,15 +9558,19 @@ public class WorldScreen extends ScreenAdapter {
         InvItem it = items.get(sel);
         confirmPart = it.partId;
         confirmIndex = sel;
+        confirmWorn = bagTab == 1 && isWorn(it.partId);
         if (btn == 1) {
             confirmAction = 3;
             confirmText = "Bỏ món đồ này ?";
         } else if (bagTab == 0) {
             confirmAction = 1;
             confirmText = "Sử dụng vật phẩm này ?";
-        } else {
+        } else if (confirmWorn) {
             confirmAction = 2;
-            confirmText = "Bỏ món đồ này vào giỏ ?";
+            confirmText = "Cất món đồ này vào giỏ ?";
+        } else {
+            confirmAction = 1;
+            confirmText = "Mặc món đồ này ?";
         }
     }
 
@@ -9521,7 +9590,7 @@ public class WorldScreen extends ScreenAdapter {
                     AvatarProtocol.usingPart(game.connection, part, 0);
                     break;
                 case 3: {
-                    boolean worn = bagTab == 1;
+                    boolean worn = bagTab == 1 && confirmWorn;
                     AvatarProtocol.removeItem(game.connection, part, worn ? 0 : 1);
                     if (worn) {
                         if (playerParts.remove((Integer) part)) {
@@ -9552,6 +9621,105 @@ public class WorldScreen extends ScreenAdapter {
         }
     }
 
+    /** Lưới TỦ ĐỒ (tab 2 của panel Giỏ): hàng chip LỌC theo nhóm,
+     *  cột trái là doll XEM TRƯỚC theo món đang chọn (gộp món chọn
+     *  vào bộ đang mặc như sân khấu thử đồ của shop), lưới 5 x 2
+     *  có phân trang; ô đang mặc viền xanh + huy hiệu "Mặc". */
+    private void drawClosetGrid(float px, float py,
+            java.util.List<InvItem> items, int sel) {
+        float tabY = py + INV_H - 108;
+        // hàng lọc
+        String[] filters = {"Tất cả", "Áo", "Quần", "Tóc", "Nón",
+            "Trang sức", "Phương tiện", "Khác"};
+        float fy = tabY - 46, fw = 76, fh = 30, fgap = 5;
+        for (int i = 0; i < filters.length; i++) {
+            float fx = px + 28 + i * (fw + fgap);
+            boolean act = closetFilter == i - 1;
+            batch.draw(Ui.roundedRect((int) fw, (int) fh, 10,
+                act ? new Color(0.25f, 0.45f, 0.65f, 0.95f) : new Color(0f, 0f, 0f, 0.30f),
+                GLASS_RIM), fx, fy);
+            Ui.centered(batch, Ui.fontTiny, truncTo(Ui.fontTiny, filters[i], fw - 8),
+                fx + fw / 2f, fy + 20,
+                act ? Color.WHITE : new Color(1f, 1f, 1f, 0.65f));
+        }
+        // cột trái: sân khấu doll xem trước
+        float stX = px + 28, stW = 150, stBot = py + 96;
+        float gridTopC = py + INV_H - 180;
+        batch.draw(Ui.roundedRect((int) stW, (int) (gridTopC - stBot), 14,
+            new Color(0.10f, 0.16f, 0.23f, 0.9f), GLASS_RIM), stX, stBot);
+        batch.setColor(0f, 0f, 0f, 0.35f);
+        batch.draw(circleTexture(), stX + stW / 2f - 52, stBot + 10, 104, 18);
+        batch.setColor(Color.WHITE);
+        if (!items.isEmpty() && sel < items.size()) {
+            refreshClosetDoll(items.get(sel).partId);
+            if (closetDoll != null) {
+                game.dollRenderer.draw(batch, closetDoll, 0,
+                    stX + stW / 2f, stBot + 16, 3.4f, false);
+            }
+        }
+        // lưới 5 x 2 (10 món/trang)
+        float gx = px + 28 + 166;
+        int cols = 5, cell = 84, gap = 10;
+        int pages = Math.max(1, (items.size() + 9) / 10);
+        if (closetPage >= pages) closetPage = pages - 1;
+        int base = closetPage * 10;
+        for (int idx = 0; idx < 10; idx++) {
+            int gi = base + idx;
+            int col = idx % cols, row = idx / cols;
+            float cx = gx + col * (cell + gap);
+            float cy = gridTopC - (row + 1) * cell - row * gap;
+            boolean has = gi < items.size();
+            boolean isSel = has && gi == sel;
+            boolean worn = has && isWorn(items.get(gi).partId);
+            batch.draw(Ui.roundedRect(cell, cell, 12,
+                has ? new Color(0.16f, 0.24f, 0.34f, 0.9f) : new Color(0f, 0f, 0f, 0.18f),
+                isSel ? new Color(1f, 0.78f, 0.30f, 1f)
+                    : worn ? new Color(0.35f, 0.85f, 0.45f, 1f) : GLASS_RIM), cx, cy);
+            if (has) {
+                drawPartIcon(items.get(gi).partId, cx + cell / 2f, cy + cell / 2f, 58);
+                if (worn) {
+                    batch.draw(Ui.roundedRect(40, 18, 6,
+                        new Color(0.20f, 0.55f, 0.28f, 0.95f), GLASS_RIM), cx + 5, cy + cell - 23);
+                    Ui.centered(batch, Ui.fontTiny, "Mặc", cx + 25, cy + cell - 10, Color.WHITE);
+                }
+            }
+        }
+        // hàng phân trang dưới lưới
+        if (pages > 1) {
+            float py2 = py + 100;
+            batch.draw(Ui.roundedRect(44, 32, 10, Ui.BTN_CANCEL, GLASS_RIM), gx, py2);
+            Ui.faIcon(batch, Ui.fa20, Ui.FA_ARROW_LEFT, gx + 22, py2 + 17, Color.WHITE);
+            batch.draw(Ui.roundedRect(44, 32, 10, Ui.BTN_CANCEL, GLASS_RIM),
+                gx + cols * cell + (cols - 1) * gap - 44, py2);
+            Ui.faIcon(batch, Ui.fa20, Ui.FA_ARROW_RIGHT,
+                gx + cols * cell + (cols - 1) * gap - 22, py2 + 17, Color.WHITE);
+            Ui.centered(batch, Ui.fontSmall, "Trang " + (closetPage + 1) + "/" + pages,
+                gx + (cols * cell + (cols - 1) * gap) / 2f, py2 + 21,
+                new Color(1f, 1f, 1f, 0.85f));
+        }
+    }
+
+    /** Dựng doll xem trước của tủ: bộ đang mặc gộp món đang chọn
+     *  (thay part cùng zOrder) — chỉ hiển thị, không gửi server. */
+    private void refreshClosetDoll(int partId) {
+        if (closetDollKey == partId && closetDoll != null) return;
+        closetDollKey = partId;
+        com.avatardk.game.data.PartData selPd = game.data.part(partId);
+        java.util.List<Integer> parts = new ArrayList<>();
+        boolean replaced = false;
+        for (int id : playerParts) {
+            com.avatardk.game.data.PartData pd = game.data.part(id);
+            if (selPd != null && pd != null && pd.zorder == selPd.zorder && id != partId) {
+                parts.add(partId);
+                replaced = true;
+            } else {
+                parts.add(id);
+            }
+        }
+        if (!replaced && !parts.contains(partId)) parts.add(partId);
+        closetDoll = game.newDoll(parts);
+    }
+
     private void drawInvPanel(boolean chest) {
         java.util.List<InvItem> items = invList(false);
         int sel = bagSel;
@@ -9572,7 +9740,7 @@ public class WorldScreen extends ScreenAdapter {
         // tabs; cuối hàng tab là sức chứa của phía đang xem.
         // Tab 3 "Rương phụ" không phải tab nội dung mà là nút chuyển
         // sang panel rương song song (chestMode = 1, gói −118).
-        String[] tabs = {"Giỏ đồ", "Đang mặc", "Rương phụ"};
+        String[] tabs = {"Giỏ đồ", "Tủ đồ", "Rương phụ"};
         float tabY = py + INV_H - 108;
         for (int i = 0; i < 3; i++) {
             float tx = px + 28 + i * 162;
@@ -9582,25 +9750,37 @@ public class WorldScreen extends ScreenAdapter {
             Ui.centered(batch, Ui.fontSmall, tabs[i], tx + 75, tabY + 25,
                 act ? Color.WHITE : new Color(1f, 1f, 1f, 0.65f));
         }
-        String cap = bagTab == 1
-            ? "Đang mặc: " + items.size() + " món"
-            : "Sức chứa: " + items.size() + "/" + bagCapacity + " ô";
-        layout.setText(Ui.fontSmall, cap);
-        Ui.fontSmall.setColor(1f, 1f, 1f, 0.85f);
-        Ui.fontSmall.draw(batch, cap, px + INV_W - 28 - layout.width, tabY + 25);
-        // lưới ô đồ 7 × 3
-        float gridTop = py + INV_H - 128;
-        int cols = 7, cell = 84, gap = 10;
-        for (int idx = 0; idx < cols * 3; idx++) {
-            int col = idx % cols, row = idx / cols;
-            float cx = px + 28 + col * (cell + gap);
-            float cy = gridTop - (row + 1) * cell - row * gap;
-            boolean has = idx < items.size();
-            boolean isSel = has && idx == sel;
-            batch.draw(Ui.roundedRect(cell, cell, 12,
-                has ? new Color(0.16f, 0.24f, 0.34f, 0.9f) : new Color(0f, 0f, 0f, 0.18f),
-                isSel ? new Color(1f, 0.78f, 0.30f, 1f) : GLASS_RIM), cx, cy);
-            if (has) drawPartIcon(items.get(idx).partId, cx + cell / 2f, cy + cell / 2f, 58);
+        if (bagTab == 1) {
+            // tab Tủ đồ: cuối hàng tab là nút SẮP XẾP (xoay 3 chế độ)
+            String[] sortNames = {"Mặc định", "Tên A-Z", "Hạn dùng"};
+            float sw = 196;
+            batch.draw(Ui.roundedRect((int) sw, 38, 12, Ui.BTN_CANCEL, GLASS_RIM),
+                px + INV_W - 28 - sw, tabY);
+            Ui.centered(batch, Ui.fontSmall, "Sắp xếp: " + sortNames[closetSort],
+                px + INV_W - 28 - sw / 2f, tabY + 25, Color.WHITE);
+        } else {
+            String cap = "Sức chứa: " + items.size() + "/" + bagCapacity + " ô";
+            layout.setText(Ui.fontSmall, cap);
+            Ui.fontSmall.setColor(1f, 1f, 1f, 0.85f);
+            Ui.fontSmall.draw(batch, cap, px + INV_W - 28 - layout.width, tabY + 25);
+        }
+        if (bagTab == 1) {
+            drawClosetGrid(px, py, items, sel);
+        } else {
+            // lưới ô đồ 7 × 3
+            float gridTop = py + INV_H - 128;
+            int cols = 7, cell = 84, gap = 10;
+            for (int idx = 0; idx < cols * 3; idx++) {
+                int col = idx % cols, row = idx / cols;
+                float cx = px + 28 + col * (cell + gap);
+                float cy = gridTop - (row + 1) * cell - row * gap;
+                boolean has = idx < items.size();
+                boolean isSel = has && idx == sel;
+                batch.draw(Ui.roundedRect(cell, cell, 12,
+                    has ? new Color(0.16f, 0.24f, 0.34f, 0.9f) : new Color(0f, 0f, 0f, 0.18f),
+                    isSel ? new Color(1f, 0.78f, 0.30f, 1f) : GLASS_RIM), cx, cy);
+                if (has) drawPartIcon(items.get(idx).partId, cx + cell / 2f, cy + cell / 2f, 58);
+            }
         }
         // thanh dưới: món đang chọn + nút hành động
         float by = py + 22;
@@ -9616,7 +9796,10 @@ public class WorldScreen extends ScreenAdapter {
             Ui.fontSmall.draw(batch, pd != null ? pd.name : ("Vật phẩm #" + cur.partId), px + 100, by + 44);
             Ui.fontTiny.setColor(1f, 1f, 1f, 0.72f);
             String exp = cur.expire == null || cur.expire.isEmpty() ? "Vĩnh viễn" : cur.expire;
-            Ui.fontTiny.draw(batch, "Hạn dùng: " + exp, px + 100, by + 20);
+            String line2 = bagTab == 1
+                ? (isWorn(cur.partId) ? "Đang mặc · Hạn dùng: " : "Trong giỏ · Hạn dùng: ") + exp
+                : "Hạn dùng: " + exp;
+            Ui.fontTiny.draw(batch, line2, px + 100, by + 20);
             String[] acts = invActions(false);
             for (int i = 0; i < acts.length; i++) {
                 float bx = px + INV_W - 28 - (acts.length - i) * 132 + 12;
@@ -9815,8 +9998,70 @@ public class WorldScreen extends ScreenAdapter {
                 return;
             }
         }
-        // lưới ô
         java.util.List<InvItem> items = invList(false);
+        if (bagTab == 1) {
+            // nút Sắp xếp ở cuối hàng tab
+            float sw = 196;
+            if (x >= px + INV_W - 28 - sw && x <= px + INV_W - 28
+                    && y >= tabY && y <= tabY + 38) {
+                closetSort = (closetSort + 1) % 3;
+                closetPage = 0;
+                bagSel = 0;
+                return;
+            }
+            // hàng chip Lọc
+            float fy = tabY - 46, fw = 76, fh = 30, fgap = 5;
+            for (int i = 0; i < 8; i++) {
+                float fx = px + 28 + i * (fw + fgap);
+                if (x >= fx && x <= fx + fw && y >= fy && y <= fy + fh) {
+                    closetFilter = i - 1;
+                    closetPage = 0;
+                    bagSel = 0;
+                    return;
+                }
+            }
+            // lưới tủ 5 x 2 + phân trang (khớp drawClosetGrid)
+            float gx = px + 28 + 166;
+            float gridTopC = py + INV_H - 180;
+            int cols = 5, cell = 84, gap = 10;
+            int pages = Math.max(1, (items.size() + 9) / 10);
+            if (closetPage >= pages) closetPage = pages - 1;
+            if (pages > 1 && y >= py + 100 && y <= py + 132) {
+                float gridW = cols * cell + (cols - 1) * gap;
+                if (x >= gx && x <= gx + 44) {
+                    if (closetPage > 0) { closetPage--; bagSel = closetPage * 10; }
+                    return;
+                }
+                if (x >= gx + gridW - 44 && x <= gx + gridW) {
+                    if (closetPage < pages - 1) { closetPage++; bagSel = closetPage * 10; }
+                    return;
+                }
+            }
+            for (int idx = 0; idx < 10; idx++) {
+                int gi = closetPage * 10 + idx;
+                int col = idx % cols, row = idx / cols;
+                float cx = gx + col * (cell + gap);
+                float cy = gridTopC - (row + 1) * cell - row * gap;
+                if (x >= cx && x <= cx + cell && y >= cy && y <= cy + cell) {
+                    if (gi < items.size()) bagSel = gi;
+                    return;
+                }
+            }
+            // nút hành động ở thanh dưới (dùng chung đoạn dưới)
+            if (!items.isEmpty() && bagSel < items.size()) {
+                String[] acts = invActions(false);
+                float by = py + 22;
+                for (int i = 0; i < acts.length; i++) {
+                    float bx = px + INV_W - 28 - (acts.length - i) * 132 + 12;
+                    if (x >= bx && x <= bx + 120 && y >= by + 13 && y <= by + 53) {
+                        invActionTapped(false, i, 0);
+                        return;
+                    }
+                }
+            }
+            return;
+        }
+        // lưới ô
         float gridTop = py + INV_H - 128;
         int cols = 7, cell = 84, gap = 10;
         for (int idx = 0; idx < cols * 3; idx++) {
@@ -24014,6 +24259,21 @@ public class WorldScreen extends ScreenAdapter {
         shopNewFlow = true;
         myXu = 100000;
         openBill();
+    }
+
+    /** Sân khấu chụp TỦ ĐỒ: tab Tủ đồ của panel Giỏ với dữ liệu
+     *  mẫu của debugOpenBag, chọn sẵn một món trong giỏ để doll
+     *  xem trước gộp món đó. */
+    public void debugOpenCloset() {
+        debugCloseHubGames();
+        closeOtherPanels();
+        debugOpenBag();
+        bagTab = 1;
+        closetFilter = -1;
+        closetSort = 0;
+        closetPage = 0;
+        closetDollKey = -1;
+        bagSel = 3;
     }
 
     /** Sân khấu chụp RƯƠNG PHỤ: panel song song Giỏ | Rương phụ
