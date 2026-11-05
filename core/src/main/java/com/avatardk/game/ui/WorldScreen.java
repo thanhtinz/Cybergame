@@ -9448,14 +9448,8 @@ public class WorldScreen extends ScreenAdapter {
             Ui.fontSmall.setColor(1f, 1f, 1f, 0.78f);
             Ui.fontSmall.draw(batch, jd, px + CP_W - 70 - layout.width, avCy + 14);
         }
-        // bên phải hàng cấp: "Người yêu: <tên>" — chưa có thì để trống
-        if (partnerName != null) {
-            String rel = (partnerRel != null && !partnerRel.isEmpty() ? partnerRel : "Người yêu")
-                + ": " + partnerName;
-            layout.setText(Ui.fontSmall, rel);
-            Ui.fontSmall.setColor(1f, 0.75f, 0.85f, 1f);
-            Ui.fontSmall.draw(batch, rel, px + CP_W - 70 - layout.width, avCy - 18);
-        }
+        // (đã bỏ dòng "<quan hệ>: <tên người yêu>" ở header —
+        // thông tin cặp đôi chỉ nằm ở tab Cặp Đôi theo lệnh Tín)
         // nút đóng: ô vuông đỏ nằm TRONG góc phải trên như panel Bạn bè
         batch.draw(Ui.roundedRect(36, 36, 10, Ui.BTN_CLOSE, GLASS_RIM), px + CP_W - 54, py + CP_H - 54);
         Ui.faIcon(batch, Ui.fa20, Ui.FA_XMARK, px + CP_W - 36, py + CP_H - 36,
