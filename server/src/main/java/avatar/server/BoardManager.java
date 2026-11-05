@@ -64,13 +64,32 @@ public class BoardManager {
             boardList.add(board);
             System.out.println("create board : " + board.boardID);
         }
+        // Bàn Tiến Lên (gameType 3): id 30–35, 4 ghế [PORT].
+        for (int i = 0; i < 6; i++) {
+            BoardInfo board = new BoardInfo();
+            board.boardID = (byte) (30 + i);
+            board.gameType = 3;
+            board.seatCap = 4;
+            board.nPlayer = 0;
+            board.maxPlayer = 4;
+            board.isPass = false;
+            board.isPlaying = false;
+            board.money = 0;
+            board.strMoney = "1000";
+            boardList.add(board);
+            System.out.println("create board TL : " + board.boardID);
+        }
     }
 
     /** [PORT] Tạo bàn mới, id chạy tiếp sau bàn lớn nhất hiện có.
-     *  Tối đa 30 bàn tất cả; quá thì trả null. */
+     *  Tối đa 60 bàn tất cả; quá thì trả null. */
     public BoardInfo createBoard() {
+        return createBoard(22);
+    }
+
+    public BoardInfo createBoard(int gameType) {
         synchronized (this) {
-            if (boardList.size() >= 30) {
+            if (boardList.size() >= 60) {
                 return null;
             }
             int next = 0;
@@ -79,8 +98,11 @@ public class BoardManager {
             }
             BoardInfo board = new BoardInfo();
             board.boardID = (byte) next;
+            board.gameType = gameType;
+            board.dynamic = true;
+            board.seatCap = gameType == 3 ? 4 : 5;
             board.nPlayer = 0;
-            board.maxPlayer = 5;
+            board.maxPlayer = (byte) board.seatCap;
             board.isPass = false;
             board.isPlaying = false;
             board.money = 0;
@@ -91,10 +113,10 @@ public class BoardManager {
         }
     }
 
-    /** [PORT] Bàn tự tạo (id >= 6) đã trống thì dọn khỏi danh sách. */
+    /** [PORT] Bàn tự tạo đã trống thì dọn khỏi danh sách. */
     public void cleanupEmptyDynamic(BoardInfo board) {
         synchronized (this) {
-            if (board != null && board.boardID >= 6 && board.presentCount() == 0) {
+            if (board != null && board.dynamic && board.presentCount() == 0) {
                 boardList.remove(board);
             }
         }

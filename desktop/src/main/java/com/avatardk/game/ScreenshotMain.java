@@ -1225,6 +1225,24 @@ public class ScreenshotMain {
                         }
                         if (frame == 15) {
                             shot("shot-race-win.png");
+                            stage = 129; frame = 0;
+                        }
+                        break;
+                    case 129: // Tiến Lên: bàn đang giữa ván
+                        if (frame == 1) {
+                            world.debugTlBoard();
+                        }
+                        if (frame == 15) {
+                            shot("shot-tl-board.png");
+                            stage = 130; frame = 0;
+                        }
+                        break;
+                    case 130: // Tiến Lên: kết quả ván
+                        if (frame == 1) {
+                            world.debugTlResult();
+                        }
+                        if (frame == 15) {
+                            shot("shot-tl-result.png");
                             stage = 121; frame = 0;
                         }
                         break;

@@ -12,6 +12,7 @@ import java.util.concurrent.TimeUnit;
 import avatar.constants.Cmd;
 import avatar.item.Item;
 import avatar.message.minigame.BauCuaMsgHandler;
+import avatar.minigame.TienLenEngine;
 import avatar.model.BoardInfo;
 import avatar.model.User;
 import avatar.network.Message;
@@ -42,6 +43,8 @@ import avatar.server.Utils;
  */
 public class CasinoMsgHandler extends MessageHandler {
     private final BauCuaMsgHandler service;
+    /** Game casino phiên này đang mở: 22 Bầu Cua · 3 Tiến Lên. */
+    private int casinoGame = 22;
 
     /** Giây cho pha đặt cược và cho từng lượt tả (số của server fan). */
     private static final byte PHASE_TIME = 10;
@@ -61,7 +64,10 @@ public class CasinoMsgHandler extends MessageHandler {
         try {
             switch (mss.getCommand()) {
                 case 61:
-                    service.joinCasino(mss);
+                    joinCasino(mss);
+                    break;
+                case 53: // FORCE_FINISH — chỉ Tiến Lên
+                    forceFinishTl();
                     break;
                 case Cmd.REQUEST_ROOMLIST:
                     requestRoomList();
@@ -116,6 +122,29 @@ public class CasinoMsgHandler extends MessageHandler {
         }
     }
 
+    /** Chọn game casino (gói 61 {byte gameType}): nhận 22 Bầu Cua
+     *  và 3 Tiến Lên; game khác báo chưa mở như trước. */
+    private void joinCasino(Message ms) throws IOException {
+        int gameType = ms.reader().available() > 0 ? ms.reader().readByte() : 22;
+        if (gameType != 22 && gameType != 3) {
+            this.client.user.getAvatarService().serverDialog("Game casino này chưa mở");
+            return;
+        }
+        casinoGame = gameType;
+        Message out = new Message(61);
+        out.writer().writeByte(gameType);
+        out.writer().flush();
+        this.client.user.sendMessage(out);
+    }
+
+    private void forceFinishTl() {
+        if (this.client.user == null) return;
+        BoardInfo board = BoardManager.getInstance().findUserBoard(this.client.user);
+        if (board == null || board.gameType != 3) return;
+        TienLenEngine.forceFinish(this.client, board,
+            (byte) this.client.user.getRoomID());
+    }
+
     // ------------------------------------------------------------------
     // Tiện ích
     // ------------------------------------------------------------------
@@ -167,8 +196,9 @@ public class CasinoMsgHandler extends MessageHandler {
     private void requestRoomList() throws IOException {
         Message ms = new Message(Cmd.REQUEST_ROOMLIST);
         DataOutputStream ds = ms.writer();
+        int roomBase = casinoGame == 3 ? 46 : 43; // TL: phòng 46–48 [PORT]
         for (int i = 0; i < 3; i++) {
-            ds.writeByte(43 + i); // id phòng (số của server fan)
+            ds.writeByte(roomBase + i); // id phòng (số của server fan)
             ds.writeByte(1);      // roomFree
             ds.writeByte(i);      // roomWait
             ds.writeByte(i);      // lv
@@ -183,10 +213,12 @@ public class CasinoMsgHandler extends MessageHandler {
         DataOutputStream ds = ms.writer();
         ds.writeByte(roomID);
         for (BoardInfo a : BoardManager.getInstance().boardList) {
+            if (a.gameType != casinoGame) continue;
             ds.writeByte(a.boardID);
             // byte đóng gói của gốc: nPlayer = v % 16, maxPlayer = v / 16
-            ds.writeByte(a.presentCount() + (5 << 4));
-            int flags = (a.isPass ? 1 : 0) | (a.phase != 0 ? 2 : 0);
+            ds.writeByte(a.presentCount() + (a.seatCap << 4));
+            boolean playing = a.gameType == 3 ? a.tl.playing : a.phase != 0;
+            int flags = (a.isPass ? 1 : 0) | (playing ? 2 : 0);
             ds.writeByte(flags);
             ds.writeInt(a.getMoney());
         }
@@ -209,7 +241,7 @@ public class CasinoMsgHandler extends MessageHandler {
             // [PORT] Tạo bàn mới: bản gốc không có gói tạo bàn riêng (vào
             // bàn trống là thành chủ bàn); bản port cho client gửi
             // boardID −1, server cấp một bàn trắng mới rồi vào ngay.
-            board = BoardManager.getInstance().createBoard();
+            board = BoardManager.getInstance().createBoard(casinoGame);
             if (board == null) {
                 us.getAvatarService().serverDialog("Đã đạt số bàn tối đa — hãy vào một bàn có sẵn");
                 return;
@@ -232,7 +264,7 @@ public class CasinoMsgHandler extends MessageHandler {
                     us.getAvatarService().serverDialog("Mật khẩu bàn không đúng");
                     return;
                 }
-                if (board.presentCount() >= 5) {
+                if (board.presentCount() >= board.seatCap) {
                     us.getAvatarService().serverDialog("Bàn đã đầy");
                     return;
                 }
@@ -262,7 +294,7 @@ public class CasinoMsgHandler extends MessageHandler {
                 }
             }
 
-            // Gói vào bàn cho chính người vào: đủ 5 ghế theo thứ tự ghế.
+            // Gói vào bàn cho chính người vào: đủ ghế theo thứ tự ghế.
             Message msj = new Message(Cmd.JOIN_BOARD);
             DataOutputStream ds = msj.writer();
             ds.writeByte(roomID);
@@ -270,12 +302,12 @@ public class CasinoMsgHandler extends MessageHandler {
             User owner = board.owner();
             ds.writeInt(owner == null ? -1 : owner.getId());
             ds.writeInt(board.getMoney());
-            for (int s = 0; s < 5; s++) writeSeat(ds, board.seats[s], board);
+            for (int s = 0; s < board.seatCap; s++) writeSeat(ds, board.seats[s], board);
             ds.flush();
             us.sendMessage(msj);
 
-            // Vào giữa ván: gửi trạng thái ván để xem (không được đặt).
-            if (board.phase != 0) {
+            // Vào giữa ván Bầu Cua: gửi trạng thái ván để xem.
+            if (board.gameType == 22 && board.phase != 0) {
                 us.setToXong(true);
                 us.setHaPhom(true);
                 Message ms2 = new Message(Cmd.PLAYING);
@@ -327,6 +359,9 @@ public class CasinoMsgHandler extends MessageHandler {
             int seat = board.seatOf(us);
             if (seat < 0) return;
             boolean wasPlaying = board.phase != 0;
+            // Tiến Lên: người đang chơi rời giữa ván → huỷ ván trước
+            // khi gỡ ghế (engine cần ghế còn nguyên để tra tay bài).
+            if (board.gameType == 3) TienLenEngine.onLeave(board, roomID, us);
             board.removeUser(us);
 
             if (board.presentCount() == 0) {
@@ -335,6 +370,10 @@ public class CasinoMsgHandler extends MessageHandler {
                 board.turnSeat = -1;
                 board.seatSnap = null;
                 board.setPlaying(false);
+                if (board.gameType == 3) {
+                    board.tl.resetHand();
+                    board.tl.firstMatch = true;
+                }
                 BoardManager.getInstance().cleanupEmptyDynamic(board);
                 return;
             }
@@ -490,9 +529,11 @@ public class CasinoMsgHandler extends MessageHandler {
                 us.getAvatarService().serverDialog("Vui lòng đặt nhỏ hơn 100.000");
                 return;
             }
-            if (money < 0 || us.getXu() < (long) money * 48) {
+            // Bầu Cua cần dự trữ ×48 (đối ứng cả bàn); Tiến Lên ×8 [PORT].
+            long need = (long) money * (board.gameType == 3 ? 8 : 48);
+            if (money < 0 || us.getXu() < need) {
                 us.getAvatarService().serverDialog(
-                    "Để đặt được " + money + " thì bạn cần có số tiền là " + ((long) money * 48));
+                    "Để đặt được " + money + " thì bạn cần có số tiền là " + need);
                 return;
             }
             board.setMoney(money);
@@ -514,6 +555,10 @@ public class CasinoMsgHandler extends MessageHandler {
         byte boardID = rd.readByte();
         BoardInfo board = BoardManager.getInstance().find(boardID);
         if (board == null) return;
+        if (board.gameType == 3) { // Tiến Lên: engine riêng
+            TienLenEngine.start(this.client, board, roomID);
+            return;
+        }
         synchronized (board) {
             User owner = board.owner();
             if (owner == null || owner.getId() != us.getId()) return; // chỉ chủ bàn
@@ -579,6 +624,15 @@ public class CasinoMsgHandler extends MessageHandler {
         byte boardID = rd.readByte();
         BoardInfo board = BoardManager.getInstance().find(boardID);
         if (board == null) return;
+        if (board.gameType == 3) { // Tiến Lên: gói 21 = MOVE {n, cards}
+            int n = rd.available() > 0 ? rd.readByte() : 0;
+            byte[] cards = new byte[Math.max(0, n)];
+            for (int i = 0; i < cards.length; i++) {
+                cards[i] = rd.available() > 0 ? rd.readByte() : 0;
+            }
+            TienLenEngine.move(this.client, board, roomID, cards);
+            return;
+        }
         synchronized (board) {
             int seat = board.seatOf(us);
             if (board.phase != 1 || seat <= 0 || us.isToXong()) return;
@@ -737,6 +791,10 @@ public class CasinoMsgHandler extends MessageHandler {
         if (ms.reader().available() >= 2) {
             roomID = ms.reader().readByte();
             ms.reader().readByte(); // boardID (không cần, đã có bàn theo người)
+        }
+        if (board.gameType == 3) { // Tiến Lên: gói 49 = SKIP
+            TienLenEngine.skip(this.client, board, roomID);
+            return;
         }
         synchronized (board) {
             int seat = board.seatOf(us);

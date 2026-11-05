@@ -7,6 +7,15 @@ public class BoardInfo
 {
     public byte boardID;// id
 
+    /** Game của bàn: 22 = Bầu Cua · 3 = Tiến Lên (docs/tienlen-spec.md). */
+    public int gameType = 22;
+    /** Bàn do người chơi tự tạo (dọn khi trống). */
+    public boolean dynamic = false;
+    /** Số ghế dùng thật (Bầu Cua 5, Tiến Lên 4 trên mảng seats[5]). */
+    public int seatCap = 5;
+    /** Trạng thái ván Tiến Lên (chỉ dùng khi gameType == 3). */
+    public final avatar.minigame.TlState tl = new avatar.minigame.TlState();
+
     public byte nPlayer;//số người
 
     public byte maxPlayer;//max người
@@ -51,7 +60,7 @@ public class BoardInfo
     /** Vào bàn ở ghế trống thấp nhất; trả số ghế hoặc -1 khi đầy. */
     public synchronized int addUser(User u) {
         if (seatOf(u) >= 0) return seatOf(u);
-        for (int i = 0; i < seats.length; i++) {
+        for (int i = 0; i < seatCap; i++) {
             if (seats[i] == null) {
                 seats[i] = u;
                 syncUserList();
