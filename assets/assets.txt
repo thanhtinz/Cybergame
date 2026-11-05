@@ -623,6 +623,12 @@ i:house/img/871.png:house/img/871-064bd80ffe374461d25657c8c714442e.png:387:image
 i:house/img/872.png:house/img/872-52b484b8bfdfe34b6b5664636d966698.png:24909:image/png:1
 i:house/img/874.png:house/img/874-f31ea8d971d1fea3817491f71eab9eb0.png:29095:image/png:1
 i:house/img/1065.png:house/img/1065-fa5531da5d51109b21c667331de0e2c9.png:1064:image/png:1
+i:house/img/1056.png:house/img/1056-69af30d651b6aeb79214dc5adc7d841b.png:1918:image/png:1
+i:house/img/1057.png:house/img/1057-0ec92e67a72035bd7f65fa36e1a3f211.png:1535:image/png:1
+i:house/img/1058.png:house/img/1058-fb34171dd10f00ec4eb547fb3bd83ff9.png:947:image/png:1
+i:house/img/1059.png:house/img/1059-cef5ba6c2b8a5a7659562c0f2377e3ec.png:1158:image/png:1
+i:house/img/1060.png:house/img/1060-e2a30e92035934710e69bb4ddf49eef9.png:1884:image/png:1
+i:house/img/1061.png:house/img/1061-18a21109304e18188563f46a005c73dc.png:2138:image/png:1
 d:bgfull:bgfull:0:application/unknown:1
 i:bgfull/71.png:bgfull/71-937e79bbb7775f8be4edea6421b4eefe.png:73502:image/png:1
 i:bgfull/10.png:bgfull/10-a1d1e79a01bca1e37939abd7c1b6f658.png:170083:image/png:1
