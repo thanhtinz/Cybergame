@@ -1450,6 +1450,24 @@ public class ScreenshotMain {
                         }
                         if (frame == 15) {
                             shot("shot-closet.png");
+                            stage = 153; frame = 0;
+                        }
+                        break;
+                    case 153: // Giỏ có món chồng x12 + nút Tách
+                        if (frame == 1) {
+                            world.debugOpenSplit(false);
+                        }
+                        if (frame == 15) {
+                            shot("shot-split-bag.png");
+                            stage = 154; frame = 0;
+                        }
+                        break;
+                    case 154: // Hộp thoại Tách vật phẩm
+                        if (frame == 1) {
+                            world.debugOpenSplit(true);
+                        }
+                        if (frame == 15) {
+                            shot("shot-split-dialog.png");
                             stage = 121; frame = 0;
                         }
                         break;

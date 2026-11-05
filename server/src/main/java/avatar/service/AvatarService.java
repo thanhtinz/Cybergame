@@ -151,11 +151,44 @@ public class AvatarService extends Service {
             // Đuôi mở rộng của bản port: sức chứa giỏ (client gốc đọc hết
             // danh sách là dừng nên không ảnh hưởng).
             ds.writeByte(this.session.user.getChestSlot());
+            // Đuôi mở rộng 2 [PORT]: cờ 1 + số lượng từng món theo đúng
+            // thứ tự danh sách (phục vụ hiển thị chồng + tách chồng).
+            ds.writeByte(1);
+            for (Item item : chests) {
+                ds.writeByte(Math.min(127, item.getQuantity()));
+            }
             ds.flush();
             sendMessage(ms);
         } catch (IOException e) {
             logger.error("viewChest ", e);
         }
+    }
+
+    /** [PORT] Tách chồng vật phẩm trong giỏ (REMOVE_ITEM_STACK của
+     *  bản chính, gói -119): {short partId, short qty} — giảm số lượng
+     *  của chồng gốc và thêm một chồng mới cùng món vào giỏ. */
+    public void splitItem(Message ms) throws IOException {
+        short partId = ms.reader().readShort();
+        short qty = ms.reader().readShort();
+        avatar.item.Item target = null;
+        for (avatar.item.Item it : this.session.user.chests) {
+            if (it.getId() == partId && it.getQuantity() > qty) {
+                target = it;
+                break;
+            }
+        }
+        if (qty < 1 || target == null) {
+            serverDialog("Không tách được số lượng này.");
+            return;
+        }
+        if (this.session.user.chests.size() >= this.session.user.getChestSlot()) {
+            serverDialog("Giỏ đã đầy, không tách thêm được.");
+            return;
+        }
+        target.setQuantity(target.getQuantity() - qty);
+        this.session.user.chests.add(avatar.item.Item.builder()
+                .id(partId).quantity(qty).expired(target.getExpired()).build());
+        viewChest(this.session.user.chests);
     }
 
     public void chatTo(String sender, String content,int type) {

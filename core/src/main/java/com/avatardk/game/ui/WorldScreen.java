@@ -3903,11 +3903,28 @@ public class WorldScreen extends ScreenAdapter {
                     // MapScr.onContainer -> doStore)
                     java.io.DataInputStream r = m.reader();
                     int n = r.readShort();
-                    bagItems.clear();
+                    int[] cids = new int[n];
+                    int[] ctms = new int[n];
+                    String[] cexs = new String[n];
                     for (int i = 0; i < n; i++) {
-                        bagItems.add(new InvItem(r.readShort(), r.readByte(), r.readUTF()));
+                        cids[i] = r.readShort();
+                        ctms[i] = r.readByte();
+                        cexs[i] = r.readUTF();
                     }
+                    bagItems.clear();
                     if (r.available() >= 1) bagCapacity = r.readByte() & 0xFF;
+                    // đuôi mở rộng 2 [PORT]: cờ + số lượng từng món
+                    if (r.available() >= 1 + n) {
+                        r.readByte(); // cờ đuôi số lượng
+                        for (int i = 0; i < n; i++) {
+                            bagItems.add(new InvItem(cids[i], ctms[i], cexs[i],
+                                Math.max(1, r.readByte() & 0xFF)));
+                        }
+                    } else {
+                        for (int i = 0; i < n; i++) {
+                            bagItems.add(new InvItem(cids[i], ctms[i], cexs[i]));
+                        }
+                    }
                     bagTab = 0;
                     bagSel = 0;
                     chestPanel = false;
@@ -6842,9 +6859,16 @@ public class WorldScreen extends ScreenAdapter {
         }
     }
 
-    /** Số lượng tối đa chọn được trong hoá đơn (vật tiêu hao mới có). */
+    /** Số lượng tối đa chọn được trong hoá đơn (vật tiêu hao mới có).
+     *  Hạt/vật phẩm farm: trần 99 như server, đồng thời không vượt
+     *  khả năng chi của loại tiền đang chọn (maxNumBuy của gốc). */
     private int sbMaxQty() {
-        if (sbKind == SB_SEED || sbKind == SB_FARM_ITEM) return 20;
+        if (sbKind == SB_SEED || sbKind == SB_FARM_ITEM) {
+            int unit = sbUnitPrice();
+            if (unit <= 0) return 1;
+            long money = sbCur == 1 ? myXu : myLuong;
+            return Math.max(1, (int) Math.min(99, money / unit));
+        }
         if (sbKind == SB_FISH && (sbId == 443 || sbId == 447 || sbId == 448)) return 20;
         return 1;
     }
@@ -9200,10 +9224,15 @@ public class WorldScreen extends ScreenAdapter {
         final int partId;
         final int time;
         final String expire;
+        final int qty;
         InvItem(int partId, int time, String expire) {
+            this(partId, time, expire, 1);
+        }
+        InvItem(int partId, int time, String expire, int qty) {
             this.partId = partId;
             this.time = time;
             this.expire = expire;
+            this.qty = qty;
         }
     }
 
@@ -9226,6 +9255,9 @@ public class WorldScreen extends ScreenAdapter {
     private PaperDoll closetDoll;
     private int closetDollKey = -1;
     private boolean confirmWorn = false;
+    // Hộp thoại TÁCH CHỒNG [PORT theo DialogBuyManyItems.initSplitItem]
+    private boolean splitOpen = false;
+    private int splitPart = 0, splitQty = 1, splitMax = 1;
     /** Hạn dùng của đồ đang mặc theo partId (từ gói đăng nhập + khi mặc từ giỏ). */
     private final java.util.Map<Integer, String> wornExpire = new java.util.HashMap<>();
     private int bagCapacity = 20, chestCapacity = 20, chestLevel = 1;
@@ -9526,7 +9558,14 @@ public class WorldScreen extends ScreenAdapter {
 
     /** Nhãn nút hành động của panel giỏ theo tab đang xem. */
     private String[] invActions(boolean chest) {
-        if (bagTab == 0) return new String[]{"Dùng", "Xoá"};
+        if (bagTab == 0) {
+            java.util.List<InvItem> items = invList(false);
+            if (!items.isEmpty() && bagSel < items.size()
+                    && items.get(bagSel).qty > 1) {
+                return new String[]{"Dùng", "Tách", "Xoá"};
+            }
+            return new String[]{"Dùng", "Xoá"};
+        }
         java.util.List<InvItem> items = invList(false);
         if (!items.isEmpty() && bagSel < items.size() && isWorn(items.get(bagSel).partId)) {
             return new String[]{"Cất đồ", "Xoá"};
@@ -9559,7 +9598,15 @@ public class WorldScreen extends ScreenAdapter {
         confirmPart = it.partId;
         confirmIndex = sel;
         confirmWorn = bagTab == 1 && isWorn(it.partId);
-        if (btn == 1) {
+        String actName = invActions(false)[btn];
+        if ("Tách".equals(actName)) {
+            splitPart = it.partId;
+            splitMax = it.qty;
+            splitQty = Math.max(1, it.qty / 2);
+            splitOpen = true;
+            return;
+        }
+        if ("Xoá".equals(actName)) {
             confirmAction = 3;
             confirmText = "Bỏ món đồ này ?";
         } else if (bagTab == 0) {
@@ -9779,7 +9826,18 @@ public class WorldScreen extends ScreenAdapter {
                 batch.draw(Ui.roundedRect(cell, cell, 12,
                     has ? new Color(0.16f, 0.24f, 0.34f, 0.9f) : new Color(0f, 0f, 0f, 0.18f),
                     isSel ? new Color(1f, 0.78f, 0.30f, 1f) : GLASS_RIM), cx, cy);
-                if (has) drawPartIcon(items.get(idx).partId, cx + cell / 2f, cy + cell / 2f, 58);
+                if (has) {
+                    drawPartIcon(items.get(idx).partId, cx + cell / 2f, cy + cell / 2f, 58);
+                    if (items.get(idx).qty > 1) {
+                        String qs = "x" + items.get(idx).qty;
+                        float qw = Ui.textWidth(Ui.fontTiny, qs) + 12;
+                        batch.draw(Ui.roundedRect((int) qw, 20, 6,
+                            new Color(0f, 0f, 0f, 0.65f), GLASS_RIM),
+                            cx + cell - qw - 5, cy + 5);
+                        Ui.centered(batch, Ui.fontTiny, qs, cx + cell - qw / 2f - 5, cy + 19,
+                            new Color(1f, 0.90f, 0.55f, 1f));
+                    }
+                }
             }
         }
         // thanh dưới: món đang chọn + nút hành động
@@ -9798,7 +9856,7 @@ public class WorldScreen extends ScreenAdapter {
             String exp = cur.expire == null || cur.expire.isEmpty() ? "Vĩnh viễn" : cur.expire;
             String line2 = bagTab == 1
                 ? (isWorn(cur.partId) ? "Đang mặc · Hạn dùng: " : "Trong giỏ · Hạn dùng: ") + exp
-                : "Hạn dùng: " + exp;
+                : "Hạn dùng: " + exp + (cur.qty > 1 ? " · Số lượng: " + cur.qty : "");
             Ui.fontTiny.draw(batch, line2, px + 100, by + 20);
             String[] acts = invActions(false);
             for (int i = 0; i < acts.length; i++) {
@@ -9814,6 +9872,77 @@ public class WorldScreen extends ScreenAdapter {
             }
         }
         if (confirmText != null) drawInvConfirm();
+        if (splitOpen) drawSplitDialog();
+    }
+
+    /** Hộp thoại TÁCH CHỒNG: chọn số lượng tách ra thành chồng mới
+     *  (stepper - / + như hộp thoại Mua nhiều của bản chính). */
+    private void drawSplitDialog() {
+        float pw = 480, ph = 300, px = (Ui.W - pw) / 2f, py = (Ui.H - ph) / 2f, top = py + ph;
+        batch.setColor(0f, 0f, 0f, 0.45f);
+        batch.draw(whiteTex, 0, 0, Ui.W, Ui.H);
+        batch.setColor(Color.WHITE);
+        batch.draw(Ui.roundedRect((int) pw, (int) ph, 16,
+            new Color(0.08f, 0.13f, 0.20f, 0.98f), GLASS_RIM), px, py);
+        Ui.font.setColor(1f, 0.85f, 0.38f, 1f);
+        Ui.font.draw(batch, "Tách vật phẩm", px + 28, top - 30);
+        batch.draw(Ui.roundedRect(36, 36, 10, Ui.BTN_CLOSE, GLASS_RIM), px + pw - 54, top - 54);
+        Ui.faIcon(batch, Ui.fa20, Ui.FA_XMARK, px + pw - 36, top - 36,
+            new Color(0.9f, 0.93f, 1f, 1f));
+        com.avatardk.game.data.PartData pd = game.data.part(splitPart);
+        drawPartIcon(splitPart, px + 62, top - 108, 52);
+        Ui.font.setColor(1f, 1f, 1f, 0.97f);
+        Ui.font.draw(batch, truncTo(Ui.font, pd != null ? pd.name : ("Vật phẩm #" + splitPart), pw - 140),
+            px + 104, top - 92);
+        Ui.fontSmall.setColor(1f, 1f, 1f, 0.70f);
+        Ui.fontSmall.draw(batch, "Đang có: " + splitMax + " — tách ra một chồng mới",
+            px + 104, top - 122);
+        float rowY = top - 196;
+        Ui.fontSmall.setColor(1f, 1f, 1f, 0.85f);
+        Ui.fontSmall.draw(batch, "Số lượng tách", px + 28, rowY + 30);
+        batch.draw(Ui.roundedRect(48, 48, 12, Ui.BTN_CANCEL, GLASS_RIM), px + pw - 196, rowY);
+        Ui.faIcon(batch, Ui.fa20, Ui.FA_MINUS, px + pw - 172, rowY + 24, Color.WHITE);
+        Ui.centered(batch, Ui.font, String.valueOf(splitQty), px + pw - 116, rowY + 32, Color.WHITE);
+        batch.draw(Ui.roundedRect(48, 48, 12, Ui.BTN_CANCEL, GLASS_RIM), px + pw - 76, rowY);
+        Ui.faIcon(batch, Ui.fa20, Ui.FA_PLUS, px + pw - 52, rowY + 24, Color.WHITE);
+        batch.draw(Ui.gradientRect(200, 54, 12, EntryUi.ORANGE_TOP, EntryUi.ORANGE_BOT),
+            px + 24, py + 22);
+        Ui.centered(batch, Ui.font, "Tách", px + 124, py + 57, Color.WHITE);
+        batch.draw(Ui.roundedRect(200, 54, 12, Ui.BTN_CANCEL, GLASS_RIM), px + pw - 224, py + 22);
+        Ui.centered(batch, Ui.font, "Huỷ", px + pw - 124, py + 57, Color.WHITE);
+        Ui.font.setColor(Color.WHITE);
+    }
+
+    private void splitTouch(float x, float y) {
+        float pw = 480, ph = 300, px = (Ui.W - pw) / 2f, py = (Ui.H - ph) / 2f, top = py + ph;
+        if (x >= px + pw - 54 && x <= px + pw - 18 && y >= top - 54 && y <= top - 18) {
+            splitOpen = false;
+            return;
+        }
+        float rowY = top - 196;
+        if (y >= rowY && y <= rowY + 48) {
+            if (x >= px + pw - 196 && x <= px + pw - 148) {
+                splitQty = Math.max(1, splitQty - 1);
+            } else if (x >= px + pw - 76 && x <= px + pw - 28) {
+                splitQty = Math.min(splitMax - 1, splitQty + 1);
+            }
+            return;
+        }
+        if (y >= py + 22 && y <= py + 76) {
+            if (x >= px + 24 && x <= px + 224) {
+                splitOpen = false;
+                if (online()) {
+                    try {
+                        AvatarProtocol.splitItem(game.connection, splitPart, splitQty);
+                    } catch (IOException e) {
+                        addChatLog(TAB_SYSTEM, null, "Không tách được (mất kết nối?).", true);
+                    }
+                }
+            } else if (x >= px + pw - 224 && x <= px + pw - 24) {
+                splitOpen = false;
+            }
+            return;
+        }
     }
 
     // ===== RƯƠNG: HAI PANEL SONG SONG, KHÔNG TAB (chủ dự án chốt
@@ -9973,6 +10102,10 @@ public class WorldScreen extends ScreenAdapter {
     /** Xử lý chạm cho panel GIỎ (2 tab). Toạ độ khớp drawInvPanel. */
     private void invTouch(float x, float y) {
         float px = (Ui.W - INV_W) / 2f, py = (Ui.H - INV_H) / 2f;
+        if (splitOpen) {
+            splitTouch(x, y);
+            return;
+        }
         if (invConfirmTouch(x, y)) return;
         // nút đóng: ô vuông trong góc phải trên
         if (x >= px + INV_W - 54 && x <= px + INV_W - 18
@@ -24259,6 +24392,26 @@ public class WorldScreen extends ScreenAdapter {
         shopNewFlow = true;
         myXu = 100000;
         openBill();
+    }
+
+    /** Sân khấu chụp TÁCH CHỒNG: panel Giỏ chọn sẵn món có số
+     *  lượng 12 (hiện huy hiệu x12 + nút Tách); openDialog = true
+     *  thì mở luôn hộp thoại tách. */
+    public void debugOpenSplit(boolean openDialog) {
+        debugCloseHubGames();
+        closeOtherPanels();
+        debugOpenBag();
+        bagItems.add(new InvItem(446, 0, "", 12));
+        bagSel = bagItems.size() - 1;
+        bagTab = 0;
+        bagPanel = true;
+        chestPanel = false;
+        if (openDialog) {
+            splitPart = 446;
+            splitMax = 12;
+            splitQty = 5;
+            splitOpen = true;
+        }
     }
 
     /** Sân khấu chụp TỦ ĐỒ: tab Tủ đồ của panel Giỏ với dữ liệu

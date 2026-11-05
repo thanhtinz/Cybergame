@@ -74,6 +74,9 @@ public final class AvatarProtocol {
      *  3 CHANGEPASS {UTF cũ, UTF mới} · 4 TRANS {byte hướng, short id}
      *  · 5 UPGRADE {byte 0 hỏi/1 xác nhận} · 10 STATE (S->C). */
     public static final byte BOX = -118;
+    /** Tách chồng vật phẩm trong giỏ [PORT theo REMOVE_ITEM_STACK
+     *  của bản chính]: gói −119 {short partId, short qty}. */
+    public static final byte SPLIT_ITEM = -119;
     /** Xoá đồ: C→S {short idPart, byte type} (1 = trong giỏ, 0 = đang mặc);
      *  S→C {int id người, short idPart} (Cmd.REMOVE_ITEM của gốc). */
     public static final byte REMOVE_ITEM = -36;
@@ -497,6 +500,15 @@ public final class AvatarProtocol {
         java.io.DataOutputStream w = m.writer();
         w.writeByte(5);
         w.writeByte(type);
+        conn.send(m);
+    }
+
+    public static void splitItem(GameConnection conn, int partId, int qty)
+            throws IOException {
+        Msg m = new Msg(SPLIT_ITEM);
+        java.io.DataOutputStream w = m.writer();
+        w.writeShort(partId);
+        w.writeShort(qty);
         conn.send(m);
     }
 
