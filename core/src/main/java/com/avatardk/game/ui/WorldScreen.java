@@ -19736,12 +19736,46 @@ public class WorldScreen extends ScreenAdapter {
     // MAX_PER_ROW = 6 ô/hàng; icon 96, nhãn cách icon ICON_LABEL_GAP = 12,
     // dòng nhãn LABEL_LINE_H = 32, đệm dưới nhãn LABEL_BOTTOM_PAD = 24,
     // khoảng từ tab zone xuống lưới ANCHOR_GAP_ABOVE = 28.
-    // Zone 1 = game 1-2 (Aincrad, Trúc Xanh) · Zone 2 = game 3-5
-    // (Cờ Caro, Tàu Chiến, Snake) [phân zone là suy từ ZONE_1=2/ZONE_2=4].
+    // Phân zone theo lệnh Tín 2026-11-05: Khu vực 1 = 3 game casino
+    // (Bầu Cua · Tiến Lên · Phỏm — khung Casino riêng, mở thẳng),
+    // Khu vực 2 = cả 5 game của hub (Aincrad, Trúc Xanh, Caro,
+    // Tàu Chiến, Rắn Thang). [Bản chính suy từ ZONE_1=2/ZONE_2=4 —
+    // đã bị lệnh này thay.]
     private int mgZone; // zone đang xem ở màn chọn (0/1)
 
     private static int[] mgZoneGames(int zone) {
-        return zone == 0 ? new int[]{1, 2} : new int[]{3, 4, 5};
+        return zone == 0 ? new int[0] : new int[]{1, 2, 3, 4, 5};
+    }
+
+    /** Tên 3 game casino ở Khu vực 1, theo thứ tự thẻ. */
+    private static final String[] MG_CASINO_NAMES = {"Bầu Cua", "Tiến Lên", "Phỏm"};
+    private com.badlogic.gdx.graphics.g2d.TextureRegion[] mgCsIcons;
+
+    /** Icon thẻ casino: Bầu Cua = mặt xúc xắc (img 874 ô 0),
+     *  Tiến Lên = mặt lá bài 0, Phỏm = lưng lá bài. */
+    private com.badlogic.gdx.graphics.g2d.TextureRegion mgCasinoIcon(int i) {
+        if (mgCsIcons == null) mgCsIcons =
+            new com.badlogic.gdx.graphics.g2d.TextureRegion[3];
+        if (mgCsIcons[i] == null) {
+            if (i == 0) {
+                Texture t = house.imgTexture(874);
+                if (t != null) mgCsIcons[i] =
+                    new com.badlogic.gdx.graphics.g2d.TextureRegion(t, 0, 0, 108, 108);
+            } else {
+                Texture t = cardTexture(i == 1 ? 48 : -1);
+                if (t != null) mgCsIcons[i] =
+                    new com.badlogic.gdx.graphics.g2d.TextureRegion(t);
+            }
+        }
+        return mgCsIcons[i];
+    }
+
+    /** Mở game casino thứ i của Khu vực 1 (đóng hub trước). */
+    private void mgOpenCasino(int i) {
+        mgCloseHub();
+        if (i == 0) startCasinoBauCua();
+        else if (i == 1) startCasinoTienLen();
+        else startCasinoPhom();
     }
 
     private static String mgSelectIcon(int gameId) {
@@ -19772,6 +19806,35 @@ public class WorldScreen extends ScreenAdapter {
                 tx, top - 188);
             Ui.centered(batch, Ui.font, "Khu vực " + (z + 1), tx + 85, top - 159,
                 Color.WHITE);
+        }
+        if (mgZone == 0) {
+            for (int i = 0; i < MG_CASINO_NAMES.length; i++) {
+                float[] rc = mgSelectCell(i, px, top);
+                float cx = rc[0], cy = rc[1], cw = rc[2], ch = rc[3];
+                batch.setColor(Color.WHITE);
+                batch.draw(Ui.roundedRect((int) cw, (int) ch, 14,
+                    new Color(0.13f, 0.20f, 0.30f, 0.95f), GLASS_RIM), cx, cy);
+                com.badlogic.gdx.graphics.g2d.TextureRegion icon = mgCasinoIcon(i);
+                if (icon != null) {
+                    float iw = icon.getRegionWidth(), ih = icon.getRegionHeight();
+                    float sc = Math.min(96f / iw, 96f / ih);
+                    float dw = iw * sc, dh = ih * sc;
+                    batch.draw(icon, cx + cw / 2f - dw / 2f,
+                        cy + ch - 108 + (96 - dh) / 2f, dw, dh);
+                } else {
+                    batch.draw(Ui.roundedRect(72, 72, 14,
+                        new Color(0.45f, 0.30f, 0.12f, 1f), GLASS_RIM),
+                        cx + cw / 2f - 36, cy + ch - 96);
+                    Ui.centered(batch, Ui.fontTitle,
+                        MG_CASINO_NAMES[i].substring(0, 1), cx + cw / 2f,
+                        cy + ch - 46, Color.WHITE);
+                }
+                Ui.centered(batch, Ui.font, MG_CASINO_NAMES[i], cx + cw / 2f,
+                    cy + 76, new Color(1f, 1f, 1f, 0.97f));
+                Ui.centered(batch, Ui.fontSmall, "Chơi ngay", cx + cw / 2f,
+                    cy + 44, new Color(0.45f, 0.95f, 0.55f, 1f));
+                batch.setColor(Color.WHITE);
+            }
         }
         int[] games = mgZoneGames(mgZone);
         for (int i = 0; i < games.length; i++) {
@@ -19814,25 +19877,8 @@ public class WorldScreen extends ScreenAdapter {
             px + (MG_PW - 300) / 2f, py + 70);
         Ui.centered(batch, Ui.font, "Bảng xếp hạng", px + MG_PW / 2f, py + 104,
             Color.WHITE);
-        // Lối vào casino [PORT]: các game này thuộc khung Casino
-        // (handler 3) chứ không thuộc hub; cổng casino type 72–77 trên
-        // map hiện không còn trong dữ liệu lưới của bản port nên tạm
-        // vào từ đây — Tiến Lên (trái) + Phỏm (giữa) + Bầu Cua (phải).
-        batch.draw(Ui.roundedRect(292, 48, 11,
-            new Color(0.13f, 0.36f, 0.20f, 0.95f), GLASS_RIM),
-            px + MG_PW / 2f - 452, py + 14);
-        Ui.centered(batch, Ui.font, "Tiến Lên · Casino", px + MG_PW / 2f - 306, py + 48,
-            Color.WHITE);
-        batch.draw(Ui.roundedRect(292, 48, 11,
-            new Color(0.20f, 0.25f, 0.55f, 0.95f), GLASS_RIM),
-            px + MG_PW / 2f - 146, py + 14);
-        Ui.centered(batch, Ui.font, "Phỏm · Casino", px + MG_PW / 2f, py + 48,
-            Color.WHITE);
-        batch.draw(Ui.roundedRect(292, 48, 11,
-            new Color(0.45f, 0.16f, 0.16f, 0.95f), GLASS_RIM),
-            px + MG_PW / 2f + 160, py + 14);
-        Ui.centered(batch, Ui.font, "Bầu Cua · Casino", px + MG_PW / 2f + 306, py + 48,
-            Color.WHITE);
+        // (3 game casino đã chuyển lên thành thẻ ở Khu vực 1 theo
+        // lệnh Tín 2026-11-05 — không còn nút ở đáy panel.)
     }
 
     private void drawMgLobby(float px, float py, float top) {
@@ -20042,28 +20088,19 @@ public class WorldScreen extends ScreenAdapter {
                 mgRequestTop();
                 return true;
             }
-            // nút Tiến Lên · Casino (khung casino riêng, không qua hub)
-            if (x >= px + MG_PW / 2f - 452 && x <= px + MG_PW / 2f - 160
-                    && y >= py + 14 && y <= py + 62) {
-                mgCloseHub();
-                startCasinoTienLen();
+            // ô lưới của zone hiện tại: Khu vực 1 = thẻ casino
+            // (mở thẳng khung Casino), Khu vực 2 = game hub
+            if (mgZone == 0) {
+                for (int i = 0; i < MG_CASINO_NAMES.length; i++) {
+                    float[] rc = mgSelectCell(i, px, top);
+                    if (x >= rc[0] && x <= rc[0] + rc[2]
+                            && y >= rc[1] && y <= rc[1] + rc[3]) {
+                        mgOpenCasino(i);
+                        return true;
+                    }
+                }
                 return true;
             }
-            // nút Phỏm · Casino (khung casino riêng, không qua hub)
-            if (x >= px + MG_PW / 2f - 146 && x <= px + MG_PW / 2f + 146
-                    && y >= py + 14 && y <= py + 62) {
-                mgCloseHub();
-                startCasinoPhom();
-                return true;
-            }
-            // nút Bầu Cua · Casino (khung casino riêng, không qua hub)
-            if (x >= px + MG_PW / 2f + 160 && x <= px + MG_PW / 2f + 452
-                    && y >= py + 14 && y <= py + 62) {
-                mgCloseHub();
-                startCasinoBauCua();
-                return true;
-            }
-            // ô lưới game của zone hiện tại
             int[] games = mgZoneGames(mgZone);
             for (int i = 0; i < games.length; i++) {
                 float[] rc = mgSelectCell(i, px, top);
