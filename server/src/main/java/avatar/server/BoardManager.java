@@ -79,6 +79,21 @@ public class BoardManager {
             boardList.add(board);
             System.out.println("create board TL : " + board.boardID);
         }
+        // Bàn Phỏm (gameType 7): id 40–45, 4 ghế [PORT].
+        for (int i = 0; i < 6; i++) {
+            BoardInfo board = new BoardInfo();
+            board.boardID = (byte) (40 + i);
+            board.gameType = 7;
+            board.seatCap = 4;
+            board.nPlayer = 0;
+            board.maxPlayer = 4;
+            board.isPass = false;
+            board.isPlaying = false;
+            board.money = 0;
+            board.strMoney = "1000";
+            boardList.add(board);
+            System.out.println("create board Phom : " + board.boardID);
+        }
     }
 
     /** [PORT] Tạo bàn mới, id chạy tiếp sau bàn lớn nhất hiện có.
@@ -100,7 +115,7 @@ public class BoardManager {
             board.boardID = (byte) next;
             board.gameType = gameType;
             board.dynamic = true;
-            board.seatCap = gameType == 3 ? 4 : 5;
+            board.seatCap = (gameType == 3 || gameType == 7) ? 4 : 5;
             board.nPlayer = 0;
             board.maxPlayer = (byte) board.seatCap;
             board.isPass = false;

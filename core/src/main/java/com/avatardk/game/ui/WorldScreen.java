@@ -12330,7 +12330,9 @@ public class WorldScreen extends ScreenAdapter {
         CS_LEAVE = 15, CS_READY = 16, CS_SET_PASSWORD = 18, CS_SET_MONEY = 19,
         CS_START = 20, CS_BET_OK = 21, CS_RESULT = 37, CS_SKIP = 49, CS_FINISH = 51,
         CS_WIN = 60, CS_GAME_TYPE = 61, CS_PLAYING = 62, CS_TA = 65, CS_SET_TURN = 100,
-        CS_STOP = 50, CS_FORCE = 53, CS_ERROR = 54;
+        CS_STOP = 50, CS_FORCE = 53, CS_ERROR = 54,
+        CS_GET_CARD = 63, CS_EAT_CARD = 64, CS_ADD_CARD = 67, CS_DEN = 69,
+        CS_ONCE_WIN = 70;
     private static final String[] BC_DOORS = {"Nai", "Bầu", "Gà", "Cá", "Cua", "Tôm"};
     /** Dãy frame lăn của 3 viên xúc xắc (Xingau của gốc). */
     private static final int[][] BC_DICE_SEQ = {
@@ -12428,6 +12430,210 @@ public class WorldScreen extends ScreenAdapter {
         tlMustInclude0 = false;
     }
 
+    // ---- Phỏm / Tá lả (gameType 7; docs/phom-spec.md) ----
+    /** Ánh xạ value của client gốc: ảnh lá Phỏm c là lá Tiến Lên
+     *  PHOM_MAP[c/4] cùng chất (c%4). */
+    private static final int[] PHOM_MAP = {11, 12, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10};
+    private final java.util.List<Integer> phHand = new ArrayList<>();
+    private final java.util.Set<Integer> phSel = new java.util.HashSet<>();
+    private final java.util.Set<Integer> phLocked = new java.util.HashSet<>();
+    /** Phỏm đã ăn/hạ theo ghế; lá < 0 = lá úp (phỏm của đối thủ). */
+    private final java.util.List<java.util.List<Integer>> phMelds = new ArrayList<>();
+    /** Chồng bài đã đánh theo ghế (lá cuối = lá trên bàn hiện tại). */
+    private final java.util.List<java.util.List<Integer>> phDiscards = new ArrayList<>();
+    private final int[] phCounts = new int[4];
+    private int phTurnId = -1;
+    private int phPhase; // 0 chờ Ăn/Bốc · 1 chờ Hạ/Đánh
+    private int phTableCard = -1, phTableFromSeat = -1;
+    private boolean phPlaying, phStopped, phHaDone;
+    private int phMyFires;
+    /** id -> {score, dMoney}; score −2 cháy · −1 ù/đền. */
+    private final java.util.Map<Integer, int[]> phResults = new java.util.HashMap<>();
+    private final java.util.Map<Integer, java.util.List<Integer>> phRac =
+        new java.util.HashMap<>();
+    private String phStatus = "";
+    private String phBanner = "";
+    private int phDenWinnerId = -1;
+    private long phTurnEndMs;
+    private int phIntervalSecs = 30;
+    /** Nhóm lá mình vừa gửi Ăn, chờ gói 64 xác nhận để áp vào tay. */
+    private java.util.List<Integer> phPendingEat;
+
+    private int phomImgId(int card) {
+        return PHOM_MAP[card / 4] * 4 + card % 4;
+    }
+
+    private void drawPhomCard(float x, float y, float w, float h, int card) {
+        drawCard(x, y, w, h, card < 0 ? -1 : phomImgId(card));
+    }
+
+    private void phReset() {
+        phHand.clear();
+        phSel.clear();
+        phLocked.clear();
+        phMelds.clear();
+        phDiscards.clear();
+        for (int i = 0; i < 4; i++) {
+            phMelds.add(new ArrayList<>());
+            phDiscards.add(new ArrayList<>());
+            phCounts[i] = 0;
+        }
+        phResults.clear();
+        phRac.clear();
+        phTurnId = -1;
+        phPhase = 0;
+        phTableCard = -1;
+        phTableFromSeat = -1;
+        phPlaying = false;
+        phStopped = false;
+        phHaDone = false;
+        phMyFires = 0;
+        phStatus = "";
+        phBanner = "";
+        phDenWinnerId = -1;
+        phPendingEat = null;
+    }
+
+    /** Phỏm hợp lệ trên dãy đã sắp: sảnh cùng chất liên tiếp hoặc
+     *  ≥3 lá cùng value (đúng PhomRules phía server). */
+    private static boolean phIsPhom(java.util.List<Integer> g) {
+        if (g.size() < 3) return false;
+        boolean sanh = true, bala = true;
+        for (int i = 1; i < g.size(); i++) {
+            int a = g.get(i - 1), b = g.get(i);
+            if (b / 4 - a / 4 != 1 || b % 4 != a % 4) sanh = false;
+            if (b / 4 != a / 4) bala = false;
+        }
+        return sanh || bala;
+    }
+
+    /** Các nhóm phỏm chứa lá first trong phần còn lại (cửa sổ sảnh
+     *  3–5 lá + mọi tập con cùng value ≥3) — bản rút gọn của
+     *  PhomRules.phomsContaining phía server. */
+    private static void phGroupsWith(java.util.List<Integer> rest, int first,
+            java.util.List<java.util.List<Integer>> out) {
+        java.util.List<Integer> sameVal = new ArrayList<>();
+        for (int c : rest) if (c != first && c / 4 == first / 4) sameVal.add(c);
+        for (int mask = 0; mask < (1 << sameVal.size()); mask++) {
+            java.util.List<Integer> g = new ArrayList<>();
+            g.add(first);
+            for (int i = 0; i < sameVal.size(); i++) {
+                if ((mask & (1 << i)) != 0) g.add(sameVal.get(i));
+            }
+            if (g.size() >= 3) {
+                java.util.Collections.sort(g);
+                if (!out.contains(g)) out.add(g);
+            }
+        }
+        int fv = first / 4, fs = first % 4;
+        for (int lo = Math.max(0, fv - 4); lo <= fv; lo++) {
+            for (int hi = fv; hi <= Math.min(12, lo + 4); hi++) {
+                if (hi - lo + 1 < 3 || fv < lo || fv > hi) continue;
+                java.util.List<Integer> g = new ArrayList<>();
+                boolean ok = true;
+                for (int v = lo; v <= hi; v++) {
+                    int c = v * 4 + fs;
+                    if (!rest.contains(c)) { ok = false; break; }
+                    g.add(c);
+                }
+                if (ok && !out.contains(g)) out.add(g);
+            }
+        }
+    }
+
+    /** Kết quả phân hoạch tay bài: các phỏm + lá rác còn lại. */
+    private static class PhPart {
+        final java.util.List<java.util.List<Integer>> melds =
+            new ArrayList<java.util.List<Integer>>();
+        java.util.List<Integer> rac = new ArrayList<>();
+    }
+
+    /** Phân hoạch tốt nhất của một tay bài — tối ưu ít lá rác
+     *  nhất, hoà thì điểm rác nhỏ nhất (như server). */
+    private static PhPart phPartition(java.util.List<Integer> cards) {
+        java.util.List<Integer> sorted = new ArrayList<>(cards);
+        java.util.Collections.sort(sorted);
+        PhPart best = new PhPart();
+        best.rac = new ArrayList<>(sorted);
+        phPartRec(sorted, new ArrayList<java.util.List<Integer>>(),
+            new ArrayList<Integer>(), best);
+        return best;
+    }
+
+    private static void phPartRec(java.util.List<Integer> rest,
+            java.util.List<java.util.List<Integer>> melds,
+            java.util.List<Integer> rac, PhPart best) {
+        if (rac.size() > best.rac.size()) return;
+        if (rest.isEmpty()) {
+            if (rac.size() < best.rac.size()
+                    || (rac.size() == best.rac.size()
+                        && racScore(rac) < racScore(best.rac))) {
+                best.melds.clear();
+                for (java.util.List<Integer> g : melds) {
+                    best.melds.add(new ArrayList<Integer>(g));
+                }
+                best.rac = new ArrayList<>(rac);
+            }
+            return;
+        }
+        int first = rest.get(0);
+        java.util.List<Integer> others = new ArrayList<>(rest.subList(1, rest.size()));
+        java.util.List<Integer> rac2 = new ArrayList<>(rac);
+        rac2.add(first);
+        phPartRec(others, melds, rac2, best);
+        java.util.List<java.util.List<Integer>> groups =
+            new ArrayList<java.util.List<Integer>>();
+        phGroupsWith(rest, first, groups);
+        for (java.util.List<Integer> g : groups) {
+            java.util.List<Integer> rest2 = new ArrayList<>(rest);
+            rest2.removeAll(g);
+            java.util.List<java.util.List<Integer>> m2 =
+                new ArrayList<java.util.List<Integer>>(melds);
+            m2.add(g);
+            phPartRec(rest2, m2, rac, best);
+        }
+    }
+
+    private static int racScore(java.util.List<Integer> rac) {
+        int s = 0;
+        for (int c : rac) s += c / 4 + 1;
+        return s;
+    }
+
+    /** Tìm nhóm lá trên tay (không khoá) tạo phỏm với lá trên bàn. */
+    private java.util.List<Integer> phFindEat() {
+        if (phTableCard < 0) return null;
+        java.util.List<Integer> free = new ArrayList<>();
+        for (int c : phHand) if (!phLocked.contains(c)) free.add(c);
+        for (int k = 2; k <= 3; k++) {
+            int n = free.size();
+            for (int mask = 0; mask < (1 << n); mask++) {
+                if (Integer.bitCount(mask) != k) continue;
+                java.util.List<Integer> g = new ArrayList<>();
+                for (int i = 0; i < n; i++) {
+                    if ((mask & (1 << i)) != 0) g.add(free.get(i));
+                }
+                g.add(phTableCard);
+                java.util.Collections.sort(g);
+                if (phIsPhom(g)) {
+                    g.remove(Integer.valueOf(phTableCard));
+                    return g;
+                }
+            }
+        }
+        return null;
+    }
+
+    /** Nhóm đang chọn có tạo phỏm với lá trên bàn không. */
+    private boolean phSelEats() {
+        if (phTableCard < 0 || phSel.size() < 2 || phSel.size() > 3) return false;
+        for (int c : phSel) if (phLocked.contains(c)) return false;
+        java.util.List<Integer> g = new ArrayList<>(phSel);
+        g.add(phTableCard);
+        java.util.Collections.sort(g);
+        return phIsPhom(g);
+    }
+
     private boolean isCasinoCmd(byte cmd) {
         switch (cmd) {
             case CS_ROOM_LIST: case CS_BOARD_LIST: case CS_JOIN_BOARD:
@@ -12436,14 +12642,20 @@ public class WorldScreen extends ScreenAdapter {
             case CS_START: case CS_BET_OK: case CS_RESULT: case CS_FINISH:
             case CS_WIN: case CS_GAME_TYPE: case CS_PLAYING: case CS_TA:
             case CS_SET_TURN: case CS_STOP: case CS_FORCE: case CS_ERROR:
+            case CS_GET_CARD: case CS_EAT_CARD: case CS_ADD_CARD:
+            case CS_DEN: case CS_ONCE_WIN:
                 return true;
             default:
                 return false;
         }
     }
 
-    /** Game casino của phiên: 22 Bầu Cua · 3 Tiến Lên. */
+    /** Game casino của phiên: 22 Bầu Cua · 3 Tiến Lên · 7 Phỏm. */
     private int csGame = 22;
+
+    private String csGameName() {
+        return csGame == 3 ? "Tiến Lên" : csGame == 7 ? "Phỏm" : "Bầu Cua";
+    }
 
     private void startCasinoBauCua() {
         startCasino(22, "Bầu Cua");
@@ -12451,6 +12663,10 @@ public class WorldScreen extends ScreenAdapter {
 
     private void startCasinoTienLen() {
         startCasino(3, "Tiến Lên");
+    }
+
+    private void startCasinoPhom() {
+        startCasino(7, "Phỏm");
     }
 
     /** Vào casino: đổi handler sang Casino (3) rồi xin gameType —
@@ -12512,6 +12728,7 @@ public class WorldScreen extends ScreenAdapter {
         }
         csResetRound();
         tlReset();
+        phReset();
     }
 
     private void csResetRound() {
@@ -12588,7 +12805,7 @@ public class WorldScreen extends ScreenAdapter {
             switch (m.command) {
                 case CS_GAME_TYPE: {
                     int t = r.readByte();
-                    if (t == 22 || t == 3) {
+                    if (t == 22 || t == 3 || t == 7) {
                         csGame = t;
                         csPending = false;
                         casinoIn = true;
@@ -12635,8 +12852,9 @@ public class WorldScreen extends ScreenAdapter {
                     csBoardMoney = r.readInt();
                     csResetRound();
                     tlReset();
+                    phReset();
                     csMySeat = -1;
-                    int seatN = csGame == 3 ? 4 : 5;
+                    int seatN = (csGame == 3 || csGame == 7) ? 4 : 5;
                     for (int s = 0; s < seatN; s++) {
                         CsSeat seat = csSeats[s];
                         int iddb = r.readInt();
@@ -12738,6 +12956,7 @@ public class WorldScreen extends ScreenAdapter {
                 }
                 case CS_START: {
                     if (csGame == 3) { tlOnStart(r); break; }
+                    if (csGame == 7) { phOnStart(r); break; }
                     r.readByte();
                     r.readByte();
                     csPhaseSecs = r.readByte();
@@ -12749,6 +12968,7 @@ public class WorldScreen extends ScreenAdapter {
                 }
                 case CS_BET_OK: {
                     if (csGame == 3) { tlOnMove(r); break; }
+                    if (csGame == 7) { phOnFire(r); break; }
                     r.readByte();
                     r.readByte();
                     int seat = r.readByte();
@@ -12767,7 +12987,8 @@ public class WorldScreen extends ScreenAdapter {
                     csPhaseEndMs = System.currentTimeMillis() + csPhaseSecs * 1000L;
                     break;
                 }
-                case CS_TA: {
+                case CS_TA: { // 65: Bầu Cua = tả · Phỏm = hạ phỏm
+                    if (csGame == 7) { phOnHa(r); break; }
                     r.readByte();
                     r.readByte();
                     int seat = r.readByte();
@@ -12802,6 +13023,7 @@ public class WorldScreen extends ScreenAdapter {
                 }
                 case CS_FINISH: {
                     if (csGame == 3) { tlOnFinish(r); break; }
+                    if (csGame == 7) { phOnFinish(r); break; }
                     r.readByte();
                     r.readByte();
                     for (int s = 0; s < 5; s++) {
@@ -12814,12 +13036,39 @@ public class WorldScreen extends ScreenAdapter {
                     csPhase = 3;
                     break;
                 }
-                case CS_SKIP: { // Tiến Lên: {whoSkip, nextMove, clear}
+                case CS_SKIP: { // TL: {whoSkip, nextMove, clear} · Phỏm: {next, firHa}
                     if (csGame == 3) tlOnSkip(r);
+                    else if (csGame == 7) phOnSkip(r);
                     break;
                 }
-                case CS_STOP: { // Tiến Lên: dừng ván (+ lộ bài nếu có)
+                case CS_STOP: { // dừng ván (+ lộ bài nếu có)
                     if (csGame == 3) tlOnStop(r);
+                    else if (csGame == 7) phOnStop(r);
+                    break;
+                }
+                case CS_GET_CARD: { // Phỏm: lá mình vừa bốc
+                    if (csGame == 7) phOnGet(r);
+                    break;
+                }
+                case CS_EAT_CARD: { // Phỏm: kết quả ăn bài
+                    if (csGame == 7) phOnEat(r);
+                    break;
+                }
+                case CS_ADD_CARD: { // Phỏm: gửi bài (chỉ ghi nhận)
+                    if (csGame == 7) { r.readByte(); r.readByte(); r.readBoolean(); r.readByte(); }
+                    break;
+                }
+                case CS_DEN: { // Phỏm: đền ù
+                    if (csGame == 7) phOnDen(r);
+                    break;
+                }
+                case CS_ONCE_WIN: { // Phỏm: mình ù thường
+                    if (csGame == 7) {
+                        r.readByte();
+                        r.readByte();
+                        int total = r.readInt();
+                        phBanner = "Bạn ù! +" + fmtMoney(total) + " xu";
+                    }
                     break;
                 }
                 case CS_FORCE: { // Tiến Lên: tới trắng
@@ -12982,6 +13231,231 @@ public class WorldScreen extends ScreenAdapter {
         tlStatus = (s != null ? s.name : "Một người chơi") + " tới trắng!";
     }
 
+    // ---------- Phỏm: xử lý gói (docs/phom-spec.md) ----------
+
+    /** START {room, board, byte interval, 9 lá, int firstMove, int firHa}. */
+    private void phOnStart(java.io.DataInputStream r) throws Exception {
+        r.readByte();
+        r.readByte();
+        phIntervalSecs = r.readUnsignedByte();
+        if (phIntervalSecs <= 0) phIntervalSecs = 30;
+        phReset();
+        for (int i = 0; i < 9; i++) phHand.add(r.readUnsignedByte());
+        java.util.Collections.sort(phHand);
+        int first = r.readInt();
+        r.readInt(); // firHa = first lúc bắt đầu
+        for (int s = 0; s < 4; s++) phCounts[s] = csSeats[s].id != -1 ? 9 : 0;
+        phTurnId = first;
+        phPhase = 0;
+        phPlaying = true;
+        phTurnEndMs = System.currentTimeMillis() + phIntervalSecs * 1000L;
+        for (CsSeat seat : csSeats) seat.ready = false;
+    }
+
+    /** FIRE {room, board, int next, int firer, byte card (−1 = sai), byte numberCard}. */
+    private void phOnFire(java.io.DataInputStream r) throws Exception {
+        r.readByte();
+        r.readByte();
+        int next = r.readInt();
+        int firer = r.readInt();
+        int card = r.readByte();
+        r.readByte(); // numberCard
+        if (card < 0) { // nước sai — chỉ người đánh nhận, lượt giữ nguyên
+            phStatus = "Lá đó không đánh được";
+            phTurnEndMs = System.currentTimeMillis() + phIntervalSecs * 1000L;
+            return;
+        }
+        int fs = csSeatIdx(firer);
+        if (fs >= 0) {
+            phDiscards.get(fs).add(card);
+            phCounts[fs] = Math.max(0, phCounts[fs] - 1);
+        }
+        if (firer == ownId()) {
+            phHand.remove(Integer.valueOf(card));
+            phSel.clear();
+            phMyFires++;
+            if (csMySeat >= 0) phCounts[csMySeat] = phHand.size();
+        }
+        phTableCard = card;
+        phTableFromSeat = fs;
+        phTurnId = next;
+        phPhase = 0;
+        phStatus = "";
+        phTurnEndMs = System.currentTimeMillis() + phIntervalSecs * 1000L;
+    }
+
+    /** SKIP {room, board, int next, int firHa} — hết giờ, lá trên bàn giữ nguyên. */
+    private void phOnSkip(java.io.DataInputStream r) throws Exception {
+        r.readByte();
+        r.readByte();
+        int next = r.readInt();
+        int firHa = r.readInt();
+        phTurnId = next;
+        phTableFromSeat = csSeatIdx(firHa);
+        phPhase = 0;
+        phTurnEndMs = System.currentTimeMillis() + phIntervalSecs * 1000L;
+    }
+
+    /** GET_CARD {room, board, byte card} — chỉ người bốc nhận. */
+    private void phOnGet(java.io.DataInputStream r) throws Exception {
+        r.readByte();
+        r.readByte();
+        int card = r.readUnsignedByte();
+        phHand.add(card);
+        java.util.Collections.sort(phHand);
+        phPhase = 1;
+        phStatus = "";
+        if (csMySeat >= 0) phCounts[csMySeat] = phHand.size();
+        phTurnEndMs = System.currentTimeMillis() + phIntervalSecs * 1000L;
+    }
+
+    /** EAT {room, board, int firHa, bool isEat, [byte numEat], byte nCard}. */
+    private void phOnEat(java.io.DataInputStream r) throws Exception {
+        r.readByte();
+        r.readByte();
+        int firHa = r.readInt();
+        boolean isEat = r.readBoolean();
+        if (!isEat) { // chỉ người ăn hụt nhận
+            r.readByte(); // nCard
+            phPendingEat = null;
+            phStatus = "Ăn không được — bốc bài hoặc chọn lá khác";
+            return;
+        }
+        int numEat = r.readUnsignedByte();
+        r.readByte(); // nCard
+        int fhSeat = csSeatIdx(firHa);
+        if (fhSeat >= 0 && !phDiscards.get(fhSeat).isEmpty()) {
+            phDiscards.get(fhSeat).remove(phDiscards.get(fhSeat).size() - 1);
+        }
+        int eaterSeat = csSeatIdx(phTurnId); // lượt chưa đổi = người ăn
+        int eatenCard = phTableCard;
+        if (eaterSeat >= 0) {
+            phCounts[eaterSeat]++;
+            if (phTurnId == ownId() && phPendingEat != null) {
+                java.util.List<Integer> meld = new ArrayList<>();
+                for (int c : phPendingEat) {
+                    phLocked.add(c);
+                    meld.add(c);
+                }
+                if (eatenCard >= 0) {
+                    phLocked.add(eatenCard);
+                    meld.add(eatenCard);
+                }
+                java.util.Collections.sort(meld);
+                phMelds.get(eaterSeat).addAll(meld);
+                if (csMySeat >= 0) phCounts[csMySeat] = phHand.size();
+                phPendingEat = null;
+            } else {
+                // phỏm của đối thủ: numEat lá úp + lá vừa ăn (thấy được)
+                for (int i = 0; i < numEat; i++) phMelds.get(eaterSeat).add(-1);
+                if (eatenCard >= 0) phMelds.get(eaterSeat).add(eatenCard);
+            }
+        }
+        phTableCard = -1;
+        phTableFromSeat = -1;
+        if (phTurnId == ownId()) phPhase = 1;
+        phStatus = "";
+        phTurnEndMs = System.currentTimeMillis() + phIntervalSecs * 1000L;
+    }
+
+    /** HA_PHOM {room, board, int curID, bool isHa, bool isU,
+     *  [4 × int dMoney, các lá đã hạ cách nhau −1]}. */
+    private void phOnHa(java.io.DataInputStream r) throws Exception {
+        r.readByte();
+        r.readByte();
+        int cur = r.readInt();
+        boolean isHa = r.readBoolean();
+        boolean isU = r.readBoolean();
+        if (!isHa) { // chỉ người hạ nhận
+            phStatus = "Phỏm không khớp — hạ lại";
+            return;
+        }
+        int[] deltas = new int[4];
+        for (int s = 0; s < 4; s++) deltas[s] = r.readInt();
+        java.util.List<Integer> down = new ArrayList<>();
+        while (r.available() > 0) {
+            int v = r.readByte();
+            if (v != -1) down.add(v & 0xFF);
+        }
+        int cs = csSeatIdx(cur);
+        if (cs >= 0) phMelds.get(cs).addAll(down);
+        if (cur == ownId()) {
+            phHaDone = true;
+            phLocked.addAll(down);
+            phStatus = "Đã hạ phỏm — đánh lá cuối";
+        }
+        if (isU) {
+            phPlaying = false;
+            phStopped = true;
+            CsSeat w = csSeatById(cur);
+            phBanner = (w != null ? w.name : "Một người chơi") + " ù!";
+            for (int s = 0; s < 4; s++) {
+                if (csSeats[s].id != -1) {
+                    phResults.put(csSeats[s].id, new int[]{-1, deltas[s]});
+                    csSeats[s].xu += deltas[s];
+                }
+            }
+        }
+    }
+
+    /** DEN_BAI {room, board, int winID, 4 × int dMoney theo ghế}. */
+    private void phOnDen(java.io.DataInputStream r) throws Exception {
+        r.readByte();
+        r.readByte();
+        int win = r.readInt();
+        phDenWinnerId = win;
+        for (int s = 0; s < 4; s++) {
+            int d = r.readInt();
+            if (csSeats[s].id != -1) {
+                phResults.put(csSeats[s].id, new int[]{-1, d});
+                csSeats[s].xu += d;
+            }
+        }
+        phPlaying = false;
+        phStopped = true;
+        CsSeat w = csSeatById(win);
+        phBanner = (w != null ? w.name : "Một người chơi") + " ù — có người đền ù!";
+    }
+
+    /** FINISH {room, board, 4 × int dMoney, 4 × int score, rác 4 ghế cách −1}. */
+    private void phOnFinish(java.io.DataInputStream r) throws Exception {
+        r.readByte();
+        r.readByte();
+        int[] money = new int[4];
+        int[] score = new int[4];
+        for (int s = 0; s < 4; s++) money[s] = r.readInt();
+        for (int s = 0; s < 4; s++) score[s] = r.readInt();
+        java.util.List<java.util.List<Integer>> rac = new ArrayList<>();
+        for (int i = 0; i < 4; i++) rac.add(new ArrayList<Integer>());
+        int cur = 0;
+        while (r.available() > 0) {
+            int v = r.readByte();
+            if (v == -1) cur++;
+            else if (cur < 4) rac.get(cur).add(v & 0xFF);
+        }
+        for (int s = 0; s < 4; s++) {
+            if (csSeats[s].id != -1) {
+                phResults.put(csSeats[s].id, new int[]{score[s], money[s]});
+                phRac.put(csSeats[s].id, rac.get(s));
+                csSeats[s].xu += money[s];
+            }
+        }
+        phPlaying = false;
+        phStopped = true;
+        phTurnId = -1;
+    }
+
+    /** STOP — ván huỷ vì có người rời giữa ván. */
+    private void phOnStop(java.io.DataInputStream r) throws Exception {
+        r.readByte();
+        r.readByte();
+        phPlaying = false;
+        phStopped = true;
+        phTurnId = -1;
+        phResults.clear();
+        phStatus = "Ván bị huỷ — có người rời bàn";
+    }
+
     // ---------- Casino: harness kiểm chứng ----------
     public void debugCasinoRooms() {
         casinoIn = true;
@@ -13107,6 +13581,58 @@ public class WorldScreen extends ScreenAdapter {
         tlResults.put(1000, new int[]{1, 1000});
         tlResults.put(1002, new int[]{2, -1000});
         tlResults.put(1003, new int[]{3, -3000});
+    }
+
+    /** Harness: bàn Phỏm đang giữa ván — lượt mình, phase đánh. */
+    public void debugPhomBoard() {
+        casinoIn = true;
+        csPending = false;
+        raceWinOpen = false;
+        if (game.player != null) game.player.id = 1000;
+        csGame = 7;
+        casinoPage = 2;
+        csRoomId = 49;
+        csBoardId = 40;
+        csOwnerId = 1000;
+        csBoardMoney = 1000;
+        phReset();
+        csDebugSeat(0, "Sơn", 208000, false, 628, 474, 0, 80, 46);
+        csDebugSeat(1, "Linh Chi", 192000, false, 628, 474, 0, 80, 49);
+        csDebugSeat(2, "Tuấn", 50000, false, 628, 475, 0, 81, 46);
+        csDebugSeat(3, "Minh", 75000, false, 628, 476, 0, 82, 46);
+        csMySeat = 0;
+        int[] hand = {20, 21, 22, 8, 12, 16, 30, 41, 47, 3};
+        for (int c : hand) phHand.add(c);
+        phSel.add(30);
+        phMelds.get(1).add(24);
+        phMelds.get(1).add(25);
+        phMelds.get(1).add(26);
+        phDiscards.get(3).add(44);
+        phTableCard = 44;
+        phTableFromSeat = 3;
+        phCounts[0] = 10;
+        phCounts[1] = 9;
+        phCounts[2] = 9;
+        phCounts[3] = 10;
+        phPlaying = true;
+        phPhase = 1;
+        phMyFires = 1;
+        phTurnId = 1000;
+        phIntervalSecs = 30;
+        phTurnEndMs = System.currentTimeMillis() + 21000;
+    }
+
+    /** Harness: bàn Phỏm vừa kết thúc ván — bảng kết quả (có người cháy). */
+    public void debugPhomResult() {
+        debugPhomBoard();
+        phPlaying = false;
+        phStopped = true;
+        phTurnId = -1;
+        phTableCard = -1;
+        phResults.put(1001, new int[]{3, 3000});
+        phResults.put(1000, new int[]{7, 1000});
+        phResults.put(1002, new int[]{12, -1500});
+        phResults.put(1003, new int[]{-2, -2500});
     }
 
     /** Harness: đóng casino + panel lẻ, ép nền BAN NGÀY để kiểm lớp trời. */
@@ -13237,7 +13763,7 @@ public class WorldScreen extends ScreenAdapter {
     private void drawCasino() {
         bcEnsureRegions();
         if (csPending && !casinoIn) {
-            csPanelBase(csGame == 3 ? "Tiến Lên" : "Bầu Cua", null);
+            csPanelBase(csGameName(), null);
             Ui.centered(batch, Ui.font, "Đang vào casino…",
                 640, 380, Color.WHITE);
             Ui.centered(batch, Ui.fontSmall, "Đang kết nối tới sảnh Casino",
@@ -13247,13 +13773,14 @@ public class WorldScreen extends ScreenAdapter {
         if (casinoPage == 0) drawCsRooms();
         else if (casinoPage == 1) drawCsBoards();
         else if (csGame == 3) drawTlBoard();
+        else if (csGame == 7) drawPhomBoard();
         else drawCsBoard();
         if (csMoneySheet) drawCsMoneySheet();
         if (csKickSheet) drawCsKickSheet();
     }
 
     private void drawCsRooms() {
-        csPanelBase("Casino — " + (csGame == 3 ? "Tiến Lên" : "Bầu Cua"),
+        csPanelBase("Casino — " + csGameName(),
             "Chọn phòng để xem bàn");
         if (csRooms.isEmpty()) {
             Ui.centered(batch, Ui.font, "Chưa có phòng nào.",
@@ -13282,7 +13809,7 @@ public class WorldScreen extends ScreenAdapter {
     }
 
     private void drawCsBoards() {
-        csPanelBase("Casino — " + (csGame == 3 ? "Tiến Lên" : "Bầu Cua"),
+        csPanelBase("Casino — " + csGameName(),
             "Phòng " + csRoomId + " · chọn một bàn hoặc tự tạo bàn");
         int pages = Math.max(1, (csBoards.size() + 5) / 6);
         if (csBoardPage >= pages) csBoardPage = pages - 1;
@@ -13769,6 +14296,328 @@ public class WorldScreen extends ScreenAdapter {
         }
     }
 
+    private void drawPhomBoard() {
+        CsSeat owner = csOwnerId >= 0 ? csSeatById(csOwnerId) : null;
+        String sub = "Chủ bàn: " + (owner != null ? owner.name : "—")
+            + (csBoardMoney > 0 ? " · Mức: " + fmtMoney(csBoardMoney) + " xu"
+                : " · Chưa đặt mức");
+        csPanelBase("Phỏm — Bàn " + (csBoardId + 1), sub);
+        long now = System.currentTimeMillis();
+        int myId = ownId();
+        boolean myTurn = phPlaying && phTurnId == myId;
+        boolean needHa = myTurn && phPhase == 1 && phMyFires >= 3 && !phHaDone;
+
+        if (!phStatus.isEmpty()) {
+            Ui.centered(batch, Ui.font, phStatus, 640, 292,
+                new Color(1f, 0.85f, 0.38f, 1f));
+        }
+
+        // gợi ý phỏm trên tay mình (phân hoạch tốt nhất) để tô viền
+        java.util.Set<Integer> hintMeld = new java.util.HashSet<>();
+        if (phPlaying && myTurn && phPhase == 1) {
+            java.util.List<Integer> free = new ArrayList<>();
+            for (int c : phHand) if (!phLocked.contains(c)) free.add(c);
+            for (java.util.List<Integer> g : phPartition(free).melds) {
+                hintMeld.addAll(g);
+            }
+        }
+
+        // 4 ghế
+        for (int s = 0; s < 4; s++) {
+            CsSeat seat = csSeats[s];
+            float[] pos = tlSeatPos(s);
+            if (seat.id == -1 || seat.doll == null) {
+                Ui.centered(batch, Ui.fontTiny, "Ghế trống", pos[0], pos[1] + 52,
+                    new Color(1f, 1f, 1f, 0.4f));
+                continue;
+            }
+            boolean isTurn = phPlaying && seat.id == phTurnId;
+            if (isTurn) {
+                batch.draw(Ui.roundedRect(120, 168, 14,
+                    new Color(1f, 0.62f, 0.15f, 0.18f),
+                    new Color(1f, 0.62f, 0.15f, 0.95f)),
+                    pos[0] - 60, pos[1] - 66);
+            }
+            game.dollRenderer.draw(batch, seat.doll, seat.anim.frameIndex(),
+                pos[0], pos[1], 2f, false);
+            boolean isOwner = seat.id == csOwnerId;
+            Ui.centered(batch, Ui.fontSmall, truncTo(Ui.fontSmall, seat.name, 130),
+                pos[0], pos[1] - 12,
+                isOwner ? new Color(1f, 0.85f, 0.38f, 1f) : Color.WHITE);
+            Ui.centered(batch, Ui.fontTiny, fmtMoney(seat.xu) + " xu",
+                pos[0], pos[1] - 36, new Color(1f, 1f, 1f, 0.7f));
+            int[] res = phResults.get(seat.id);
+            if (res != null) {
+                String lab = res[0] == -2 ? "Cháy" : res[0] == -1 ? "Ù"
+                    : res[0] + " điểm";
+                Ui.centered(batch, Ui.fontSmall, lab, pos[0], pos[1] - 62,
+                    new Color(1f, 0.85f, 0.38f, 1f));
+                if (res[1] != 0) {
+                    Ui.centered(batch, Ui.fontSmall,
+                        (res[1] > 0 ? "+" : "-") + fmtMoney(Math.abs(res[1])),
+                        pos[0], pos[1] - 88,
+                        res[1] > 0 ? new Color(0.45f, 0.95f, 0.5f, 1f)
+                            : new Color(1f, 0.45f, 0.4f, 1f));
+                }
+            } else if (!phPlaying && !phStopped && seat.ready) {
+                Ui.centered(batch, Ui.fontTiny, "Sẵn sàng", pos[0], pos[1] - 60,
+                    new Color(0.45f, 0.95f, 0.5f, 1f));
+            }
+            // phỏm đã ăn/hạ: hàng lá nhỏ dưới tên ghế (chỉ khi đang chơi —
+            // hết ván nhãn kết quả ở cùng vị trí, tránh vẽ đè)
+            java.util.List<Integer> melds = phMelds.get(s);
+            if (!melds.isEmpty() && phPlaying) {
+                float mw = 26f, mstep = 15f;
+                float mtotal = mw + (melds.size() - 1) * mstep;
+                for (int i = 0; i < melds.size(); i++) {
+                    drawPhomCard(pos[0] - mtotal / 2f + i * mstep, pos[1] - 132,
+                        mw, 35, melds.get(i));
+                }
+            }
+            // bài úp của đối thủ
+            if (seat.id != myId && phPlaying && phCounts[s] > 0) {
+                int n = phCounts[s];
+                int rel = csMySeat >= 0 ? (s - csMySeat + 4) % 4 : s;
+                if (rel == 2) {
+                    float shift = melds.isEmpty() ? 0 : 150; // tránh hàng phỏm đã hạ
+                    float tw = 26 + Math.min(n, 8) * 12f;
+                    for (int i = 0; i < Math.min(n, 8); i++) {
+                        drawCard(pos[0] + shift - tw / 2f + i * 12f, pos[1] - 118, 26, 35, -1);
+                    }
+                    Ui.centered(batch, Ui.fontSmall, "×" + n,
+                        pos[0] + shift, pos[1] - 96,
+                        new Color(1f, 0.85f, 0.38f, 1f));
+                } else {
+                    for (int i = 0; i < Math.min(n, 5); i++) {
+                        drawCard(pos[0] - 13 + (rel == 1 ? 52 : -78), pos[1] - 20 + i * 7f,
+                            26, 35, -1);
+                    }
+                    Ui.centered(batch, Ui.fontSmall, "×" + n,
+                        pos[0] + (rel == 1 ? 66 : -66), pos[1] + 24,
+                        new Color(1f, 0.85f, 0.38f, 1f));
+                }
+            }
+        }
+
+        // giữa bàn: kết quả / lá trên bàn / chờ
+        if (phStopped && !phResults.isEmpty()) {
+            batch.draw(Ui.roundedRect(480, 250, 16, GLASS_FILL_DARK, GLASS_RIM),
+                400, 224);
+            Ui.centered(batch, Ui.font,
+                phBanner.isEmpty() ? "Kết quả ván" : phBanner, 640, 448,
+                new Color(1f, 0.85f, 0.38f, 1f));
+            float ry = 406;
+            for (int s = 0; s < 4; s++) {
+                CsSeat seat = csSeats[s];
+                if (seat.id == -1) continue;
+                int[] res = phResults.get(seat.id);
+                if (res == null) continue;
+                String lab = res[0] == -2 ? "Cháy" : res[0] == -1 ? "Ù"
+                    : res[0] + " điểm";
+                Ui.font.draw(batch, truncTo(Ui.font, seat.name, 200) + " — " + lab,
+                    436, ry);
+                int d = res[1];
+                String dtxt = (d > 0 ? "+" : d < 0 ? "-" : "") + fmtMoney(Math.abs(d)) + " xu";
+                layout.setText(Ui.font, dtxt);
+                Ui.font.setColor(d > 0 ? 0.45f : d < 0 ? 1f : 1f,
+                    d > 0 ? 0.95f : d < 0 ? 0.45f : 1f,
+                    d > 0 ? 0.5f : d < 0 ? 0.4f : 1f, 1f);
+                Ui.font.draw(batch, dtxt, 844 - layout.width, ry);
+                Ui.font.setColor(Color.WHITE);
+                ry -= 44;
+            }
+        } else if (phPlaying) {
+            if (phTableCard >= 0) {
+                CsSeat tp = phTableFromSeat >= 0 ? csSeats[phTableFromSeat] : null;
+                if (tp != null) {
+                    Ui.centered(batch, Ui.fontSmall, tp.name + " vừa đánh", 640, 452,
+                        new Color(1f, 1f, 1f, 0.75f));
+                }
+                drawPhomCard(640 - 23, 372, 46, 62, phTableCard);
+            } else {
+                CsSeat tp = phTurnId >= 0 ? csSeatById(phTurnId) : null;
+                Ui.centered(batch, Ui.fontSmall,
+                    phTurnId == myId ? "Bạn đi trước — bốc bài rồi đánh"
+                        : "Chờ " + (tp != null ? tp.name : "…"),
+                    640, 420, new Color(1f, 1f, 1f, 0.75f));
+            }
+            long remain = Math.max(0, (phTurnEndMs - now + 999) / 1000);
+            Ui.centered(batch, Ui.fontTitle, String.valueOf(remain), 640, 332,
+                remain <= 10 ? new Color(1f, 0.45f, 0.4f, 1f)
+                    : new Color(1f, 0.85f, 0.38f, 1f));
+            if (myTurn) {
+                Ui.centered(batch, Ui.fontSmall,
+                    phPhase == 0 ? "Tới lượt bạn — Ăn lá trên bàn hoặc Bốc bài"
+                        : needHa ? "Lượt cuối — Hạ phỏm rồi đánh lá cuối"
+                        : "Chọn 1 lá rồi bấm Đánh",
+                    640, 168, new Color(0.45f, 0.95f, 0.5f, 1f));
+            }
+        } else if (!phStopped) {
+            Ui.centered(batch, Ui.font,
+                csMySeat == 0 ? "Bấm Bắt đầu khi mọi người đã sẵn sàng"
+                    : "Chờ chủ bàn bắt đầu ván mới…",
+                640, 400, new Color(1f, 1f, 1f, 0.8f));
+        }
+
+        // bài của mình (quạt dưới đáy)
+        if (!phHand.isEmpty()) {
+            float step = 36;
+            float total = 56 + (phHand.size() - 1) * step;
+            float x0 = 640 - total / 2f;
+            for (int i = 0; i < phHand.size(); i++) {
+                int c = phHand.get(i);
+                float y = 30 + (phSel.contains(c) ? 18 : 0);
+                if (hintMeld.contains(c)) {
+                    batch.draw(Ui.roundedRect(60, 80, 6,
+                        new Color(1f, 0.85f, 0.38f, 0.10f),
+                        new Color(1f, 0.85f, 0.38f, 0.9f)),
+                        x0 + i * step - 2, y - 2);
+                }
+                drawPhomCard(x0 + i * step, y, 56, 76, c);
+                if (phLocked.contains(c)) {
+                    batch.draw(Ui.roundedRect(56, 5, 2,
+                        new Color(1f, 0.85f, 0.38f, 1f), null), x0 + i * step, y);
+                }
+            }
+        }
+
+        // thanh nút
+        csButton(CS_PX + CS_PW - 174, 20, 150, 52, "Rời bàn", 2);
+        if (phStopped) {
+            csButton(540, 20, 200, 52, "Chơi tiếp", 1);
+        } else if (phPlaying) {
+            if (myTurn && phPhase == 0) {
+                boolean canEat = phSelEats() || phFindEat() != null;
+                csButton(856, 118, 160, 52, "Ăn", canEat ? 1 : 3);
+                csButton(1032, 118, 160, 52, "Bốc", 0);
+            } else if (myTurn && phPhase == 1) {
+                if (needHa) {
+                    csButton(856, 118, 160, 52, "Hạ phỏm", 1);
+                    csButton(1032, 118, 160, 52, "Đánh", 3);
+                } else {
+                    boolean one = phSel.size() == 1
+                        && !phLocked.contains(phSel.iterator().next());
+                    csButton(856, 118, 160, 52, "Đánh", one ? 1 : 3);
+                }
+            }
+        } else if (csMySeat == 0) {
+            csButton(462, 20, 170, 52, "Đặt mức", 0);
+            csButton(646, 20, 170, 52, "Bắt đầu", 1);
+        } else if (csMySeat > 0) {
+            boolean ready = csSeats[csMySeat].ready;
+            csButton(530, 20, 220, 52, ready ? "Huỷ sẵn sàng" : "Sẵn sàng", ready ? 0 : 1);
+        }
+    }
+
+    private void phomTouch(float x, float y) {
+        int myId = ownId();
+        if (phStopped) {
+            if (x >= 540 && x <= 740 && y >= 20 && y <= 72) {
+                phReset();
+                for (CsSeat seat : csSeats) seat.ready = false;
+            }
+            return;
+        }
+        if (phPlaying && phTurnId == myId) {
+            // chọn bài trong quạt
+            if (!phHand.isEmpty() && y >= 30 && y <= 124) {
+                float step = 36;
+                float total = 56 + (phHand.size() - 1) * step;
+                float x0 = 640 - total / 2f;
+                for (int i = phHand.size() - 1; i >= 0; i--) {
+                    int c = phHand.get(i);
+                    float cy = 30 + (phSel.contains(c) ? 18 : 0);
+                    if (x >= x0 + i * step && x <= x0 + i * step + 56
+                            && y >= cy && y <= cy + 76) {
+                        if (phPhase == 1) phSel.clear();
+                        if (phSel.contains(c)) phSel.remove(c);
+                        else if (phSel.size() < 3) phSel.add(c);
+                        return;
+                    }
+                }
+            }
+            if (phPhase == 0) {
+                if (x >= 856 && x <= 1016 && y >= 118 && y <= 170) { // Ăn
+                    java.util.List<Integer> group = phSelEats()
+                        ? new ArrayList<>(phSel) : phFindEat();
+                    if (group == null) {
+                        phStatus = "Chọn 2–3 lá tạo phỏm với lá trên bàn để Ăn";
+                        return;
+                    }
+                    java.util.Collections.sort(group);
+                    phPendingEat = group;
+                    Msg e = csMsgRB(CS_EAT_CARD);
+                    try {
+                        for (int c : group) e.writer().writeByte(c);
+                        e.writer().writeByte(0); // index (server bỏ qua)
+                    } catch (Exception ignored) {
+                    }
+                    csSend(e);
+                    return;
+                }
+                if (x >= 1032 && x <= 1192 && y >= 118 && y <= 170) { // Bốc
+                    csSend(csMsgRB(CS_GET_CARD));
+                    return;
+                }
+                return;
+            }
+            // phase 1
+            boolean needHa = phMyFires >= 3 && !phHaDone;
+            if (x >= 856 && x <= 1016 && y >= 118 && y <= 170) {
+                if (needHa) { // Hạ phỏm theo phân hoạch tốt nhất
+                    java.util.List<Integer> free = new ArrayList<>();
+                    for (int c : phHand) if (!phLocked.contains(c)) free.add(c);
+                    java.util.List<java.util.List<Integer>> melds =
+                        phPartition(free).melds;
+                    Msg hm = csMsgRB(CS_TA);
+                    try {
+                        for (int gi = 0; gi < melds.size(); gi++) {
+                            if (gi > 0) hm.writer().writeByte(-1);
+                            for (int c : melds.get(gi)) hm.writer().writeByte(c);
+                        }
+                    } catch (Exception ignored) {
+                    }
+                    csSend(hm);
+                } else if (phSel.size() == 1) { // Đánh
+                    int card = phSel.iterator().next();
+                    if (phLocked.contains(card)) {
+                        phStatus = "Lá thuộc phỏm đã ăn — không đánh được";
+                        return;
+                    }
+                    Msg fm = csMsgRB(CS_BET_OK);
+                    try {
+                        fm.writer().writeByte(card);
+                    } catch (Exception ignored) {
+                    }
+                    csSend(fm);
+                }
+                return;
+            }
+            return;
+        }
+        if (!phPlaying) {
+            if (csMySeat == 0) {
+                if (x >= 462 && x <= 632 && y >= 20 && y <= 72) {
+                    csMoneySheet = true;
+                    return;
+                }
+                if (x >= 646 && x <= 816 && y >= 20 && y <= 72) {
+                    csSend(csMsgRB(CS_START));
+                    return;
+                }
+            } else if (csMySeat > 0) {
+                if (x >= 530 && x <= 750 && y >= 20 && y <= 72) {
+                    Msg rd = csMsgRB(CS_READY);
+                    try {
+                        rd.writer().writeBoolean(!csSeats[csMySeat].ready);
+                    } catch (Exception ignored) {
+                    }
+                    csSend(rd);
+                }
+            }
+        }
+    }
+
     private String csHintText() {
         if (csSpectating && !csFinished) return csStatus;
         if (csFinished) {
@@ -13977,6 +14826,11 @@ public class WorldScreen extends ScreenAdapter {
         // Tiến Lên: chạm riêng trong bàn
         if (csGame == 3) {
             tlTouch(x, y);
+            return true;
+        }
+        // Phỏm: chạm riêng trong bàn
+        if (csGame == 7) {
+            phomTouch(x, y);
             return true;
         }
         // ô cửa
@@ -16009,16 +16863,21 @@ public class WorldScreen extends ScreenAdapter {
         // Lối vào casino [PORT]: các game này thuộc khung Casino
         // (handler 3) chứ không thuộc hub; cổng casino type 72–77 trên
         // map hiện không còn trong dữ liệu lưới của bản port nên tạm
-        // vào từ đây — Tiến Lên (trái) + Bầu Cua (phải).
+        // vào từ đây — Tiến Lên (trái) + Phỏm (giữa) + Bầu Cua (phải).
         batch.draw(Ui.roundedRect(292, 48, 11,
             new Color(0.13f, 0.36f, 0.20f, 0.95f), GLASS_RIM),
-            px + MG_PW / 2f - 308, py + 14);
-        Ui.centered(batch, Ui.font, "Tiến Lên · Casino", px + MG_PW / 2f - 162, py + 48,
+            px + MG_PW / 2f - 452, py + 14);
+        Ui.centered(batch, Ui.font, "Tiến Lên · Casino", px + MG_PW / 2f - 306, py + 48,
+            Color.WHITE);
+        batch.draw(Ui.roundedRect(292, 48, 11,
+            new Color(0.20f, 0.25f, 0.55f, 0.95f), GLASS_RIM),
+            px + MG_PW / 2f - 146, py + 14);
+        Ui.centered(batch, Ui.font, "Phỏm · Casino", px + MG_PW / 2f, py + 48,
             Color.WHITE);
         batch.draw(Ui.roundedRect(292, 48, 11,
             new Color(0.45f, 0.16f, 0.16f, 0.95f), GLASS_RIM),
-            px + MG_PW / 2f + 16, py + 14);
-        Ui.centered(batch, Ui.font, "Bầu Cua · Casino", px + MG_PW / 2f + 162, py + 48,
+            px + MG_PW / 2f + 160, py + 14);
+        Ui.centered(batch, Ui.font, "Bầu Cua · Casino", px + MG_PW / 2f + 306, py + 48,
             Color.WHITE);
     }
 
@@ -16230,14 +17089,21 @@ public class WorldScreen extends ScreenAdapter {
                 return true;
             }
             // nút Tiến Lên · Casino (khung casino riêng, không qua hub)
-            if (x >= px + MG_PW / 2f - 308 && x <= px + MG_PW / 2f - 16
+            if (x >= px + MG_PW / 2f - 452 && x <= px + MG_PW / 2f - 160
                     && y >= py + 14 && y <= py + 62) {
                 mgCloseHub();
                 startCasinoTienLen();
                 return true;
             }
+            // nút Phỏm · Casino (khung casino riêng, không qua hub)
+            if (x >= px + MG_PW / 2f - 146 && x <= px + MG_PW / 2f + 146
+                    && y >= py + 14 && y <= py + 62) {
+                mgCloseHub();
+                startCasinoPhom();
+                return true;
+            }
             // nút Bầu Cua · Casino (khung casino riêng, không qua hub)
-            if (x >= px + MG_PW / 2f + 16 && x <= px + MG_PW / 2f + 308
+            if (x >= px + MG_PW / 2f + 160 && x <= px + MG_PW / 2f + 452
                     && y >= py + 14 && y <= py + 62) {
                 mgCloseHub();
                 startCasinoBauCua();

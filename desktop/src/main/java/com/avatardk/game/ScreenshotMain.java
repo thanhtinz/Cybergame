@@ -1243,6 +1243,24 @@ public class ScreenshotMain {
                         }
                         if (frame == 15) {
                             shot("shot-tl-result.png");
+                            stage = 131; frame = 0;
+                        }
+                        break;
+                    case 131: // Phỏm: bàn đang giữa ván
+                        if (frame == 1) {
+                            world.debugPhomBoard();
+                        }
+                        if (frame == 15) {
+                            shot("shot-phom-board.png");
+                            stage = 132; frame = 0;
+                        }
+                        break;
+                    case 132: // Phỏm: kết quả ván
+                        if (frame == 1) {
+                            world.debugPhomResult();
+                        }
+                        if (frame == 15) {
+                            shot("shot-phom-result.png");
                             stage = 121; frame = 0;
                         }
                         break;

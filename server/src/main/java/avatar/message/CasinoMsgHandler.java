@@ -105,8 +105,19 @@ public class CasinoMsgHandler extends MessageHandler {
                 case Cmd.TO_XONG:
                     toXong(mss, this.client.user);
                     break;
-                case Cmd.HA_PHOM:
-                    haPhom(mss, this.client.user);
+                case Cmd.HA_PHOM: // 65: Bầu Cua = tả · Phỏm = hạ phỏm
+                    haPhomDispatch(mss, this.client.user);
+                    break;
+                case Cmd.GET_CARD: // 63 — Phỏm: bốc bài
+                    getCardPhom(mss, this.client.user);
+                    break;
+                case Cmd.EAT_CARD: // 64 — Phỏm: ăn bài
+                    eatCardPhom(mss, this.client.user);
+                    break;
+                case Cmd.ADD_CARD: // 67 — Phỏm: gửi bài
+                    addCardPhom(mss, this.client.user);
+                    break;
+                case Cmd.RESET_PHOM_EAT: // 68 — [PORT] không dùng (ăn kiểm nguyên tử)
                     break;
                 case 49: // SKIP — client Bầu Cua gửi gói rỗng
                     skip(mss, this.client.user);
@@ -126,7 +137,7 @@ public class CasinoMsgHandler extends MessageHandler {
      *  và 3 Tiến Lên; game khác báo chưa mở như trước. */
     private void joinCasino(Message ms) throws IOException {
         int gameType = ms.reader().available() > 0 ? ms.reader().readByte() : 22;
-        if (gameType != 22 && gameType != 3) {
+        if (gameType != 22 && gameType != 3 && gameType != 7) {
             this.client.user.getAvatarService().serverDialog("Game casino này chưa mở");
             return;
         }
@@ -196,7 +207,7 @@ public class CasinoMsgHandler extends MessageHandler {
     private void requestRoomList() throws IOException {
         Message ms = new Message(Cmd.REQUEST_ROOMLIST);
         DataOutputStream ds = ms.writer();
-        int roomBase = casinoGame == 3 ? 46 : 43; // TL: phòng 46–48 [PORT]
+        int roomBase = casinoGame == 3 ? 46 : casinoGame == 7 ? 49 : 43; // TL 46–48 · Phỏm 49–51 [PORT]
         for (int i = 0; i < 3; i++) {
             ds.writeByte(roomBase + i); // id phòng (số của server fan)
             ds.writeByte(1);      // roomFree
@@ -217,7 +228,8 @@ public class CasinoMsgHandler extends MessageHandler {
             ds.writeByte(a.boardID);
             // byte đóng gói của gốc: nPlayer = v % 16, maxPlayer = v / 16
             ds.writeByte(a.presentCount() + (a.seatCap << 4));
-            boolean playing = a.gameType == 3 ? a.tl.playing : a.phase != 0;
+            boolean playing = a.gameType == 3 ? a.tl.playing
+                : a.gameType == 7 ? a.phom.playing : a.phase != 0;
             int flags = (a.isPass ? 1 : 0) | (playing ? 2 : 0);
             ds.writeByte(flags);
             ds.writeInt(a.getMoney());
@@ -362,6 +374,9 @@ public class CasinoMsgHandler extends MessageHandler {
             // Tiến Lên: người đang chơi rời giữa ván → huỷ ván trước
             // khi gỡ ghế (engine cần ghế còn nguyên để tra tay bài).
             if (board.gameType == 3) TienLenEngine.onLeave(board, roomID, us);
+            if (board.gameType == 7) {
+                avatar.minigame.PhomEngine.onLeave(board, roomID, us);
+            }
             board.removeUser(us);
 
             if (board.presentCount() == 0) {
@@ -374,6 +389,7 @@ public class CasinoMsgHandler extends MessageHandler {
                     board.tl.resetHand();
                     board.tl.firstMatch = true;
                 }
+                if (board.gameType == 7) board.phom.resetHand();
                 BoardManager.getInstance().cleanupEmptyDynamic(board);
                 return;
             }
@@ -529,8 +545,8 @@ public class CasinoMsgHandler extends MessageHandler {
                 us.getAvatarService().serverDialog("Vui lòng đặt nhỏ hơn 100.000");
                 return;
             }
-            // Bầu Cua cần dự trữ ×48 (đối ứng cả bàn); Tiến Lên ×8 [PORT].
-            long need = (long) money * (board.gameType == 3 ? 8 : 48);
+            // Bầu Cua cần dự trữ ×48 (đối ứng cả bàn); Tiến Lên/Phỏm ×8 [PORT].
+            long need = (long) money * ((board.gameType == 3 || board.gameType == 7) ? 8 : 48);
             if (money < 0 || us.getXu() < need) {
                 us.getAvatarService().serverDialog(
                     "Để đặt được " + money + " thì bạn cần có số tiền là " + need);
@@ -557,6 +573,10 @@ public class CasinoMsgHandler extends MessageHandler {
         if (board == null) return;
         if (board.gameType == 3) { // Tiến Lên: engine riêng
             TienLenEngine.start(this.client, board, roomID);
+            return;
+        }
+        if (board.gameType == 7) { // Phỏm: engine riêng
+            avatar.minigame.PhomEngine.start(this.client, board, roomID);
             return;
         }
         synchronized (board) {
@@ -631,6 +651,11 @@ public class CasinoMsgHandler extends MessageHandler {
                 cards[i] = rd.available() > 0 ? rd.readByte() : 0;
             }
             TienLenEngine.move(this.client, board, roomID, cards);
+            return;
+        }
+        if (board.gameType == 7) { // Phỏm: gói 21 = FIRE {byte cardID}
+            int card = rd.available() > 0 ? rd.readByte() : -1;
+            avatar.minigame.PhomEngine.fire(this.client, board, roomID, card);
             return;
         }
         synchronized (board) {
@@ -744,6 +769,76 @@ public class CasinoMsgHandler extends MessageHandler {
         }
     }
 
+    /** Gói 65: Bầu Cua = tả (dời tiền) · Phỏm = hạ phỏm — rẽ theo
+     *  game của bàn người gửi đang ngồi (không đọc gói trước). */
+    private void haPhomDispatch(Message ms, User us) throws IOException {
+        if (us == null) return;
+        BoardInfo board = BoardManager.getInstance().findUserBoard(us);
+        if (board != null && board.gameType == 7) {
+            java.io.DataInputStream rd = ms.reader();
+            byte roomID = rd.readByte();
+            rd.readByte(); // boardID
+            java.util.List<java.util.List<Integer>> groups = new java.util.ArrayList<>();
+            java.util.List<Integer> cur = new java.util.ArrayList<>();
+            while (rd.available() > 0) {
+                byte v = rd.readByte();
+                if (v == -1) {
+                    if (!cur.isEmpty()) {
+                        groups.add(cur);
+                        cur = new java.util.ArrayList<>();
+                    }
+                } else {
+                    cur.add((int) v);
+                }
+            }
+            if (!cur.isEmpty()) groups.add(cur);
+            avatar.minigame.PhomEngine.haPhom(this.client, board, roomID, groups);
+            return;
+        }
+        haPhom(ms, us);
+    }
+
+    /** Gói 63 — Phỏm: bốc bài. */
+    private void getCardPhom(Message ms, User us) {
+        if (us == null) return;
+        BoardInfo board = BoardManager.getInstance().findUserBoard(us);
+        if (board == null || board.gameType != 7) return;
+        avatar.minigame.PhomEngine.getCard(this.client, board,
+            (byte) us.getRoomID());
+    }
+
+    /** Gói 64 — Phỏm: ăn bài {room, board, các lá trên tay, index}. */
+    private void eatCardPhom(Message ms, User us) throws IOException {
+        if (us == null) return;
+        BoardInfo board = BoardManager.getInstance().findUserBoard(us);
+        if (board == null || board.gameType != 7) return;
+        java.io.DataInputStream rd = ms.reader();
+        byte roomID = rd.readByte();
+        rd.readByte(); // boardID
+        java.util.List<Byte> raw = new java.util.ArrayList<>();
+        while (rd.available() > 0) raw.add(rd.readByte());
+        // byte cuối là index vị trí lá ăn của client gốc — bỏ qua
+        int n = Math.max(0, raw.size() - 1);
+        int[] cards = new int[n];
+        for (int i = 0; i < n; i++) cards[i] = raw.get(i);
+        avatar.minigame.PhomEngine.eat(this.client, board, roomID, cards);
+    }
+
+    /** Gói 67 — Phỏm: gửi bài {room, board, các lá}. */
+    private void addCardPhom(Message ms, User us) throws IOException {
+        if (us == null) return;
+        BoardInfo board = BoardManager.getInstance().findUserBoard(us);
+        if (board == null || board.gameType != 7) return;
+        java.io.DataInputStream rd = ms.reader();
+        byte roomID = rd.readByte();
+        rd.readByte(); // boardID
+        java.util.List<Integer> list = new java.util.ArrayList<>();
+        while (rd.available() > 0) list.add((int) rd.readByte());
+        int[] cards = new int[list.size()];
+        for (int i = 0; i < cards.length; i++) cards[i] = list.get(i);
+        avatar.minigame.PhomEngine.addCard(this.client, board, roomID, cards);
+    }
+
     private void haPhom(Message ms, User us) throws IOException {
         if (us == null) return;
         DataInputStream rd = ms.reader();
@@ -796,6 +891,7 @@ public class CasinoMsgHandler extends MessageHandler {
             TienLenEngine.skip(this.client, board, roomID);
             return;
         }
+        if (board.gameType == 7) return; // Phỏm: client không gửi 49
         synchronized (board) {
             int seat = board.seatOf(us);
             if (board.phase != 2 || seat < 0 || board.turnSeat != seat) return;

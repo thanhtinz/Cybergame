@@ -15,6 +15,7 @@ public class BoardInfo
     public int seatCap = 5;
     /** Trạng thái ván Tiến Lên (chỉ dùng khi gameType == 3). */
     public final avatar.minigame.TlState tl = new avatar.minigame.TlState();
+    public final avatar.minigame.PhomState phom = new avatar.minigame.PhomState();
 
     public byte nPlayer;//số người
 
