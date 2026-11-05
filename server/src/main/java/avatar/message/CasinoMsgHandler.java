@@ -137,7 +137,7 @@ public class CasinoMsgHandler extends MessageHandler {
      *  và 3 Tiến Lên; game khác báo chưa mở như trước. */
     private void joinCasino(Message ms) throws IOException {
         int gameType = ms.reader().available() > 0 ? ms.reader().readByte() : 22;
-        if (gameType != 22 && gameType != 3 && gameType != 7) {
+        if (gameType != 22 && gameType != 3 && gameType != 7 && gameType != 21) {
             this.client.user.getAvatarService().serverDialog("Game casino này chưa mở");
             return;
         }
@@ -207,7 +207,8 @@ public class CasinoMsgHandler extends MessageHandler {
     private void requestRoomList() throws IOException {
         Message ms = new Message(Cmd.REQUEST_ROOMLIST);
         DataOutputStream ds = ms.writer();
-        int roomBase = casinoGame == 3 ? 46 : casinoGame == 7 ? 49 : 43; // TL 46–48 · Phỏm 49–51 [PORT]
+        int roomBase = casinoGame == 3 ? 46 : casinoGame == 7 ? 49
+            : casinoGame == 21 ? 52 : 43; // TL 46–48 · Phỏm 49–51 · Diamond 52–54 [PORT]
         for (int i = 0; i < 3; i++) {
             ds.writeByte(roomBase + i); // id phòng (số của server fan)
             ds.writeByte(1);      // roomFree
@@ -229,7 +230,8 @@ public class CasinoMsgHandler extends MessageHandler {
             // byte đóng gói của gốc: nPlayer = v % 16, maxPlayer = v / 16
             ds.writeByte(a.presentCount() + (a.seatCap << 4));
             boolean playing = a.gameType == 3 ? a.tl.playing
-                : a.gameType == 7 ? a.phom.playing : a.phase != 0;
+                : a.gameType == 7 ? a.phom.playing
+                : a.gameType == 21 ? a.diamond.playing : a.phase != 0;
             int flags = (a.isPass ? 1 : 0) | (playing ? 2 : 0);
             ds.writeByte(flags);
             ds.writeInt(a.getMoney());
@@ -318,6 +320,11 @@ public class CasinoMsgHandler extends MessageHandler {
             ds.flush();
             us.sendMessage(msj);
 
+            // Vào giữa ván Diamond: gửi bàn cờ + chỉ số để xem/chơi tiếp.
+            if (board.gameType == 21 && board.diamond.playing) {
+                avatar.minigame.DiamondEngine.sendData(us, board, roomID);
+            }
+
             // Vào giữa ván Bầu Cua: gửi trạng thái ván để xem.
             if (board.gameType == 22 && board.phase != 0) {
                 us.setToXong(true);
@@ -376,6 +383,9 @@ public class CasinoMsgHandler extends MessageHandler {
             if (board.gameType == 3) TienLenEngine.onLeave(board, roomID, us);
             if (board.gameType == 7) {
                 avatar.minigame.PhomEngine.onLeave(board, roomID, us);
+            }
+            if (board.gameType == 21) {
+                avatar.minigame.DiamondEngine.onLeave(board, roomID, us);
             }
             board.removeUser(us);
 
@@ -546,7 +556,8 @@ public class CasinoMsgHandler extends MessageHandler {
                 return;
             }
             // Bầu Cua cần dự trữ ×48 (đối ứng cả bàn); Tiến Lên/Phỏm ×8 [PORT].
-            long need = (long) money * ((board.gameType == 3 || board.gameType == 7) ? 8 : 48);
+            long need = (long) money * ((board.gameType == 3 || board.gameType == 7
+                || board.gameType == 21) ? 8 : 48);
             if (money < 0 || us.getXu() < need) {
                 us.getAvatarService().serverDialog(
                     "Để đặt được " + money + " thì bạn cần có số tiền là " + need);
@@ -577,6 +588,10 @@ public class CasinoMsgHandler extends MessageHandler {
         }
         if (board.gameType == 7) { // Phỏm: engine riêng
             avatar.minigame.PhomEngine.start(this.client, board, roomID);
+            return;
+        }
+        if (board.gameType == 21) { // Diamond: engine riêng
+            avatar.minigame.DiamondEngine.start(this.client, board, roomID);
             return;
         }
         synchronized (board) {
@@ -656,6 +671,12 @@ public class CasinoMsgHandler extends MessageHandler {
         if (board.gameType == 7) { // Phỏm: gói 21 = FIRE {byte cardID}
             int card = rd.available() > 0 ? rd.readByte() : -1;
             avatar.minigame.PhomEngine.fire(this.client, board, roomID, card);
+            return;
+        }
+        if (board.gameType == 21) { // Diamond: gói 21 = MOVE {iSelected, selected}
+            int iSel = rd.available() > 0 ? rd.readByte() : -1;
+            int sel = rd.available() > 0 ? rd.readByte() : -1;
+            avatar.minigame.DiamondEngine.move(this.client, board, roomID, iSel, sel);
             return;
         }
         synchronized (board) {
@@ -892,6 +913,10 @@ public class CasinoMsgHandler extends MessageHandler {
             return;
         }
         if (board.gameType == 7) return; // Phỏm: client không gửi 49
+        if (board.gameType == 21) { // Diamond: bỏ lượt
+            avatar.minigame.DiamondEngine.skip(this.client, board, roomID);
+            return;
+        }
         synchronized (board) {
             int seat = board.seatOf(us);
             if (board.phase != 2 || seat < 0 || board.turnSeat != seat) return;

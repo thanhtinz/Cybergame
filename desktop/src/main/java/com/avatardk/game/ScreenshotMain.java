@@ -1495,6 +1495,15 @@ public class ScreenshotMain {
                         }
                         if (frame == 15) {
                             shot("shot-quiz.png");
+                            stage = 158; frame = 0;
+                        }
+                        break;
+                    case 158: // Diamond (Kim Cương): bàn đang giữa ván
+                        if (frame == 1) {
+                            world.debugOpenDiamond();
+                        }
+                        if (frame == 15) {
+                            shot("shot-diamond-board.png");
                             stage = 121; frame = 0;
                         }
                         break;

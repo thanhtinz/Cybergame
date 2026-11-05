@@ -94,6 +94,21 @@ public class BoardManager {
             boardList.add(board);
             System.out.println("create board Phom : " + board.boardID);
         }
+        // Bàn Diamond (gameType 21): id 50–55, 2 ghế [PORT].
+        for (int i = 0; i < 6; i++) {
+            BoardInfo board = new BoardInfo();
+            board.boardID = (byte) (50 + i);
+            board.gameType = 21;
+            board.seatCap = 2;
+            board.nPlayer = 0;
+            board.maxPlayer = 2;
+            board.isPass = false;
+            board.isPlaying = false;
+            board.money = 0;
+            board.strMoney = "1000";
+            boardList.add(board);
+            System.out.println("create board Diamond : " + board.boardID);
+        }
     }
 
     /** [PORT] Tạo bàn mới, id chạy tiếp sau bàn lớn nhất hiện có.
@@ -115,7 +130,7 @@ public class BoardManager {
             board.boardID = (byte) next;
             board.gameType = gameType;
             board.dynamic = true;
-            board.seatCap = (gameType == 3 || gameType == 7) ? 4 : 5;
+            board.seatCap = gameType == 21 ? 2 : (gameType == 3 || gameType == 7) ? 4 : 5;
             board.nPlayer = 0;
             board.maxPlayer = (byte) board.seatCap;
             board.isPass = false;

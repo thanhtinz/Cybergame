@@ -16502,7 +16502,7 @@ public class WorldScreen extends ScreenAdapter {
         CS_WIN = 60, CS_GAME_TYPE = 61, CS_PLAYING = 62, CS_TA = 65, CS_SET_TURN = 100,
         CS_STOP = 50, CS_FORCE = 53, CS_ERROR = 54,
         CS_GET_CARD = 63, CS_EAT_CARD = 64, CS_ADD_CARD = 67, CS_DEN = 69,
-        CS_ONCE_WIN = 70;
+        CS_ONCE_WIN = 70, CS_OUT_PATH = 24, CS_DATA = 71;
     private static final String[] BC_DOORS = {"Nai", "Bầu", "Gà", "Cá", "Cua", "Tôm"};
     /** Dãy frame lăn của 3 viên xúc xắc (Xingau của gốc). */
     private static final int[][] BC_DICE_SEQ = {
@@ -16814,6 +16814,7 @@ public class WorldScreen extends ScreenAdapter {
             case CS_SET_TURN: case CS_STOP: case CS_FORCE: case CS_ERROR:
             case CS_GET_CARD: case CS_EAT_CARD: case CS_ADD_CARD:
             case CS_DEN: case CS_ONCE_WIN:
+            case CS_SKIP: case CS_OUT_PATH: case CS_DATA:
                 return true;
             default:
                 return false;
@@ -16824,7 +16825,8 @@ public class WorldScreen extends ScreenAdapter {
     private int csGame = 22;
 
     private String csGameName() {
-        return csGame == 3 ? "Tiến Lên" : csGame == 7 ? "Phỏm" : "Bầu Cua";
+        return csGame == 3 ? "Tiến Lên" : csGame == 7 ? "Phỏm"
+            : csGame == 21 ? "Kim Cương" : "Bầu Cua";
     }
 
     private void startCasinoBauCua() {
@@ -16837,6 +16839,10 @@ public class WorldScreen extends ScreenAdapter {
 
     private void startCasinoPhom() {
         startCasino(7, "Phỏm");
+    }
+
+    private void startCasinoDiamond() {
+        startCasino(21, "Kim Cương");
     }
 
     /** Vào casino: đổi handler sang Casino (3) rồi xin gameType —
@@ -16899,6 +16905,7 @@ public class WorldScreen extends ScreenAdapter {
         csResetRound();
         tlReset();
         phReset();
+        dmReset();
     }
 
     private void csResetRound() {
@@ -16937,6 +16944,7 @@ public class WorldScreen extends ScreenAdapter {
     }
 
     private void csUpdate() {
+        if (csGame == 21) dmProcessSteps();
         if (csPending && System.currentTimeMillis() - csPendingAt > 6000) {
             csPending = false;
             addChatLog(TAB_SYSTEM, null, "Không vào được casino (server không trả lời).", true);
@@ -17024,7 +17032,7 @@ public class WorldScreen extends ScreenAdapter {
                     tlReset();
                     phReset();
                     csMySeat = -1;
-                    int seatN = (csGame == 3 || csGame == 7) ? 4 : 5;
+                    int seatN = csGame == 21 ? 2 : (csGame == 3 || csGame == 7) ? 4 : 5;
                     for (int s = 0; s < seatN; s++) {
                         CsSeat seat = csSeats[s];
                         int iddb = r.readInt();
@@ -17127,6 +17135,7 @@ public class WorldScreen extends ScreenAdapter {
                 case CS_START: {
                     if (csGame == 3) { tlOnStart(r); break; }
                     if (csGame == 7) { phOnStart(r); break; }
+                    if (csGame == 21) { dmOnStart(r); break; }
                     r.readByte();
                     r.readByte();
                     csPhaseSecs = r.readByte();
@@ -17139,6 +17148,7 @@ public class WorldScreen extends ScreenAdapter {
                 case CS_BET_OK: {
                     if (csGame == 3) { tlOnMove(r); break; }
                     if (csGame == 7) { phOnFire(r); break; }
+                    if (csGame == 21) { dmOnMove(r); break; }
                     r.readByte();
                     r.readByte();
                     int seat = r.readByte();
@@ -17194,6 +17204,7 @@ public class WorldScreen extends ScreenAdapter {
                 case CS_FINISH: {
                     if (csGame == 3) { tlOnFinish(r); break; }
                     if (csGame == 7) { phOnFinish(r); break; }
+                    if (csGame == 21) { dmOnFinish(r); break; }
                     r.readByte();
                     r.readByte();
                     for (int s = 0; s < 5; s++) {
@@ -17206,9 +17217,10 @@ public class WorldScreen extends ScreenAdapter {
                     csPhase = 3;
                     break;
                 }
-                case CS_SKIP: { // TL: {whoSkip, nextMove, clear} · Phỏm: {next, firHa}
+                case CS_SKIP: { // TL: {whoSkip, nextMove, clear} · Phỏm: {next, firHa} · Diamond: {whoMove}
                     if (csGame == 3) tlOnSkip(r);
                     else if (csGame == 7) phOnSkip(r);
+                    else if (csGame == 21) dmOnSkip(r);
                     break;
                 }
                 case CS_STOP: { // dừng ván (+ lộ bài nếu có)
@@ -17220,8 +17232,9 @@ public class WorldScreen extends ScreenAdapter {
                     if (csGame == 7) phOnGet(r);
                     break;
                 }
-                case CS_EAT_CARD: { // Phỏm: kết quả ăn bài
+                case CS_EAT_CARD: { // Phỏm: ăn bài · Diamond (64): kết quả một đợt xoá
                     if (csGame == 7) phOnEat(r);
+                    else if (csGame == 21) dmOnCreate(r);
                     break;
                 }
                 case CS_ADD_CARD: { // Phỏm: gửi bài (chỉ ghi nhận)
@@ -17253,6 +17266,14 @@ public class WorldScreen extends ScreenAdapter {
                     }
                     break;
                 }
+                case CS_OUT_PATH: { // Diamond: hết nước đi — bàn mới
+                    if (csGame == 21) dmOnOutPath(r);
+                    break;
+                }
+                case CS_DATA: { // Diamond: trạng thái ván cho người vào giữa ván
+                    if (csGame == 21) dmOnData(r);
+                    break;
+                }
                 case CS_PLAYING: {
                     r.readByte();
                     r.readByte();
@@ -17270,6 +17291,639 @@ public class WorldScreen extends ScreenAdapter {
             }
         } catch (Exception ignored) {
         }
+    }
+
+
+    // ==================================================================
+    // DIAMOND (Kim Cương) — casino gameType 21 [PORT theo DiamondScr
+    // gốc Pack5; docs/diamond-spec.md]. Match-3 đối kháng 2 người
+    // trên bàn 8x8 chung; server giải dây chuyền, client chạy hoạt
+    // ảnh theo từng gói 64.
+    // ==================================================================
+    private static final float DM_BX = 456f, DM_BY = 168f, DM_CELL = 46f;
+    private final int[] dmCells = new int[64];      // bàn đang HIỂN THỊ
+    private final int[] dmLogic = new int[64];      // bàn logic theo server
+    private final int[] dmIds = {-1, -1};
+    private final int[] dmHp = {100, 100};
+    private final int[] dmMp = {40, 40};
+    private final int[] dmDef = {0, 0};
+    private final int[] dmMaxMp = {100, 100};
+    private final int[] dmDelta = {0, 0};
+    private int dmTurnId = -1, dmInterval = 30, dmSel = -1;
+    private long dmTurnEndMs;
+    private boolean dmPlaying, dmFinished;
+    private String dmStatus = "";
+    private int[] dmPendingBoard;
+    private final long[] dmKoUntil = {0, 0};
+
+    private static final class DmStep {
+        int kind; // 0 = đổi chỗ · 1 = một đợt xoá (gói 64)
+        int a, b; // ô đổi chỗ (kind 0)
+        int[] pre, fin; // bàn trước/sau đợt (kind 1)
+        boolean[] cleared;
+        java.util.List<int[]> entries; // {pos, fall, type}
+        int[] hp, mp, def;
+        int fightSeat = -1, fightVal, noSeat = -1;
+    }
+
+    private final java.util.List<DmStep> dmSteps = new ArrayList<>();
+    private DmStep dmCur;
+    private long dmCurT0;
+
+    private static final class DmFly {
+        float x, y;
+        String text;
+        Color color;
+        long t0;
+    }
+
+    private final java.util.List<DmFly> dmFlies = new ArrayList<>();
+    private com.badlogic.gdx.graphics.g2d.TextureRegion[] dmGemReg;
+    private com.badlogic.gdx.graphics.g2d.TextureRegion dmSelReg;
+    private Texture dmEffectTex, dmShieldTex, dmKoTex;
+
+    private void dmReset() {
+        java.util.Arrays.fill(dmCells, -1);
+        java.util.Arrays.fill(dmLogic, -1);
+        dmIds[0] = dmIds[1] = -1;
+        dmHp[0] = dmHp[1] = 100;
+        dmMp[0] = dmMp[1] = 40;
+        dmDef[0] = dmDef[1] = 0;
+        dmDelta[0] = dmDelta[1] = 0;
+        dmTurnId = -1;
+        dmSel = -1;
+        dmPlaying = false;
+        dmFinished = false;
+        dmStatus = "";
+        dmSteps.clear();
+        dmCur = null;
+        dmFlies.clear();
+        dmPendingBoard = null;
+        dmKoUntil[0] = dmKoUntil[1] = 0;
+    }
+
+    private com.badlogic.gdx.graphics.g2d.TextureRegion dmGem(int type) {
+        if (dmGemReg == null) {
+            dmGemReg = new com.badlogic.gdx.graphics.g2d.TextureRegion[6];
+            Texture t = game.texture("diamond/gems.png");
+            if (t != null) {
+                for (int i = 0; i < 6; i++) {
+                    dmGemReg[i] = new com.badlogic.gdx.graphics.g2d.TextureRegion(
+                        t, 0, i * 72, 72, 72);
+                }
+            }
+        }
+        return dmGemReg[type];
+    }
+
+    private boolean[] dmFindMatches(int[] c) {
+        boolean[] m = new boolean[64];
+        for (int r = 0; r < 8; r++) {
+            int run = 1;
+            for (int col = 1; col <= 8; col++) {
+                if (col < 8 && c[r * 8 + col] == c[r * 8 + col - 1] && c[r * 8 + col] >= 0) {
+                    run++;
+                } else {
+                    if (run >= 3) for (int k = col - run; k < col; k++) m[r * 8 + k] = true;
+                    run = 1;
+                }
+            }
+        }
+        for (int col = 0; col < 8; col++) {
+            int run = 1;
+            for (int r = 1; r <= 8; r++) {
+                if (r < 8 && c[r * 8 + col] == c[(r - 1) * 8 + col] && c[r * 8 + col] >= 0) {
+                    run++;
+                } else {
+                    if (run >= 3) for (int k = r - run; k < r; k++) m[k * 8 + col] = true;
+                    run = 1;
+                }
+            }
+        }
+        return m;
+    }
+
+    private void dmOnStart(java.io.DataInputStream r) throws Exception {
+        r.readByte();
+        r.readByte();
+        dmInterval = r.readByte();
+        int who = r.readInt();
+        for (int i = 0; i < 64; i++) dmLogic[i] = r.readByte();
+        for (int s = 0; s < 2; s++) {
+            dmIds[s] = r.readInt();
+            dmDef[s] = r.readShort();
+            dmHp[s] = r.readShort();
+            dmMp[s] = r.readShort();
+            dmMaxMp[s] = r.readShort();
+        }
+        System.arraycopy(dmLogic, 0, dmCells, 0, 64);
+        dmSteps.clear();
+        dmCur = null;
+        dmFlies.clear();
+        dmSel = -1;
+        dmDelta[0] = dmDelta[1] = 0;
+        dmFinished = false;
+        dmPlaying = true;
+        dmTurnId = who;
+        dmTurnEndMs = System.currentTimeMillis() + dmInterval * 1000L;
+        dmStatus = who == ownId() ? "Tới lượt bạn — đổi chỗ 2 ô kề nhau"
+            : "Đối thủ đi trước…";
+    }
+
+    private void dmOnMove(java.io.DataInputStream r) throws Exception {
+        r.readByte();
+        r.readByte();
+        r.readInt(); // whoMove
+        DmStep st = new DmStep();
+        st.kind = 0;
+        st.a = r.readByte();
+        st.b = r.readByte();
+        if (st.a >= 0 && st.a < 64 && st.b >= 0 && st.b < 64) {
+            int t = dmLogic[st.a];
+            dmLogic[st.a] = dmLogic[st.b];
+            dmLogic[st.b] = t;
+        }
+        dmSteps.add(st);
+    }
+
+    private void dmOnCreate(java.io.DataInputStream r) throws Exception {
+        r.readByte();
+        r.readByte();
+        DmStep st = new DmStep();
+        st.kind = 1;
+        st.pre = dmLogic.clone();
+        // ô bị xoá trên bàn logic hiện tại (gồm nổ lan của bom loại 4)
+        boolean[] match = dmFindMatches(dmLogic);
+        st.cleared = match.clone();
+        for (int i = 0; i < 64; i++) {
+            if (match[i] && dmLogic[i] == 4) {
+                int rr = i / 8, cc = i % 8;
+                if (rr > 0) st.cleared[i - 8] = true;
+                if (rr < 7) st.cleared[i + 8] = true;
+                if (cc > 0) st.cleared[i - 1] = true;
+                if (cc < 7) st.cleared[i + 1] = true;
+            }
+        }
+        int n = r.readUnsignedByte();
+        st.entries = new ArrayList<>();
+        for (int i = 0; i < n; i++) {
+            int pos = r.readUnsignedByte();
+            int fall = r.readUnsignedByte();
+            int type = r.readUnsignedByte();
+            st.entries.add(new int[]{pos, fall, type});
+            if (pos < 64) dmLogic[pos] = type;
+        }
+        r.readByte(); // combo
+        int nText = r.readUnsignedByte();
+        for (int i = 0; i < nText; i++) r.readUTF();
+        st.hp = new int[2];
+        st.mp = new int[2];
+        st.def = new int[2];
+        for (int s = 0; s < 2; s++) {
+            r.readInt(); // id theo ghế
+            int fight = r.readByte();
+            st.def[s] = r.readShort();
+            st.hp[s] = r.readShort();
+            st.mp[s] = r.readShort();
+            boolean isNo = r.readBoolean();
+            if (fight > 0) {
+                st.fightSeat = s;
+                st.fightVal = fight;
+            }
+            if (isNo) st.noSeat = s;
+        }
+        st.fin = dmLogic.clone();
+        dmSteps.add(st);
+    }
+
+    private void dmOnSkip(java.io.DataInputStream r) throws Exception {
+        r.readByte();
+        r.readByte();
+        dmTurnId = r.readInt();
+        dmSel = -1;
+        dmTurnEndMs = System.currentTimeMillis() + dmInterval * 1000L;
+        dmStatus = dmTurnId == ownId() ? "Tới lượt bạn" : "Lượt đối thủ…";
+    }
+
+    private void dmOnOutPath(java.io.DataInputStream r) throws Exception {
+        r.readByte();
+        r.readByte();
+        int who = r.readInt();
+        int[] nb = new int[64];
+        for (int i = 0; i < 64; i++) nb[i] = r.readByte();
+        System.arraycopy(nb, 0, dmLogic, 0, 64);
+        dmPendingBoard = nb;
+        dmTurnId = who;
+        dmSel = -1;
+        dmTurnEndMs = System.currentTimeMillis() + dmInterval * 1000L;
+        dmStatus = "Hết nước đi — đã phát bàn mới";
+    }
+
+    private void dmOnData(java.io.DataInputStream r) throws Exception {
+        r.readByte();
+        r.readByte();
+        for (int i = 0; i < 64; i++) dmLogic[i] = r.readByte();
+        for (int s = 0; s < 2; s++) {
+            dmIds[s] = r.readInt();
+            dmDef[s] = r.readShort();
+            dmHp[s] = r.readShort();
+            dmMp[s] = r.readShort();
+            dmMaxMp[s] = r.readShort();
+        }
+        dmTurnId = r.readInt();
+        System.arraycopy(dmLogic, 0, dmCells, 0, 64);
+        dmPlaying = true;
+        dmFinished = false;
+        dmTurnEndMs = System.currentTimeMillis() + dmInterval * 1000L;
+    }
+
+    private void dmOnFinish(java.io.DataInputStream r) throws Exception {
+        r.readByte();
+        r.readByte();
+        for (int k = 0; k < 2; k++) {
+            int id = r.readInt();
+            int delta = r.readInt();
+            for (int s = 0; s < 2; s++) {
+                if (dmIds[s] == id) {
+                    dmDelta[s] = delta;
+                    CsSeat seat = csSeatById(id);
+                    if (seat != null) seat.xu += delta;
+                    if (id == ownId()) myXu += delta;
+                }
+            }
+        }
+        dmPlaying = false;
+        dmFinished = true;
+        dmSteps.clear();
+        dmCur = null;
+        dmSel = -1;
+    }
+
+    /** Chạy hàng đợi hoạt ảnh (gọi mỗi frame khi ở casino). */
+    private void dmProcessSteps() {
+        long now = System.currentTimeMillis();
+        if (dmCur == null && !dmSteps.isEmpty()) {
+            dmCur = dmSteps.remove(0);
+            dmCurT0 = now;
+            if (dmCur.kind == 0) {
+                int t = dmCells[dmCur.a];
+                dmCells[dmCur.a] = dmCells[dmCur.b];
+                dmCells[dmCur.b] = t;
+            } else {
+                System.arraycopy(dmCur.fin, 0, dmCells, 0, 64);
+                for (int s = 0; s < 2; s++) {
+                    dmHp[s] = dmCur.hp[s];
+                    dmMp[s] = dmCur.mp[s];
+                    dmDef[s] = dmCur.def[s];
+                }
+                if (dmCur.fightSeat >= 0) {
+                    int opp = 1 - dmCur.fightSeat;
+                    DmFly f = new DmFly();
+                    f.x = dmSeatX(opp);
+                    f.y = 500;
+                    f.text = "-" + dmCur.fightVal;
+                    f.color = new Color(1f, 0.45f, 0.4f, 1f);
+                    f.t0 = now;
+                    dmFlies.add(f);
+                }
+                if (dmCur.noSeat >= 0) dmKoUntil[dmCur.noSeat] = now + 1600;
+            }
+        }
+        if (dmCur != null) {
+            long dur = dmCur.kind == 0 ? 230 : 640;
+            if (now - dmCurT0 >= dur) dmCur = null;
+        }
+        if (dmCur == null && dmSteps.isEmpty() && dmPendingBoard != null) {
+            System.arraycopy(dmPendingBoard, 0, dmCells, 0, 64);
+            dmPendingBoard = null;
+        }
+        for (int i = dmFlies.size() - 1; i >= 0; i--) {
+            if (now - dmFlies.get(i).t0 > 950) dmFlies.remove(i);
+        }
+    }
+
+    private float dmSeatX(int s) {
+        return s == 0 ? 208f : 1072f;
+    }
+
+    private void dmDrawGem(int pos, float extraY) {
+        int type = dmCells[pos];
+        if (type < 0 || type > 5) return;
+        com.badlogic.gdx.graphics.g2d.TextureRegion reg = dmGem(type);
+        if (reg == null) return;
+        int r = pos / 8, c = pos % 8;
+        float x = DM_BX + c * DM_CELL;
+        float y = DM_BY + (7 - r) * DM_CELL + extraY;
+        batch.draw(reg, x + 3, y + 3, DM_CELL - 6, DM_CELL - 6);
+    }
+
+    private void drawDiamondBoard() {
+        CsSeat owner = csOwnerId >= 0 ? csSeatById(csOwnerId) : null;
+        String sub = "Chủ bàn: " + (owner != null ? owner.name : "—")
+            + (csBoardMoney > 0 ? " · Mức: " + fmtMoney(csBoardMoney) + " xu"
+                : " · Chưa đặt mức");
+        csPanelBase("Kim Cương — Bàn " + (csBoardId + 1), sub);
+        long now = System.currentTimeMillis();
+        int myId = ownId();
+        if (dmEffectTex == null) dmEffectTex = game.texture("diamond/effect.png");
+        if (dmShieldTex == null) dmShieldTex = game.texture("diamond/shield.png");
+        if (dmKoTex == null) dmKoTex = game.texture("diamond/ko1.png");
+        if (dmSelReg == null) {
+            Texture st = game.texture("diamond/select.png");
+            if (st != null) dmSelReg = new com.badlogic.gdx.graphics.g2d.TextureRegion(
+                st, 0, 48, 48, 48);
+        }
+
+        // ---- hai người chơi hai bên ----
+        for (int s = 0; s < 2; s++) {
+            CsSeat seat = csSeats[s];
+            float cx = dmSeatX(s);
+            if (seat.id == -1 || seat.doll == null) {
+                Ui.centered(batch, Ui.fontTiny, "Ghế trống", cx, 420,
+                    new Color(1f, 1f, 1f, 0.4f));
+                continue;
+            }
+            boolean isTurn = dmPlaying && seat.id == dmTurnId;
+            if (isTurn) {
+                batch.draw(Ui.roundedRect(170, 300, 14,
+                    new Color(1f, 0.62f, 0.15f, 0.16f),
+                    new Color(1f, 0.62f, 0.15f, 0.95f)), cx - 85, 218);
+            }
+            game.dollRenderer.draw(batch, seat.doll, seat.anim.frameIndex(),
+                cx, 386, 2f, s == 1);
+            if (dmPlaying && now < dmKoUntil[s] && dmKoTex != null) {
+                if ((now / 300) % 2 == 0) {
+                    batch.draw(dmKoTex, cx - 24, 492, 48, 48,
+                        0, 0, 48, 48, false, true);
+                }
+            }
+            Ui.centered(batch, Ui.fontSmall, truncTo(Ui.fontSmall, seat.name, 150),
+                cx, 368, seat.id == csOwnerId
+                    ? new Color(1f, 0.85f, 0.38f, 1f) : Color.WHITE);
+            Ui.centered(batch, Ui.fontTiny, fmtMoney(seat.xu) + " xu",
+                cx, 346, new Color(1f, 1f, 1f, 0.7f));
+            // thanh HP / MP (theo ghế ván Diamond)
+            int si = dmIds[0] == seat.id ? 0 : dmIds[1] == seat.id ? 1 : -1;
+            if (si >= 0 && (dmPlaying || dmFinished)) {
+                float bw = 170, bx = cx - bw / 2f;
+                batch.draw(Ui.roundedRect((int) bw, 16, 6,
+                    new Color(0f, 0f, 0f, 0.55f), GLASS_RIM), bx, 306);
+                float hpf = Math.max(0, dmHp[si]) / 100f;
+                if (hpf > 0) {
+                    batch.draw(Ui.roundedRect(Math.max(10, (int) (bw * hpf)), 16, 6,
+                        new Color(0.85f, 0.25f, 0.25f, 1f), null), bx, 306);
+                }
+                Ui.centered(batch, Ui.fontTiny, "HP " + Math.max(0, dmHp[si]) + "/100",
+                    cx, 319, Color.WHITE);
+                batch.draw(Ui.roundedRect((int) bw, 12, 6,
+                    new Color(0f, 0f, 0f, 0.55f), GLASS_RIM), bx, 288);
+                float mpf = Math.max(0, Math.min(dmMaxMp[si], dmMp[si]))
+                    / (float) Math.max(1, dmMaxMp[si]);
+                if (mpf > 0) {
+                    batch.draw(Ui.roundedRect(Math.max(10, (int) (bw * mpf)), 12, 6,
+                        new Color(0.25f, 0.50f, 0.95f, 1f), null), bx, 288);
+                }
+                Ui.centered(batch, Ui.fontTiny, "MP " + Math.max(0, dmMp[si]),
+                    cx, 298, Color.WHITE);
+                if (dmShieldTex != null) {
+                    batch.draw(dmShieldTex, bx, 262, 20, 20);
+                }
+                Ui.fontTiny.setColor(1f, 1f, 1f, 0.85f);
+                Ui.fontTiny.draw(batch, "Khiên " + dmDef[si], bx + 26, 276);
+            }
+            if (dmFinished && si >= 0 && dmDelta[si] != 0) {
+                Ui.centered(batch, Ui.font, (dmDelta[si] > 0 ? "+" : "-")
+                        + fmtMoney(Math.abs(dmDelta[si])) + " xu",
+                    cx, 560, dmDelta[si] > 0
+                        ? new Color(0.45f, 0.95f, 0.5f, 1f)
+                        : new Color(1f, 0.45f, 0.4f, 1f));
+            } else if (!dmPlaying && !dmFinished && seat.ready) {
+                Ui.centered(batch, Ui.fontTiny, "Sẵn sàng", cx, 250,
+                    new Color(0.45f, 0.95f, 0.5f, 1f));
+            }
+        }
+
+        // ---- bàn cờ 8x8 ca-rô ----
+        Color ca = new Color(0.31f, 0.30f, 0.25f, 1f);  // 5197647 gốc
+        Color cb = new Color(0.16f, 0.16f, 0.13f, 1f);  // 2697513 gốc
+        for (int r = 0; r < 8; r++) {
+            for (int c = 0; c < 8; c++) {
+                batch.setColor(((r + c) % 2 == 0) ? ca : cb);
+                batch.draw(whiteTex, DM_BX + c * DM_CELL,
+                    DM_BY + (7 - r) * DM_CELL, DM_CELL, DM_CELL);
+            }
+        }
+        batch.setColor(Color.WHITE);
+        boolean burst = dmCur != null && dmCur.kind == 1
+            && (now - dmCurT0) < 220;
+        boolean falling = dmCur != null && dmCur.kind == 1 && !burst;
+        if (burst) {
+            int[] save = dmCells.clone();
+            System.arraycopy(dmCur.pre, 0, dmCells, 0, 64);
+            for (int pos = 0; pos < 64; pos++) {
+                if (dmCur.cleared[pos]) {
+                    if (dmEffectTex != null) {
+                        float pr = (now - dmCurT0) / 220f;
+                        float sz = DM_CELL * (0.7f + pr * 0.7f);
+                        int r = pos / 8, c = pos % 8;
+                        batch.setColor(1f, 1f, 1f, 1f - pr * 0.4f);
+                        batch.draw(dmEffectTex,
+                            DM_BX + c * DM_CELL + (DM_CELL - sz) / 2f,
+                            DM_BY + (7 - r) * DM_CELL + (DM_CELL - sz) / 2f, sz, sz);
+                        batch.setColor(Color.WHITE);
+                    }
+                } else {
+                    dmDrawGem(pos, 0);
+                }
+            }
+            System.arraycopy(save, 0, dmCells, 0, 64);
+        } else if (falling) {
+            float q = Math.min(1f, (now - dmCurT0 - 220) / 420f);
+            float e = 1f - (1f - q) * (1f - q);
+            java.util.Map<Integer, Integer> fallOf = new java.util.HashMap<>();
+            for (int[] en : dmCur.entries) fallOf.put(en[0], en[1]);
+            for (int pos = 0; pos < 64; pos++) {
+                Integer f = fallOf.get(pos);
+                dmDrawGem(pos, f == null ? 0 : f * DM_CELL * (1f - e));
+            }
+        } else if (dmCur != null && dmCur.kind == 0) {
+            float q = Math.min(1f, (now - dmCurT0) / 230f);
+            for (int pos = 0; pos < 64; pos++) {
+                if (pos != dmCur.a && pos != dmCur.b) dmDrawGem(pos, 0);
+            }
+            // hai viên đang tráo: vẽ theo vị trí nội suy
+            drawDmSwapGem(dmCur.b, dmCur.a, dmCur.b, q);
+            drawDmSwapGem(dmCur.a, dmCur.b, dmCur.a, q);
+        } else {
+            for (int pos = 0; pos < 64; pos++) dmDrawGem(pos, 0);
+        }
+        // khung chọn
+        if (dmSel >= 0 && dmSelReg != null && dmPlaying && dmTurnId == myId) {
+            int r = dmSel / 8, c = dmSel % 8;
+            batch.draw(dmSelReg, DM_BX + c * DM_CELL - 2,
+                DM_BY + (7 - r) * DM_CELL - 2, DM_CELL + 4, DM_CELL + 4);
+        }
+
+        // text bay (sát thương)
+        for (DmFly f : dmFlies) {
+            float pr = (now - f.t0) / 950f;
+            batch.setColor(1f, 1f, 1f, 1f);
+            Ui.centered(batch, Ui.fontTitle, f.text, f.x, f.y + pr * 46,
+                new Color(f.color.r, f.color.g, f.color.b, 1f - pr));
+        }
+        batch.setColor(Color.WHITE);
+
+        // ---- trạng thái / đồng hồ lượt ----
+        if (dmPlaying) {
+            long remain = Math.max(0, (dmTurnEndMs - now + 999) / 1000);
+            Ui.centered(batch, Ui.fontTitle, String.valueOf(remain), 640, 592,
+                remain <= 10 ? new Color(1f, 0.45f, 0.4f, 1f)
+                    : new Color(1f, 0.85f, 0.38f, 1f));
+            Ui.centered(batch, Ui.fontSmall,
+                dmTurnId == myId ? "Tới lượt bạn — chạm 1 ô rồi chạm ô kề để đổi chỗ"
+                    : "Lượt của đối thủ…",
+                640, 128, dmTurnId == myId
+                    ? new Color(0.45f, 0.95f, 0.5f, 1f)
+                    : new Color(1f, 1f, 1f, 0.7f));
+        } else if (dmFinished) {
+            int winSeat = dmDelta[0] > 0 ? 0 : dmDelta[1] > 0 ? 1 : -1;
+            String wt = winSeat < 0 ? "Hoà ván!" : "Thắng: "
+                + truncTo(Ui.font, csSeatById(dmIds[winSeat]) != null
+                    ? csSeatById(dmIds[winSeat]).name : "?", 200);
+            Ui.centered(batch, Ui.font, wt, 640, 128,
+                new Color(1f, 0.85f, 0.38f, 1f));
+        } else {
+            Ui.centered(batch, Ui.font,
+                csMySeat == 0 ? "Bấm Bắt đầu khi đối thủ đã sẵn sàng"
+                    : "Chờ chủ bàn bắt đầu ván mới…",
+                640, 128, new Color(1f, 1f, 1f, 0.8f));
+        }
+        if (!dmStatus.isEmpty() && dmPlaying) {
+            Ui.centered(batch, Ui.fontTiny, dmStatus, 640, 556,
+                new Color(1f, 1f, 1f, 0.55f));
+        }
+
+        // ---- thanh nút ----
+        csButton(CS_PX + CS_PW - 174, 20, 150, 52, "Rời bàn", 2);
+        if (dmPlaying) {
+            if (dmTurnId == myId) csButton(856, 20, 160, 52, "Bỏ lượt", 0);
+        } else if (csMySeat == 0) {
+            csButton(462, 20, 170, 52, "Đặt mức", 0);
+            csButton(646, 20, 170, 52, "Bắt đầu", 1);
+        } else if (csMySeat > 0) {
+            boolean ready = csSeats[csMySeat].ready;
+            csButton(530, 20, 220, 52, ready ? "Huỷ sẵn sàng" : "Sẵn sàng", ready ? 0 : 1);
+        }
+    }
+
+    /** Vẽ viên đang ở ô srcFrom (giá trị đã tráo trong dmCells tại
+     *  ô đích) trượt từ ô from sang ô to với tiến trình q. */
+    private void drawDmSwapGem(int storedAt, int from, int to, float q) {
+        int type = dmCells[storedAt];
+        if (type < 0 || type > 5) return;
+        com.badlogic.gdx.graphics.g2d.TextureRegion reg = dmGem(type);
+        if (reg == null) return;
+        float fx = DM_BX + (from % 8) * DM_CELL, fy = DM_BY + (7 - from / 8) * DM_CELL;
+        float tx = DM_BX + (to % 8) * DM_CELL, ty = DM_BY + (7 - to / 8) * DM_CELL;
+        batch.draw(reg, fx + (tx - fx) * q + 3, fy + (ty - fy) * q + 3,
+            DM_CELL - 6, DM_CELL - 6);
+    }
+
+    private void dmTouch(float x, float y) {
+        if (dmPlaying) {
+            if (dmTurnId == ownId() && x >= 856 && x <= 1016 && y >= 20 && y <= 72) {
+                csSend(csMsgRB(CS_SKIP));
+                return;
+            }
+            if (dmTurnId != ownId() || dmCur != null || !dmSteps.isEmpty()) return;
+            if (x < DM_BX || x >= DM_BX + 8 * DM_CELL
+                || y < DM_BY || y >= DM_BY + 8 * DM_CELL) return;
+            int c = (int) ((x - DM_BX) / DM_CELL);
+            int r = 7 - (int) ((y - DM_BY) / DM_CELL);
+            int pos = r * 8 + c;
+            if (dmSel == -1) {
+                dmSel = pos;
+            } else if (pos == dmSel) {
+                dmSel = -1;
+            } else if (Math.abs(pos / 8 - dmSel / 8) + Math.abs(pos % 8 - dmSel % 8) == 1) {
+                Msg mv = csMsgRB(CS_BET_OK);
+                try {
+                    mv.writer().writeByte(dmSel);
+                    mv.writer().writeByte(pos);
+                } catch (Exception ignored) {
+                }
+                csSend(mv);
+                dmSel = -1;
+            } else {
+                dmSel = pos;
+            }
+            return;
+        }
+        if (dmFinished || !dmPlaying) {
+            if (csMySeat == 0) {
+                if (x >= 462 && x <= 632 && y >= 20 && y <= 72) {
+                    csMoneySheet = true;
+                    return;
+                }
+                if (x >= 646 && x <= 816 && y >= 20 && y <= 72) {
+                    csSend(csMsgRB(CS_START));
+                    return;
+                }
+            } else if (csMySeat > 0) {
+                if (x >= 530 && x <= 750 && y >= 20 && y <= 72) {
+                    Msg rd = csMsgRB(CS_READY);
+                    try {
+                        rd.writer().writeBoolean(!csSeats[csMySeat].ready);
+                    } catch (Exception ignored) {
+                    }
+                    csSend(rd);
+                }
+            }
+        }
+    }
+
+    /** Harness: bàn Diamond đang giữa ván, tới lượt mình. */
+    public void debugOpenDiamond() {
+        debugCloseHubGames();
+        quizOpen = false;
+        casinoIn = true;
+        csPending = false;
+        csGame = 21;
+        casinoPage = 2;
+        if (game.player != null) game.player.id = 1000;
+        csResetBoard();
+        csRoomId = 52;
+        csBoardId = 50;
+        csOwnerId = 1000;
+        csBoardMoney = 1000;
+        csDebugSeat(0, "Sơn", 208000, false, 628, 474, 0, 80, 46);
+        csDebugSeat(1, "Linh Chi", 192000, false, 628, 474, 0, 80, 49);
+        csMySeat = 0;
+        int[] pat = {
+            0, 2, 1, 3, 4, 5, 2, 0,
+            3, 1, 4, 2, 0, 3, 5, 1,
+            2, 4, 0, 5, 1, 2, 3, 4,
+            5, 0, 3, 1, 2, 4, 0, 5,
+            1, 3, 5, 0, 4, 1, 2, 3,
+            4, 2, 0, 3, 5, 0, 1, 4,
+            0, 5, 2, 4, 3, 1, 4, 2,
+            3, 1, 4, 5, 2, 0, 5, 3};
+        System.arraycopy(pat, 0, dmCells, 0, 64);
+        System.arraycopy(pat, 0, dmLogic, 0, 64);
+        dmIds[0] = 1000;
+        dmIds[1] = 1001;
+        dmHp[0] = 72;
+        dmHp[1] = 100;
+        dmMp[0] = 55;
+        dmMp[1] = 40;
+        dmDef[0] = 6;
+        dmDef[1] = 0;
+        dmPlaying = true;
+        dmTurnId = 1000;
+        dmInterval = 30;
+        dmTurnEndMs = System.currentTimeMillis() + 19000;
+        dmSel = 28;
+        dmStatus = "Ván mẫu kiểm chứng hình";
     }
 
     // ---------- Tiến Lên: xử lý gói (docs/tienlen-spec.md) ----------
@@ -17944,6 +18598,7 @@ public class WorldScreen extends ScreenAdapter {
         else if (casinoPage == 1) drawCsBoards();
         else if (csGame == 3) drawTlBoard();
         else if (csGame == 7) drawPhomBoard();
+        else if (csGame == 21) drawDiamondBoard();
         else drawCsBoard();
         if (csMoneySheet) drawCsMoneySheet();
         if (csKickSheet) drawCsKickSheet();
@@ -19001,6 +19656,11 @@ public class WorldScreen extends ScreenAdapter {
         // Phỏm: chạm riêng trong bàn
         if (csGame == 7) {
             phomTouch(x, y);
+            return true;
+        }
+        // Diamond: chạm riêng trong bàn
+        if (csGame == 21) {
+            dmTouch(x, y);
             return true;
         }
         // ô cửa
@@ -20988,16 +21648,20 @@ public class WorldScreen extends ScreenAdapter {
     }
 
     /** Tên 3 game casino ở Khu vực 1, theo thứ tự thẻ. */
-    private static final String[] MG_CASINO_NAMES = {"Bầu Cua", "Tiến Lên", "Phỏm"};
+    private static final String[] MG_CASINO_NAMES = {"Bầu Cua", "Tiến Lên", "Phỏm", "Kim Cương"};
     private com.badlogic.gdx.graphics.g2d.TextureRegion[] mgCsIcons;
 
     /** Icon thẻ casino: Bầu Cua = mặt xúc xắc (img 874 ô 0),
      *  Tiến Lên = mặt lá bài 0, Phỏm = lưng lá bài. */
     private com.badlogic.gdx.graphics.g2d.TextureRegion mgCasinoIcon(int i) {
         if (mgCsIcons == null) mgCsIcons =
-            new com.badlogic.gdx.graphics.g2d.TextureRegion[3];
+            new com.badlogic.gdx.graphics.g2d.TextureRegion[4];
         if (mgCsIcons[i] == null) {
-            if (i == 0) {
+            if (i == 3) {
+                Texture t = game.texture("diamond/gems.png");
+                if (t != null) mgCsIcons[i] =
+                    new com.badlogic.gdx.graphics.g2d.TextureRegion(t, 0, 72, 72, 72);
+            } else if (i == 0) {
                 Texture t = house.imgTexture(874);
                 if (t != null) mgCsIcons[i] =
                     new com.badlogic.gdx.graphics.g2d.TextureRegion(t, 0, 0, 108, 108);
@@ -21015,7 +21679,8 @@ public class WorldScreen extends ScreenAdapter {
         mgCloseHub();
         if (i == 0) startCasinoBauCua();
         else if (i == 1) startCasinoTienLen();
-        else startCasinoPhom();
+        else if (i == 2) startCasinoPhom();
+        else startCasinoDiamond();
     }
 
     private static String mgSelectIcon(int gameId) {
@@ -21069,8 +21734,14 @@ public class WorldScreen extends ScreenAdapter {
                         MG_CASINO_NAMES[i].substring(0, 1), cx + cw / 2f,
                         cy + ch - 46, Color.WHITE);
                 }
-                Ui.centered(batch, Ui.font, MG_CASINO_NAMES[i], cx + cw / 2f,
-                    cy + 76, new Color(1f, 1f, 1f, 0.97f));
+                layout.setText(Ui.font, MG_CASINO_NAMES[i]);
+                if (layout.width > cw - 8) {
+                    Ui.centered(batch, Ui.fontSmall, MG_CASINO_NAMES[i], cx + cw / 2f,
+                        cy + 74, new Color(1f, 1f, 1f, 0.97f));
+                } else {
+                    Ui.centered(batch, Ui.font, MG_CASINO_NAMES[i], cx + cw / 2f,
+                        cy + 76, new Color(1f, 1f, 1f, 0.97f));
+                }
                 Ui.centered(batch, Ui.fontSmall, "Chơi ngay", cx + cw / 2f,
                     cy + 44, new Color(0.45f, 0.95f, 0.55f, 1f));
                 batch.setColor(Color.WHITE);

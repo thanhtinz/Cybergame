@@ -16,6 +16,8 @@ public class BoardInfo
     /** Trạng thái ván Tiến Lên (chỉ dùng khi gameType == 3). */
     public final avatar.minigame.TlState tl = new avatar.minigame.TlState();
     public final avatar.minigame.PhomState phom = new avatar.minigame.PhomState();
+    /** Trạng thái ván Diamond (chỉ dùng khi gameType == 21). */
+    public final avatar.minigame.DiamondState diamond = new avatar.minigame.DiamondState();
 
     public byte nPlayer;//số người
 
