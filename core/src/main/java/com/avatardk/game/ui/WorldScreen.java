@@ -17451,10 +17451,12 @@ public class WorldScreen extends ScreenAdapter {
         r.readByte();
         DmStep st = new DmStep();
         st.kind = 1;
-        st.pre = dmLogic.clone();
+        st.pre = new int[64];
+        System.arraycopy(dmLogic, 0, st.pre, 0, 64);
         // ô bị xoá trên bàn logic hiện tại (gồm nổ lan của bom loại 4)
         boolean[] match = dmFindMatches(dmLogic);
-        st.cleared = match.clone();
+        st.cleared = new boolean[64];
+        System.arraycopy(match, 0, st.cleared, 0, 64);
         for (int i = 0; i < 64; i++) {
             if (match[i] && dmLogic[i] == 4) {
                 int rr = i / 8, cc = i % 8;
@@ -17492,7 +17494,8 @@ public class WorldScreen extends ScreenAdapter {
             }
             if (isNo) st.noSeat = s;
         }
-        st.fin = dmLogic.clone();
+        st.fin = new int[64];
+        System.arraycopy(dmLogic, 0, st.fin, 0, 64);
         dmSteps.add(st);
     }
 
@@ -17718,7 +17721,8 @@ public class WorldScreen extends ScreenAdapter {
             && (now - dmCurT0) < 220;
         boolean falling = dmCur != null && dmCur.kind == 1 && !burst;
         if (burst) {
-            int[] save = dmCells.clone();
+            int[] save = new int[64];
+            System.arraycopy(dmCells, 0, save, 0, 64);
             System.arraycopy(dmCur.pre, 0, dmCells, 0, 64);
             for (int pos = 0; pos < 64; pos++) {
                 if (dmCur.cleared[pos]) {
