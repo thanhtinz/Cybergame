@@ -748,6 +748,7 @@ i:minigame/BG_Box_2.png:minigame/BG_Box_2-506c159d264348a7ec2643995c983cbf.png:2
 i:minigame/BG_Box_3.png:minigame/BG_Box_3-232669e10dcf5e6b2fad53a1118f8c08.png:2066:image/png:1
 i:minigame/BG_Box_4.png:minigame/BG_Box_4-698ba177e10b8a6003b00505e7f6da2d.png:373:image/png:1
 i:minigame/BG_Box_5.png:minigame/BG_Box_5-6119cca5e9345a9e61df10d0f45dd576.png:385:image/png:1
+i:minigame/snake.png:minigame/snake-ea8cbbe13163f0da939351b325c72d4d.png:7621:image/png:1
 d:diallucky:diallucky:0:application/unknown:1
 i:diallucky/c.png:diallucky/c-d1039780cbd3988f4dbd502eba37ac07.png:593:image/png:1
 i:diallucky/cb.png:diallucky/cb-440d73e85015662c8df1855ad8848ce6.png:472:image/png:1
