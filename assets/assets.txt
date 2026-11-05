@@ -849,6 +849,13 @@ i:titles/title-18.png:titles/title-18-91704bf60da83f0fcb2afa01938dfe2f.png:4853:
 i:titles/title-19.png:titles/title-19-f66aac216f0de7b323880ce1154f4841.png:4515:image/png:1
 i:titles/title-20.png:titles/title-20-85f793505429e5fa260da16de9e571cf.png:4793:image/png:1
 i:titles/title-21.png:titles/title-21-7c9b2c0e01df64b5650667947cd255cb.png:5321:image/png:1
+d:diamond:diamond:0:application/unknown:1
+i:diamond/gems.png:diamond/gems-cbdb0cc7178df85c7973914ecb94d2aa.png:10759:image/png:1
+i:diamond/effect.png:diamond/effect-e8f70b92aebd164db7f80098c1c78642.png:669:image/png:1
+i:diamond/select.png:diamond/select-fbbbd94916884c5169be00b51d4347e1.png:264:image/png:1
+i:diamond/shield.png:diamond/shield-b52bb82e7bd2fca75f5ecc668c94005e.png:256:image/png:1
+i:diamond/ko1.png:diamond/ko1-ffc4bfc30fcd0de9712fc9da71f80192.png:2625:image/png:1
+i:diamond/ko2.png:diamond/ko2-7ff6799ce88c9210cd7bc1ff0a55268a.png:3050:image/png:1
 t:com/badlogic/gdx/graphics/g3d/particles/particles.fragment.glsl:particles.fragment-b90524761fdf09b0a836056d590c30b8.glsl:820:application/unknown:1
 t:com/badlogic/gdx/graphics/g3d/particles/particles.vertex.glsl:particles.vertex-f25b8b2fae10b9bfa09bfdd484923148.glsl:2886:application/unknown:1
 t:com/badlogic/gdx/graphics/g3d/shaders/default.fragment.glsl:default.fragment-e1c018bd48044c8b67c7bbc53145e540.glsl:5874:application/unknown:1
