@@ -50,3 +50,11 @@
   cách bỏ qua Boss trong announceEnter; chẩn đoán ban đầu về
   handshake timeout là SAI (gói bắt tay do client gửi trước),
   đã xác minh lại bằng thread dump + log accept.
+
+## Sửa theo lệnh Tín 2026-11-05 — Danh hiệu là TAB trong panel nhân vật
+
+- BỎ panel Danh hiệu riêng + pill ở panel kính. Bản chốt (Cards) của panel Thông tin nhân vật nay có THANH TAB "Thông tin | Danh hiệu" (đúng ownedTitleTab của bản chính) tại py+382; phía phải hàng tab hiện "Đang đeo: <tên>". CP_H tăng 470 -> 520 cho thoáng; chip tiền neo cố định py+308.
+- Tab Danh hiệu: lưới 2 cột x 6 hàng, thẻ 292x48 (tên fontSmall đủ dài, dòng điều kiện fontTiny, nhãn Đeo/Đang đeo/Chưa có góc phải). Bấm thẻ đã sở hữu = đeo/gỡ (online gửi gói -120 sub 1).
+- Client có FALLBACK_TITLE_DEFS (12 định nghĩa khớp server) dùng khi chưa nhận STATE. CHẾ ĐỘ CHƠI THỬ OFFLINE: đeo thử tự do mọi danh hiệu (chỉ hiển thị trên máy, myTitleId + remoteTitles của chính mình) để xem danh hiệu hiện trên đầu nhân vật; online vẫn theo sở hữu thật ở server.
+- Chuỗi điều kiện rút gọn cho vừa thẻ: "Danh hiệu khởi đầu", "Nắm giữ 1.000.000 xu", "Sở hữu cần câu xịn", "Sở hữu 30 món đồ" (đồng bộ server + client + harness).
+- Kiểm mắt: kiem-title-tab-v1.png (tab), kiem-title-dau-v1.png (danh hiệu "Đại Gia" vàng trên đầu nhân vật trong map). Test sống live_title_test.py vẫn ALL PASS sau khi sửa.

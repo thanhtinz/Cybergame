@@ -44,18 +44,18 @@ public class TitleService extends Service {
 
     // id, tên, màu (0 trắng 1 xanh lá 2 xanh dương 3 tím 4 vàng 5 cam 6 hồng), điều kiện
     public static final Object[][] DEFS = {
-        {1, "Người Mới", 0, "Danh hiệu khởi đầu của mọi cư dân"},
+        {1, "Người Mới", 0, "Danh hiệu khởi đầu"},
         {2, "Cư Dân Thị Trấn", 1, "Đạt cấp 5"},
         {3, "Lão Làng", 2, "Đạt cấp 15"},
         {4, "Huyền Thoại Thị Trấn", 3, "Đạt cấp 30"},
-        {5, "Đại Gia", 4, "Có lúc nắm giữ 1.000.000 xu"},
+        {5, "Đại Gia", 4, "Nắm giữ 1.000.000 xu"},
         {6, "Cao Thủ Mini Game", 5, "Thắng 25 ván mini game"},
-        {7, "Vua Câu Cá", 2, "Sở hữu cần câu xịn (447/448)"},
+        {7, "Vua Câu Cá", 2, "Sở hữu cần câu xịn"},
         {8, "Chủ Clan", 5, "Là chủ một clan"},
         {9, "Phu Thê Song Toàn", 6, "Đã kết hôn"},
         {10, "Nông Dân Vàng", 1, "Đã nâng cấp Farm cấp 2"},
         {11, "Siêng Năng", 4, "Điểm danh tích luỹ 7 điểm"},
-        {12, "Nhà Sưu Tầm", 3, "Sở hữu 30 món đồ khác nhau"},
+        {12, "Nhà Sưu Tầm", 3, "Sở hữu 30 món đồ"},
     };
 
     private static volatile boolean schemaReady = false;
