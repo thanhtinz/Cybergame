@@ -19,7 +19,8 @@ public class Cmd {
     public static final byte DAILY = -116; // [PORT] Diem danh + Nhiem vu ngay (docs/daily-auction-spec.md)
     public static final byte AUCTION = -117;
     public static final byte BOX = -118;
-    public static final byte SPLIT_ITEM = -119; // [PORT] Tach chong vat pham (REMOVE_ITEM_STACK ban chinh) // [PORT] Ruong phu ca nhan (BoxScr ban chinh; -54 cua ban chinh da la SMS o ban fan) // [PORT] Dau gia nguoc (docs/daily-auction-spec.md)
+    public static final byte SPLIT_ITEM = -119;
+    public static final byte TITLE = -120; // [PORT] Danh hieu (ban chinh dung -98, o ban fan -98 da la REQUEST_IMAGE_PART) // [PORT] Tach chong vat pham (REMOVE_ITEM_STACK ban chinh) // [PORT] Ruong phu ca nhan (BoxScr ban chinh; -54 cua ban chinh da la SMS o ban fan) // [PORT] Dau gia nguoc (docs/daily-auction-spec.md)
     public static final byte TRANS_ICON_WEDDING = -103;
     public static final byte CHANS_MONEY_XENG = -102;
     public static final byte ADD_MENU = -101;

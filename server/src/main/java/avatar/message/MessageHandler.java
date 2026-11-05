@@ -165,6 +165,13 @@ public class MessageHandler implements IMessageHandler {
                         }
                         break;
                     }
+                    case Cmd.TITLE: {
+                        if (this.client.user != null) {
+                            new avatar.service.TitleService(this.client)
+                                    .onMessage(mss);
+                        }
+                        break;
+                    }
                     case Cmd.SPLIT_ITEM: {
                         if (this.client.user != null) {
                             this.client.user.getAvatarService().splitItem(mss);

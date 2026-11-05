@@ -1468,6 +1468,24 @@ public class ScreenshotMain {
                         }
                         if (frame == 15) {
                             shot("shot-split-dialog.png");
+                            stage = 155; frame = 0;
+                        }
+                        break;
+                    case 155: // Panel Danh hiệu
+                        if (frame == 1) {
+                            world.debugOpenTitle(true);
+                        }
+                        if (frame == 15) {
+                            shot("shot-title-panel.png");
+                            stage = 156; frame = 0;
+                        }
+                        break;
+                    case 156: // Danh hiệu trên đầu nhân vật trong map
+                        if (frame == 1) {
+                            world.debugOpenTitle(false);
+                        }
+                        if (frame == 15) {
+                            shot("shot-title-map.png");
                             stage = 121; frame = 0;
                         }
                         break;

@@ -77,6 +77,11 @@ public final class AvatarProtocol {
     /** Tách chồng vật phẩm trong giỏ [PORT theo REMOVE_ITEM_STACK
      *  của bản chính]: gói −119 {short partId, short qty}. */
     public static final byte SPLIT_ITEM = -119;
+    /** Danh hiệu [PORT theo TITLE của bản chính; số -98 của bản
+     *  chính đã là REQUEST_IMAGE_PART ở bản fan nên port dùng
+     *  -120]: sub 0 LIST, 1 SET {short id}, 5 ZONE_REQ; server trả
+     *  sub 0 STATE, 3 WEAR (cả khu), 4 ZONE_STATE. */
+    public static final byte TITLE = -120;
     /** Xoá đồ: C→S {short idPart, byte type} (1 = trong giỏ, 0 = đang mặc);
      *  S→C {int id người, short idPart} (Cmd.REMOVE_ITEM của gốc). */
     public static final byte REMOVE_ITEM = -36;
@@ -450,6 +455,27 @@ public final class AvatarProtocol {
     public static void requestContainer(GameConnection conn, int id) throws IOException {
         Msg m = new Msg(CONTAINER);
         m.writer().writeInt(id);
+        conn.send(m);
+    }
+
+    public static void titleList(GameConnection conn) throws IOException {
+        Msg m = new Msg(TITLE);
+        m.writer().writeByte(0);
+        conn.send(m);
+    }
+
+    public static void titleSet(GameConnection conn, int titleId)
+            throws IOException {
+        Msg m = new Msg(TITLE);
+        java.io.DataOutputStream w = m.writer();
+        w.writeByte(1);
+        w.writeShort(titleId);
+        conn.send(m);
+    }
+
+    public static void titleZoneReq(GameConnection conn) throws IOException {
+        Msg m = new Msg(TITLE);
+        m.writer().writeByte(5);
         conn.send(m);
     }
 

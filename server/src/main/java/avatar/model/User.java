@@ -1858,6 +1858,9 @@ public class User {
         }
     }
 
+    /** Danh hiệu đang đeo [PORT gói -98]; nạp từ players.title_id. */
+    public int titleId = 0;
+
     /** Món đang thử đồ (chỉ RAM, không lưu DB) — gói −100. */
     public int previewPartId = 0;
 

@@ -3371,11 +3371,61 @@ public class WorldScreen extends ScreenAdapter {
                 return;
             }
             switch (m.command) {
+                case AvatarProtocol.TITLE: {
+                    java.io.DataInputStream r = m.reader();
+                    int sub = r.readByte();
+                    if (sub == 0) {
+                        myTitleId = r.readShort();
+                        int nd = r.readShort();
+                        titleDefs.clear();
+                        for (int i = 0; i < nd; i++) {
+                            titleDefs.add(new TitleDef(r.readShort(), r.readUTF(),
+                                r.readByte(), r.readUTF()));
+                        }
+                        int no = r.readShort();
+                        titleOwned.clear();
+                        for (int i = 0; i < no; i++) titleOwned.add((int) r.readShort());
+                        int nf = r.available() > 0 ? r.readByte() : 0;
+                        for (int i = 0; i < nf; i++) {
+                            TitleDef d = titleDef(r.readShort());
+                            addChatLog(TAB_SYSTEM, null,
+                                "Nhận danh hiệu mới: " + (d != null ? d.name : "?"), true);
+                        }
+                        if (myTitleId > 0) remoteTitles.put(ownId(), myTitleId);
+                        else remoteTitles.remove(ownId());
+                    } else if (sub == 3) {
+                        int uid = r.readInt();
+                        int tid = r.readShort();
+                        if (tid > 0) remoteTitles.put(uid, tid);
+                        else remoteTitles.remove(uid);
+                        if (uid == ownId()) myTitleId = tid;
+                    } else if (sub == 4) {
+                        int n = r.readShort();
+                        for (int i = 0; i < n; i++) {
+                            int uid = r.readInt();
+                            int tid = r.readShort();
+                            if (tid > 0) remoteTitles.put(uid, tid);
+                            else remoteTitles.remove(uid);
+                        }
+                    }
+                    break;
+                }
                 case AvatarProtocol.AVATAR_JOIN_PARK: {
                     ZonePlayers.JoinResult jr = ZonePlayers.parseJoin(m);
                     currentArea = jr.zoneId; // khu thật server xếp mình vào
                     remotes.clear();
                     for (ZonePlayers.RemotePlayer p : jr.players) addRemote(p);
+                    // vào khu: xin danh hiệu của mọi người trong khu
+                    if (online()) {
+                        try {
+                            AvatarProtocol.titleZoneReq(game.connection);
+                            if (!titleAsked) {
+                                titleAsked = true;
+                                AvatarProtocol.titleList(game.connection);
+                            }
+                        } catch (IOException ignored) {
+                        }
+                    }
                     break;
                 }
                 case AvatarProtocol.PARK_BOARD_LIST: {
@@ -5884,6 +5934,12 @@ public class WorldScreen extends ScreenAdapter {
                 charPanel = false;
                 return;
             }
+            // pill Danh hiệu ở đáy panel -> mở panel Danh hiệu
+            if (x >= px + 24 && x <= px + 344 && y >= py + 8 && y <= py + 38) {
+                charPanel = false;
+                openTitlePanel();
+                return;
+            }
             if (x >= px && x <= px + CP_W && y >= py && y <= py + CP_H) return;
             charPanel = false;
             return;
@@ -5901,6 +5957,10 @@ public class WorldScreen extends ScreenAdapter {
         // panel shop đang mở: modal, nuốt mọi chạm
         if (shopOpen) {
             shopTouch(x, y, pointer);
+            return;
+        }
+        if (titleOpen) {
+            titleTouch(x, y);
             return;
         }
         // panel giỏ đồ / rương đồ đang mở: modal, nuốt mọi chạm
@@ -7703,6 +7763,7 @@ public class WorldScreen extends ScreenAdapter {
     /** Đóng các panel modal khác để panel Thư/Bạn bè không chồng lên
      *  chúng (kính chồng kính không đọc được chữ). */
     private void closeOtherPanels() {
+        titleOpen = false;
         musicOpen = false;
         mailOpen = false;
         shopOpen = false;
@@ -8984,6 +9045,15 @@ public class WorldScreen extends ScreenAdapter {
             Ui.fontTiny.draw(batch, st == null ? "—"
                 : (i == 0 ? st[0] + " · " + st[1] + "%" : String.valueOf(barVals[i])), bx + 242, by + 4);
         }
+        // hàng Danh hiệu [PORT]: pill mở panel Danh hiệu
+        TitleDef curT = titleDef(myTitleId);
+        batch.draw(Ui.roundedRect(320, 30, 10, new Color(0f, 0f, 0f, 0.30f), GLASS_RIM),
+            px + 24, py + 8);
+        Ui.fontTiny.setColor(1f, 0.85f, 0.38f, 1f);
+        String titleLine = "Danh hiệu: " + (curT != null ? curT.name : "Chưa đeo")
+            + "  ·  bấm để đổi";
+        Ui.fontTiny.draw(batch, titleLine, px + 38, py + 28);
+        Ui.fontTiny.setColor(Color.WHITE);
     }
 
     /** Kiểu C — NGUYÊN BẢN GỐC: nền giấy PopupShop, chữ xanh, nền myinfo/back
@@ -9258,6 +9328,46 @@ public class WorldScreen extends ScreenAdapter {
     // Hộp thoại TÁCH CHỒNG [PORT theo DialogBuyManyItems.initSplitItem]
     private boolean splitOpen = false;
     private int splitPart = 0, splitQty = 1, splitMax = 1;
+    // DANH HIỆU [PORT theo TITLE bản chính, gói -120]
+    private static class TitleDef {
+        int id; String name; int color; String req;
+        TitleDef(int id, String name, int color, String req) {
+            this.id = id; this.name = name; this.color = color; this.req = req;
+        }
+    }
+    private final java.util.List<TitleDef> titleDefs = new ArrayList<>();
+    private final java.util.Set<Integer> titleOwned = new java.util.HashSet<>();
+    private final java.util.Map<Integer, Integer> remoteTitles = new java.util.HashMap<>();
+    private int myTitleId = 0;
+    private boolean titleOpen = false;
+    private int titleSel = 0;
+    private boolean titleAsked = false;
+    private static final Color[] TITLE_COLORS = {
+        new Color(1f, 1f, 1f, 1f), new Color(0.45f, 0.90f, 0.50f, 1f),
+        new Color(0.45f, 0.75f, 1f, 1f), new Color(0.78f, 0.55f, 1f, 1f),
+        new Color(1f, 0.85f, 0.38f, 1f), new Color(1f, 0.62f, 0.30f, 1f),
+        new Color(1f, 0.60f, 0.80f, 1f)};
+
+    /** Danh hiệu của doll ĐANG được vẽ (nơi gọi đặt trước drawFigure,
+     *  drawFigure tự xoá sau khi dùng). */
+    private int drawingTitleId = 0;
+
+    private TitleDef titleDef(int id) {
+        for (TitleDef d : titleDefs) if (d.id == id) return d;
+        return null;
+    }
+
+    private void openTitlePanel() {
+        closeOtherPanels();
+        titleOpen = true;
+        titleSel = 0;
+        if (online()) {
+            try {
+                AvatarProtocol.titleList(game.connection);
+            } catch (IOException ignored) {
+            }
+        }
+    }
     /** Hạn dùng của đồ đang mặc theo partId (từ gói đăng nhập + khi mặc từ giỏ). */
     private final java.util.Map<Integer, String> wornExpire = new java.util.HashMap<>();
     private int bagCapacity = 20, chestCapacity = 20, chestLevel = 1;
@@ -9765,6 +9875,91 @@ public class WorldScreen extends ScreenAdapter {
         }
         if (!replaced && !parts.contains(partId)) parts.add(partId);
         closetDoll = game.newDoll(parts);
+    }
+
+    private static final float TI_W = 700, TI_H = 540;
+
+    /** Panel DANH HIỆU [PORT]: lưới mọi danh hiệu — đã sở hữu thì
+     *  bấm để đeo, đang đeo thì bấm để gỡ; chưa có hiện mờ kèm điều
+     *  kiện đạt được. */
+    private void drawTitlePanel() {
+        float px = (Ui.W - TI_W) / 2f, py = (Ui.H - TI_H) / 2f, top = py + TI_H;
+        batch.setColor(0f, 0f, 0f, 0.55f);
+        batch.draw(whiteTex, 0, 0, Ui.W, Ui.H);
+        batch.setColor(Color.WHITE);
+        batch.draw(Ui.roundedRect((int) TI_W, (int) TI_H, 18,
+            new Color(0.07f, 0.11f, 0.17f, 0.97f), GLASS_RIM), px, py);
+        Ui.font.setColor(1f, 0.85f, 0.38f, 1f);
+        Ui.font.draw(batch, "Danh hiệu", px + 28, top - 24);
+        batch.draw(Ui.roundedRect(36, 36, 10, Ui.BTN_CLOSE, GLASS_RIM), px + TI_W - 54, top - 54);
+        Ui.faIcon(batch, Ui.fa20, Ui.FA_XMARK, px + TI_W - 36, top - 36,
+            new Color(0.9f, 0.93f, 1f, 1f));
+        TitleDef curT = titleDef(myTitleId);
+        Ui.fontSmall.setColor(1f, 1f, 1f, 0.75f);
+        Ui.fontSmall.draw(batch, "Đang đeo: " + (curT != null ? curT.name : "Chưa đeo danh hiệu nào"),
+            px + 28, top - 62);
+        if (titleDefs.isEmpty()) {
+            Ui.centered(batch, Ui.fontSmall,
+                online() ? "Đang tải danh sách…" : "Cần chơi online để dùng danh hiệu",
+                px + TI_W / 2f, py + TI_H / 2f, new Color(1f, 1f, 1f, 0.6f));
+            return;
+        }
+        float cw = 314, chh = 62, gap = 12;
+        float gridTop = top - 84;
+        for (int i = 0; i < titleDefs.size(); i++) {
+            TitleDef d = titleDefs.get(i);
+            int col = i % 2, row = i / 2;
+            float cx = px + 28 + col * (cw + gap);
+            float cy = gridTop - (row + 1) * chh - row * gap;
+            boolean ownedT = titleOwned.contains(d.id);
+            boolean equipped = myTitleId == d.id;
+            batch.draw(Ui.roundedRect((int) cw, (int) chh, 12,
+                ownedT ? new Color(0.16f, 0.24f, 0.34f, 0.92f) : new Color(0f, 0f, 0f, 0.22f),
+                equipped ? new Color(1f, 0.78f, 0.30f, 1f) : GLASS_RIM), cx, cy);
+            Color nc = TITLE_COLORS[d.color];
+            if (!ownedT) nc = new Color(nc.r, nc.g, nc.b, 0.45f);
+            Ui.font.setColor(nc);
+            Ui.font.draw(batch, truncTo(Ui.font, d.name, cw - 110), cx + 16, cy + 42);
+            Ui.fontTiny.setColor(1f, 1f, 1f, ownedT ? 0.72f : 0.45f);
+            Ui.fontTiny.draw(batch, truncTo(Ui.fontTiny, d.req, cw - 110), cx + 16, cy + 20);
+            Ui.font.setColor(Color.WHITE);
+            String tag = equipped ? "Đang đeo" : ownedT ? "Đeo" : "Chưa có";
+            Color tagC = equipped ? new Color(1f, 0.85f, 0.38f, 1f)
+                : ownedT ? new Color(0.55f, 0.95f, 0.65f, 1f) : new Color(1f, 1f, 1f, 0.4f);
+            layout.setText(Ui.fontSmall, tag);
+            Ui.fontSmall.setColor(tagC);
+            Ui.fontSmall.draw(batch, tag, cx + cw - 14 - layout.width, cy + 39);
+        }
+    }
+
+    private void titleTouch(float x, float y) {
+        float px = (Ui.W - TI_W) / 2f, py = (Ui.H - TI_H) / 2f, top = py + TI_H;
+        if (x >= px + TI_W - 54 && x <= px + TI_W - 18
+                && y >= top - 54 && y <= top - 18) {
+            titleOpen = false;
+            return;
+        }
+        if (x < px || x > px + TI_W || y < py || y > py + TI_H) {
+            titleOpen = false;
+            return;
+        }
+        float cw = 314, chh = 62, gap = 12;
+        float gridTop = top - 84;
+        for (int i = 0; i < titleDefs.size(); i++) {
+            TitleDef d = titleDefs.get(i);
+            int col = i % 2, row = i / 2;
+            float cx = px + 28 + col * (cw + gap);
+            float cy = gridTop - (row + 1) * chh - row * gap;
+            if (x >= cx && x <= cx + cw && y >= cy && y <= cy + chh) {
+                if (!titleOwned.contains(d.id) || !online()) return;
+                try {
+                    AvatarProtocol.titleSet(game.connection,
+                        myTitleId == d.id ? 0 : d.id);
+                } catch (IOException ignored) {
+                }
+                return;
+            }
+        }
     }
 
     private void drawInvPanel(boolean chest) {
@@ -10744,6 +10939,7 @@ public class WorldScreen extends ScreenAdapter {
                         rDrawX = lp[0];
                         rDrawY = lp[1];
                     }
+                    drawingTitleId = remoteTitles.getOrDefault(it.remote.info.id, 0);
                     drawFigure(rUseDoll, it.remote.anim, rDrawX, rDrawY,
                         com.avatardk.game.data.GameSettings.showName ? it.remote.info.name : null,
                         new Color(0.55f, 0.9f, 1f, 1f));
@@ -10869,6 +11065,7 @@ public class WorldScreen extends ScreenAdapter {
                         pDrawX = lp[0];
                         pDrawY = lp[1];
                     }
+                    drawingTitleId = myTitleId;
                     drawFigure(pdoll, playerAnim, pDrawX, pDrawY, displayName, true);
                     if (chatBubble != null) {
                         drawBubble(pdoll, playerAnim, playerFeetX,
@@ -10984,6 +11181,7 @@ public class WorldScreen extends ScreenAdapter {
         int frame = anim.frameIndex();
         game.dollRenderer.draw(batch, doll, frame, feetX, feetY, AvatarDkGame.HD, anim.facingLeft);
         if (name == null) {
+            drawingTitleId = 0;
             return; // cài đặt "Tên: ẩn" — nơi gọi truyền null cho người khác/NPC
         }
         float topY = feetY + game.dollRenderer.heightPx(doll, frame, AvatarDkGame.HD);
@@ -10993,6 +11191,34 @@ public class WorldScreen extends ScreenAdapter {
         Ui.fontSmall.draw(batch, name, feetX - layout.width / 2f + 1.5f, topY + 24f - 1.5f);
         Ui.fontSmall.setColor(c);
         Ui.fontSmall.draw(batch, name, feetX - layout.width / 2f, topY + 24f);
+        // danh hiệu [PORT]: dòng nhỏ màu riêng NẰM TRÊN tên
+        String ttl = titleTextFor(doll);
+        if (ttl != null) {
+            Color tc = titleColorFor(doll);
+            Ui.fontTiny.setColor(0f, 0f, 0f, 0.85f);
+            layout.setText(Ui.fontTiny, ttl);
+            Ui.fontTiny.draw(batch, ttl, feetX - layout.width / 2f + 1f, topY + 43f - 1f);
+            Ui.fontTiny.setColor(tc);
+            Ui.fontTiny.draw(batch, ttl, feetX - layout.width / 2f, topY + 43f);
+        }
+        drawingTitleId = 0;
+    }
+
+    /** Danh hiệu của một doll đang vẽ: chính mình dùng myTitleId,
+     *  người khác tra remoteTitles theo doll (khớp qua tên hiển thị
+     *  không đáng tin nên dùng bản đồ id->figure ở nơi gọi). */
+    private String titleTextFor(PaperDoll doll) {
+        if (drawingTitleId <= 0) return null;
+        TitleDef d = titleDef(drawingTitleId);
+        return d != null ? d.name : null;
+    }
+
+    private Color titleColorFor(PaperDoll doll) {
+        TitleDef d = titleDef(drawingTitleId);
+        if (d == null || d.color < 0 || d.color >= TITLE_COLORS.length) {
+            return Color.WHITE;
+        }
+        return TITLE_COLORS[d.color];
     }
 
     private void drawBubble(PaperDoll doll, AvatarAnimator anim, float feetX, float feetY, String text) {
@@ -11034,6 +11260,7 @@ public class WorldScreen extends ScreenAdapter {
         if (friendInviteId != 0) drawFriendInvite();
         if (charPanel) drawCharPanel();
         if (bagPanel) drawInvPanel(false);
+        if (titleOpen) drawTitlePanel();
         if (chestPanel) drawChestPanels();
         if (shopOpen) drawShop();
         if (npcMenuOpen) drawNpcMenu();
@@ -24392,6 +24619,34 @@ public class WorldScreen extends ScreenAdapter {
         shopNewFlow = true;
         myXu = 100000;
         openBill();
+    }
+
+    /** Sân khấu chụp DANH HIỆU: nạp bảng định nghĩa mẫu (khớp
+     *  TitleService), sở hữu {1,5,6}, đang đeo 5 "Đại Gia";
+     *  withPanel = true thì mở panel Danh hiệu, false thì chỉ để
+     *  danh hiệu hiện trên đầu nhân vật trong map. */
+    public void debugOpenTitle(boolean withPanel) {
+        debugCloseHubGames();
+        closeOtherPanels();
+        titleDefs.clear();
+        titleDefs.add(new TitleDef(1, "Người Mới", 0, "Danh hiệu khởi đầu của mọi cư dân"));
+        titleDefs.add(new TitleDef(2, "Cư Dân Thị Trấn", 1, "Đạt cấp 5"));
+        titleDefs.add(new TitleDef(3, "Lão Làng", 2, "Đạt cấp 15"));
+        titleDefs.add(new TitleDef(4, "Huyền Thoại Thị Trấn", 3, "Đạt cấp 30"));
+        titleDefs.add(new TitleDef(5, "Đại Gia", 4, "Có lúc nắm giữ 1.000.000 xu"));
+        titleDefs.add(new TitleDef(6, "Cao Thủ Mini Game", 5, "Thắng 25 ván mini game"));
+        titleDefs.add(new TitleDef(7, "Vua Câu Cá", 2, "Sở hữu cần câu xịn (447/448)"));
+        titleDefs.add(new TitleDef(8, "Chủ Clan", 5, "Là chủ một clan"));
+        titleDefs.add(new TitleDef(9, "Phu Thê Song Toàn", 6, "Đã kết hôn"));
+        titleDefs.add(new TitleDef(10, "Nông Dân Vàng", 1, "Đã nâng cấp Farm cấp 2"));
+        titleDefs.add(new TitleDef(11, "Siêng Năng", 4, "Điểm danh tích luỹ 7 điểm"));
+        titleDefs.add(new TitleDef(12, "Nhà Sưu Tầm", 3, "Sở hữu 30 món đồ khác nhau"));
+        titleOwned.clear();
+        titleOwned.add(1);
+        titleOwned.add(5);
+        titleOwned.add(6);
+        myTitleId = 5;
+        titleOpen = withPanel;
     }
 
     /** Sân khấu chụp TÁCH CHỒNG: panel Giỏ chọn sẵn món có số

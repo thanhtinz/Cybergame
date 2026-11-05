@@ -196,6 +196,22 @@ public class MapService extends Service {
         }
     }
 
+    /** Danh hiệu [PORT gói -98 sub 3]: phát cho cả khu khi một
+     *  người đeo/đổi danh hiệu hoặc vừa vào khu. */
+    public void titlePart(int userID, short titleId) {
+        try {
+            Message ms = new Message(Cmd.TITLE);
+            DataOutputStream ds = ms.writer();
+            ds.writeByte(3);
+            ds.writeInt(userID);
+            ds.writeShort(titleId);
+            ds.flush();
+            sendMessage(ms);
+        } catch (IOException ex) {
+            logger.error("titlePart()", ex);
+        }
+    }
+
     public void usingPart(int userID, short itemID) {
         try {
             Message ms = new Message(Cmd.USING_PART);
