@@ -13650,6 +13650,10 @@ public class WorldScreen extends ScreenAdapter {
     private final int[] raceLocalWins = new int[6];
     private final int[] raceLocalRaces = new int[6];
 
+    private static String racePad2(int v) {
+        return v < 10 ? "0" + v : "" + v;
+    }
+
     private static boolean isRaceCmd(int cmd) {
         return cmd == 1 || cmd == 2 || cmd == 5 || cmd == 8 || cmd == 9 || cmd == 10;
     }
@@ -14059,8 +14063,9 @@ public class WorldScreen extends ScreenAdapter {
         for (int i = 0; i < 6; i++) raceLocalRaces[i]++;
         raceLocalWins[winner]++;
         raceHistIcons.add(0, RACE_PET_IMG[winner]);
-        raceHistTimes.add(0, new java.text.SimpleDateFormat("HH:mm dd/MM")
-            .format(new java.util.Date()));
+        java.util.Date nowD = new java.util.Date();
+        raceHistTimes.add(0, racePad2(nowD.getHours()) + ":" + racePad2(nowD.getMinutes())
+            + " " + racePad2(nowD.getDate()) + "/" + racePad2(nowD.getMonth() + 1));
         while (raceHistIcons.size() > 10) {
             raceHistIcons.remove(raceHistIcons.size() - 1);
             raceHistTimes.remove(raceHistTimes.size() - 1);
