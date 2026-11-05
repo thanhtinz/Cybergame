@@ -20530,9 +20530,14 @@ public class WorldScreen extends ScreenAdapter {
     private static final float RC_PX = 150, RC_PY = 56, RC_PW = 980, RC_PH = 608;
 
     private void drawRace() {
-        // nút Lịch sử / Thoát ở góc phải trên (dưới nút burger)
-        csButton(Ui.W - 176, Ui.H - 128, 150, 48, "Lịch sử", 0);
-        csButton(Ui.W - 176, Ui.H - 188, 150, 48, "Thoát", 2);
+        // nút Lịch sử / Thoát: lúc panel cược đang mở thì nằm
+        // TRONG header panel (bản cũ vẽ theo tọa độ màn hình nên
+        // lơ lửng ngoài mép phải panel — Tín bắt lỗi lệch);
+        // lúc đang đua (không panel) giữ góc phải trên màn hình
+        if (racePhase != 0) {
+            csButton(Ui.W - 176, Ui.H - 128, 150, 48, "Lịch sử", 0);
+            csButton(Ui.W - 176, Ui.H - 188, 150, 48, "Thoát", 2);
+        }
         if (racePhase == 0) drawRaceBetPanel();
         if (racePhase == 1 && raceCountStart > 0) {
             Texture cd = house.imgTexture(1065);
@@ -20568,7 +20573,9 @@ public class WorldScreen extends ScreenAdapter {
         String remain = "Còn " + raceTimeRemain + "s";
         Ui.fontSmall.setColor(1f, 1f, 1f, 0.95f);
         layout.setText(Ui.fontSmall, remain);
-        Ui.fontSmall.draw(batch, remain, px + pw - 190 - layout.width, top - 30);
+        Ui.fontSmall.draw(batch, remain, px + pw - 330 - layout.width, top - 30);
+        csButton(px + pw - 314, top - 62, 140, 46, "Lịch sử", 0);
+        csButton(px + pw - 164, top - 62, 140, 46, "Thoát", 2);
         // hàng chờ trạng thái trước khi có đội hình
         if (racePets[0] == null) {
             Ui.font.setColor(1f, 1f, 1f, 0.9f);
@@ -20626,18 +20633,23 @@ public class WorldScreen extends ScreenAdapter {
                     new Color(1f, 0.75f, 0.25f, 0.16f),
                     new Color(1f, 0.75f, 0.25f, 0.65f)), rx, ryBot - 2);
             }
-            drawRacePetFrame(p.img, rx + 42, ryBot + 8, 0,
-                (int) ((System.currentTimeMillis() / 450) % 12), 84, 62);
+            // nhãn X nằm trên MỘT đường cố định trong hàng
+            // (ryBot + 16), thú đứng phía trên đường đó — bản cũ
+            // neo nhãn sát đáy icon nên mực chữ rơi xuống dưới
+            // hàng, khỏi viền highlight của hàng đang chọn
+            drawRacePetFrame(p.img, rx + 42, ryBot + 22, 0,
+                (int) ((System.currentTimeMillis() / 450) % 12), 84, 50);
             Ui.fontTiny.setColor(1f, 0.85f, 0.3f, 1f);
             String rate = "X" + p.rate;
             layout.setText(Ui.fontTiny, rate);
-            Ui.fontTiny.draw(batch, rate, rx + 42 - layout.width / 2f, ryBot + 2);
+            Ui.fontTiny.draw(batch, rate, rx + 42 - layout.width / 2f, ryBot + 16);
             csButton(rx + 104, ryBot + 8, 220, 60,
                 p.money > 0 ? fmtMoney(p.money) : "Đặt cược", p.money > 0 ? 0 : 1);
             if (raceMyStake[i] > 0) {
+                // cân giữa theo chiều cao ô tiền (ryBot+8..+68)
                 Ui.fontTiny.setColor(0.6f, 1f, 0.6f, 1f);
                 Ui.fontTiny.draw(batch, "của bạn " + fmtMoney(raceMyStake[i]),
-                    rx + 336, ryBot + 34);
+                    rx + 336, ryBot + 44);
             }
         }
     }
@@ -20795,14 +20807,28 @@ public class WorldScreen extends ScreenAdapter {
             }
             return true;
         }
-        // nút Lịch sử / Thoát
-        if (x >= Ui.W - 176 && x <= Ui.W - 26 && y >= Ui.H - 128 && y <= Ui.H - 80) {
-            raceRequestHistory();
-            return true;
-        }
-        if (x >= Ui.W - 176 && x <= Ui.W - 26 && y >= Ui.H - 188 && y <= Ui.H - 140) {
-            raceExitConfirm = true;
-            return true;
+        // nút Lịch sử / Thoát (khớp vị trí vẽ theo từng phase)
+        if (racePhase == 0) {
+            float bpx = RC_PX, bpw = RC_PW, btop = RC_PY + RC_PH;
+            if (x >= bpx + bpw - 314 && x <= bpx + bpw - 174
+                    && y >= btop - 62 && y <= btop - 16) {
+                raceRequestHistory();
+                return true;
+            }
+            if (x >= bpx + bpw - 164 && x <= bpx + bpw - 24
+                    && y >= btop - 62 && y <= btop - 16) {
+                raceExitConfirm = true;
+                return true;
+            }
+        } else {
+            if (x >= Ui.W - 176 && x <= Ui.W - 26 && y >= Ui.H - 128 && y <= Ui.H - 80) {
+                raceRequestHistory();
+                return true;
+            }
+            if (x >= Ui.W - 176 && x <= Ui.W - 26 && y >= Ui.H - 188 && y <= Ui.H - 140) {
+                raceExitConfirm = true;
+                return true;
+            }
         }
         if (racePhase == 0 && racePets[0] != null) {
             float px = RC_PX, py = RC_PY, pw = RC_PW, ph = RC_PH;
@@ -21268,9 +21294,30 @@ public class WorldScreen extends ScreenAdapter {
             drawPartIcon(partId, cx + cw / 2f - 28, cyy + chh - 76, 56);
             com.avatardk.game.data.PartData pd = game.data.part(partId);
             Ui.fontTiny.setColor(1f, 1f, 1f, 0.95f);
-            String nm = truncTo(Ui.fontTiny, pd != null ? pd.name : ("#" + partId), cw - 12);
-            layout.setText(Ui.fontTiny, nm);
-            Ui.fontTiny.draw(batch, nm, cx + (cw - layout.width) / 2f, cyy + 34);
+            // tên món dài xuống tối đa 2 dòng theo bề ngang ô
+            // (bản cũ truncTo 1 dòng nên "cần câu tre (7 ngày)"
+            // bị cắt cụt thành "cần câu tre (7 n...")
+            String nmFull = pd != null ? pd.name : ("#" + partId);
+            java.util.List<String> wl = wrapText(nmFull, Ui.fontTiny, cw - 12);
+            String l1 = wl.isEmpty() ? "" : wl.get(0);
+            String l2 = null;
+            if (wl.size() > 1) {
+                StringBuilder sb2 = new StringBuilder();
+                for (int k = 1; k < wl.size(); k++) {
+                    if (k > 1) sb2.append(' ');
+                    sb2.append(wl.get(k));
+                }
+                l2 = truncTo(Ui.fontTiny, sb2.toString(), cw - 12);
+            }
+            if (l2 == null) {
+                layout.setText(Ui.fontTiny, l1);
+                Ui.fontTiny.draw(batch, l1, cx + (cw - layout.width) / 2f, cyy + 30);
+            } else {
+                layout.setText(Ui.fontTiny, l1);
+                Ui.fontTiny.draw(batch, l1, cx + (cw - layout.width) / 2f, cyy + 40);
+                layout.setText(Ui.fontTiny, l2);
+                Ui.fontTiny.draw(batch, l2, cx + (cw - layout.width) / 2f, cyy + 20);
+            }
         }
         if (pages > 1) {
             csButton(px + 28, py + 20, 130, 48, "< Trước", dlPrizePage > 0 ? 0 : 3);
