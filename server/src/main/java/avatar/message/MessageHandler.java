@@ -374,6 +374,13 @@ public class MessageHandler implements IMessageHandler {
                         }
                         break;
                     }
+                    // [PORT] Farm cấp 2 + nuôi ong (gói −115)
+                    case Cmd.FARM2: {
+                        if (this.client.user != null) {
+                            new avatar.service.Farm2Service(this.client).onMessage(mss);
+                        }
+                        break;
+                    }
                     // [PORT] Chợ + Giao dịch theo bản chính 3.4.4 (gói 127)
                     case Cmd.MARKET: {
                         if (this.client.user != null) {

@@ -47,6 +47,10 @@ public class FarmService extends Service {
     public void sellFarmitm(User user, Message ms) throws IOException {
         short idFarmItm = ms.reader().readShort();
         int price = FarmProductData.sellPriceOf(idFarmItm);
+        // [PORT Farm cấp 2] hạng Sản phẩm: giá bán nông sản +10%
+        if (price > 0 && Farm2Service.upOf(user.getId(), Farm2Service.UP_PRODUCT)) {
+            price = price * 110 / 100;
+        }
         if (price < 0) {
             user.getAvatarService().serverDialog("Chưa bán được nông sản này.");
             return;
@@ -165,6 +169,7 @@ public class FarmService extends Service {
         landItem.setFertilized(false);
         landItem.setHarvestable(false);
         landItem.setResourceCount(0);
+        sanluong = Farm2Service.roomFor(this.session.user, sanluong);
         if (sanluong > 0) {
             NongSan existing = null;
             for (NongSan ns : this.session.user.NongSan) {
@@ -444,6 +449,7 @@ public class FarmService extends Service {
                 long cycles = (System.currentTimeMillis() / 1000L - from) / (e[0] * 60L);
                 if (cycles > 0) {
                     n = producible(pet);
+                    n = Farm2Service.roomFor(this.session.user, n);
                     if (n > 0) {
                         // sản phẩm vật nuôi mang id = species (client gốc addProductAnimal)
                         avatar.Farm.NongSan exist = null;
@@ -492,6 +498,7 @@ public class FarmService extends Service {
     public void harvestStarFruit(Message ms) throws IOException {
         avatar.model.User u = this.session.user;
         int n = currentStarNum();
+        n = Farm2Service.roomFor(u, n);
         if (n > 0) {
             avatar.Farm.NongSan exist = null;
             for (avatar.Farm.NongSan p : u.NongSan) {
@@ -565,11 +572,14 @@ public class FarmService extends Service {
             }
         }
         this.session.user.foodId = foodId;
-        this.session.user.cookFinish = System.currentTimeMillis() / 1000L + food.cookMinutes * 60L;
+        // [PORT Farm cấp 2] hạng Bếp: thời gian nấu giảm một nửa
+        int cookMins = Farm2Service.upOf(this.session.user.getId(), Farm2Service.UP_COOKING)
+                ? Math.max(1, food.cookMinutes / 2) : food.cookMinutes;
+        this.session.user.cookFinish = System.currentTimeMillis() / 1000L + cookMins * 60L;
         ms = new Message(Cmd.COOKING);
         DataOutputStream ds = ms.writer();
         ds.writeShort(foodId);
-        ds.writeShort(food.cookMinutes);
+        ds.writeShort(cookMins);
         ds.flush();
         this.session.sendMessage(ms);
     }
@@ -823,6 +833,17 @@ public class FarmService extends Service {
             this.session.user.updateLuong(-price);
         }
 
+        // [PORT Farm cấp 2] giới hạn số con mỗi loài theo hạng chuồng
+        int sameSpecies = 0;
+        for (Animal a0 : this.session.user.Animal) if (a0.getId() == n) sameSpecies++;
+        if (sameSpecies >= Farm2Service.animalCap(this.session.user.getId(), n)) {
+            // hoàn tiền vừa trừ
+            if (byXu) this.session.user.updateXu(price);
+            else this.session.user.updateLuong(price);
+            this.session.user.getAvatarService().serverDialog(
+                    "Chuồng đã đầy loài này (nâng cấp chuồng ở Farm cấp 2 để nuôi thêm).");
+            return;
+        }
         Animal newAnimal = new Animal(n, 100, 1, 0, 0, true, false, false);
         newAnimal.setBornTime(System.currentTimeMillis() / 1000L);
         newAnimal.setLastFeed(newAnimal.getBornTime());

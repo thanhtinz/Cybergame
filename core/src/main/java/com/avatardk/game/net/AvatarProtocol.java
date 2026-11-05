@@ -582,6 +582,22 @@ public final class AvatarProtocol {
     }
 
     // ===== Clan đầy đủ (bản chính 3.4.4; docs/clan-spec.md) =====
+    // ---- FARM CẤP 2 + ONG ([PORT]: gói −115, docs/farmlvl2-spec.md) ----
+    public static final byte FARM2 = -115;
+    public static final byte F2_INFO = 0, F2_UPGRADE = 1, F2_RESULT = 2,
+        F2_BEE_BUY = 3, F2_BEE_COLLECT = 4, F2_BEE_UPGRADE = 5;
+
+    public static Msg farm2Msg(byte sub) throws IOException {
+        Msg m = new Msg(FARM2); m.writer().writeByte(sub); return m;
+    }
+    public static void farm2Info(GameConnection conn) throws IOException { conn.send(farm2Msg(F2_INFO)); }
+    public static void farm2Upgrade(GameConnection conn, int idx) throws IOException {
+        Msg m = farm2Msg(F2_UPGRADE); m.writer().writeByte(idx); conn.send(m);
+    }
+    public static void farm2BeeBuy(GameConnection conn) throws IOException { conn.send(farm2Msg(F2_BEE_BUY)); }
+    public static void farm2BeeCollect(GameConnection conn) throws IOException { conn.send(farm2Msg(F2_BEE_COLLECT)); }
+    public static void farm2BeeUpgrade(GameConnection conn) throws IOException { conn.send(farm2Msg(F2_BEE_UPGRADE)); }
+
     // ---- CHỢ + GIAO DỊCH (bản chính: gói 127 MARKET) ----
     public static final byte MARKET = 127;
     public static final byte MK_LIST = 0, MK_SELL = 1, MK_BUY = 2, MK_CANCEL = 3,

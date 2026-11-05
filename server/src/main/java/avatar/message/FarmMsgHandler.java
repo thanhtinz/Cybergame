@@ -151,6 +151,10 @@ public class FarmMsgHandler extends MessageHandler {
                     break;
                 }
                 default:
+                    if (mss.getCommand() == avatar.constants.Cmd.FARM2) {
+                        new avatar.service.Farm2Service(this.client).onMessage(mss);
+                        break;
+                    }
                     super.onMessage(mss);
                     break;
             }

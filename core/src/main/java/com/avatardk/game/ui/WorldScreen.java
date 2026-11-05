@@ -1838,6 +1838,14 @@ public class WorldScreen extends ScreenAdapter {
             Ui.centered(batch, Ui.fontSmall, tabs[i], tx + tw / 2f, ty + 28, new Color(1f, 1f, 1f, 0.95f));
             farmSellBtns.add(new float[]{tx, ty, tw, th, -100 - i});
         }
+        // [PORT Farm cấp 2] nút mở panel nâng cấp farm + ong
+        {
+            float bx2 = FK_PX + FK_PW - 26 - 168f;
+            batch.draw(Ui.roundedRect(168, (int) th, 12, GLASS_FILL, GLASS_RIM), bx2, ty);
+            Ui.centered(batch, Ui.fontSmall, "Farm cấp 2", bx2 + 84, ty + 28,
+                new Color(1f, 0.85f, 0.4f, 1f));
+            farmSellBtns.add(new float[]{bx2, ty, 168f, th, -300});
+        }
         float gridTop = ty - 12f;
         java.util.List<int[]> list = farmStoreList();
         int perPage = 15;
@@ -1993,6 +2001,9 @@ public class WorldScreen extends ScreenAdapter {
                 if (code <= -100 && code > -200) { // tab
                     farmStoreTab = -100 - code;
                     farmStorePage = 0;
+                } else if (code == -300) {
+                    farmStoreOpen = false;
+                    openFarm2Panel();
                 } else if (code == -200) {
                     farmStorePage = Math.max(0, farmStorePage - 1);
                 } else if (code == -201) {
@@ -3734,6 +3745,10 @@ public class WorldScreen extends ScreenAdapter {
                 case AvatarProtocol.MARKET: {
                     // phong bì chợ + giao dịch {127}: {byte sub,...}
                     handleMarketPacket(m);
+                    break;
+                }
+                case AvatarProtocol.FARM2: {
+                    handleFarm2Packet(m);
                     break;
                 }
                 case AvatarProtocol.FISH_START: {
@@ -5625,6 +5640,7 @@ public class WorldScreen extends ScreenAdapter {
         if (tradeInviteTouch(x, y)) return;
         if (marketTouch(x, y)) return;
         if (tradeTouch(x, y)) return;
+        if (farm2Touch(x, y)) return;
         // hộp xác nhận nâng cấp rương (−90) là modal trên cùng
         if (chestUpTouch(x, y)) return;
         // hoá đơn mua chung là lớp trên cùng (mở đè cả panel nhà —
@@ -7595,6 +7611,7 @@ public class WorldScreen extends ScreenAdapter {
         clanOpen = false;
         marketOpen = false;
         tradeOpen = false;
+        farm2Open = false;
     }
 
     private void openMsgPanel() {
@@ -10384,7 +10401,7 @@ public class WorldScreen extends ScreenAdapter {
     private boolean inMiniGameScreen() {
         return mgOpen || tcOpen || crOpen || txOpen || aiOpen
             || casinoIn || csPending || raceIn || dlOpen || dlPrizeOpen
-            || marketOpen || tradeOpen;
+            || marketOpen || tradeOpen || farm2Open;
     }
 
     private void drawHud(float playerFeetX, float playerFeetY) {
@@ -10430,6 +10447,7 @@ public class WorldScreen extends ScreenAdapter {
         if (clanOpen) drawClanPanel();
         if (marketOpen) drawMarketPanel();
         if (tradeOpen) drawTradePanel();
+        if (farm2Open) drawFarm2Panel();
         drawTradeInviteBox();
         if (friendOpen) drawFriendPanel();
         if (passFormOpen) drawPassFormPanel();
@@ -13821,6 +13839,234 @@ public class WorldScreen extends ScreenAdapter {
         tradeOtherLock = false;
         tradeLog.add(0, "Linh Chi: ok chốt nhé");
         tradeOpen = true;
+    }
+
+
+    // ---------- FARM CẤP 2 + ONG (gói −115, docs/farmlvl2-spec.md) ----------
+    private boolean farm2Open;
+    private int farm2Tab; // 0 nâng cấp · 1 nuôi ong
+    private final int[] farm2Up = new int[7];
+    private int farm2BeeLevel, farm2BeeBank, farm2BeeCap, farm2BeePerH;
+    private String farm2Msg = "";
+    private boolean farm2MsgOk;
+    private static final String[] F2_NAMES = {
+        "Kho nông sản", "Chuồng gà", "Chuồng bò", "Chuồng chó",
+        "Bếp", "Sản phẩm", "Nuôi ong"};
+    private static final String[] F2_EFFECTS = {
+        "Sức chứa kho: 500 lên 2.000",
+        "Gà/Vịt: 5 lên 8 con mỗi loài",
+        "Bò/Heo/Cừu/Trâu: 5 lên 8 con mỗi loài",
+        "Chó: tối đa 5 lên 8 con",
+        "Thời gian nấu ăn giảm một nửa",
+        "Giá bán nông sản +10%",
+        "Mở khoá nuôi ong"};
+    private static final int[][][] F2_MATS = {
+        {{215, 10}, {200, 20}},
+        {{201, 15}, {202, 15}},
+        {{203, 15}, {204, 15}},
+        {{248, 10}, {252, 10}},
+        {{249, 10}, {253, 10}},
+        {{215, 20}},
+        {{266, 10}, {267, 10}},
+    };
+    private static final int[] F2_XU = {30000, 20000, 20000, 20000, 25000, 30000, 40000};
+    private static final int F2_PW = 920, F2_PH = 600;
+    private static final int F2_PX = (1280 - F2_PW) / 2, F2_PY = (720 - F2_PH) / 2;
+
+    private void openFarm2Panel() {
+        if (!online()) {
+            addChatLog(TAB_SYSTEM, null, "Farm cấp 2 cần chơi online — bản chơi thử không có.", true);
+            return;
+        }
+        closeOtherPanels();
+        farm2Open = true;
+        farm2Tab = 0;
+        farm2Msg = "";
+        try { AvatarProtocol.farm2Info(game.connection); } catch (IOException e) { }
+    }
+
+    private int farm2Have(int productId) {
+        int n = 0;
+        for (int[] e : farm.products) if (e[0] == productId) n += e[1];
+        for (int[] e : farm.specials) if (e[0] == productId) n += e[1];
+        return n;
+    }
+
+    private void handleFarm2Packet(Msg m) {
+        try {
+            java.io.DataInputStream r = m.reader();
+            if (r.available() < 1) return;
+            int sub = r.readByte();
+            if (sub == AvatarProtocol.F2_INFO) {
+                for (int i = 0; i < 7; i++) farm2Up[i] = r.readByte();
+                farm2BeeLevel = r.readByte();
+                farm2BeeBank = r.readInt();
+                farm2BeeCap = r.readInt();
+                farm2BeePerH = r.readInt();
+            } else if (sub == AvatarProtocol.F2_RESULT) {
+                farm2MsgOk = r.readBoolean();
+                farm2Msg = r.readUTF();
+                if (!farm2Open) addChatLog(TAB_SYSTEM, null, farm2Msg, true);
+            }
+        } catch (IOException e) { }
+    }
+
+    private void drawFarm2Panel() {
+        int px = F2_PX, py = F2_PY;
+        batch.draw(Ui.roundedRect(F2_PW, F2_PH, 18, GLASS_FILL_DARK, GLASS_RIM), px, py);
+        Ui.fontTitle.setColor(1f, 0.85f, 0.3f, 1f);
+        Ui.fontTitle.draw(batch, "Farm cấp 2", px + 28, py + F2_PH - 16);
+        batch.draw(Ui.roundedRect(36, 36, 10, Ui.BTN_CLOSE, null), px + F2_PW - 54, py + F2_PH - 54);
+        Ui.faIcon(batch, Ui.fa20, Ui.FA_XMARK, px + F2_PW - 36, py + F2_PH - 36, Color.WHITE);
+        String[] tabs = {"Nâng cấp", "Nuôi ong"};
+        for (int i = 0; i < 2; i++) {
+            int tx = px + 28 + i * 190;
+            int ty = py + F2_PH - 118;
+            batch.draw(Ui.roundedRect(178, 44, 10,
+                farm2Tab == i ? new Color(0.95f, 0.55f, 0.15f, 1f) : Ui.BTN_CANCEL, null), tx, ty);
+            Ui.centered(batch, Ui.font, tabs[i], tx + 89, ty + 29, Color.WHITE);
+        }
+        if (!farm2Msg.isEmpty()) {
+            Ui.fontSmall.setColor(farm2MsgOk ? new Color(0.55f, 0.95f, 0.6f, 1f)
+                : new Color(1f, 0.55f, 0.5f, 1f));
+            Ui.fontSmall.draw(batch, truncTo(Ui.fontSmall, farm2Msg, F2_PW - 56),
+                px + 28, py + F2_PH - 138);
+        }
+        if (farm2Tab == 0) drawFarm2Upgrades(px, py);
+        else drawFarm2Bee(px, py);
+    }
+
+    private void drawFarm2Upgrades(int px, int py) {
+        int top = py + F2_PH - 168;
+        for (int i = 0; i < 7; i++) {
+            int ry = top - i * 62;
+            boolean done = farm2Up[i] == 1;
+            batch.draw(Ui.roundedRect(F2_PW - 56, 54, 10, GLASS_FILL, null), px + 28, ry);
+            Ui.font.setColor(Color.WHITE);
+            Ui.font.draw(batch, F2_NAMES[i], px + 48, ry + 38);
+            Ui.fontSmall.setColor(1f, 1f, 1f, 0.72f);
+            StringBuilder sb = new StringBuilder(F2_EFFECTS[i]);
+            sb.append("  ·  ");
+            for (int k = 0; k < F2_MATS[i].length; k++) {
+                int pid = F2_MATS[i][k][0], q = F2_MATS[i][k][1];
+                FarmWorld.ProductDef pd = farm.productDefs.get(pid);
+                if (k > 0) sb.append(" · ");
+                sb.append(pd != null ? pd.name : ("SP" + pid))
+                  .append(' ').append(farm2Have(pid)).append('/').append(q);
+            }
+            sb.append(" · ").append(fmtMoney(F2_XU[i])).append(" xu");
+            Ui.fontSmall.draw(batch, truncTo(Ui.fontSmall, sb.toString(), 664), px + 48, ry + 16);
+            if (done) mkBtn(px + F2_PW - 196, ry + 9, 110, 36, "Đã nâng", 3);
+            else mkBtn(px + F2_PW - 196, ry + 9, 110, 36, "Nâng cấp", 1);
+        }
+    }
+
+    private void drawFarm2Bee(int px, int py) {
+        int top = py + F2_PH - 180;
+        // thẻ tổ ong
+        batch.draw(Ui.roundedRect(400, 300, 14, GLASS_FILL, null), px + 28, top - 300);
+        FarmWorld.ProductDef honey = farm.productDefs.get(288);
+        Ui.centered(batch, Ui.font, farm2BeeLevel > 0 ? "Tổ ong cấp " + farm2BeeLevel : "Chưa có tổ ong",
+            px + 228, top - 30, Color.WHITE);
+        drawProductIcon(288, honey, px + 228 - 42, top - 186, 84);
+        if (farm2BeeLevel > 0) {
+            Ui.centered(batch, Ui.fontSmall,
+                "Mật đang có: " + farm2BeeBank + "/" + farm2BeeCap + " · Sản lượng: "
+                    + farm2BeePerH + " mật/giờ",
+                px + 228, top - 226, new Color(1f, 0.9f, 0.5f, 1f));
+            Ui.centered(batch, Ui.fontSmall, "Mật ong bán được 120 xu/cái trong Kho.",
+                px + 228, top - 252, new Color(1f, 1f, 1f, 0.7f));
+        } else {
+            Ui.centered(batch, Ui.fontSmall, "Cần nâng cấp hạng mục Nuôi ong trước,",
+                px + 228, top - 226, new Color(1f, 1f, 1f, 0.8f));
+            Ui.centered(batch, Ui.fontSmall, "sau đó mua tổ ong để ong làm mật theo giờ.",
+                px + 228, top - 252, new Color(1f, 1f, 1f, 0.8f));
+        }
+        int bx = px + 470;
+        if (farm2BeeLevel == 0) {
+            mkBtn(bx, top - 70, 330, 52, "Mua tổ ong — 50.000 xu", farm2Up[6] == 1 ? 1 : 3);
+        } else {
+            mkBtn(bx, top - 70, 330, 52, "Thu hoạch mật (" + farm2BeeBank + ")",
+                farm2BeeBank > 0 ? 1 : 3);
+            if (farm2BeeLevel < 5) {
+                mkBtn(bx, top - 140, 330, 52,
+                    "Nâng cấp ong — " + fmtMoney(farm2BeeLevel * 30000) + " xu + "
+                        + (farm2BeeLevel * 5) + " mật", 0);
+            } else {
+                mkBtn(bx, top - 140, 330, 52, "Đã đạt cấp tối đa (5)", 3);
+            }
+        }
+        Ui.fontSmall.setColor(1f, 1f, 1f, 0.7f);
+        Ui.fontSmall.draw(batch, "Ong làm mật kể cả khi bạn không ở trong farm — quay lại thu hoạch sau.",
+            px + 28, py + 40);
+    }
+
+    private boolean farm2Touch(float x, float y) {
+        if (!farm2Open) return false;
+        int px = F2_PX, py = F2_PY;
+        if (inRect(x, y, px + F2_PW - 54, py + F2_PH - 54, 36, 36)) {
+            farm2Open = false;
+            return true;
+        }
+        if (x < px || x > px + F2_PW || y < py || y > py + F2_PH) return false;
+        for (int i = 0; i < 2; i++) {
+            int tx = px + 28 + i * 190;
+            int ty = py + F2_PH - 118;
+            if (inRect(x, y, tx, ty, 178, 44)) {
+                farm2Tab = i;
+                farm2Msg = "";
+                try { AvatarProtocol.farm2Info(game.connection); } catch (IOException e) { }
+                return true;
+            }
+        }
+        if (farm2Tab == 0) {
+            int top = py + F2_PH - 168;
+            for (int i = 0; i < 7; i++) {
+                int ry = top - i * 62;
+                if (farm2Up[i] != 1 && inRect(x, y, px + F2_PW - 196, ry + 9, 110, 36)) {
+                    try { AvatarProtocol.farm2Upgrade(game.connection, i); }
+                    catch (IOException e) { }
+                    return true;
+                }
+            }
+        } else {
+            int top = py + F2_PH - 180;
+            int bx = px + 470;
+            if (farm2BeeLevel == 0) {
+                if (farm2Up[6] == 1 && inRect(x, y, bx, top - 70, 330, 52)) {
+                    try { AvatarProtocol.farm2BeeBuy(game.connection); } catch (IOException e) { }
+                    return true;
+                }
+            } else {
+                if (inRect(x, y, bx, top - 70, 330, 52)) {
+                    try { AvatarProtocol.farm2BeeCollect(game.connection); } catch (IOException e) { }
+                    return true;
+                }
+                if (farm2BeeLevel < 5 && inRect(x, y, bx, top - 140, 330, 52)) {
+                    try { AvatarProtocol.farm2BeeUpgrade(game.connection); } catch (IOException e) { }
+                    return true;
+                }
+            }
+        }
+        return true;
+    }
+
+    // ----- harness farm 2 -----
+    public void debugFarm2() {
+        closeOtherPanels();
+        farm2Open = true;
+        farm2Tab = 0;
+        farm2Msg = "";
+        System.arraycopy(new int[]{1, 0, 1, 0, 0, 0, 1}, 0, farm2Up, 0, 7);
+    }
+
+    public void debugFarm2Bee() {
+        debugFarm2();
+        farm2Tab = 1;
+        farm2BeeLevel = 3;
+        farm2BeeBank = 17;
+        farm2BeeCap = 30;
+        farm2BeePerH = 3;
     }
 
     // Harness tour: mở panel clan với dữ liệu giả (my clan + list)

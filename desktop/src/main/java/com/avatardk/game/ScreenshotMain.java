@@ -1342,6 +1342,24 @@ public class ScreenshotMain {
                         }
                         if (frame == 15) {
                             shot("shot-trade.png");
+                            stage = 141; frame = 0;
+                        }
+                        break;
+                    case 141: // Farm cấp 2: tab Nâng cấp
+                        if (frame == 1) {
+                            world.debugFarm2();
+                        }
+                        if (frame == 15) {
+                            shot("shot-farm2.png");
+                            stage = 142; frame = 0;
+                        }
+                        break;
+                    case 142: // Farm cấp 2: tab Nuôi ong
+                        if (frame == 1) {
+                            world.debugFarm2Bee();
+                        }
+                        if (frame == 15) {
+                            shot("shot-farm2-bee.png");
                             stage = 121; frame = 0;
                         }
                         break;

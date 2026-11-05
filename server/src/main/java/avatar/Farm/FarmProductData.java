@@ -128,6 +128,7 @@ public final class FarmProductData {
         SELL_PRICE_XU.put(285, 0);
         SELL_PRICE_XU.put(286, 3);
         SELL_PRICE_XU.put(287, 3000);
+        SELL_PRICE_XU.put(288, 120); // [PORT-ONG] Mật Ong (docs/farmlvl2-spec.md)
     }
 
     private FarmProductData() {
