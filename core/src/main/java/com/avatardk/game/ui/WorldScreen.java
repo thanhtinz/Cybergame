@@ -771,7 +771,7 @@ public class WorldScreen extends ScreenAdapter {
     private static final String[][] MENU_ITEMS = {
         {"50", "Map"}, {"msg0", "Thư"}, {"balo", "Balo"},
         {"40", "Bạn bè"}, {"20", "Cá nhân"}, {"gear", "Cài đặt"},
-        {"music", "Nhạc"},
+        {"music", "Nhạc"}, {"clan", "Clan"},
     };
     private static final float MENU_PX = Ui.W - 330f, MENU_PW = 312f;
     private static final float MENU_HEADER = 40f, MENU_CELL = 96f, MENU_CELL_H = 92f;
@@ -6226,6 +6226,8 @@ public class WorldScreen extends ScreenAdapter {
                             settingsOpen = true;
                         } else if (i == 6) {
                             musicOpen = true;
+                        } else if (i == 7) {
+                            openClanPanel();
                         } else {
                             addChatLog(TAB_SYSTEM, null, "Tính năng " + MENU_ITEMS[i][1] + " đang được port ở đợt tiếp theo.", true);
                         }
