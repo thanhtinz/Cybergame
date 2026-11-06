@@ -194,7 +194,7 @@ màn hình/hệ phụ (Thư chính thức, Tủ đồ, Hộp quà, Danh hiệu, 
 | Thử đồ (Preview) | lệnh APPLY_PREVIEW_ITEM=−100 | Xem thử món trước khi mua/áp. Port chưa có. NHỎ. |
 | Mua nhiều / stack | `DialogBuyManyItems.cs`, BUY_ITEM_STACK=−43, REMOVE_ITEM_STACK=−63 | Mua/xóa item theo số lượng. Port chưa có. NHỎ. |
 | Danh hiệu (Title) | lệnh TITLE=−98; sprite UI `backtitle`, `backtabtitle` | Hệ danh hiệu người chơi. Port chưa có. NHỎ–VỪA. |
-| Vật phẩm đặc biệt trên map | lệnh park ITEM_MAP_SPECIAL=48, model `ItemMapSpecial.cs` | Nhặt/vật phẩm sự kiện đặt trên map. Port chưa có. NHỎ. |
+| Vật phẩm đặc biệt trên map | model `ItemMapSpecial` (id/name/idImg/idMenu/type/listItemMap/itemTouch/itemBlock/isTran/isBlockMap) | ĐÃ RÀ 2026-11-06: đây là MODEL dữ liệu vật thể đặc biệt trên map của client mới (vẽ + chạm + chặn + cổng dịch chuyển), không phải lệnh/gói riêng — phía port vai trò này do objects trong maps.json + LinkMap + điểm tương tác trong thế giới đảm nhiệm. Không còn việc riêng. |
 | Trả lời câu hỏi (Quiz) | lệnh ANSWERQUESTION=−97, định danh `AnswerQuestion` | Chưa rõ điểm vào (sự kiện/nhiệm vụ ngày?). NHỎ, cần đào thêm. |
 | Nấu ăn tách màn hình | `screen/CookingScr.cs`, sprite `cooking/cooking2/cookoff` | Chỉ là tách UI khỏi FarmScr — chức năng port ĐÃ có trong farm. Không phải tính năng mới. |
 | Thông tin farm | `screen/InfoFarmScr.cs`, OPEN_INFO_FARM=104, OPEN_SHOP_FARM=103 | Màn thông tin farm; shop farm port đã có. NHỎ. |
