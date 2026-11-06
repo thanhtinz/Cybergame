@@ -9453,7 +9453,7 @@ public class WorldScreen extends ScreenAdapter {
             Texture tt = null;
             try { tt = game.texture("trialchar/front.png"); } catch (Exception ignored) { }
             if (tt != null && tt.getWidth() > 0) {
-                float th2 = 132f, tw2 = th2 * tt.getWidth() / tt.getHeight();
+                float th2 = 110f, tw2 = th2 * tt.getWidth() / tt.getHeight();
                 batch.draw(tt, cx - 92 - tw2 / 2f, floorY, tw2, th2);
             } else {
                 game.dollRenderer.draw(batch, playerDoll, playerAnim.frameIndex(),
@@ -11817,7 +11817,7 @@ public class WorldScreen extends ScreenAdapter {
      *  nhún nhẹ khi di chuyển + bóng chân. Trả chiều cao đã dùng. */
     private float drawTrialFigure(float feetX, float feetY) {
         Texture t = trialTexture();
-        float th = 138f;
+        float th = 114f;
         float tw = th * t.getWidth() / t.getHeight();
         float bob = trialMoving
             ? Math.abs((float) Math.sin(System.currentTimeMillis() / 85.0)) * 5f : 0f;
