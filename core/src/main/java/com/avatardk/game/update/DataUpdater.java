@@ -36,7 +36,7 @@ public class DataUpdater {
 
     /** Nơi phát hành dữ liệu game (GitHub Releases của repo dự án). */
     public static final String DEFAULT_BASE_URL =
-        "https://github.com/thanhtinz/Cybergame/releases/download/gamedata-v1/";
+        "https://github.com/thanhtinz/Cybergame/releases/download/gamedata-v2/";
 
     public interface Progress {
         void onProgress(long doneBytes, long totalBytes, String status);
