@@ -189,6 +189,7 @@ public class WorldScreen extends ScreenAdapter {
     private static class DrawItem {
         static final int OBJ = 0, NPC = 1, REMOTE = 2, PLAYER = 3, FARM = 4, FARM_INFO = 5, FARM_ANIMAL_INFO = 6, FARM_STAR = 7, HOUSE_ITEM = 8;
         int kind;
+        static final int DOOR = 9;
         float y;
         float x;
         float drawY; // riêng HOUSE_ITEM: điểm vẽ dọc (neo trên–trái theo dy), y là khoá sắp xếp
@@ -770,7 +771,7 @@ public class WorldScreen extends ScreenAdapter {
     private static final String[][] MENU_ITEMS = {
         {"50", "Map"}, {"msg0", "Thư"}, {"balo", "Balo"},
         {"40", "Bạn bè"}, {"20", "Cá nhân"}, {"gear", "Cài đặt"},
-        {"music", "Nhạc"}, {"minigame", "Mini game"}, {"41", "Clan"},
+        {"music", "Nhạc"},
     };
     private static final float MENU_PX = Ui.W - 330f, MENU_PW = 312f;
     private static final float MENU_HEADER = 40f, MENU_CELL = 96f, MENU_CELL_H = 92f;
@@ -5998,6 +5999,12 @@ public class WorldScreen extends ScreenAdapter {
                 charPanel = false;
                 return;
             }
+            // nút Clan ở header (bản Cards): mở panel clan
+            if (charVariant == 3 && x >= px + 210 && x <= px + 360
+                    && y >= py + 424 && y <= py + 462) {
+                openClanPanel();
+                return;
+            }
             // thanh tab Thông tin | Danh hiệu | Cặp Đôi (chỉ bản Cards)
             if (charVariant == 3 && y >= py + 378 && y <= py + 416) {
                 for (int t = 0; t < CHAR_TABS.length; t++) {
@@ -6219,10 +6226,6 @@ public class WorldScreen extends ScreenAdapter {
                             settingsOpen = true;
                         } else if (i == 6) {
                             musicOpen = true;
-                        } else if (i == 7) {
-                            openMiniGameHub();
-                        } else if (i == 8) {
-                            openClanPanel();
                         } else {
                             addChatLog(TAB_SYSTEM, null, "Tính năng " + MENU_ITEMS[i][1] + " đang được port ở đợt tiếp theo.", true);
                         }
@@ -7362,6 +7365,12 @@ public class WorldScreen extends ScreenAdapter {
             return;
         }
         NpcFigure n = findNearestNpc();
+        if (nearMiniDoor() && (n == null
+                || Math.abs(playerX - MINI_DOOR_X / 2f)
+                    < Math.hypot(playerX - n.data.x, playerY - n.data.y))) {
+            openMiniGameHub();
+            return;
+        }
         if (n == null) {
             // trong farm: nút Tương tác dùng cho ô đất / vật nuôi / công
             // trình gần nhất (đi lại gần rồi bấm nút, đúng mô hình của game)
@@ -9526,6 +9535,16 @@ public class WorldScreen extends ScreenAdapter {
         // canh phải thẳng hàng với dòng người yêu ở dưới
         if (selfJoinDate != null) {
             batch.setColor(1f, 1f, 1f, 0.22f);
+            // nút CLAN dưới khối ngày vào game: icon clan GỐC
+            // (cl00 — mây logo clan) + chữ Clan; điểm vào clan
+            // thay ô menu (đã gỡ khỏi menu theo lệnh Tín)
+            batch.draw(Ui.roundedRect(150, 38, 12, GLASS_FILL, GLASS_RIM),
+                px + 210, py + 424);
+            Texture clIc = game.texture("iconmenu/clan.png");
+            batch.draw(clIc, px + 220, py + 430, 26, 26);
+            Ui.fontSmall.setColor(1f, 1f, 1f, 0.95f);
+            Ui.fontSmall.draw(batch, "Clan", px + 254, py + 449);
+            Ui.fontSmall.setColor(Color.WHITE);
             batch.draw(whiteTex, px + 424, avCy - 30, 2, 56);
             batch.setColor(Color.WHITE);
             Ui.faIcon(batch, Ui.fa30, Ui.FA_CALENDAR, px + 460, avCy + 2,
@@ -11241,6 +11260,13 @@ public class WorldScreen extends ScreenAdapter {
         if (mapDef.id == 25 && farm.joined) {
             buildFarmDrawItems();
         }
+        if (mapDef != null && mapDef.id == 10 && miniDoorFeetY() > 0) {
+            DrawItem it = new DrawItem();
+            it.kind = DrawItem.DOOR;
+            it.y = miniDoorFeetY();
+            it.x = MINI_DOOR_X;
+            drawItems.add(it);
+        }
         for (NpcFigure f : npcFigures) {
             DrawItem it = new DrawItem();
             it.kind = DrawItem.NPC;
@@ -11284,6 +11310,24 @@ public class WorldScreen extends ScreenAdapter {
                             it.y + 56f);
                     }
                     break;
+                case DrawItem.DOOR: {
+                    // CỬA MINI GAME trong park (bản chính có
+                    // doorMiniGame — điểm vào hub thay cho ô menu)
+                    float dx = it.x, dy = it.y;
+                    batch.draw(Ui.roundedRect(84, 16, 8,
+                        new Color(0.30f, 0.85f, 1f, 0.30f),
+                        new Color(0, 0, 0, 0)), dx - 42, dy - 6);
+                    batch.draw(Ui.roundedRect(76, 118, 34,
+                        new Color(0.07f, 0.13f, 0.24f, 0.94f), GLASS_RIM),
+                        dx - 38, dy);
+                    Texture mgIc = game.texture("iconmenu/minigame.png");
+                    batch.draw(mgIc, dx - 23, dy + 56, 46, 46);
+                    Ui.centered(batch, Ui.fontTiny, "MINI GAME", dx, dy + 44,
+                        new Color(1f, 0.85f, 0.45f, 1f));
+                    Ui.centered(batch, Ui.fontSmall, "Cửa mini game", dx, dy + 142,
+                        Color.WHITE);
+                    break;
+                }
                 case DrawItem.NPC:
                     drawFigure(it.npc.doll, it.npc.anim, it.npc.feetX, it.npc.feetY,
                         com.avatardk.game.data.GameSettings.showName ? it.npc.data.name : null,
@@ -13140,32 +13184,7 @@ public class WorldScreen extends ScreenAdapter {
             float is = 46f;
             float iconX = cx + MENU_CELL / 2f - is / 2f;
             float iconY = cy + MENU_CELL_H - 8 - is - 8;
-            if (i == 4) {
-                // ô Cá nhân: icon là ĐẦU NHÂN VẬT của chính người
-                // chơi (lệnh Tín: thêm icon nhân vật vào menu sau
-                // khi bỏ card góc) — vẽ doll thật cắt theo ô
-                batch.draw(Ui.roundedRect((int) is, (int) is, 8,
-                    new Color(0.10f, 0.17f, 0.26f, 0.97f), GLASS_RIM),
-                    iconX, iconY);
-                int[] b = playerDoll.bounds(playerAnim.frameIndex());
-                float unit = 4.4f * (is / 80f);
-                float feetX = iconX + is / 2f - ((b[0] + b[2]) / 2f) * unit;
-                float feetY = iconY + is + b[1] * unit;
-                Rectangle clip = new Rectangle(iconX + 1, iconY + 1,
-                    is - 2, is - 2);
-                Rectangle scissors = new Rectangle();
-                batch.flush();
-                ScissorStack.calculateScissors(
-                    hudViewport.getCamera(), batch.getTransformMatrix(),
-                    clip, scissors);
-                batch.flush();
-                if (ScissorStack.pushScissors(scissors)) {
-                    game.dollRenderer.draw(batch, playerDoll,
-                        playerAnim.frameIndex(), feetX, feetY, unit, false);
-                    batch.flush();
-                    ScissorStack.popScissors();
-                }
-            } else {
+            {
                 Texture icon = game.texture("iconmenu/" + MENU_ITEMS[i][0] + ".png");
                 batch.draw(icon, iconX, iconY, is, is);
             }
@@ -21611,6 +21630,24 @@ public class WorldScreen extends ScreenAdapter {
 
     private String myDisplayName() {
         return game.player != null ? game.player.username : "";
+    }
+
+    // Cửa mini game ở Khu giải trí (map 10, cạnh sạp quay số) —
+    // điểm vào hub mini game theo bản chính (doorMiniGame), thay
+    // cho ô "Mini game" trong menu burger (đã gỡ theo lệnh Tín).
+    private static final float MINI_DOOR_X = 1240f;
+
+    private float miniDoorFeetY() {
+        for (NpcFigure f : npcFigures) {
+            if (f.data.id == 185) return f.feetY;
+        }
+        return -1;
+    }
+
+    private boolean nearMiniDoor() {
+        // playerX ở hệ toạ độ dữ liệu (nửa thang HD) — cửa ở x=620
+        return mapDef != null && mapDef.id == 10
+            && Math.abs(playerX - MINI_DOOR_X / 2f) < 48;
     }
 
     private void openMiniGameHub() {
