@@ -56,5 +56,10 @@ commandList}; GlobalService.doRequestCmdCouple; CoupleList
   mình tô hồng. Test sống live_coupleboard_test.py ALL PASS.
   Còn lại: danh hiệu cặp đôi theo cấp (CoupleList.idTitleCouple)
   vẫn chưa có dữ liệu — chưa làm.
-- Mục hôn nhân ở panel thông tin NGƯỜI KHÁC: vẫn chưa làm (ghi nợ
-  từ wedding-spec).
+- Mục hôn nhân ở panel thông tin NGƯỜI KHÁC: ĐÃ LÀM 2026-11-06 —
+  gói −22 vốn đã mang đủ khối người yêu cho mọi id đích (server
+  requestYourInfo(us) dùng chung); client nay đọc khối đó ở nhánh
+  người khác và hiện dải “♥ <đối tác> · <quan hệ> · Cấp đôi <lv>
+  (<per>%)” dưới 5 thanh chỉ số của thẻ thông tin (thẻ cao 130 ->
+  172 khi người đó có cặp). Test sống live_otherinfo_test.py
+  ALL PASS.

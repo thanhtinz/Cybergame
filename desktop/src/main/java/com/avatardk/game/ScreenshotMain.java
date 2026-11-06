@@ -1552,7 +1552,20 @@ public class ScreenshotMain {
                         break;
                     case 168: // Bảng xếp hạng cặp đôi
                         if (frame == 1) world.debugOpenCoupleBoard();
-                        if (frame == 15) { shot("shot-couple-board.png"); stage = 121; frame = 0; }
+                        if (frame == 15) { shot("shot-couple-board.png"); stage = 169; frame = 0; }
+                        break;
+                    case 169: // Thẻ thông tin người khác + khối cặp đôi
+                        if (frame == 1) {
+                            world.debugCloseCoupleBoard();
+                            try {
+                                world.debugInjectNet((byte) 51, joinPayload(7, "Linh", new int[]{628, 474, 0, 80, 49}, 395, 88));
+                            } catch (java.io.IOException ioe) {
+                                throw new RuntimeException(ioe);
+                            }
+                            world.debugOpenPlayerPanel();
+                            world.debugSeedOtherInfo();
+                        }
+                        if (frame == 15) { shot("shot-player-info-couple.png"); stage = 121; frame = 0; }
                         break;
                     case 121: // nền ban ngày ở thành phố (kiểm lớp trời/BGMap)
                         if (frame == 1) {

@@ -3702,6 +3702,25 @@ public class WorldScreen extends ScreenAdapter {
                     } else {
                         infoStats = st;
                         infoForId = id;
+                        infoPartnerName = null;
+                        infoPartnerRel = null;
+                        try {
+                            if (r.available() >= 4) {
+                                int pid = r.readInt();
+                                if (pid != -1) {
+                                    infoPartnerName = r.readUTF();
+                                    int n = r.readByte();
+                                    for (int i = 0; i < n; i++) r.readShort();
+                                    r.readUTF(); // slogan của đối tác
+                                    r.readShort(); // idImage quan hệ
+                                    infoPartnerLv = r.readByte() & 0xFF;
+                                    infoPartnerPct = MathUtils.clamp(r.readByte(), 0, 100);
+                                    infoPartnerRel = r.readUTF();
+                                }
+                            }
+                        } catch (Exception ignored) {
+                            infoPartnerName = null;
+                        }
                         RemoteFigure f = remotes.get(id);
                         if (f != null) panelPlayer = f;
                     }
@@ -6164,7 +6183,7 @@ public class WorldScreen extends ScreenAdapter {
             // thẻ thông tin đang hiện cũng thuộc panel: chạm vào thì nuốt
             if (infoStats != null && infoForId == panelPlayer.info.id) {
                 float iy = ppInfoY();
-                if (x >= px && x <= px + PP_W && y >= iy && y <= iy + 130) return;
+                if (x >= px && x <= px + PP_W && y >= iy && y <= iy + ppInfoH()) return;
             }
             for (int i = 0; i < 5; i++) {
                 float bx = ppBtnX(i);
@@ -7546,6 +7565,13 @@ public class WorldScreen extends ScreenAdapter {
     private static final float FR_PX = (Ui.W - FR_PW) / 2f, FR_PY = (Ui.H - FR_PH) / 2f;
     private int[] infoStats;   // {cấp, %cấp, thân thiện, phong cách, vui vẻ, độ no} từ gói −22
     private int infoForId;
+    // Khối cặp đôi của NGƯỜI KHÁC trong gói −22 (bản chính onInfoPlayer
+    // có đủ: tên đối tác + quan hệ + cấp đôi) — trước đây bản port
+    // bỏ qua, nay đọc và hiện ở thẻ thông tin của panel người chơi.
+    private String infoPartnerName, infoPartnerRel;
+    private int infoPartnerLv, infoPartnerPct;
+
+    private float ppInfoH() { return infoPartnerName != null ? 172f : 130f; }
     private float lastCamX = 640f, lastCamY = 360f;
 
     /** Hiệu ứng Đánh/Hôn (gói 59) đang chạy trên đầu một nhân vật. */
@@ -7599,7 +7625,7 @@ public class WorldScreen extends ScreenAdapter {
         if (ppExtrasUp()) {
             return (panelSub ? ppSubY() + PP_SUB_H : g[1] + PP_H) + 8f;
         }
-        return (panelSub ? ppSubY() : g[1]) - 8f - 130f;
+        return (panelSub ? ppSubY() : g[1]) - 8f - ppInfoH();
     }
     private float panelTailCx() {
         float[] g = playerPanelGeom();
@@ -7843,19 +7869,20 @@ public class WorldScreen extends ScreenAdapter {
         }
         if (infoStats != null && infoForId == f.info.id) {
             float iy = ppInfoY();
-            batch.draw(Ui.roundedRect((int) PP_W, 130, 14, GLASS_FILL_DARK, GLASS_RIM), px, iy);
+            float ih = ppInfoH();
+            batch.draw(Ui.roundedRect((int) PP_W, (int) ih, 14, GLASS_FILL_DARK, GLASS_RIM), px, iy);
             Ui.fontSmall.setColor(1f, 0.85f, 0.45f, 1f);
-            Ui.fontSmall.draw(batch, "THÔNG TIN", px + 18, iy + 130 - 14);
+            Ui.fontSmall.draw(batch, "THÔNG TIN", px + 18, iy + ih - 14);
             Ui.fontSmall.setColor(1f, 1f, 1f, 0.92f);
             String lv = "Cấp " + infoStats[0] + " · " + infoStats[1] + "%";
             layout.setText(Ui.fontSmall, lv);
-            Ui.fontSmall.draw(batch, lv, px + PP_W - 18 - layout.width, iy + 130 - 14);
+            Ui.fontSmall.draw(batch, lv, px + PP_W - 18 - layout.width, iy + ih - 14);
             String[] labels = {"Thân thiện", "Gây rối", "Sành điệu", "Vui vẻ", "Sức khỏe"};
             Color[] cols = {new Color(0.45f, 0.9f, 0.5f, 0.95f), new Color(0.9f, 0.45f, 0.6f, 0.95f),
                 new Color(0.6f, 0.72f, 1f, 0.95f), new Color(1f, 0.8f, 0.35f, 0.95f),
                 new Color(1f, 0.55f, 0.4f, 0.95f)};
             for (int i = 0; i < 5; i++) {
-                float by = iy + 90 - i * 19;
+                float by = iy + ih - 40 - i * 19;
                 Ui.fontTiny.setColor(1f, 1f, 1f, 0.8f);
                 Ui.fontTiny.draw(batch, labels[i], px + 18, by + 4);
                 batch.draw(Ui.roundedRect(300, 10, 5, new Color(0f, 0f, 0f, 0.45f), GLASS_RIM),
@@ -7867,6 +7894,15 @@ public class WorldScreen extends ScreenAdapter {
                 }
                 Ui.fontTiny.setColor(1f, 1f, 1f, 0.9f);
                 Ui.fontTiny.draw(batch, String.valueOf(v), px + 418, by + 4);
+            }
+            if (infoPartnerName != null) {
+                Ui.faIcon(batch, Ui.fa20, Ui.FA_HEART, px + 30, iy + 23,
+                    new Color(0.96f, 0.45f, 0.68f, 1f));
+                Ui.fontSmall.setColor(1f, 0.85f, 0.9f, 0.95f);
+                String cs = infoPartnerName + " · "
+                    + (infoPartnerRel != null ? infoPartnerRel : "")
+                    + " · Cấp đôi " + infoPartnerLv + " (" + infoPartnerPct + "%)";
+                Ui.fontSmall.draw(batch, truncTo(Ui.fontSmall, cs, PP_W - 60), px + 48, iy + 30);
             }
         }
         // panel chính
@@ -11056,6 +11092,18 @@ public class WorldScreen extends ScreenAdapter {
         }
     }
     public void debugPanelSub(boolean open) { panelSub = open; }
+
+    public void debugCloseCoupleBoard() { cpBoardOpen = false; charPanel = false; }
+
+    public void debugSeedOtherInfo() {
+        if (panelPlayer == null) return;
+        infoForId = panelPlayer.info.id;
+        infoStats = new int[]{12, 35, 80, 20, 65, 90, 70};
+        infoPartnerName = "Sơn";
+        infoPartnerRel = "Cặp đôi hạnh phúc";
+        infoPartnerLv = 7;
+        infoPartnerPct = 45;
+    }
     public int debugPanelPlayerId() { return panelPlayer != null ? panelPlayer.info.id : -1; }
 
     /** Điểm chân (medium, hệ trên–trái) có đứng được không. Hai lớp như
