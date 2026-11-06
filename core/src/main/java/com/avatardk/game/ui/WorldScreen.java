@@ -6137,11 +6137,6 @@ public class WorldScreen extends ScreenAdapter {
             panelPlayer = null; // chạm ra ngoài: đóng, chạm đó xử lý tiếp ở dưới
             panelSub = false;
         }
-        // card nhân vật (trái trên): mở panel nhân vật
-        if (x >= CARD_X && x <= CARD_X + CARD_W && y >= Ui.H - 14 - CARD_H && y <= Ui.H - 14) {
-            openCharPanel();
-            return;
-        }
         // nút burger (phải trên): mở/đóng panel kính; trong nhà thì nút
         // này mở menu nhà thay cho menu burger (phố) như HouseScr gốc
         if (x >= BURGER_X && x <= BURGER_X + BURGER_S && y >= BURGER_Y && y <= BURGER_Y + BURGER_S) {
@@ -11658,7 +11653,8 @@ public class WorldScreen extends ScreenAdapter {
         hudViewport.apply();
         batch.setProjectionMatrix(hudViewport.getCamera().combined);
         batch.begin();
-        drawPlayerCard();
+        // (card thông tin góc trái đã bỏ hẳn theo lệnh Tín —
+        //  thông tin nhân vật mở từ ô "Cá nhân" trong menu)
         drawFarmChip();
         drawHouseChip();
         drawBurger();
@@ -13142,8 +13138,37 @@ public class WorldScreen extends ScreenAdapter {
             float cy = py + ph - MENU_HEADER - (row + 1) * MENU_CELL_H + 6;
             // Chỉ asset + nhãn, KHÔNG đè ô kính lên icon nữa (yêu cầu của chủ dự án)
             float is = 46f;
-            Texture icon = game.texture("iconmenu/" + MENU_ITEMS[i][0] + ".png");
-            batch.draw(icon, cx + MENU_CELL / 2f - is / 2f, cy + MENU_CELL_H - 8 - is - 8, is, is);
+            float iconX = cx + MENU_CELL / 2f - is / 2f;
+            float iconY = cy + MENU_CELL_H - 8 - is - 8;
+            if (i == 4) {
+                // ô Cá nhân: icon là ĐẦU NHÂN VẬT của chính người
+                // chơi (lệnh Tín: thêm icon nhân vật vào menu sau
+                // khi bỏ card góc) — vẽ doll thật cắt theo ô
+                batch.draw(Ui.roundedRect((int) is, (int) is, 8,
+                    new Color(0.10f, 0.17f, 0.26f, 0.97f), GLASS_RIM),
+                    iconX, iconY);
+                int[] b = playerDoll.bounds(playerAnim.frameIndex());
+                float unit = 4.4f * (is / 80f);
+                float feetX = iconX + is / 2f - ((b[0] + b[2]) / 2f) * unit;
+                float feetY = iconY + is + b[1] * unit;
+                Rectangle clip = new Rectangle(iconX + 1, iconY + 1,
+                    is - 2, is - 2);
+                Rectangle scissors = new Rectangle();
+                batch.flush();
+                ScissorStack.calculateScissors(
+                    hudViewport.getCamera(), batch.getTransformMatrix(),
+                    clip, scissors);
+                batch.flush();
+                if (ScissorStack.pushScissors(scissors)) {
+                    game.dollRenderer.draw(batch, playerDoll,
+                        playerAnim.frameIndex(), feetX, feetY, unit, false);
+                    batch.flush();
+                    ScissorStack.popScissors();
+                }
+            } else {
+                Texture icon = game.texture("iconmenu/" + MENU_ITEMS[i][0] + ".png");
+                batch.draw(icon, iconX, iconY, is, is);
+            }
             Ui.fontSmall.setColor(1f, 1f, 1f, 0.92f);
             layout.setText(Ui.fontSmall, MENU_ITEMS[i][1]);
             Ui.fontSmall.draw(batch, MENU_ITEMS[i][1], cx + MENU_CELL / 2f - layout.width / 2f, cy + 24);
