@@ -9653,7 +9653,7 @@ public class WorldScreen extends ScreenAdapter {
                 // mặt ở 56% chiều cao sprite đo từ đáy (đo pixel
                 // trên front.png) — neo để tâm mặt trùng tâm vòng
                 float ah = 165f, aw = ah * at.getWidth() / at.getHeight();
-                batch.draw(at, avCx - aw / 2f, avCy - 93, aw, ah);
+                batch.draw(at, avCx - aw / 2f, avCy - 95, aw, ah);
             } else {
                 game.dollRenderer.draw(batch, playerDoll, playerAnim.frameIndex(), feetX, feetY, unit, false);
             }
@@ -11803,8 +11803,12 @@ public class WorldScreen extends ScreenAdapter {
     }
 
     private Texture trialTexture() {
+        return trialTex(trialDirName);
+    }
+
+    private Texture trialTex(String name) {
         try {
-            Texture t = game.texture("trialchar/" + trialDirName + ".png");
+            Texture t = game.texture("trialchar/" + name + ".png");
             return t != null && t.getWidth() > 0 ? t : null;
         } catch (Exception e) {
             return null;
@@ -11814,11 +11818,33 @@ public class WorldScreen extends ScreenAdapter {
     /** Vẽ nhân vật thử tại chân (feetX, feetY): sprite theo hướng,
      *  nhún nhẹ khi di chuyển + bóng chân. Trả chiều cao đã dùng. */
     private float drawTrialFigure(float feetX, float feetY) {
-        Texture t = trialTexture();
+        // Asset mới (chủ dự án gửi bản nét 2026-11-06): có chu kỳ
+        // Walk 8 frame + Idle 8 frame. Đi lên (hướng back*) dùng
+        // sprite hướng + nhún; đi các hướng còn lại chạy Walk (bản
+        // lật ngang walkr* khi đi sang phải). Đứng hướng trước chạy
+        // Idle chậm.
+        Texture t;
+        float bob = 0f;
+        long now = System.currentTimeMillis();
+        boolean up = trialDirName.startsWith("back");
+        if (trialMoving && !up) {
+            int f = (int) (now / 90) % 8;
+            boolean rightish = trialDirName.equals("right")
+                || trialDirName.equals("front_right");
+            t = trialTex((rightish ? "walkr" : "walk") + f);
+            if (t == null) t = trialTexture();
+        } else if (!trialMoving && !up) {
+            int f = (int) (now / 260) % 8;
+            t = trialTex("idle" + f);
+            if (t == null) t = trialTexture();
+        } else {
+            t = trialTexture();
+            if (trialMoving) {
+                bob = Math.abs((float) Math.sin(now / 85.0)) * 5f;
+            }
+        }
         float th = 114f;
         float tw = th * t.getWidth() / t.getHeight();
-        float bob = trialMoving
-            ? Math.abs((float) Math.sin(System.currentTimeMillis() / 85.0)) * 5f : 0f;
         batch.setColor(0f, 0f, 0f, 0.30f);
         batch.draw(circleTexture(), feetX - 42, feetY - 6, 84, 15);
         batch.setColor(Color.WHITE);
