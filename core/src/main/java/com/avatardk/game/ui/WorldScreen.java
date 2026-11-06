@@ -11662,6 +11662,7 @@ public class WorldScreen extends ScreenAdapter {
         drawFarmChip();
         drawHouseChip();
         drawBurger();
+        if (!inMiniGameScreen()) drawCurrencyBar();
         if (menuOpen) drawBurgerPanel();
         if (!inMiniGameScreen()) {
             drawJoystick();
@@ -13063,17 +13064,51 @@ public class WorldScreen extends ScreenAdapter {
         // tên nhân vật
         Ui.font.setColor(Color.WHITE);
         Ui.font.draw(batch, displayName, CARD_X + 106, cardY + CARD_H - 24);
-        // tiền tệ GỌN một hàng: [icon xu] số · [icon lượng] số — icon là asset gốc
-        Texture iconXu = game.texture("myinfo/icon0.png");
-        Texture iconLuong = game.texture("myinfo/icon1.png");
-        float cy = cardY + 20;
-        batch.draw(iconXu, CARD_X + 106, cy, 21, 22);
-        Ui.fontSmall.setColor(Color.WHITE);
-        Ui.fontSmall.draw(batch, displayXu, CARD_X + 133, cy + 17);
-        layout.setText(Ui.fontSmall, displayXu);
-        float x2 = CARD_X + 133 + layout.width + 14;
-        batch.draw(iconLuong, x2, cy + 2, 24, 17);
-        Ui.fontSmall.draw(batch, displayLuong, x2 + 30, cy + 17);
+        // THANH XP thay hàng tiền (lệnh Tín 2026-11-05: tiền dời
+        // lên cạnh nút menu, chỗ này để thanh kinh nghiệm)
+        int[] stc = charStats();
+        int xpPct = stc == null ? 0
+            : MathUtils.clamp(stc[1], 0, 100);
+        float barX = CARD_X + 106, barY = cardY + 26, barW = 140;
+        batch.draw(Ui.roundedRect((int) barW, 14, 7,
+            new Color(0f, 0f, 0f, 0.42f), GLASS_RIM), barX, barY);
+        if (xpPct > 0) {
+            float fw = Math.max(14f, barW * xpPct / 100f);
+            batch.draw(Ui.gradientRect((int) fw, 14, 7,
+                new Color(0.45f, 0.85f, 1f, 1f),
+                new Color(0.18f, 0.52f, 0.95f, 1f)), barX, barY);
+        }
+        Ui.fontTiny.setColor(1f, 1f, 1f, 0.9f);
+        Ui.fontTiny.draw(batch, xpPct + "%", barX + barW + 8,
+            barY + 12);
+        Ui.fontTiny.setColor(1f, 1f, 1f, 0.55f);
+        Ui.fontTiny.draw(batch, "XP", barX, barY + 30);
+    }
+
+    /** Hàng 4 chip tiền ngang ngay BÊN TRÁI nút menu burger
+     *  (lệnh Tín): Xu · Lượng · Lượng khóa · Xèng — icon myinfo
+     *  gốc, chip co theo độ dài số. */
+    private void drawCurrencyBar() {
+        com.avatardk.game.net.PlayerInfo p = game.player;
+        int[] icons = {0, 1, 4, 2};
+        String[] vals = {displayXu, displayLuong,
+            fmtMoney(p == null ? 0 : p.luongKhoa),
+            fmtMoney(p == null ? 0 : p.xeng)};
+        float chipH = 34;
+        float cy = BURGER_Y + BURGER_S / 2f - chipH / 2f;
+        float right = BURGER_X - 12;
+        for (int i = 3; i >= 0; i--) {
+            float w = 34 + Ui.textWidth(Ui.fontSmall, vals[i]) + 12;
+            float cx = right - w;
+            batch.draw(Ui.roundedRect((int) w, (int) chipH, 10,
+                new Color(0.04f, 0.09f, 0.15f, 0.82f), GLASS_RIM),
+                cx, cy);
+            batch.draw(game.texture("myinfo/icon" + icons[i] + ".png"),
+                cx + 7, cy + 7, 20, 20);
+            Ui.fontSmall.setColor(1f, 1f, 1f, 0.94f);
+            Ui.fontSmall.draw(batch, vals[i], cx + 33, cy + 23);
+            right = cx - 8;
+        }
     }
 
     /** Phải trên — nút burger glass (3 vạch vẽ bằng hình, không emoji). */
