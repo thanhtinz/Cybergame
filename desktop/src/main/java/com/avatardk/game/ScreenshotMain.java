@@ -1527,8 +1527,24 @@ public class ScreenshotMain {
                         }
                         if (frame == 15) {
                             shot("shot-clan-edit.png");
-                            stage = 121; frame = 0;
+                            stage = 162; frame = 0;
                         }
+                        break;
+                    case 162: // Panel clan: tab Quỹ + Cấp
+                        if (frame == 1) world.debugClanFund();
+                        if (frame == 15) { shot("shot-clan-fund.png"); stage = 163; frame = 0; }
+                        break;
+                    case 163: // Panel clan: tab Đồ clan
+                        if (frame == 1) world.debugClanOwn();
+                        if (frame == 15) { shot("shot-clan-own.png"); stage = 165; frame = 0; }
+                        break;
+                    case 165: // Panel clan: tab Xin vào
+                        if (frame == 1) world.debugClanRequests();
+                        if (frame == 15) { shot("shot-clan-requests.png"); stage = 166; frame = 0; }
+                        break;
+                    case 166: // Khung chat: tab Clan mới thêm
+                        if (frame == 1) world.debugChatClanTab();
+                        if (frame == 15) { shot("shot-chat-clan.png"); stage = 121; frame = 0; }
                         break;
                     case 121: // nền ban ngày ở thành phố (kiểm lớp trời/BGMap)
                         if (frame == 1) {

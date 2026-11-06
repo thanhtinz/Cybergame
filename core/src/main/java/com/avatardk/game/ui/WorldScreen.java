@@ -608,8 +608,8 @@ public class WorldScreen extends ScreenAdapter {
     // hơn một chút (32 so với 27) chứ không to nhỏ lệch hẳn — chủ dự án chốt
     // 2026-10-31.
     private static final float TAB_H_ACTIVE = 32f, TAB_H_IDLE = 27f;
-    private static final int TAB_SYSTEM = 0, TAB_WORLD = 1, TAB_NEARBY = 2;
-    private static final String[] CHAT_TABS = {"Hệ thống", "Thế giới", "Gần đây"};
+    private static final int TAB_SYSTEM = 0, TAB_WORLD = 1, TAB_NEARBY = 2, TAB_CLAN = 3;
+    private static final String[] CHAT_TABS = {"Hệ thống", "Thế giới", "Gần đây", "Clan"};
     private int activeChatTab = TAB_NEARBY;
     private boolean chatSeeded = false;
     private static class ChatLine {
@@ -621,7 +621,8 @@ public class WorldScreen extends ScreenAdapter {
     }
     @SuppressWarnings("unchecked")
     private final List<ChatLine>[] chatLogs = new List[]{
-        new ArrayList<ChatLine>(), new ArrayList<ChatLine>(), new ArrayList<ChatLine>()};
+        new ArrayList<ChatLine>(), new ArrayList<ChatLine>(), new ArrayList<ChatLine>(),
+        new ArrayList<ChatLine>()};
 
     /** Giờ hiện tại dạng HH:mm (viết tay để chạy được cả trên bản web —
      *  SimpleDateFormat không có trong GWT). */
@@ -3106,8 +3107,21 @@ public class WorldScreen extends ScreenAdapter {
         String msg = typeBuffer.toString().trim();
         typeBuffer.setLength(0);
         if (msg.isEmpty()) return;
-        activeChatTab = TAB_NEARBY;
-        if (privateTargetId != 0) {
+        boolean toClan = activeChatTab == TAB_CLAN && privateTargetId == 0;
+        if (!toClan) activeChatTab = TAB_NEARBY;
+        if (toClan) {
+            if (!online()) {
+                addChatLog(TAB_SYSTEM, null, "Mất kết nối — không gửi được tin clan.", true);
+            } else if (!clanHas && myClanIdSv <= 0) {
+                addChatLog(TAB_SYSTEM, null, "Bạn chưa có clan.", true);
+            } else {
+                try {
+                    AvatarProtocol.clanChat(game.connection, msg);
+                } catch (IOException e) {
+                    addChatLog(TAB_SYSTEM, null, "Không gửi được tin clan (mất kết nối?).", true);
+                }
+            }
+        } else if (privateTargetId != 0) {
             // đang nhắn riêng (gói −6): server chỉ chuyển cho người nhận,
             // không echo lại — tự ghi vào nhật ký như MessageScr của gốc
             if (online()) {
@@ -13749,7 +13763,6 @@ public class WorldScreen extends ScreenAdapter {
     private final StringBuilder clanNameField = new StringBuilder();
     private final StringBuilder clanSloganField = new StringBuilder();
     private final StringBuilder clanInviteField = new StringBuilder();
-    private final StringBuilder clanChatField = new StringBuilder();
     private int clanCreateIcon = 2;
     // Bộ logo clan GỐC (mây cl00/cl01/cl10/cl11 từ APK 2.60) —
     // thay bộ icon object tạm trước đây; icon cũ ngoài 0..3 vẫn
@@ -13946,7 +13959,7 @@ public class WorldScreen extends ScreenAdapter {
                     String text = r.readUTF();
                     clanChatLog.add(fromName + ": " + text);
                     while (clanChatLog.size() > 30) clanChatLog.remove(0);
-                    addChatLog(TAB_SYSTEM, null, "[Clan] " + fromName + ": " + text, true);
+                    addChatLog(TAB_CLAN, fromName, text, false);
                     break;
                 }
                 case AvatarProtocol.CL_QUEST_DONE: {
@@ -14000,15 +14013,18 @@ public class WorldScreen extends ScreenAdapter {
     }
 
     private static final String[] CLAN_TABS = {
-        "Thành viên", "Nhiệm vụ", "Cửa hàng", "Đồ clan", "Quỹ + Cấp", "Chat clan", "Xin vào"
+        "Thành viên", "Nhiệm vụ", "Cửa hàng", "Đồ clan", "Quỹ + Cấp", "Xin vào"
     };
 
     private void drawClanPanel() {
         float px = CL_PX, py = CL_PY, pw = CL_PW, ph = CL_PH;
-        batch.setColor(0f, 0f, 0f, 0.55f);
+        batch.setColor(0f, 0f, 0f, 0.68f);
         batch.draw(whiteTex, 0, 0, Ui.W, Ui.H);
         batch.setColor(Color.WHITE);
-        batch.draw(Ui.roundedRect((int) pw, (int) ph, 18, GLASS_FILL_DARK, GLASS_RIM), px, py);
+        // nền gần đặc (0.98): nền kính 0.92 để cảnh + khung chat phía sau
+        // xuyên qua che chữ trong panel (Tín bắt lỗi 2026-11-05)
+        batch.draw(Ui.roundedRect((int) pw, (int) ph, 18,
+            new Color(0.04f, 0.08f, 0.14f, 0.98f), GLASS_RIM), px, py);
         // nút đóng chuẩn
         batch.draw(Ui.roundedRect(36, 36, 10, Ui.BTN_CLOSE, null), px + pw - 54, py + ph - 54);
         Ui.faIcon(batch, Ui.fa20, Ui.FA_XMARK, px + pw - 36, py + ph - 36, Color.WHITE);
@@ -14056,8 +14072,9 @@ public class WorldScreen extends ScreenAdapter {
         Ui.fontSmall.setColor(Color.WHITE);
 
         // Hàng tab
-        int nTabs = clanRole >= 1 ? 7 : 6;
-        float tabW = 124, tabY = top - 152;
+        int nTabs = clanRole >= 1 ? 6 : 5;
+        float tabY = top - 152;
+        float tabW = (pw - 56 - 6f * (nTabs - 1)) / nTabs;
         for (int i = 0; i < nTabs; i++) {
             clanBtn(px + 28 + i * (tabW + 6), tabY, tabW, 42, CLAN_TABS[i], clanTab == i ? 1 : 0);
         }
@@ -14068,8 +14085,7 @@ public class WorldScreen extends ScreenAdapter {
             case 2: drawClanShopTab(px, py, contentTop); break;
             case 3: drawClanOwnTab(px, py, contentTop); break;
             case 4: drawClanFundTab(px, py, contentTop); break;
-            case 5: drawClanChatTab(px, py, contentTop); break;
-            case 6: drawClanRequestTab(px, py, contentTop); break;
+            case 5: drawClanRequestTab(px, py, contentTop); break;
             default: break;
         }
         if (clanEditOpen) drawClanEditDialog();
@@ -14275,14 +14291,14 @@ public class WorldScreen extends ScreenAdapter {
             Ui.fontSmall.setColor(Color.WHITE);
             boolean selfRow = mb.id == ownId();
             if (!selfRow && clanRole == 2 && mb.role == 0) {
-                clanBtn(px + CL_PW - 356, ry + 8, 104, 36, "Lên phó", 0);
+                clanBtn(px + CL_PW - 352, ry + 8, 104, 36, "Lên phó", 0);
             }
             if (!selfRow && clanRole == 2 && mb.role == 1) {
-                clanBtn(px + CL_PW - 356, ry + 8, 104, 36, "Hạ phó", 0);
+                clanBtn(px + CL_PW - 352, ry + 8, 104, 36, "Hạ phó", 0);
             }
             if (!selfRow && clanRole >= 1 && mb.role < clanRole) {
-                clanBtn(px + CL_PW - 240, ry + 8, 84, 36, mb.blocked ? "Mở chat" : "Chặn", 0);
-                clanBtn(px + CL_PW - 144, ry + 8, 84, 36, "Trục xuất", 2);
+                clanBtn(px + CL_PW - 236, ry + 8, 88, 36, mb.blocked ? "Mở chat" : "Chặn", 0);
+                clanBtn(px + CL_PW - 136, ry + 8, 108, 36, "Trục xuất", 2);
             }
             y = ry;
         }
@@ -14408,23 +14424,23 @@ public class WorldScreen extends ScreenAdapter {
             + fmtMoney(clanMyDonLuong) + " lượng", x, contentTop - 40);
         Ui.fontSmall.setColor(Color.WHITE);
         // hàng chọn mức góp
-        float ry = contentTop - 96;
+        float ry = contentTop - 88;
         Ui.fontSmall.draw(batch, "Xu góp:", x, ry + 24);
         int[] xuSteps = {10000, 50000, 100000};
         for (int i = 0; i < xuSteps.length; i++) {
             clanBtn(x + 130 + i * 150, ry, 138, 42, "+" + fmtMoney(xuSteps[i]),
                 clanDonXu == xuSteps[i] ? 1 : 0);
         }
-        float ry2 = ry - 62;
+        float ry2 = ry - 56;
         Ui.fontSmall.draw(batch, "Lượng góp:", x, ry2 + 24);
         int[] lgSteps = {10, 50, 100};
         for (int i = 0; i < lgSteps.length; i++) {
             clanBtn(x + 130 + i * 150, ry2, 138, 42, "+" + lgSteps[i],
                 clanDonLuong == lgSteps[i] ? 1 : 0);
         }
-        clanBtn(x, ry2 - 70, 200, 48, "Góp quỹ", clanDonXu > 0 || clanDonLuong > 0 ? 1 : 3);
+        clanBtn(x, ry2 - 62, 200, 48, "Góp quỹ", clanDonXu > 0 || clanDonLuong > 0 ? 1 : 3);
         // khối cấp clan
-        float ly = ry2 - 150;
+        float ly = ry2 - 136;
         Ui.font.draw(batch, "Cấp clan", x, ly);
         if (clanLevelInfo != null) {
             Ui.fontSmall.setColor(0.85f, 0.92f, 1f, 1f);
@@ -14438,34 +14454,6 @@ public class WorldScreen extends ScreenAdapter {
                 && clanFundXu >= clanLevelInfo[3] && clanFundLuong >= clanLevelInfo[4];
             clanBtn(x, ly - 122, 220, 48, "Nâng cấp clan", canUp ? 1 : 3);
         }
-    }
-
-    private void drawClanChatTab(float px, float py, float contentTop) {
-        float x = px + 28, w = CL_PW - 56;
-        float logTop = contentTop - 6;
-        batch.draw(Ui.roundedRect((int) w, 300, 12,
-            new com.badlogic.gdx.graphics.Color(0.05f, 0.07f, 0.11f, 0.85f), null), x, logTop - 300);
-        Ui.fontSmall.setColor(Color.WHITE);
-        int n = clanChatLog.size();
-        for (int i = 0; i < Math.min(13, n); i++) {
-            String line = clanChatLog.get(n - 1 - i);
-            Ui.fontSmall.draw(batch, truncTo(Ui.fontSmall, line, 800), x + 16, logTop - 28 - i * 22);
-        }
-        if (n == 0) {
-            Ui.fontSmall.setColor(0.8f, 0.85f, 0.95f, 1f);
-            Ui.fontSmall.draw(batch, "Chưa có tin nhắn clan.", x + 16, logTop - 28);
-            Ui.fontSmall.setColor(Color.WHITE);
-        }
-        float iy = logTop - 356;
-        batch.draw(Ui.roundedRect(660, 48, 10,
-            new com.badlogic.gdx.graphics.Color(0.10f, 0.13f, 0.22f, 0.97f), null), x, iy);
-        SoftInput.register("clan.chat",
-            SoftInput.of(clanChatField, 120, () -> { SoftInput.hide(); clanSendChat(); }),
-            false, true, x, iy, 660, 48, 10);
-        Ui.fontSmall.setColor(Color.WHITE);
-        String t = clanChatField.length() == 0 ? "Nhắn cho clan…" : clanChatField.toString();
-        Ui.fontSmall.draw(batch, t, x + 14, iy + 31);
-        clanBtn(x + 676, iy, 130, 48, "Gửi", 1);
     }
 
     private void drawClanRequestTab(float px, float py, float contentTop) {
@@ -14504,14 +14492,6 @@ public class WorldScreen extends ScreenAdapter {
         }
         clanBtn(x + 50, y + 28, 200, 50, "Đồng ý", 1);
         clanBtn(x + w - 250, y + 28, 200, 50, "Từ chối", 0);
-    }
-
-    private void clanSendChat() {
-        String t = clanChatField.toString().trim();
-        if (t.isEmpty()) return;
-        clanChatField.setLength(0);
-        try { AvatarProtocol.clanChat(game.connection, t); }
-        catch (java.io.IOException e) { }
     }
 
     private boolean inRect(float x, float y, float rx, float ry, float rw, float rh) {
@@ -14664,10 +14644,11 @@ public class WorldScreen extends ScreenAdapter {
                 return true;
             }
             // đã có clan: hàng tab
-            int nTabs = clanRole >= 1 ? 7 : 6;
+            int nTabs = clanRole >= 1 ? 6 : 5;
             float tabY = top - 152;
             for (int i = 0; i < nTabs; i++) {
-                if (inRect(x, y, px + 28 + i * 130, tabY, 124, 42)) {
+                float tw = (pw - 56 - 6f * (nTabs - 1)) / nTabs;
+                if (inRect(x, y, px + 28 + i * (tw + 6), tabY, tw, 42)) {
                     clanTab = i;
                     clanPage = 0;
                     clanSendTabData();
@@ -14725,15 +14706,6 @@ public class WorldScreen extends ScreenAdapter {
                 }
                 case 4: return clanFundTouch(x, y, px, contentTop);
                 case 5: {
-                    float iy = contentTop - 362;
-                    if (inRect(x, y, px + 28 + 676, iy, 130, 48)) {
-                        SoftInput.hide();
-                        clanSendChat();
-                        return true;
-                    }
-                    return true;
-                }
-                case 6: {
                     float yy = contentTop;
                     for (ClMember mb : clanRequests) {
                         float ry = yy - 56;
@@ -14779,17 +14751,17 @@ public class WorldScreen extends ScreenAdapter {
             float ry = yy - 56;
             boolean selfRow = mb.id == ownId();
             if (!selfRow && clanRole >= 1 && mb.role < clanRole
-                    && inRect(x, y, px + CL_PW - 144, ry + 8, 84, 36)) {
+                    && inRect(x, y, px + CL_PW - 136, ry + 8, 108, 36)) {
                 AvatarProtocol.clanKick(game.connection, mb.id);
                 return true;
             }
             if (!selfRow && clanRole >= 1 && mb.role < clanRole
-                    && inRect(x, y, px + CL_PW - 240, ry + 8, 84, 36)) {
+                    && inRect(x, y, px + CL_PW - 236, ry + 8, 88, 36)) {
                 AvatarProtocol.clanBlockChat(game.connection, mb.id, !mb.blocked);
                 return true;
             }
             if (!selfRow && clanRole == 2 && mb.role != 2
-                    && inRect(x, y, px + CL_PW - 356, ry + 8, 104, 36)) {
+                    && inRect(x, y, px + CL_PW - 352, ry + 8, 104, 36)) {
                 AvatarProtocol.clanDeputy(game.connection, mb.id, mb.role == 0);
                 return true;
             }
@@ -14821,7 +14793,7 @@ public class WorldScreen extends ScreenAdapter {
     private boolean clanFundTouch(float x, float y, float px, float contentTop)
             throws java.io.IOException {
         float fx = px + 40;
-        float ry = contentTop - 96;
+        float ry = contentTop - 88;
         int[] xuSteps = {10000, 50000, 100000};
         for (int i = 0; i < xuSteps.length; i++) {
             if (inRect(x, y, fx + 130 + i * 150, ry, 138, 42)) {
@@ -14829,7 +14801,7 @@ public class WorldScreen extends ScreenAdapter {
                 return true;
             }
         }
-        float ry2 = ry - 62;
+        float ry2 = ry - 56;
         int[] lgSteps = {10, 50, 100};
         for (int i = 0; i < lgSteps.length; i++) {
             if (inRect(x, y, fx + 130 + i * 150, ry2, 138, 42)) {
@@ -14837,13 +14809,13 @@ public class WorldScreen extends ScreenAdapter {
                 return true;
             }
         }
-        if (inRect(x, y, fx, ry2 - 70, 200, 48) && (clanDonXu > 0 || clanDonLuong > 0)) {
+        if (inRect(x, y, fx, ry2 - 62, 200, 48) && (clanDonXu > 0 || clanDonLuong > 0)) {
             AvatarProtocol.clanDonate(game.connection, clanDonXu, clanDonLuong);
             clanDonXu = 0;
             clanDonLuong = 0;
             return true;
         }
-        float ly = ry2 - 150;
+        float ly = ry2 - 136;
         if (clanLevelInfo != null && inRect(x, y, fx, ly - 122, 220, 48)) {
             boolean canUp = clanRole >= 1 && clanLevelInfo[1] >= clanLevelInfo[2]
                 && clanFundXu >= clanLevelInfo[3] && clanFundLuong >= clanLevelInfo[4];
@@ -16313,6 +16285,8 @@ public class WorldScreen extends ScreenAdapter {
 
     // Harness tour: mở panel clan với dữ liệu giả (my clan + list)
     public void debugClan() {
+        closeOtherPanels();
+        clanEditOpen = false;
         clanOpen = true;
         clanHas = true;
         clanId = 6;
@@ -16360,6 +16334,60 @@ public class WorldScreen extends ScreenAdapter {
         clanSloganField.append(clanSlogan);
         clanCreateIcon = clanIcon;
         clanEditOpen = true;
+    }
+
+    public void debugChatClanTab() {
+        closeOtherPanels();
+        activeChatTab = TAB_CLAN;
+        chatMin = false;
+        chatExpanded = false;
+        chatLogs[TAB_CLAN].clear();
+        addChatLog(TAB_CLAN, "Sơn", "Tối nay 8h cả clan đi săn boss nhé mọi người", false);
+        addChatLog(TAB_CLAN, "Linh Chi", "Ok anh, em nộp xong nhiệm vụ cá rồi", false);
+        addChatLog(TAB_CLAN, "Tuấn Anh", "Ai còn vé câu cá mập không cho em xin với", false);
+        addChatLog(TAB_CLAN, "Minh Ngọc", "Quỹ sắp đủ lên cấp 4 rồi mọi người ơi", false);
+    }
+
+    public void debugClanFund() {
+        debugClan();
+        clanTab = 4;
+        clanLevelInfo = new int[]{3, 2450, 3000, 500000, 200, 40, 3};
+    }
+
+    public void debugClanOwn() {
+        debugClan();
+        clanTab = 3;
+        clanOwnItems.clear();
+        Object[][] os = {
+            {1, 2090, 30, false},
+            {2, 2052, 12, false},
+            {3, 620, 0, true},
+        };
+        for (Object[] a : os) {
+            ClOwnItem o = new ClOwnItem();
+            o.ownId = (Integer) a[0];
+            o.partId = (Integer) a[1];
+            o.days = (Integer) a[2];
+            o.received = (Boolean) a[3];
+            clanOwnItems.add(o);
+        }
+    }
+
+    public void debugClanRequests() {
+        debugClan();
+        clanTab = 5;
+        clanRequests.clear();
+        Object[][] rs = {
+            {1005, "Hoàng Nam"},
+            {1006, "Thu Hằng"},
+            {1007, "Đức Anh"},
+        };
+        for (Object[] a : rs) {
+            ClMember mb = new ClMember();
+            mb.id = (Integer) a[0];
+            mb.name = (String) a[1];
+            clanRequests.add(mb);
+        }
     }
 
     public void debugClanQuest() {
