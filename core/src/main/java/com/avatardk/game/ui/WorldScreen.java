@@ -9452,8 +9452,7 @@ public class WorldScreen extends ScreenAdapter {
         batch.draw(circleTexture(), cx + 92 - 46, stY + 5, 92, 14);
         batch.setColor(Color.WHITE);
         if (com.avatardk.game.data.GameSettings.trialChar) {
-            Texture tt = null;
-            try { tt = game.texture("trialchar/front.png"); } catch (Exception ignored) { }
+            Texture tt = trialTex("front");
             if (tt != null && tt.getWidth() > 0) {
                 float th2 = 110f, tw2 = th2 * tt.getWidth() / tt.getHeight();
                 batch.draw(tt, cx - 92 - tw2 / 2f, floorY, tw2, th2);
@@ -9647,7 +9646,7 @@ public class WorldScreen extends ScreenAdapter {
         if (ScissorStack.pushScissors(scissors)) {
             Texture at = null;
             if (com.avatardk.game.data.GameSettings.trialChar) {
-                try { at = game.texture("trialchar/front.png"); } catch (Exception ignored) { }
+                at = trialTex("front");
             }
             if (at != null && at.getWidth() > 0) {
                 // mặt ở 56% chiều cao sprite đo từ đáy (đo pixel
@@ -11128,6 +11127,16 @@ public class WorldScreen extends ScreenAdapter {
         trialMoving = true;
     }
 
+    /** Pose nhân vật thử NỮ cho tour chụp (ép cờ nữ bất kể doll mẫu). */
+    public void debugTrialFemalePose() {
+        rankOpen = false; // stage 173 de lai panel BXH mo chong
+        weddingOn = false; // cuoi/cau ca nhường doll chuyen dung -> tat
+        fishState = FISH_NONE;
+        trialFemaleFlag = true;
+        trialDirName = "front_right";
+        trialMoving = true;
+    }
+
     /** Doll đối tác mặc bộ đồ MỚI nhập từ bản chính (Chú thuật hồi
      *  chiến, part 7064-7067) — kiểm ảnh/atlas của kho part mới. */
     public void debugPartnerNewSet() {
@@ -11808,9 +11817,20 @@ public class WorldScreen extends ScreenAdapter {
         return trialTex(trialDirName);
     }
 
+    /** Nhân vật thử NỮ (asset chủ dự án gửi 2026-11-06): dùng khi
+     *  nhân vật của mình là nữ (gender == 2); forceTrialFemale chỉ
+     *  để tour chụp kiểm chứng. */
+    private boolean trialFemaleFlag = false;
+
+    private boolean trialFemale() {
+        return trialFemaleFlag
+            || (game.player != null && game.player.gender == 2);
+    }
+
     private Texture trialTex(String name) {
         try {
-            Texture t = game.texture("trialchar/" + name + ".png");
+            Texture t = game.texture("trialchar/"
+                + (trialFemale() ? "f/" : "") + name + ".png");
             return t != null && t.getWidth() > 0 ? t : null;
         } catch (Exception e) {
             return null;
@@ -11828,12 +11848,22 @@ public class WorldScreen extends ScreenAdapter {
         Texture t;
         float bob = 0f;
         long now = System.currentTimeMillis();
-        boolean up = trialDirName.startsWith("back");
+        // Nhân vật nữ chưa có sprite hướng lưng trong sheet gốc:
+        // mọi hướng đều chạy Idle/Walk (walk gốc hướng PHẢI, walkr
+        // là bản lật sang trái — ngược với bộ nam).
+        boolean fem = trialFemale();
+        boolean up = !fem && trialDirName.startsWith("back");
         if (trialMoving && !up) {
             int f = (int) (now / 90) % 8;
             boolean rightish = trialDirName.equals("right")
                 || trialDirName.equals("front_right");
-            t = trialTex((rightish ? "walkr" : "walk") + f);
+            String pref;
+            if (fem) {
+                pref = trialDirName.contains("left") ? "walkr" : "walk";
+            } else {
+                pref = rightish ? "walkr" : "walk";
+            }
+            t = trialTex(pref + f);
             if (t == null) t = trialTexture();
         } else if (!trialMoving && !up) {
             int f = (int) (now / 260) % 8;

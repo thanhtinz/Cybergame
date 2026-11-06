@@ -1577,7 +1577,11 @@ public class ScreenshotMain {
                         break;
                     case 173: // Panel Bang xep hang tong hop (o BXH trong menu)
                         if (frame == 1) { world.debugCloseCoupleBoard(); world.debugOpenRank(); }
-                        if (frame == 15) { shot("shot-rank.png"); stage = 121; frame = 0; }
+                        if (frame == 15) { shot("shot-rank.png"); stage = 174; frame = 0; }
+                        break;
+                    case 174: // Nhan vat thu NU trong the gioi (huong cheo)
+                        if (frame == 1) { world.debugCloseCoupleBoard(); world.debugTrialFemalePose(); }
+                        if (frame == 15) { shot("shot-trial-female.png"); stage = 121; frame = 0; }
                         break;
                     case 121: // nền ban ngày ở thành phố (kiểm lớp trời/BGMap)
                         if (frame == 1) {
