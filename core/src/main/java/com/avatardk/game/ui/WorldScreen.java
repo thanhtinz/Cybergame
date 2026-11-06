@@ -3889,6 +3889,13 @@ public class WorldScreen extends ScreenAdapter {
                     handleAuctionPacket(m);
                     break;
                 }
+                case AvatarProtocol.BOSS_SHOP: {
+                    // gói -78 của gốc: shop sự kiện + nâng cấp kim hoàn
+                    // {byte type, int idBoss, byte idShop, UTF tên,
+                    //  short n, n x {short part, UTF dialog[, UTF dialog2]}}
+                    handleBossShopPacket(m);
+                    break;
+                }
                 case AvatarProtocol.FISH_START: {
                     // gói 86 trả lời bắt đầu câu: {bool ok, UTF lỗi}
                     java.io.DataInputStream r = m.reader();
@@ -5867,6 +5874,7 @@ public class WorldScreen extends ScreenAdapter {
         if (weddingConfirmTouch(x, y)) return;
         // panel clan + hộp lời mời clan
         if (clanTouch(x, y)) return;
+        if (bsTouch(x, y)) return;
         // chợ + giao dịch + hộp mời giao dịch
         if (tradeInviteTouch(x, y)) return;
         if (marketTouch(x, y)) return;
@@ -7356,8 +7364,8 @@ public class WorldScreen extends ScreenAdapter {
      *  dùng chung gói −81/shop sự kiện, dễ xung đột ngữ cảnh.) */
     private static boolean npcHasServerMenu(int id) {
         switch (id) {
-            case 95: case 185: case 186: case 430: case 761: case 850:
-            case 857: case 860: case 861: case 862: case 863: case 864:
+            case 95: case 165: case 185: case 186: case 430: case 761: case 850:
+            case 857: case 858: case 859: case 860: case 861: case 862: case 863: case 864:
                 return true;
             default: return false;
         }
@@ -8013,6 +8021,7 @@ public class WorldScreen extends ScreenAdapter {
         guideOpen = false;
         dlPrizeOpen = false;
         clanOpen = false;
+        bsOpen = false;
         marketOpen = false;
         tradeOpen = false;
         farm2Open = false;
@@ -11786,6 +11795,7 @@ public class WorldScreen extends ScreenAdapter {
         if (msgOpen) drawMsgPanel();
         if (mailOpen) drawMailPanel();
         if (clanOpen) drawClanPanel();
+        if (bsOpen) drawBossShopPanel();
         if (marketOpen) drawMarketPanel();
         if (tradeOpen) drawTradePanel();
         if (farm2Open) drawFarm2Panel();
@@ -13812,6 +13822,190 @@ public class WorldScreen extends ScreenAdapter {
                 AvatarProtocol.clanListRequest(game.connection);
             }
         } catch (java.io.IOException e) { }
+    }
+
+    // ===== Shop sự kiện + Nâng cấp kim hoàn (gói BOSS_SHOP -78 của gốc) =====
+    // Server mở panel này từ menu NPC: Thợ Kim Hoàn 95 (nâng cấp),
+    // Bạch/Hắc Vô Thường 858/859, Pay/Chay To Win 862/863, shop Lượng
+    // của 861. Trước đợt này client KHÔNG có handler -78 nên các shop
+    // trên mở menu xong chọn là im lặng. Chọn món -> hộp xác nhận ->
+    // gửi lại -78 {idBoss, idShop, index} như ParkService.doBossShop.
+    private static class BsItem {
+        int partId; String dialog; String dialog2;
+    }
+    private boolean bsOpen = false;
+    private int bsType = 0, bsIdBoss = 0, bsIdShop = 0, bsPage = 0, bsConfirm = -1;
+    private String bsName = "";
+    private final java.util.List<BsItem> bsItems = new java.util.ArrayList<>();
+    private static final float BS_PW = 920f, BS_PH = 600f;
+    private static final float BS_PX = (Ui.W - BS_PW) / 2f, BS_PY = (Ui.H - BS_PH) / 2f;
+
+    private void handleBossShopPacket(Msg m) {
+        try {
+            java.io.DataInputStream r = m.reader();
+            bsType = r.readByte();
+            bsIdBoss = r.readInt();
+            bsIdShop = r.readByte();
+            bsName = r.readUTF();
+            int n = r.readShort();
+            if (n <= 0) return;
+            bsItems.clear();
+            for (int i = 0; i < n; i++) {
+                BsItem it = new BsItem();
+                it.partId = r.readShort();
+                it.dialog = r.readUTF();
+                it.dialog2 = bsType == 1 ? r.readUTF() : null;
+                bsItems.add(it);
+            }
+            closeOtherPanels();
+            bsOpen = true;
+            bsPage = 0;
+            bsConfirm = -1;
+        } catch (Exception e) { }
+    }
+
+    private void drawBossShopPanel() {
+        float px = BS_PX, py = BS_PY, pw = BS_PW, ph = BS_PH;
+        batch.setColor(0f, 0f, 0f, 0.68f);
+        batch.draw(whiteTex, 0, 0, Ui.W, Ui.H);
+        batch.setColor(Color.WHITE);
+        batch.draw(Ui.roundedRect((int) pw, (int) ph, 18,
+            new Color(0.04f, 0.08f, 0.14f, 0.98f), GLASS_RIM), px, py);
+        batch.draw(Ui.roundedRect(36, 36, 10, Ui.BTN_CLOSE, null), px + pw - 54, py + ph - 54);
+        Ui.faIcon(batch, Ui.fa20, Ui.FA_XMARK, px + pw - 36, py + ph - 36, Color.WHITE);
+        float top = py + ph;
+        Ui.font.setColor(1f, 0.85f, 0.35f, 1f);
+        Ui.font.draw(batch, bsName == null || bsName.isEmpty() ? "Cửa hàng sự kiện" : bsName,
+            px + 28, top - 26);
+        Ui.font.setColor(Color.WHITE);
+        int perPage = 7;
+        int pages = Math.max(1, (bsItems.size() + perPage - 1) / perPage);
+        if (bsPage >= pages) bsPage = pages - 1;
+        float y = top - 84;
+        int start = bsPage * perPage;
+        for (int i = start; i < Math.min(bsItems.size(), start + perPage); i++) {
+            BsItem it = bsItems.get(i);
+            float ry = y - 58;
+            batch.draw(Ui.roundedRect((int) (pw - 56), 54, 10,
+                new Color(1f, 1f, 1f, 0.07f), null), px + 28, ry);
+            drawPartIcon(it.partId, px + 66, ry + 27, 44);
+            java.util.List<String> lines = wrapText(
+                it.dialog == null ? "" : it.dialog, Ui.fontSmall, 540);
+            Ui.fontSmall.setColor(Color.WHITE);
+            if (lines.size() >= 2) {
+                Ui.fontSmall.draw(batch, lines.get(0), px + 106, ry + 42);
+                Ui.fontSmall.draw(batch, lines.get(1), px + 106, ry + 21);
+            } else if (lines.size() == 1) {
+                Ui.fontSmall.draw(batch, lines.get(0), px + 106, ry + 32);
+            }
+            if (it.dialog2 != null && !it.dialog2.isEmpty()
+                    && !it.dialog2.equals(it.dialog) && lines.size() < 2) {
+                Ui.fontSmall.setColor(0.65f, 0.85f, 1f, 1f);
+                Ui.fontSmall.draw(batch, truncTo(Ui.fontSmall, it.dialog2, 540), px + 106, ry + 14);
+                Ui.fontSmall.setColor(Color.WHITE);
+            }
+            clanBtn(px + pw - 168, ry + 8, 110, 38, "Chọn", 0);
+            y = ry - 6;
+        }
+        // phân trang
+        float by = py + 16;
+        if (bsPage > 0) clanBtn(px + pw - 330, by, 110, 40, "< Trước", 3);
+        Ui.fontSmall.setColor(Color.WHITE);
+        String pg = (bsPage + 1) + "/" + pages;
+        layout.setText(Ui.fontSmall, pg);
+        Ui.fontSmall.draw(batch, pg, px + pw - 196 - layout.width / 2f, by + 26);
+        if (bsPage < pages - 1) clanBtn(px + pw - 150, by, 122, 40, "Sau >", 3);
+        if (bsConfirm >= 0 && bsConfirm < bsItems.size()) drawBossShopConfirm(px, py, pw, ph);
+    }
+
+    private void drawBossShopConfirm(float px, float py, float pw, float ph) {
+        BsItem it = bsItems.get(bsConfirm);
+        batch.setColor(0f, 0f, 0f, 0.5f);
+        batch.draw(whiteTex, 0, 0, Ui.W, Ui.H);
+        batch.setColor(Color.WHITE);
+        float bw = 660, bh = 320, bx = (Ui.W - bw) / 2f, by = (Ui.H - bh) / 2f;
+        batch.draw(Ui.roundedRect((int) bw, (int) bh, 16,
+            new Color(0.05f, 0.09f, 0.15f, 0.99f), GLASS_RIM), bx, by);
+        Ui.font.setColor(1f, 0.85f, 0.35f, 1f);
+        Ui.font.draw(batch, "Xác nhận", bx + 28, by + bh - 26);
+        Ui.font.setColor(Color.WHITE);
+        drawPartIcon(it.partId, bx + 58, by + bh - 96, 52);
+        java.util.List<String> lines = wrapText(
+            it.dialog == null ? "" : it.dialog, Ui.fontSmall, 520);
+        Ui.fontSmall.setColor(Color.WHITE);
+        for (int i = 0; i < Math.min(6, lines.size()); i++) {
+            Ui.fontSmall.draw(batch, lines.get(i), bx + 96, by + bh - 84 - i * 22);
+        }
+        clanBtn(bx + 60, by + 28, 220, 50, "Đồng ý", 1);
+        clanBtn(bx + bw - 280, by + 28, 220, 50, "Huỷ", 2);
+    }
+
+    private boolean bsTouch(float x, float y) {
+        if (!bsOpen) return false;
+        float px = BS_PX, py = BS_PY, pw = BS_PW, ph = BS_PH;
+        if (bsConfirm >= 0) {
+            float bw = 660, bh = 320, bx = (Ui.W - bw) / 2f, by = (Ui.H - bh) / 2f;
+            if (inRect(x, y, bx + 60, by + 28, 220, 50)) {
+                int idx = bsConfirm;
+                bsConfirm = -1;
+                try { AvatarProtocol.bossShop(game.connection, bsIdBoss, bsIdShop, idx); }
+                catch (Exception e) { }
+                return true;
+            }
+            if (inRect(x, y, bx + bw - 280, by + 28, 220, 50)) {
+                bsConfirm = -1;
+                return true;
+            }
+            return true; // hộp xác nhận là modal
+        }
+        if (inRect(x, y, px + pw - 54, py + ph - 54, 36, 36)) {
+            bsOpen = false;
+            return true;
+        }
+        int perPage = 7;
+        int pages = Math.max(1, (bsItems.size() + perPage - 1) / perPage);
+        float by = py + 16;
+        if (bsPage > 0 && inRect(x, y, px + pw - 330, by, 110, 40)) { bsPage--; return true; }
+        if (bsPage < pages - 1 && inRect(x, y, px + pw - 150, by, 122, 40)) { bsPage++; return true; }
+        float yy = py + ph - 84;
+        int start = bsPage * perPage;
+        for (int i = start; i < Math.min(bsItems.size(), start + perPage); i++) {
+            float ry = yy - 58;
+            if (inRect(x, y, px + pw - 168, ry + 8, 110, 38)) {
+                bsConfirm = i;
+                return true;
+            }
+            yy = ry - 6;
+        }
+        return inRect(x, y, px, py, pw, ph);
+    }
+
+    public void debugOpenBossShop() {
+        closeOtherPanels();
+        bsOpen = true;
+        bsType = 0;
+        bsIdBoss = NPC_ID_ADD + 858;
+        bsIdShop = 0;
+        bsName = "Event";
+        bsPage = 0;
+        bsConfirm = -1;
+        bsItems.clear();
+        Object[][] ss = {
+            {3861, "Bạn có muốn đổi Rương sự kiện bằng 150 điểm sự kiện không?(tối đa 1)"},
+            {2295, "Bạn có muốn đổi Áo choàng bóng đêm bằng 90 điểm sự kiện không?"},
+            {2543, "Bạn có muốn đổi Nón phù thủy cổ bằng 60 điểm sự kiện không?"},
+            {4277, "Bạn có muốn đổi Cánh thiên thần đen bằng 200 điểm sự kiện không?"},
+            {3494, "Bạn có muốn đổi Vương miện hoàng gia bằng 120 điểm sự kiện không?"},
+            {4261, "Bạn có muốn đổi Gậy phép ánh sao bằng 80 điểm sự kiện không?"},
+            {5103, "Bạn có muốn đổi Thú cưỡi mây ngũ sắc bằng 300 điểm sự kiện không?"},
+            {3962, "Bạn có muốn đổi Nhẫn hoàng kim bằng 45 điểm sự kiện không?"},
+        };
+        for (Object[] a : ss) {
+            BsItem it = new BsItem();
+            it.partId = (Integer) a[0];
+            it.dialog = (String) a[1];
+            bsItems.add(it);
+        }
     }
 
     private void handleClanPacket(Msg m) {

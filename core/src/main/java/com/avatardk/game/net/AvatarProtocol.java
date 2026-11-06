@@ -884,6 +884,21 @@ public final class AvatarProtocol {
         conn.send(m);
     }
 
+    /** Gói BOSS_SHOP của gốc (Cmd -78): shop sự kiện (Vô Thường, Pay /
+     *  Chay To Win, shop lượng của 861) + nâng cấp Thợ Kim Hoàn. Chiều
+     *  client gửi: {int idBoss, byte idShop, short index} = chọn món. */
+    public static final byte BOSS_SHOP = -78;
+
+    public static void bossShop(GameConnection conn, int idBoss, int idShop, int index)
+            throws IOException {
+        Msg m = new Msg(BOSS_SHOP);
+        java.io.DataOutputStream w = m.writer();
+        w.writeInt(idBoss);
+        w.writeByte(idShop);
+        w.writeShort(index);
+        conn.send(m);
+    }
+
     public static void clanChat(GameConnection conn, String text) throws IOException {
         Msg m = clanMsg(CL_CHAT);
         m.writer().writeUTF(text);

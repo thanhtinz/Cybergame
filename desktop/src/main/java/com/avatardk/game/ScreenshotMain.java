@@ -1544,7 +1544,11 @@ public class ScreenshotMain {
                         break;
                     case 166: // Khung chat: tab Clan mới thêm
                         if (frame == 1) world.debugChatClanTab();
-                        if (frame == 15) { shot("shot-chat-clan.png"); stage = 121; frame = 0; }
+                        if (frame == 15) { shot("shot-chat-clan.png"); stage = 167; frame = 0; }
+                        break;
+                    case 167: // Panel BossShop -78 (shop sự kiện / kim hoàn)
+                        if (frame == 1) world.debugOpenBossShop();
+                        if (frame == 15) { shot("shot-bossshop.png"); stage = 121; frame = 0; }
                         break;
                     case 121: // nền ban ngày ở thành phố (kiểm lớp trời/BGMap)
                         if (frame == 1) {
