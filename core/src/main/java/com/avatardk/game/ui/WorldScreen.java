@@ -11473,6 +11473,7 @@ public class WorldScreen extends ScreenAdapter {
                 new Color(0.45f, 0.95f, 1f, pulse)),
                 panelPlayer.feetX - 32, panelPlayer.feetY - 7);
         }
+        nameTags.clear();
         drawItems.sort((a, b) -> Float.compare(b.y, a.y));
         for (DrawItem it : drawItems) {
             switch (it.kind) {
@@ -11701,6 +11702,7 @@ public class WorldScreen extends ScreenAdapter {
             batch.draw(busTex, busX * AvatarDkGame.HD - busTex.getWidth() / 2f, 2f);
         }
         if (raceIn) drawRacePets();
+        flushNameTags();
         drawFlyTexts();
         drawActFx(playerFeetX, playerFeetY);
         drawFishingGear(playerFeetX, playerFeetY);
@@ -11858,6 +11860,62 @@ public class WorldScreen extends ScreenAdapter {
             isPlayer ? new Color(1f, 0.35f, 0.3f, 1f) : new Color(1f, 0.9f, 0.35f, 1f));
     }
 
+    /** Thẻ tên treo trên đầu (tên + logo clan + ảnh danh hiệu). Vẽ
+     *  ở MỘT LƯỢT RIÊNG sau khi mọi thân nhân vật đã vẽ xong — lệnh
+     *  chủ dự án 2026-11-06: tên NPC/người chơi không được bị thân
+     *  nhân vật đứng trước che mất. */
+    private static class NameTag {
+        float feetX, topY;
+        String name;
+        Color color;
+        int titleId, clanIcon;
+        PaperDoll doll;
+    }
+
+    private final java.util.ArrayList<NameTag> nameTags = new java.util.ArrayList<>();
+
+    private void flushNameTags() {
+        for (NameTag t : nameTags) {
+            Ui.fontSmall.setColor(0f, 0f, 0f, 0.85f);
+            layout.setText(Ui.fontSmall, t.name);
+            Ui.fontSmall.draw(batch, t.name, t.feetX - layout.width / 2f + 1.5f, t.topY + 24f - 1.5f);
+            Ui.fontSmall.setColor(t.color);
+            Ui.fontSmall.draw(batch, t.name, t.feetX - layout.width / 2f, t.topY + 24f);
+            if (t.clanIcon >= 0 && t.clanIcon <= 3) {
+                Texture lt = game.texture("clan/logo-" + t.clanIcon + ".png");
+                if (lt != null && lt.getWidth() > 0) {
+                    float lw = 38f, lh = lw * lt.getHeight() / lt.getWidth();
+                    layout.setText(Ui.fontSmall, t.name);
+                    batch.draw(lt, t.feetX - layout.width / 2f - lw - 5, t.topY + 24f - lh + 4, lw, lh);
+                }
+            }
+            if (t.titleId > 0) {
+                Texture tt = null;
+                try {
+                    tt = game.texture("titles/title-" + t.titleId + ".png");
+                    tt.setFilter(Texture.TextureFilter.Linear, Texture.TextureFilter.Linear);
+                } catch (Exception ignored) {
+                }
+                if (tt != null && tt.getWidth() > 0) {
+                    float tw = 150f;
+                    float th = tw * tt.getHeight() / tt.getWidth();
+                    batch.draw(tt, t.feetX - tw / 2f, t.topY + 41f, tw, th);
+                } else {
+                    String ttl = titleTextFor(t.doll);
+                    if (ttl != null) {
+                        Color tc = titleColorFor(t.doll);
+                        Ui.fontTiny.setColor(0f, 0f, 0f, 0.85f);
+                        layout.setText(Ui.fontTiny, ttl);
+                        Ui.fontTiny.draw(batch, ttl, t.feetX - layout.width / 2f + 1f, t.topY + 43f - 1f);
+                        Ui.fontTiny.setColor(tc);
+                        Ui.fontTiny.draw(batch, ttl, t.feetX - layout.width / 2f, t.topY + 43f);
+                    }
+                }
+            }
+        }
+        nameTags.clear();
+    }
+
     private void drawFigure(PaperDoll doll, AvatarAnimator anim, float feetX, float feetY, String name, Color nameColor) {
         int frame = anim.frameIndex();
         float topY;
@@ -11872,48 +11930,16 @@ public class WorldScreen extends ScreenAdapter {
             drawingTrial = false;
             return; // cài đặt "Tên: ẩn" — nơi gọi truyền null cho người khác/NPC
         }
-        Color c = nameColor;
-        Ui.fontSmall.setColor(0f, 0f, 0f, 0.85f);
-        layout.setText(Ui.fontSmall, name);
-        Ui.fontSmall.draw(batch, name, feetX - layout.width / 2f + 1.5f, topY + 24f - 1.5f);
-        Ui.fontSmall.setColor(c);
-        Ui.fontSmall.draw(batch, name, feetX - layout.width / 2f, topY + 24f);
-        // logo clan GỐC ngay bên trái tên (bản chính: idLogoClan
-        // gắn trên avatar) — chỉ bộ logo 0..3 mới vẽ trên map
-        if (drawingClanIcon >= 0 && drawingClanIcon <= 3) {
-            Texture lt = game.texture("clan/logo-" + drawingClanIcon + ".png");
-            if (lt != null && lt.getWidth() > 0) {
-                float lw = 38f, lh = lw * lt.getHeight() / lt.getWidth();
-                batch.draw(lt, feetX - layout.width / 2f - lw - 5, topY + 24f - lh + 4, lw, lh);
-            }
-        }
+        NameTag tag = new NameTag();
+        tag.feetX = feetX;
+        tag.topY = topY;
+        tag.name = name;
+        tag.color = nameColor;
+        tag.titleId = drawingTitleId;
+        tag.clanIcon = drawingClanIcon;
+        tag.doll = doll;
+        nameTags.add(tag);
         drawingClanIcon = -1;
-        // danh hiệu: ẢNH gốc của bản chính (titles/title-<id>.png,
-        // giải mã từ TextAsset Title1..21) vẽ TRÊN tên; thiếu ảnh
-        // thì lùi về dòng chữ màu như bản đầu.
-        if (drawingTitleId > 0) {
-            Texture tt = null;
-            try {
-                tt = game.texture("titles/title-" + drawingTitleId + ".png");
-                tt.setFilter(Texture.TextureFilter.Linear, Texture.TextureFilter.Linear);
-            } catch (Exception ignored) {
-            }
-            if (tt != null && tt.getWidth() > 0) {
-                float tw = 150f;
-                float th = tw * tt.getHeight() / tt.getWidth();
-                batch.draw(tt, feetX - tw / 2f, topY + 41f, tw, th);
-            } else {
-                String ttl = titleTextFor(doll);
-                if (ttl != null) {
-                    Color tc = titleColorFor(doll);
-                    Ui.fontTiny.setColor(0f, 0f, 0f, 0.85f);
-                    layout.setText(Ui.fontTiny, ttl);
-                    Ui.fontTiny.draw(batch, ttl, feetX - layout.width / 2f + 1f, topY + 43f - 1f);
-                    Ui.fontTiny.setColor(tc);
-                    Ui.fontTiny.draw(batch, ttl, feetX - layout.width / 2f, topY + 43f);
-                }
-            }
-        }
         drawingTitleId = 0;
         drawingTrial = false;
     }
