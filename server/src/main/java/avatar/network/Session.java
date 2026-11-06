@@ -1579,6 +1579,14 @@ public void NhanThuongEventXuBoss() throws IOException {
         int idBoss = ms.reader().readInt();
         byte type = ms.reader().readByte();
         short indexItem = ms.reader().readShort();
+        if (!avatar.admin.FeatureFlags.eventOpen()
+                && (idBoss == Npc.ID_ADD + NpcName.bunma || idBoss == Npc.ID_ADD + NpcName.Vegeta
+                    || idBoss == Npc.ID_ADD + NpcName.Pay_To_Win
+                    || idBoss == Npc.ID_ADD + NpcName.Chay_To_Win
+                    || idBoss == Npc.ID_ADD + NpcName.Shop_Buy_Luong)) {
+            getService().serverDialog("Sự kiện đang tạm đóng, quay lại sau nhé.");
+            return;
+        }
         if (idBoss == Npc.ID_ADD + NpcName.THO_KIM_HOAN && user.getBossShopItems() != null) {
             System.out.println(MessageFormat.format("do upgrade item boss shop {0}, {1}, {2},"
                     , idBoss, type, indexItem));

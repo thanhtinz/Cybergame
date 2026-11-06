@@ -407,7 +407,8 @@ const FLAG_DEFS = [
   ["wheel", "Vòng quay may mắn", "Tắt là không quay được vòng quay.", false],
   ["giftcode", "Nhập giftcode", "Tắt là người chơi nhập code sẽ nhận thông báo tạm đóng.", false],
   ["farm", "Nông trại", "Tắt là mọi thao tác trong nông trại bị chặn.", false],
-  ["chat", "Chat trong game", "Tắt là tin nhắn park và nhắn riêng bị bỏ qua.", false]
+  ["chat", "Chat trong game", "Tắt là tin nhắn park và nhắn riêng bị bỏ qua.", false],
+  ["event", "Sự kiện (NPC sự kiện + shop đổi quà)", "Tắt là Bạch/Hắc Vô Thường, Pay/Chay To Win, Saitama và shop Đổi Quà của NPC 861 không mở menu/shop. Thợ Kim Hoàn vẫn hoạt động (dịch vụ thường trực).", false]
 ];
 async function loadFlags() {
   const o = await api("/api/flags");

@@ -228,6 +228,14 @@ public class NpcHandler {
             }
             us.updateSpam(-1,(Boss)boss,us);
         }else {
+            // [ADMIN] Cờ tắt sự kiện: NPC sự kiện không mở menu/shop
+            if (!avatar.admin.FeatureFlags.eventOpen()
+                    && (npcIdCase == NpcName.bunma || npcIdCase == NpcName.Vegeta
+                        || npcIdCase == NpcName.Pay_To_Win || npcIdCase == NpcName.Chay_To_Win
+                        || npcIdCase == NpcName.Shop_Buy_Luong || npcIdCase == NpcName.SAITAMA)) {
+                us.getAvatarService().serverDialog("Sự kiện đang tạm đóng, quay lại sau nhé.");
+                return;
+            }
             switch (npcIdCase) {
                 case NpcName.Than_Tai_Xiu: {
                     List<Menu> menuList = List.of(

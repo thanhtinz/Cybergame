@@ -13,7 +13,8 @@ import java.util.concurrent.ConcurrentHashMap;
  *  lại mỗi 20 giây và ngay khi admin đổi). Tên cờ chuẩn:
  *  maintenance (bảo trì — chặn đăng nhập trừ admin), register (cho
  *  đăng ký mới), shop (mua bán ở Cửa Hàng), wheel (vòng quay may mắn),
- *  giftcode (nhập giftcode), farm (vào nông trại), chat (chat trong game). */
+ *  giftcode (nhập giftcode), farm (vào nông trại), chat (chat trong game),
+ *  event (NPC + shop sự kiện: Vô Thường, Pay/Chay To Win, Saitama, 861). */
 public class FeatureFlags {
 
     private static final Map<String, Boolean> CACHE = new ConcurrentHashMap<>();
@@ -77,4 +78,5 @@ public class FeatureFlags {
     public static boolean giftcodeOpen() { return get("giftcode", true); }
     public static boolean farmOpen() { return get("farm", true); }
     public static boolean chatOpen() { return get("chat", true); }
+    public static boolean eventOpen() { return get("event", true); }
 }

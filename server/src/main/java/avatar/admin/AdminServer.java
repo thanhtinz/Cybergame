@@ -1044,6 +1044,7 @@ public class AdminServer {
         f.put("giftcode", FeatureFlags.giftcodeOpen());
         f.put("farm", FeatureFlags.farmOpen());
         f.put("chat", FeatureFlags.chatOpen());
+        f.put("event", FeatureFlags.eventOpen());
         o.put("flags", f);
         sendJson(ex, 200, o);
     }
@@ -1053,7 +1054,7 @@ public class AdminServer {
         String name = str(body, "name", "").trim();
         boolean value = num(body, "value", 0) == 1;
         java.util.Set<String> known = new java.util.HashSet<>(java.util.Arrays.asList(
-            "maintenance", "register", "shop", "wheel", "giftcode", "farm", "chat"));
+            "maintenance", "register", "shop", "wheel", "giftcode", "farm", "chat", "event"));
         if (!known.contains(name)) {
             sendJson(ex, 400, err("Cờ không hợp lệ: " + name));
             return;
