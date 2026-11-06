@@ -58,6 +58,9 @@ public class ClanService extends Service {
     public static final int S_QUEST_DONE = 24;
     public static final int S_LIST_NEW = 25;
     public static final int S_SET_PLAYER = 26;
+    /** [PORT] Đổi thông tin clan (CHANGE_CLAN của bản chính):
+     *  chủ clan sửa tên / slogan / logo. */
+    public static final int S_CHANGE_INFO = 32;
     public static final int S_REQ_ITEMS = 27;
     public static final int S_ITEM_OWN = 28;
     public static final int S_BUY_ITEM = 29;
@@ -139,6 +142,7 @@ public class ClanService extends Service {
     static class ClanRow {
         int id; int ownerId; String name; int icon; long xu; long luong;
         int level; long exp; String slogan; int maxMembersCfg;
+        String dob = "";
     }
 
     static class MemberRow {
@@ -187,6 +191,10 @@ public class ClanService extends Service {
         try { cl.exp = r.getLong("exp"); } catch (SQLException e) { cl.exp = 0; }
         cl.slogan = r.getString("description");
         if (cl.slogan == null) cl.slogan = "";
+        try {
+            java.sql.Timestamp ts = r.getTimestamp("created_at");
+            if (ts != null) cl.dob = new java.text.SimpleDateFormat("dd/MM/yyyy").format(ts);
+        } catch (Exception e) { cl.dob = ""; }
         cl.maxMembersCfg = r.getInt("max_members");
         return cl;
     }
@@ -324,6 +332,7 @@ public class ClanService extends Service {
                 case S_BUY_ITEM: doBuyItem(me, r.readShort()); break;
                 case S_RECEIVE: doReceive(me, r.readInt()); break;
                 case S_INVITE: doInvite(me, r); break;
+                case S_CHANGE_INFO: doChangeInfo(me, r); break;
                 default: break;
             }
         } catch (Exception e) {
@@ -409,6 +418,7 @@ public class ClanService extends Service {
 
     void sendSetPlayer(User me) {
         ClanRow cl = myClan(me.getId());
+        me.setClanIconCache((short) (cl == null ? -1 : cl.icon));
         try {
             Message m = msg(S_SET_PLAYER);
             DataOutputStream w = m.writer();
@@ -445,6 +455,53 @@ public class ClanService extends Service {
             w.writeInt(mb.points);
             w.writeBoolean(mb.online);
             w.writeBoolean(mb.blocked);
+        }
+        w.writeUTF(cl.dob); // [PORT] ngày thành lập (dobClan của gốc)
+    }
+
+    /** Đổi thông tin clan — chỉ chủ clan (role 2). */
+    private void doChangeInfo(User me, DataInputStream r) throws IOException {
+        String name = r.readUTF().trim();
+        String slogan = r.readUTF().trim();
+        int icon = r.readShort();
+        ClanRow cl = myClan(me.getId());
+        if (cl == null) { serverDialog("Bạn chưa có clan."); return; }
+        MemberRow my = memberOf(cl.id, me.getId());
+        if (my == null || my.role != 2) {
+            serverDialog("Chỉ chủ clan mới đổi được thông tin clan.");
+            return;
+        }
+        if (!name.equals(cl.name)) {
+            String err = validateName(name);
+            if (err != null) { serverDialog(err); return; }
+        }
+        if (slogan.length() > 60) slogan = slogan.substring(0, 60);
+        if (icon < 0) icon = 0;
+        try (Connection c = conn();
+             PreparedStatement ps = c.prepareStatement(
+                 "UPDATE clans SET name = ?, description = ?, icon = ? WHERE id = ?")) {
+            ps.setString(1, name);
+            ps.setString(2, slogan);
+            ps.setString(3, String.valueOf(icon));
+            ps.setInt(4, cl.id);
+            ps.executeUpdate();
+        } catch (SQLException e) {
+            e.printStackTrace();
+            serverDialog("Đổi thông tin thất bại.");
+            return;
+        }
+        serverDialog("Đã cập nhật thông tin clan.");
+        // làm mới cho mình + mọi thành viên đang online
+        sendInfo(me);
+        sendSetPlayer(me);
+        for (MemberRow mb : members(cl.id)) {
+            if (mb.userId == me.getId()) continue;
+            avatar.model.User t = UserManager.getInstance().find(mb.userId);
+            if (t != null) {
+                ClanService cs = new ClanService(t.session);
+                cs.sendInfo(t);
+                cs.sendSetPlayer(t);
+            }
         }
     }
 

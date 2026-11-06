@@ -83,6 +83,15 @@ public class User {
         if (this.idUsHenHo != 0) return 2;
         return -1;
     }
+    /** [PORT clan] Icon/logo clan đã cache để ghi vào gói zone
+     *  (50/51) cho người khác thấy cạnh tên — ClanService cập nhật
+     *  qua sendSetPlayer, đăng nhập cập nhật ở AvatarService. */
+    private short clanIconCache = -1;
+
+    public short clanIconId() { return clanIconCache; }
+
+    public void setClanIconCache(short v) { clanIconCache = v; }
+
     private int imginfo;
     private String tenNhan;
     private java.sql.Date timeCreate;

@@ -1518,6 +1518,15 @@ public class ScreenshotMain {
                         }
                         if (frame == 15) {
                             shot("shot-couple.png");
+                            stage = 160; frame = 0;
+                        }
+                        break;
+                    case 160: // Hộp sửa thông tin clan (CHANGE_CLAN)
+                        if (frame == 1) {
+                            world.debugClanEdit();
+                        }
+                        if (frame == 15) {
+                            shot("shot-clan-edit.png");
                             stage = 121; frame = 0;
                         }
                         break;

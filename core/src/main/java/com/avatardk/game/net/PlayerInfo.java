@@ -21,6 +21,9 @@ public class PlayerInfo {
     public int luong;
     public int luongKhoa;
     public int xeng;
+    /** Icon/logo clan của người chơi (gói info có sẵn, gốc đọc bỏ) —
+     *  -1 = chưa có clan; 0..3 = bộ logo clan gốc. */
+    public int clanIcon = -1;
     /** 5 chỉ số trong gói đăng nhập (cùng thứ tự gói −22): thân thiện,
      *  gây rối, sành điệu, vui vẻ, sức khỏe (= 100 − đói). */
     public int friendly, crazy, stylish, happy, health;
@@ -49,7 +52,7 @@ public class PlayerInfo {
             r.readByte();
             p.wearingExpire[i] = r.readUTF(); // hạn dùng của part
         }
-        r.readShort(); // icon clan (-1 nếu chưa có)
+        p.clanIcon = r.readShort(); // icon clan (-1 nếu chưa có)
         int nCmd = r.readByte();
         for (int i = 0; i < nCmd; i++) {
             r.readUTF();

@@ -19,6 +19,7 @@ public final class ZonePlayers {
         public int role;      // 0 = NPC
         public int direct;    // 0 = phải, 2 = trái (Base của gốc)
         public int idWedding = -1; // icon hôn nhân cạnh tên (−1 = độc thân)
+        public int clanIcon = -1; // [PORT clan] logo clan cạnh tên (đuôi mở rộng gói 50/51)
     }
 
     /** Kết quả đọc gói 50: map/khu server xác nhận + danh sách người. */
@@ -63,6 +64,12 @@ public final class ZonePlayers {
                 int w = r.readShort(); // idWedding cuối mỗi user
                 if (i < out.size()) out.get(i).idWedding = w;
             }
+            // [PORT clan] đuôi mở rộng của server port: icon clan
+            // theo từng user (server gốc không có → đọc hụt thì thôi)
+            for (int i = 0; i < num; i++) {
+                int ci = r.readShort();
+                if (i < out.size()) out.get(i).clanIcon = ci;
+            }
         } catch (IOException tail) {
             // đuôi gói lệch cũng không được làm mất danh sách người chơi đã đọc
         }
@@ -90,6 +97,9 @@ public final class ZonePlayers {
                 r.readByte();
                 r.readShort();
                 p.idWedding = r.readShort();
+            }
+            if (r.available() >= 2) {
+                p.clanIcon = r.readShort(); // [PORT clan] đuôi mở rộng
             }
         } catch (IOException ignored) {
         }

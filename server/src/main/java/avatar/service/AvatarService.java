@@ -263,10 +263,12 @@ public class AvatarService extends Service {
                         short icon = res.getShort("icon");
                         String thongbaonhom = res.getString("description");
                         ds.writeShort(icon);  // Ghi ID icon của clan vào DataOutputStream
+                        us.setClanIconCache(icon);
                         us.getAvatarService().SendTabmsg("Thông báo nhóm: " + thongbaonhom);  // Gửi thông báo nhóm
                     } else {
                         // Nếu không có kết quả (người dùng không tham gia clan nào)
                         ds.writeShort((short) -1);  // Ghi giá trị mặc định -1 cho icon
+                        us.setClanIconCache((short) -1);
                         us.getAvatarService().SendTabmsg("Bạn chưa tham gia vào nhóm nào.");  // Gửi thông báo mặc định
                     }
                 }
@@ -617,6 +619,12 @@ public class AvatarService extends Service {
             // sau map items) — icon hôn nhân cạnh tên
             for (User pl : players) {
                 ds.writeShort(pl.weddingIconId());
+            }
+            // [PORT clan] đuôi mở rộng: icon clan theo từng người
+            // (client port đọc trong khối đuôi chịu lỗi; client gốc
+            // bỏ qua byte thừa cuối gói)
+            for (User pl : players) {
+                ds.writeShort(pl.clanIconId());
             }
             ds.flush();
 

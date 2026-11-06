@@ -7402,6 +7402,26 @@ public class WorldScreen extends ScreenAdapter {
             openAuctionPanel();
             return;
         }
+        // NPC Hội Nhóm (870, Tòa thị chính — bản chính: gặp NPC
+        // Hội Nhóm để xin gia nhập hội nhóm): mở panel clan
+        if (n.data.id == 870) {
+            openClanPanel();
+            return;
+        }
+        // NPC Thị Trưởng (871, Tòa thị chính — bản chính: gặp thị
+        // trưởng để NHẬN NHIỆM VỤ): có clan thì mở thẳng tab
+        // Nhiệm vụ clan; chưa có thì hướng dẫn gặp NPC Hội Nhóm
+        if (n.data.id == 871) {
+            if (clanHas || myClanIdSv > 0) {
+                openClanPanel();
+                clanTab = 1;
+            } else {
+                n.bubble = "Hãy gặp NPC Hội Nhóm bên cạnh để xin gia nhập hội nhóm, rồi quay lại nhận nhiệm vụ nhé!";
+                n.bubbleTimer = 5f;
+                openClanPanel();
+            }
+            return;
+        }
         // NPC Chủ Hôn (525, lễ đường): [PORT] mở menu cục bộ 3 việc
         // Hẹn hò / Bắt đầu lễ cưới / Chia tay — gốc mở hộp cưới bằng
         // chạm vào Chủ Hôn (đối tượng −100), xem docs/wedding-spec.md.
@@ -9739,6 +9759,7 @@ public class WorldScreen extends ScreenAdapter {
     /** Danh hiệu của doll ĐANG được vẽ (nơi gọi đặt trước drawFigure,
      *  drawFigure tự xoá sau khi dùng). */
     private int drawingTitleId = 0;
+    private int drawingClanIcon = -1;
 
     private TitleDef titleDef(int id) {
         for (TitleDef d : titleListEffective()) if (d.id == id) return d;
@@ -11379,6 +11400,7 @@ public class WorldScreen extends ScreenAdapter {
                         rDrawY = lp[1];
                     }
                     drawingTitleId = remoteTitles.getOrDefault(it.remote.info.id, 0);
+                    drawingClanIcon = it.remote.info.clanIcon;
                     drawFigure(rUseDoll, it.remote.anim, rDrawX, rDrawY,
                         com.avatardk.game.data.GameSettings.showName ? it.remote.info.name : null,
                         new Color(0.55f, 0.9f, 1f, 1f));
@@ -11505,6 +11527,8 @@ public class WorldScreen extends ScreenAdapter {
                         pDrawY = lp[1];
                     }
                     drawingTitleId = myTitleId;
+                    drawingClanIcon = myClanIconSv >= 0 ? myClanIconSv
+                        : (game.player != null ? game.player.clanIcon : -1);
                     drawFigure(pdoll, playerAnim, pDrawX, pDrawY, displayName, true);
                     if (chatBubble != null) {
                         drawBubble(pdoll, playerAnim, playerFeetX,
@@ -11630,6 +11654,16 @@ public class WorldScreen extends ScreenAdapter {
         Ui.fontSmall.draw(batch, name, feetX - layout.width / 2f + 1.5f, topY + 24f - 1.5f);
         Ui.fontSmall.setColor(c);
         Ui.fontSmall.draw(batch, name, feetX - layout.width / 2f, topY + 24f);
+        // logo clan GỐC ngay bên trái tên (bản chính: idLogoClan
+        // gắn trên avatar) — chỉ bộ logo 0..3 mới vẽ trên map
+        if (drawingClanIcon >= 0 && drawingClanIcon <= 3) {
+            Texture lt = game.texture("clan/logo-" + drawingClanIcon + ".png");
+            if (lt != null && lt.getWidth() > 0) {
+                float lw = 38f, lh = lw * lt.getHeight() / lt.getWidth();
+                batch.draw(lt, feetX - layout.width / 2f - lw - 5, topY + 24f - lh + 4, lw, lh);
+            }
+        }
+        drawingClanIcon = -1;
         // danh hiệu: ẢNH gốc của bản chính (titles/title-<id>.png,
         // giải mã từ TextAsset Title1..21) vẽ TRÊN tên; thiếu ảnh
         // thì lùi về dòng chữ màu như bản đầu.
@@ -13689,6 +13723,9 @@ public class WorldScreen extends ScreenAdapter {
     private boolean clanHas = false; // mình đã có clan chưa
     private int clanId = -1;
     private String clanName = "", clanSlogan = "";
+    private String clanDob = "";
+    private final StringBuilder clanSearchField = new StringBuilder();
+    private boolean clanEditOpen = false;
     private int clanIcon = 0, clanLevel = 1, clanExp = 0, clanExpNeed = 1000;
     private int clanFundXu = 0, clanFundLuong = 0;
     private int clanRole = 0, clanMemCount = 0, clanMaxMem = 30;
@@ -13714,7 +13751,10 @@ public class WorldScreen extends ScreenAdapter {
     private final StringBuilder clanInviteField = new StringBuilder();
     private final StringBuilder clanChatField = new StringBuilder();
     private int clanCreateIcon = 2;
-    private static final int[] CLAN_ICONS = {2, 310, 311, 312, 313, 314, 331, 332, 842, 843, 844};
+    // Bộ logo clan GỐC (mây cl00/cl01/cl10/cl11 từ APK 2.60) —
+    // thay bộ icon object tạm trước đây; icon cũ ngoài 0..3 vẫn
+    // vẽ theo đường object để clan cũ không vỡ.
+    private static final int[] CLAN_ICONS = {0, 1, 2, 3};
     // Lời mời vào clan đang chờ trả lời (NOTIFY kind 6)
     private int clanInviteId = -1;
     private String clanInviteText = "";
@@ -13798,6 +13838,9 @@ public class WorldScreen extends ScreenAdapter {
                             mb.blocked = r.readBoolean();
                             clanMembers.add(mb);
                         }
+                        // [PORT] ngày thành lập clan ở CUỐI gói info
+                        try { clanDob = r.available() > 0 ? r.readUTF() : ""; }
+                        catch (Exception e) { clanDob = ""; }
                         if (clanOpen) clanSendTabData();
                     }
                     break;
@@ -13999,6 +14042,14 @@ public class WorldScreen extends ScreenAdapter {
                 + " lượng · Thành viên " + clanMemCount + "/" + clanMaxMem,
             px + 104, top - 92);
         Ui.fontSmall.setColor(Color.WHITE);
+        if (!clanDob.isEmpty()) {
+            Ui.fontSmall.setColor(0.85f, 0.92f, 1f, 1f);
+            Ui.fontSmall.draw(batch, "Thành lập: " + clanDob, px + 560, top - 92);
+            Ui.fontSmall.setColor(Color.WHITE);
+        }
+        if (clanRole == 2) {
+            clanBtn(px + pw - 216, top - 44, 150, 36, "Sửa thông tin", 0);
+        }
         String slogan = truncTo(Ui.fontSmall, clanSlogan, 400);
         Ui.fontSmall.setColor(1f, 0.9f, 0.6f, 1f);
         Ui.fontSmall.draw(batch, slogan, px + 560, top - 66);
@@ -14021,6 +14072,7 @@ public class WorldScreen extends ScreenAdapter {
             case 6: drawClanRequestTab(px, py, contentTop); break;
             default: break;
         }
+        if (clanEditOpen) drawClanEditDialog();
         if (clanInviteId >= 0) drawClanInviteBox();
     }
 
@@ -14035,6 +14087,18 @@ public class WorldScreen extends ScreenAdapter {
     }
 
     private void drawClanListTab(float px, float py, float pw, float contentTop) {
+        // Tìm clan theo ID (searchClan của bản chính: "Enter clan ID")
+        batch.draw(Ui.roundedRect(250, 40, 10,
+            new com.badlogic.gdx.graphics.Color(0.10f, 0.13f, 0.22f, 0.97f),
+            GLASS_RIM), px + 28, contentTop - 44);
+        SoftInput.register("clan.search",
+            SoftInput.of(clanSearchField, 9, () -> SoftInput.hide()),
+            false, true, px + 28, contentTop - 44, 250, 40, 10);
+        Ui.fontSmall.setColor(1f, 1f, 1f, 0.95f);
+        Ui.fontSmall.draw(batch, clanSearchField.length() > 0
+            ? clanSearchField.toString() : "Nhập ID clan…", px + 42, contentTop - 18);
+        Ui.fontSmall.setColor(Color.WHITE);
+        clanBtn(px + 288, contentTop - 44, 84, 40, "Tìm", 1);
         clanBtn(px + pw - 330, contentTop - 44, 140, 40,
             "Cấp cao", !clanListNewest ? 1 : 0);
         clanBtn(px + pw - 178, contentTop - 44, 140, 40,
@@ -14090,6 +14154,57 @@ public class WorldScreen extends ScreenAdapter {
     }
 
     private int clanLevelOf(ClListItem it) { return it.level; }
+
+    /** Hộp ĐỔI THÔNG TIN clan (CHANGE_CLAN của bản chính): chủ clan
+     *  sửa tên / khẩu hiệu / logo — dùng chung ô nhập với form tạo. */
+    private void drawClanEditDialog() {
+        float w = 720, h = 470, x = (Ui.W - w) / 2f, y = (Ui.H - h) / 2f;
+        batch.setColor(0f, 0f, 0f, 0.45f);
+        batch.draw(whiteTex, 0, 0, Ui.W, Ui.H);
+        batch.setColor(Color.WHITE);
+        batch.draw(Ui.roundedRect((int) w, (int) h, 16, GLASS_FILL_DARK, GLASS_RIM), x, y);
+        Ui.font.setColor(1f, 0.85f, 0.35f, 1f);
+        Ui.font.draw(batch, "Sửa thông tin clan", x + 28, y + h - 30);
+        Ui.font.setColor(Color.WHITE);
+        float fx = x + 60;
+        Ui.fontSmall.setColor(0.85f, 0.92f, 1f, 1f);
+        Ui.fontSmall.draw(batch, "Tên clan (3–20 ký tự):", fx, y + h - 84);
+        Ui.fontSmall.setColor(Color.WHITE);
+        float fy = y + h - 152;
+        batch.draw(Ui.roundedRect(560, 54, 12,
+            new com.badlogic.gdx.graphics.Color(0.10f, 0.13f, 0.22f, 0.97f),
+            new com.badlogic.gdx.graphics.Color(1f, 0.62f, 0.25f, 1f)), fx, fy);
+        SoftInput.register("clan.name",
+            SoftInput.of(clanNameField, 20, () -> SoftInput.hide()),
+            false, true, fx, fy, 560, 54, 12);
+        Ui.font.setColor(Color.WHITE);
+        Ui.font.draw(batch, clanNameField.toString(), fx + 16, fy + 36);
+        Ui.fontSmall.setColor(0.85f, 0.92f, 1f, 1f);
+        Ui.fontSmall.draw(batch, "Khẩu hiệu / thông báo clan:", fx, fy - 26);
+        Ui.fontSmall.setColor(Color.WHITE);
+        float sy = fy - 94;
+        batch.draw(Ui.roundedRect(560, 54, 12,
+            new com.badlogic.gdx.graphics.Color(0.10f, 0.13f, 0.22f, 0.97f),
+            new com.badlogic.gdx.graphics.Color(1f, 0.62f, 0.25f, 1f)), fx, sy);
+        SoftInput.register("clan.slogan",
+            SoftInput.of(clanSloganField, 60, () -> SoftInput.hide()),
+            false, true, fx, sy, 560, 54, 12);
+        Ui.font.draw(batch, clanSloganField.toString(), fx + 16, sy + 36);
+        Ui.fontSmall.setColor(0.85f, 0.92f, 1f, 1f);
+        Ui.fontSmall.draw(batch, "Chọn biểu tượng clan:", fx, sy - 28);
+        Ui.fontSmall.setColor(Color.WHITE);
+        float iy = sy - 96;
+        for (int i = 0; i < CLAN_ICONS.length; i++) {
+            float ix = fx + i * 68;
+            boolean sel = clanCreateIcon == CLAN_ICONS[i];
+            batch.draw(Ui.roundedRect(60, 60, 10,
+                sel ? new com.badlogic.gdx.graphics.Color(0.95f, 0.55f, 0.15f, 0.55f)
+                    : new com.badlogic.gdx.graphics.Color(1f, 1f, 1f, 0.08f), null), ix, iy);
+            clanIconDraw(CLAN_ICONS[i], ix + 30, iy + 30, 44);
+        }
+        clanBtn(x + 60, y + 28, 220, 52, "Lưu thay đổi", 1);
+        clanBtn(x + w - 280, y + 28, 220, 52, "Huỷ", 0);
+    }
 
     private void drawClanCreateTab(float px, float py, float pw, float contentTop) {
         float x = px + 60;
@@ -14438,6 +14553,33 @@ public class WorldScreen extends ScreenAdapter {
             }
             return true;
         }
+        // hộp sửa thông tin clan: nuốt mọi chạm, xử lý 2 nút + icon
+        if (clanEditOpen) {
+            float w = 720, h = 470, bx = (1280 - w) / 2f, by = (720 - h) / 2f;
+            float iy = by + 128;
+            for (int i = 0; i < CLAN_ICONS.length; i++) {
+                if (inRect(x, y, bx + 60 + i * 68, iy, 60, 60)) {
+                    clanCreateIcon = CLAN_ICONS[i];
+                    return true;
+                }
+            }
+            if (inRect(x, y, bx + 60, by + 28, 220, 52)) {
+                try {
+                    AvatarProtocol.clanChangeInfo(game.connection,
+                        clanNameField.toString().trim(),
+                        clanSloganField.toString().trim(), clanCreateIcon);
+                } catch (java.io.IOException e) { }
+                clanEditOpen = false;
+                SoftInput.hide();
+                return true;
+            }
+            if (inRect(x, y, bx + w - 280, by + 28, 220, 52)) {
+                clanEditOpen = false;
+                SoftInput.hide();
+                return true;
+            }
+            return true;
+        }
         if (inRect(x, y, px + pw - 54, py + ph - 54, 36, 36)) {
             clanOpen = false;
             SoftInput.hide();
@@ -14450,6 +14592,15 @@ public class WorldScreen extends ScreenAdapter {
                 if (inRect(x, y, px + 210, top - 108, 170, 42)) { clanTab = 1; return true; }
                 float contentTop = top - 128;
                 if (clanTab == 0) {
+                    if (inRect(x, y, px + 288, contentTop - 44, 84, 40)) {
+                        try {
+                            int sid = Integer.parseInt(clanSearchField.toString().trim());
+                            AvatarProtocol.clanCheckInfo(game.connection, sid);
+                        } catch (Exception e) {
+                            addChatLog(TAB_SYSTEM, null, "Nhập ID clan là số để tìm.", true);
+                        }
+                        return true;
+                    }
                     if (inRect(x, y, px + pw - 330, contentTop - 44, 140, 40)) {
                         clanListNewest = false; clanPage = 0;
                         AvatarProtocol.clanList(game.connection, false);
@@ -14500,6 +14651,16 @@ public class WorldScreen extends ScreenAdapter {
                         clanSloganField.toString().trim(), clanCreateIcon);
                     return true;
                 }
+                return true;
+            }
+            // đã có clan: nút Sửa thông tin (chỉ chủ clan)
+            if (clanRole == 2 && inRect(x, y, px + pw - 216, top - 44, 150, 36)) {
+                clanNameField.setLength(0);
+                clanNameField.append(clanName);
+                clanSloganField.setLength(0);
+                clanSloganField.append(clanSlogan);
+                clanCreateIcon = clanIcon;
+                clanEditOpen = true;
                 return true;
             }
             // đã có clan: hàng tab
@@ -16157,6 +16318,7 @@ public class WorldScreen extends ScreenAdapter {
         clanId = 6;
         clanName = "Hội Mặt Trời";
         clanSlogan = "Vui là chính, cày là phụ";
+        clanDob = "14/02/2025";
         clanIcon = 2;
         clanLevel = 3;
         clanExp = 2450;
@@ -16188,6 +16350,16 @@ public class WorldScreen extends ScreenAdapter {
         }
         clanTab = 0;
         clanPage = 0;
+    }
+
+    public void debugClanEdit() {
+        debugClan();
+        clanNameField.setLength(0);
+        clanNameField.append(clanName);
+        clanSloganField.setLength(0);
+        clanSloganField.append(clanSlogan);
+        clanCreateIcon = clanIcon;
+        clanEditOpen = true;
     }
 
     public void debugClanQuest() {
@@ -16283,7 +16455,9 @@ public class WorldScreen extends ScreenAdapter {
     }
 
     private void clanIconDraw(int iconId, float cx, float cy, float size) {
-        com.badlogic.gdx.graphics.Texture t = house.imgTexture(iconId);
+        com.badlogic.gdx.graphics.Texture t = (iconId >= 0 && iconId <= 3)
+            ? game.texture("clan/logo-" + iconId + ".png")
+            : house.imgTexture(iconId);
         if (t == null) return;
         float s = Math.min(size / t.getWidth(), size / t.getHeight());
         float w = t.getWidth() * s, h = t.getHeight() * s;

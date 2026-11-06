@@ -173,6 +173,7 @@ public class MapService extends Service {
             ds.writeByte(-1);
             ds.writeShort(-1);
             ds.writeShort(us.weddingIconId());
+            ds.writeShort(us.clanIconId()); // [PORT clan] đuôi mở rộng
             ds.flush();
             sendMessage(ms);
         } catch (IOException ex) {

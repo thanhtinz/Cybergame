@@ -822,7 +822,8 @@ public final class AvatarProtocol {
         CL_LIST_QUEST = 20, CL_INFO_QUEST = 21, CL_SUBMIT_QUEST = 22,
         CL_SUBMIT_ITEM = 23, CL_QUEST_DONE = 24, CL_LIST_NEW = 25,
         CL_SET_PLAYER = 26, CL_REQ_ITEMS = 27, CL_ITEM_OWN = 28,
-        CL_BUY_ITEM = 29, CL_RECEIVE = 30, CL_INVITE = 31;
+        CL_BUY_ITEM = 29, CL_RECEIVE = 30, CL_INVITE = 31,
+        CL_CHANGE_INFO = 32;
 
     public static Msg clanMsg(int sub) throws IOException {
         Msg m = new Msg(CLAN);
@@ -903,6 +904,18 @@ public final class AvatarProtocol {
         DataOutputStream w = m.writer();
         w.writeInt(xu);
         w.writeInt(luong);
+        conn.send(m);
+    }
+
+    /** Đổi thông tin clan (CHANGE_CLAN của bản chính, sub 32 [PORT]). */
+    public static void clanChangeInfo(GameConnection conn, String name,
+            String slogan, int icon) throws IOException {
+        Msg m = clanMsg(CL_CHANGE_INFO);
+        java.io.DataOutputStream w = m.writer();
+        w.writeUTF(name);
+        w.writeUTF(slogan);
+        w.writeShort(icon);
+        w.flush();
         conn.send(m);
     }
 
