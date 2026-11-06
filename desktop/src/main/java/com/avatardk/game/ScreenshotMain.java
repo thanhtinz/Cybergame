@@ -1573,7 +1573,11 @@ public class ScreenshotMain {
                         break;
                     case 172: // Nhân vật THỬ trong thế giới (hướng chéo)
                         if (frame == 1) { world.debugCloseCoupleBoard(); world.debugTrialPose(); }
-                        if (frame == 15) { shot("shot-trial-char.png"); stage = 121; frame = 0; }
+                        if (frame == 15) { shot("shot-trial-char.png"); stage = 173; frame = 0; }
+                        break;
+                    case 173: // Panel Bang xep hang tong hop (o BXH trong menu)
+                        if (frame == 1) { world.debugCloseCoupleBoard(); world.debugOpenRank(); }
+                        if (frame == 15) { shot("shot-rank.png"); stage = 121; frame = 0; }
                         break;
                     case 121: // nền ban ngày ở thành phố (kiểm lớp trời/BGMap)
                         if (frame == 1) {

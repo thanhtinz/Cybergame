@@ -737,6 +737,16 @@ public final class AvatarProtocol {
     }
     public static void dailyDashboard(GameConnection conn) throws IOException { conn.send(dailyMsg(D_DASHBOARD)); }
 
+    // [PORT] Bảng xếp hạng tổng hợp (mọi thể loại, một panel riêng)
+    public static final byte RANK = -123;
+
+    public static void rankBoard(GameConnection conn, int cat) throws IOException {
+        Msg m = new Msg(RANK);
+        m.writer().writeByte(cat);
+        m.writer().flush();
+        conn.send(m);
+    }
+
     public static void coupleBoard(GameConnection conn) throws IOException {
         Msg m = new Msg(COUPLE);
         m.writer().writeByte(0);

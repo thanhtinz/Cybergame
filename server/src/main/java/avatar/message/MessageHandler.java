@@ -418,6 +418,13 @@ public class MessageHandler implements IMessageHandler {
                         }
                         break;
                     }
+                    // [PORT] Bảng xếp hạng tổng hợp (gói −123)
+                    case Cmd.RANK: {
+                        if (this.client.user != null) {
+                            new avatar.service.RankService(this.client).onMessage(mss);
+                        }
+                        break;
+                    }
                     // [PORT] Điểm danh + Nhiệm vụ ngày (gói −116)
                     case Cmd.DAILY: {
                         if (this.client.user != null) {

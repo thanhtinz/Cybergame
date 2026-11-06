@@ -778,7 +778,7 @@ public class WorldScreen extends ScreenAdapter {
     private static final String[][] MENU_ITEMS = {
         {"50", "Map"}, {"msg0", "Thư"}, {"balo", "Balo"},
         {"40", "Bạn bè"}, {"20", "Cá nhân"}, {"gear", "Cài đặt"},
-        {"music", "Nhạc"}, {"clan", "Clan"},
+        {"music", "Nhạc"}, {"clan", "Clan"}, {"bxh", "BXH"},
     };
     private static final float MENU_PX = Ui.W - 330f, MENU_PW = 312f;
     private static final float MENU_HEADER = 40f, MENU_CELL = 96f, MENU_CELL_H = 92f;
@@ -3918,6 +3918,10 @@ public class WorldScreen extends ScreenAdapter {
                     handleCouplePacket(m);
                     break;
                 }
+                case AvatarProtocol.RANK: {
+                    handleRankPacket(m);
+                    break;
+                }
                 case AvatarProtocol.BOSS_SHOP: {
                     // gói -78 của gốc: shop sự kiện + nâng cấp kim hoàn
                     // {byte type, int idBoss, byte idShop, UTF tên,
@@ -5905,6 +5909,7 @@ public class WorldScreen extends ScreenAdapter {
         if (clanTouch(x, y)) return;
         if (bsTouch(x, y)) return;
         if (cpBoardTouch(x, y)) return;
+        if (rankTouch(x, y)) return;
         // chợ + giao dịch + hộp mời giao dịch
         if (tradeInviteTouch(x, y)) return;
         if (marketTouch(x, y)) return;
@@ -6072,12 +6077,6 @@ public class WorldScreen extends ScreenAdapter {
                         return;
                     }
                 }
-            }
-            // tab Cặp Đôi: nút Top cặp đôi mở bảng xếp hạng
-            if (charVariant == 3 && charTab == 2
-                    && x >= px + 24 && x <= px + 162 && y >= py + 12 && y <= py + 62) {
-                openCoupleBoard();
-                return;
             }
             // tab Cặp Đôi: nút hành động (Chia tay) ở đáy tab
             if (charVariant == 3 && charTab == 2 && partnerName != null
@@ -6286,6 +6285,8 @@ public class WorldScreen extends ScreenAdapter {
                             musicOpen = true;
                         } else if (i == 7) {
                             openClanPanel();
+                        } else if (i == 8) {
+                            openRankPanel();
                         } else {
                             addChatLog(TAB_SYSTEM, null, "Tính năng " + MENU_ITEMS[i][1] + " đang được port ở đợt tiếp theo.", true);
                         }
@@ -8076,6 +8077,7 @@ public class WorldScreen extends ScreenAdapter {
         clanOpen = false;
         bsOpen = false;
         cpBoardOpen = false;
+        rankOpen = false;
         marketOpen = false;
         tradeOpen = false;
         farm2Open = false;
@@ -9515,12 +9517,8 @@ public class WorldScreen extends ScreenAdapter {
         }
         Ui.fontSmall.setColor(1f, 0.75f, 0.85f, 1f);
         Ui.fontSmall.draw(batch, (single ? 0 : partnerPct) + "%", px + 532, py + 91);
-        // nút Top cặp đôi (mở bảng xếp hạng) — trái nút Chia tay
-        batch.draw(Ui.roundedRect(138, 50, 14,
-            new Color(0.08f, 0.13f, 0.20f, 0.92f), GLASS_RIM), px + 24, py + 12);
-        Ui.faIcon(batch, Ui.fa20, Ui.FA_TROPHY, px + 46, py + 37, new Color(1f, 0.8f, 0.3f, 1f));
-        Ui.fontSmall.setColor(0.92f, 0.95f, 1f, 1f);
-        Ui.fontSmall.draw(batch, "Top cặp đôi", px + 64, py + 45);
+        // (Nút Top cặp đôi đã gỡ 2026-11-06: mọi BXH gom về panel
+        // Bảng Xếp Hạng riêng trong menu — lệnh chủ dự án.)
         // nút Chia tay lớn (chỉ khi đang có cặp)
         if (!single) {
             batch.draw(Ui.roundedRect(300, 50, 14,
@@ -11975,6 +11973,7 @@ public class WorldScreen extends ScreenAdapter {
         if (clanOpen) drawClanPanel();
         if (bsOpen) drawBossShopPanel();
         if (cpBoardOpen) drawCoupleBoardPanel();
+        if (rankOpen) drawRankPanel();
         if (marketOpen) drawMarketPanel();
         if (tradeOpen) drawTradePanel();
         if (farm2Open) drawFarm2Panel();
@@ -14170,6 +14169,193 @@ public class WorldScreen extends ScreenAdapter {
             cpBoard.add(r);
         }
         cpMyRank = 2;
+    }
+
+    // ---- BẢNG XẾP HẠNG TỔNG HỢP ([PORT] gói -123; chủ dự án lệnh
+    // 2026-11-06: một panel riêng chứa mọi thể loại xếp hạng) ----
+    private static final String[] RANK_CATS = {
+        "Cấp độ", "Đại gia", "Cặp đôi", "Clan",
+        "Mini game", "Câu cá", "Thu hoạch", "Đố vui"};
+    private static final String[] RANK_ICONS = {
+        Ui.FA_CROWN, Ui.FA_COINS, Ui.FA_HEART, Ui.FA_USER_GROUP,
+        Ui.FA_DICE, Ui.FA_BOLT, Ui.FA_FIRE, Ui.FA_STAR};
+    private boolean rankOpen = false;
+    private int rankCat = 0, rankPage = 0, rankMyRank = 0;
+    private String rankMyValue = "";
+    private final java.util.ArrayList<String[]> rankRows = new java.util.ArrayList<>();
+    private final java.util.ArrayList<Boolean> rankMine = new java.util.ArrayList<>();
+    private static final float RK_PW = 880, RK_PH = 600;
+    private static final float RK_PX = (Ui.W - RK_PW) / 2f, RK_PY = (Ui.H - RK_PH) / 2f;
+
+    private void openRankPanel() {
+        closeOtherPanels();
+        rankOpen = true;
+        rankPage = 0;
+        requestRank();
+    }
+
+    private void requestRank() {
+        rankRows.clear();
+        rankMine.clear();
+        rankMyRank = 0;
+        rankMyValue = "";
+        if (online()) {
+            try {
+                AvatarProtocol.rankBoard(game.connection, rankCat);
+            } catch (IOException ignored) {
+            }
+        } else {
+            seedRankSample();
+        }
+    }
+
+    private void handleRankPacket(Msg m) throws IOException {
+        int cat = m.reader().readByte();
+        if (cat != rankCat) return;
+        rankRows.clear();
+        rankMine.clear();
+        int n = m.reader().readByte();
+        for (int i = 0; i < n; i++) {
+            rankRows.add(new String[]{m.reader().readUTF(), m.reader().readUTF()});
+            rankMine.add(m.reader().readBoolean());
+        }
+        if (m.reader().available() >= 2) rankMyRank = m.reader().readShort();
+        if (m.reader().available() > 0) rankMyValue = m.reader().readUTF();
+        rankOpen = true;
+    }
+
+    private void seedRankSample() {
+        String[][][] sample = {
+            {{"Sơn", "Cấp 50"}, {"Linh Chi", "Cấp 47"}, {"Hoàng Nam", "Cấp 45"},
+             {"Thu Hằng", "Cấp 41"}, {"Đức Anh", "Cấp 38"}},
+            {{"Hoàng Nam", "1.250.000 xu"}, {"Sơn", "985.000 xu"}, {"Minh Ngọc", "720.500 xu"},
+             {"Tuấn Anh", "655.000 xu"}},
+            {{"Hoàng Nam + Thu Hằng", "Cấp 12 - 30%"}, {"Sơn + Linh Chi", "Cấp 7 - 45%"},
+             {"Đức Anh + Minh Ngọc", "Cấp 5 - 80%"}},
+            {{"Hội Mặt Trời", "Cấp 3"}, {"Gia Đình Vui Vẻ", "Cấp 2"}, {"Những Người Bạn", "Cấp 2"}},
+            {{"Sơn", "86 thắng"}, {"Tuấn Anh", "79 thắng"}, {"Linh Chi", "64 thắng"}},
+            {{"Đức Anh", "212 cá"}, {"Sơn", "180 cá"}, {"Hoàng Nam", "154 cá"}},
+            {{"Linh Chi", "340 vụ"}, {"Sơn", "295 vụ"}, {"Thu Hằng", "260 vụ"}},
+            {{"Minh Ngọc", "48 câu đúng"}, {"Sơn", "41 câu đúng"}, {"Tuấn Anh", "37 câu đúng"}},
+        };
+        boolean[] mineIdx = {true, false, true, true, true, false, false, false};
+        int mi = rankCat == 0 ? 0 : rankCat == 2 ? 1 : rankCat == 3 ? 0 : rankCat == 4 ? 0 : -1;
+        String[][] rows = sample[rankCat];
+        for (int i = 0; i < rows.length; i++) {
+            rankRows.add(rows[i]);
+            rankMine.add(i == mi);
+            if (i == mi) {
+                rankMyRank = i + 1;
+                rankMyValue = rows[i][1];
+            }
+        }
+        if (mi < 0) {
+            rankMyRank = 0;
+            rankMyValue = "";
+        }
+    }
+
+    private void drawRankPanel() {
+        float px = RK_PX, py = RK_PY, pw = RK_PW, ph = RK_PH, top = py + ph;
+        batch.setColor(0f, 0f, 0f, 0.62f);
+        batch.draw(whiteTex, 0, 0, Ui.W, Ui.H);
+        batch.setColor(Color.WHITE);
+        batch.draw(Ui.roundedRect((int) pw, (int) ph, 16,
+            new Color(0.04f, 0.08f, 0.14f, 0.98f), GLASS_RIM), px, py);
+        Ui.faIcon(batch, Ui.fa26, Ui.FA_TROPHY, px + 42, top - 38, new Color(1f, 0.8f, 0.3f, 1f));
+        Ui.fontTitle.setColor(1f, 0.85f, 0.45f, 1f);
+        Ui.fontTitle.draw(batch, "Bảng xếp hạng", px + 66, top - 29);
+        batch.draw(Ui.roundedRect(36, 36, 10, Ui.BTN_CLOSE, GLASS_RIM), px + pw - 54, top - 54);
+        Ui.faIcon(batch, Ui.fa20, Ui.FA_XMARK, px + pw - 36, top - 36, new Color(0.9f, 0.93f, 1f, 1f));
+        batch.draw(Ui.roundedRect((int) (pw - 44), 2, 1, new Color(1f, 1f, 1f, 0.14f), null), px + 22, top - 66);
+        // cột thể loại bên trái
+        for (int i = 0; i < RANK_CATS.length; i++) {
+            float cy = top - 84 - i * 56;
+            boolean sel = i == rankCat;
+            batch.draw(Ui.roundedRect(216, 50, 12,
+                sel ? new Color(0.98f, 0.58f, 0.16f, 0.95f) : new Color(1f, 1f, 1f, 0.07f),
+                sel ? new Color(1f, 0.75f, 0.45f, 1f) : GLASS_RIM), px + 20, cy - 50);
+            Ui.faIcon(batch, Ui.fa20, RANK_ICONS[i], px + 48, cy - 25,
+                sel ? new Color(1f, 1f, 1f, 1f) : new Color(1f, 0.8f, 0.3f, 1f));
+            Ui.fontSmall.setColor(1f, 1f, 1f, sel ? 1f : 0.88f);
+            Ui.fontSmall.draw(batch, RANK_CATS[i], px + 72, cy - 17);
+        }
+        // danh sách bên phải: 10 dòng/trang
+        float lx = px + 256, lw = pw - 276;
+        int per = 10, pages = Math.max(1, (rankRows.size() + per - 1) / per);
+        if (rankPage >= pages) rankPage = pages - 1;
+        if (rankRows.isEmpty()) {
+            Ui.centered(batch, Ui.fontSmall, "Chưa có ai trên bảng này.",
+                lx + lw / 2f, py + ph / 2f, new Color(0.75f, 0.82f, 0.95f, 0.85f));
+        }
+        for (int k = 0; k < per; k++) {
+            int i = rankPage * per + k;
+            if (i >= rankRows.size()) break;
+            float ry = top - 84 - k * 44;
+            String[] r = rankRows.get(i);
+            if (rankMine.get(i)) {
+                batch.draw(Ui.roundedRect((int) lw, 40, 10,
+                    new Color(0.98f, 0.64f, 0.79f, 0.16f),
+                    new Color(1f, 0.75f, 0.88f, 0.5f)), lx, ry - 38);
+            }
+            Color rankCol = i == 0 ? new Color(1f, 0.8f, 0.3f, 1f)
+                : i == 1 ? new Color(0.85f, 0.89f, 0.95f, 1f)
+                : i == 2 ? new Color(0.9f, 0.62f, 0.4f, 1f)
+                : new Color(0.65f, 0.72f, 0.85f, 0.9f);
+            Ui.centered(batch, Ui.font, String.valueOf(i + 1), lx + 26, ry - 11, rankCol);
+            Ui.font.setColor(1f, 1f, 1f, 0.97f);
+            Ui.font.draw(batch, truncTo(Ui.font, r[0], 330), lx + 56, ry - 11);
+            layout.setText(Ui.fontSmall, r[1]);
+            Ui.fontSmall.setColor(0.75f, 0.82f, 0.95f, 0.95f);
+            Ui.fontSmall.draw(batch, r[1], lx + lw - 14 - layout.width, ry - 12);
+        }
+        // chân panel: hạng của tôi + nút trang
+        String mine = rankMyRank > 0
+            ? "Hạng của bạn: " + rankMyRank + " - " + rankMyValue
+            : "Bạn chưa có hạng ở mục này.";
+        Ui.centered(batch, Ui.fontSmall, mine, px + pw / 2f, py + 30,
+            new Color(1f, 0.85f, 0.55f, 0.95f));
+        if (pages > 1) {
+            Ui.centered(batch, Ui.fontSmall, "< Trang " + (rankPage + 1) + "/" + pages + " >",
+                px + pw - 92, py + 30, new Color(0.85f, 0.9f, 1f, 0.95f));
+        }
+    }
+
+    private boolean rankTouch(float x, float y) {
+        if (!rankOpen) return false;
+        float px = RK_PX, py = RK_PY, pw = RK_PW, ph = RK_PH, top = py + ph;
+        if (inRect(x, y, px + pw - 54, top - 54, 36, 36)) {
+            rankOpen = false;
+            return true;
+        }
+        for (int i = 0; i < RANK_CATS.length; i++) {
+            float cy = top - 84 - i * 56;
+            if (inRect(x, y, px + 20, cy - 50, 216, 50)) {
+                if (i != rankCat) {
+                    rankCat = i;
+                    rankPage = 0;
+                    requestRank();
+                }
+                return true;
+            }
+        }
+        // vùng trang: bấm nửa trái/phải của cụm trang để lật
+        int pages = Math.max(1, (rankRows.size() + 9) / 10);
+        if (pages > 1 && y >= py + 8 && y <= py + 52 && x >= px + pw - 170 && x <= px + pw - 14) {
+            rankPage = (rankPage + (x < px + pw - 92 ? -1 : 1) + pages) % pages;
+            return true;
+        }
+        return inRect(x, y, px, py, pw, ph);
+    }
+
+    public void debugOpenRank() {
+        closeOtherPanels();
+        rankCat = 0;
+        rankPage = 0;
+        rankRows.clear();
+        rankMine.clear();
+        seedRankSample();
+        rankOpen = true;
     }
 
     private void handleCouplePacket(Msg m) throws IOException {
