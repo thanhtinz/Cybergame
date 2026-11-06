@@ -1569,7 +1569,11 @@ public class ScreenshotMain {
                         break;
                     case 170: // Doll mặc bộ đồ mới nhập (Chú thuật + nón quỷ)
                         if (frame == 1) world.debugPartnerNewSet();
-                        if (frame == 15) { shot("shot-new-outfit.png"); stage = 121; frame = 0; }
+                        if (frame == 15) { shot("shot-new-outfit.png"); stage = 172; frame = 0; }
+                        break;
+                    case 172: // Nhân vật THỬ trong thế giới (hướng chéo)
+                        if (frame == 1) { world.debugCloseCoupleBoard(); world.debugTrialPose(); }
+                        if (frame == 15) { shot("shot-trial-char.png"); stage = 121; frame = 0; }
                         break;
                     case 121: // nền ban ngày ở thành phố (kiểm lớp trời/BGMap)
                         if (frame == 1) {

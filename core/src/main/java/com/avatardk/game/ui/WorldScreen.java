@@ -373,7 +373,7 @@ public class WorldScreen extends ScreenAdapter {
     // burger; 3 hàng Tên / Chỉ đường / Âm thanh với nút bước ‹ › hai bên
     // như gốc, nút "Xong" đóng và lưu (gốc lưu RMS khi đóng).
     private boolean settingsOpen = false;
-    private static final float SET_PW = 560f, SET_PH = 468f;
+    private static final float SET_PW = 560f, SET_PH = 560f;
     private static final float SET_PX = (Ui.W - SET_PW) / 2f, SET_PY = (Ui.H - SET_PH) / 2f;
 
     private float setRowCenter(int i) { return SET_PY + SET_PH - 118 - i * 76; }
@@ -526,6 +526,12 @@ public class WorldScreen extends ScreenAdapter {
 
     private PaperDoll playerDoll;
     private final AvatarAnimator playerAnim = new AvatarAnimator();
+    // ---- Nhân vật THỬ (sprite pixel mới, asset chủ dự án gửi
+    // 2026-11-06; sau này thay asset thật): hướng 8 chiều + nhún khi
+    // đi. drawingTrial dùng cơ chế cờ như drawingTitleId.
+    private boolean drawingTrial = false;
+    private boolean trialMoving = false;
+    private String trialDirName = "front";
     private float playerX = 200f, playerY = 150f; // medium, gốc trên–trái
 
     // Thông tin hiển thị trên card: mặc định là nhân vật mẫu "Sơn" (chế độ offline);
@@ -9443,8 +9449,20 @@ public class WorldScreen extends ScreenAdapter {
         }
         batch.draw(circleTexture(), cx + 92 - 46, stY + 5, 92, 14);
         batch.setColor(Color.WHITE);
-        game.dollRenderer.draw(batch, playerDoll, playerAnim.frameIndex(),
-            cx - 92, floorY, 2.9f, false);
+        if (com.avatardk.game.data.GameSettings.trialChar) {
+            Texture tt = null;
+            try { tt = game.texture("trialchar/front.png"); } catch (Exception ignored) { }
+            if (tt != null && tt.getWidth() > 0) {
+                float th2 = 132f, tw2 = th2 * tt.getWidth() / tt.getHeight();
+                batch.draw(tt, cx - 92 - tw2 / 2f, floorY, tw2, th2);
+            } else {
+                game.dollRenderer.draw(batch, playerDoll, playerAnim.frameIndex(),
+                    cx - 92, floorY, 2.9f, false);
+            }
+        } else {
+            game.dollRenderer.draw(batch, playerDoll, playerAnim.frameIndex(),
+                cx - 92, floorY, 2.9f, false);
+        }
         if (!single) {
             game.dollRenderer.draw(batch, partnerDoll, playerAnim.frameIndex(),
                 cx + 92, floorY, 2.9f, true);
@@ -9629,7 +9647,18 @@ public class WorldScreen extends ScreenAdapter {
         ScissorStack.calculateScissors(hudViewport.getCamera(), batch.getTransformMatrix(), clip, scissors);
         batch.flush();
         if (ScissorStack.pushScissors(scissors)) {
-            game.dollRenderer.draw(batch, playerDoll, playerAnim.frameIndex(), feetX, feetY, unit, false);
+            Texture at = null;
+            if (com.avatardk.game.data.GameSettings.trialChar) {
+                try { at = game.texture("trialchar/front.png"); } catch (Exception ignored) { }
+            }
+            if (at != null && at.getWidth() > 0) {
+                // mặt ở 56% chiều cao sprite đo từ đáy (đo pixel
+                // trên front.png) — neo để tâm mặt trùng tâm vòng
+                float ah = 165f, aw = ah * at.getWidth() / at.getHeight();
+                batch.draw(at, avCx - aw / 2f, avCy - 93, aw, ah);
+            } else {
+                game.dollRenderer.draw(batch, playerDoll, playerAnim.frameIndex(), feetX, feetY, unit, false);
+            }
             batch.flush();
             ScissorStack.popScissors();
         }
@@ -11095,12 +11124,21 @@ public class WorldScreen extends ScreenAdapter {
 
     public void debugCloseCoupleBoard() { cpBoardOpen = false; charPanel = false; }
 
+    /** Pose nhân vật thử cho tour chụp: hướng chéo + đang di chuyển. */
+    public void debugTrialPose() {
+        trialDirName = "front_right";
+        trialMoving = true;
+    }
+
     /** Doll đối tác mặc bộ đồ MỚI nhập từ bản chính (Chú thuật hồi
      *  chiến, part 7064-7067) — kiểm ảnh/atlas của kho part mới. */
     public void debugPartnerNewSet() {
         debugOpenCouple();
+        // Phải có part 0 (thân + mặt nền) như bộ mặc thật — thiếu
+        // là doll mất mặt. 7932 (z60) thay 7067 (cùng z60) như luật
+        // mặc thật: trùng zOrder thì món sau đè món trước.
         partnerDoll = new PaperDoll(game.data,
-            new java.util.ArrayList<>(java.util.Arrays.asList(7064, 7065, 7066, 7067, 7932)));
+            new java.util.ArrayList<>(java.util.Arrays.asList(0, 7064, 7065, 7066, 7932)));
     }
 
     public void debugSeedOtherInfo() {
@@ -11210,6 +11248,7 @@ public class WorldScreen extends ScreenAdapter {
             moving = false;
             mx = 0f; my = 0f;
         }
+        trialMoving = false;
         if (moving) {
             mx /= Math.max(1f, len); my /= Math.max(1f, len);
             // di chuyển tách trục + va chạm: trục nào đụng vật thể thì
@@ -11224,6 +11263,8 @@ public class WorldScreen extends ScreenAdapter {
             if (canStand(playerX, ny)) playerY = ny;
             else tryPortal(playerX, ny);
             if (Math.abs(mx) > 0.05f) playerAnim.facingLeft = mx < 0;
+            trialMoving = true;
+            trialDirName = trialDirFor(mx, my);
             // di chuyển huỷ mọi tư thế hành động (đúng gốc)
             playerPose = 0;
             playerJumpT = -1f;
@@ -11646,6 +11687,8 @@ public class WorldScreen extends ScreenAdapter {
                     drawingTitleId = myTitleId;
                     drawingClanIcon = myClanIconSv >= 0 ? myClanIconSv
                         : (game.player != null ? game.player.clanIcon : -1);
+                    drawingTrial = com.avatardk.game.data.GameSettings.trialChar
+                        && fishState == FISH_NONE && !weddingOn;
                     drawFigure(pdoll, playerAnim, pDrawX, pDrawY, displayName, true);
                     if (chatBubble != null) {
                         drawBubble(pdoll, playerAnim, playerFeetX,
@@ -11751,6 +11794,40 @@ public class WorldScreen extends ScreenAdapter {
         batch.end();
     }
 
+    /** Hướng 8 chiều cho nhân vật thử từ vector di chuyển (my > 0 =
+     *  đi xuống màn hình = hướng mặt về người xem). */
+    private static String trialDirFor(float mx, float my) {
+        float ax = Math.abs(mx), ay = Math.abs(my);
+        if (ax > ay * 1.4f) return mx < 0 ? "left" : "right";
+        if (ay > ax * 1.4f) return my > 0 ? "front" : "back";
+        if (my > 0) return mx < 0 ? "front_left" : "front_right";
+        return mx < 0 ? "back_left" : "back_right";
+    }
+
+    private Texture trialTexture() {
+        try {
+            Texture t = game.texture("trialchar/" + trialDirName + ".png");
+            return t != null && t.getWidth() > 0 ? t : null;
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    /** Vẽ nhân vật thử tại chân (feetX, feetY): sprite theo hướng,
+     *  nhún nhẹ khi di chuyển + bóng chân. Trả chiều cao đã dùng. */
+    private float drawTrialFigure(float feetX, float feetY) {
+        Texture t = trialTexture();
+        float th = 138f;
+        float tw = th * t.getWidth() / t.getHeight();
+        float bob = trialMoving
+            ? Math.abs((float) Math.sin(System.currentTimeMillis() / 85.0)) * 5f : 0f;
+        batch.setColor(0f, 0f, 0f, 0.30f);
+        batch.draw(circleTexture(), feetX - 42, feetY - 6, 84, 15);
+        batch.setColor(Color.WHITE);
+        batch.draw(t, feetX - tw / 2f, feetY + bob, tw, th);
+        return th;
+    }
+
     private void drawFigure(PaperDoll doll, AvatarAnimator anim, float feetX, float feetY, String name, boolean isPlayer) {
         // tên trên đầu: người chơi màu đỏ, NPC màu vàng — đúng Avatar.paintName của gốc
         drawFigure(doll, anim, feetX, feetY, name,
@@ -11759,12 +11836,18 @@ public class WorldScreen extends ScreenAdapter {
 
     private void drawFigure(PaperDoll doll, AvatarAnimator anim, float feetX, float feetY, String name, Color nameColor) {
         int frame = anim.frameIndex();
-        game.dollRenderer.draw(batch, doll, frame, feetX, feetY, AvatarDkGame.HD, anim.facingLeft);
+        float topY;
+        if (drawingTrial && trialTexture() != null) {
+            topY = feetY + drawTrialFigure(feetX, feetY);
+        } else {
+            game.dollRenderer.draw(batch, doll, frame, feetX, feetY, AvatarDkGame.HD, anim.facingLeft);
+            topY = feetY + game.dollRenderer.heightPx(doll, frame, AvatarDkGame.HD);
+        }
         if (name == null) {
             drawingTitleId = 0;
+            drawingTrial = false;
             return; // cài đặt "Tên: ẩn" — nơi gọi truyền null cho người khác/NPC
         }
-        float topY = feetY + game.dollRenderer.heightPx(doll, frame, AvatarDkGame.HD);
         Color c = nameColor;
         Ui.fontSmall.setColor(0f, 0f, 0f, 0.85f);
         layout.setText(Ui.fontSmall, name);
@@ -11808,6 +11891,7 @@ public class WorldScreen extends ScreenAdapter {
             }
         }
         drawingTitleId = 0;
+        drawingTrial = false;
     }
 
     /** Danh hiệu của một doll đang vẽ: chính mình dùng myTitleId,
@@ -12342,8 +12426,8 @@ public class WorldScreen extends ScreenAdapter {
             SET_PX + SET_PW - 54, SET_PY + SET_PH - 54);
         Ui.faIcon(batch, Ui.fa20, Ui.FA_XMARK, SET_PX + SET_PW - 36, SET_PY + SET_PH - 36,
             new Color(1f, 1f, 1f, 0.9f));
-        String[] labels = {"Tên", "Chỉ đường", "Âm thanh", "Đổi mật khẩu", "Giftcode"};
-        for (int i = 0; i < 5; i++) {
+        String[] labels = {"Tên", "Chỉ đường", "Âm thanh", "Đổi mật khẩu", "Giftcode", "Nhân vật mới"};
+        for (int i = 0; i < 6; i++) {
             float cy = setRowCenter(i);
             if (i > 0) {
                 batch.draw(Ui.roundedRect((int) SET_PW - 48, 2, 1,
@@ -12352,7 +12436,7 @@ public class WorldScreen extends ScreenAdapter {
             }
             Ui.font.setColor(1f, 1f, 1f, 0.95f);
             Ui.font.draw(batch, labels[i], SET_PX + 30, cy + 10);
-            if (i < 3) {
+            if (i < 3 || i == 5) {
                 drawSetToggle(i, cy);
             } else {
                 // hàng Đổi mật khẩu / Giftcode: nút mở form riêng
@@ -12367,6 +12451,7 @@ public class WorldScreen extends ScreenAdapter {
     private boolean setRowOn(int i) {
         if (i == 0) return com.avatardk.game.data.GameSettings.showName;
         if (i == 1) return com.avatardk.game.data.GameSettings.showDir;
+        if (i == 5) return com.avatardk.game.data.GameSettings.trialChar;
         return com.avatardk.game.data.GameSettings.volume > 0;
     }
 
@@ -12375,7 +12460,7 @@ public class WorldScreen extends ScreenAdapter {
     private void drawSetToggle(int i, float cy) {
         boolean on = setRowOn(i);
         float cx = SET_PX + SET_PW - 70;
-        String st = i == 2 ? (on ? "bật" : "tắt") : (on ? "hiện" : "ẩn");
+        String st = (i == 2 || i == 5) ? (on ? "bật" : "tắt") : (on ? "hiện" : "ẩn");
         layout.setText(Ui.fontSmall, st);
         Ui.fontSmall.setColor(on ? new Color(0.55f, 0.95f, 0.60f, 1f)
             : new Color(0.62f, 0.65f, 0.70f, 1f));
@@ -12402,6 +12487,9 @@ public class WorldScreen extends ScreenAdapter {
         } else if (row == 1) {
             com.avatardk.game.data.GameSettings.showDir =
                 !com.avatardk.game.data.GameSettings.showDir;
+        } else if (row == 5) {
+            com.avatardk.game.data.GameSettings.trialChar =
+                !com.avatardk.game.data.GameSettings.trialChar;
         } else if (row == 2) {
             if (com.avatardk.game.data.GameSettings.volume > 0) {
                 com.avatardk.game.data.GameSettings.lastVolume =
@@ -12422,9 +12510,9 @@ public class WorldScreen extends ScreenAdapter {
             closeSettings();
             return;
         }
-        for (int i = 0; i < 5; i++) {
+        for (int i = 0; i < 6; i++) {
             if (Math.abs(y - setRowCenter(i)) <= 36) {
-                if (i < 3) {
+                if (i < 3 || i == 5) {
                     applySettingsToggle(i);
                 } else if (i == 3) {
                     openPassForm();
