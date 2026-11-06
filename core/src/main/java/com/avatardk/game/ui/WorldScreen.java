@@ -532,6 +532,9 @@ public class WorldScreen extends ScreenAdapter {
     private boolean drawingTrial = false;
     private boolean trialMoving = false;
     private String trialDirName = "front";
+    /** Chỉ số hướng 16 nấc (sheet xoay chủ dự án gửi 2026-11-06):
+     *  0 = mặt trước, 4 = phải, 8 = lưng, 12 = trái; mỗi nấc 22.5°. */
+    private int trialDirIdx = 0;
     private float playerX = 200f, playerY = 150f; // medium, gốc trên–trái
 
     // Thông tin hiển thị trên card: mặc định là nhân vật mẫu "Sơn" (chế độ offline);
@@ -11124,6 +11127,7 @@ public class WorldScreen extends ScreenAdapter {
     /** Pose nhân vật thử cho tour chụp: hướng chéo + đang di chuyển. */
     public void debugTrialPose() {
         trialDirName = "front_right";
+        trialDirIdx = 2;
         trialMoving = true;
     }
 
@@ -11133,8 +11137,10 @@ public class WorldScreen extends ScreenAdapter {
         weddingOn = false; // cuoi/cau ca nhường doll chuyen dung -> tat
         fishState = FISH_NONE;
         trialFemaleFlag = true;
-        trialDirName = "front_right";
-        trialMoving = true;
+        // dung yen nhin tu sau lung: kiem sprite d8 cua sheet xoay 16 huong
+        trialDirName = "back";
+        trialDirIdx = 8;
+        trialMoving = false;
     }
 
     /** Doll đối tác mặc bộ đồ MỚI nhập từ bản chính (Chú thuật hồi
@@ -11272,6 +11278,8 @@ public class WorldScreen extends ScreenAdapter {
             if (Math.abs(mx) > 0.05f) playerAnim.facingLeft = mx < 0;
             trialMoving = true;
             trialDirName = trialDirFor(mx, my);
+            trialDirIdx = ((int) Math.round(
+                Math.toDegrees(Math.atan2(mx, my)) / 22.5)) & 15;
             // di chuyển huỷ mọi tư thế hành động (đúng gốc)
             playerPose = 0;
             playerJumpT = -1f;
@@ -11848,11 +11856,11 @@ public class WorldScreen extends ScreenAdapter {
         Texture t;
         float bob = 0f;
         long now = System.currentTimeMillis();
-        // Nhân vật nữ chưa có sprite hướng lưng trong sheet gốc:
-        // mọi hướng đều chạy Idle/Walk (walk gốc hướng PHẢI, walkr
-        // là bản lật sang trái — ngược với bộ nam).
+        // Sprite tĩnh theo 16 hướng (d<idx>): dùng cho nửa lưng
+        // (idx 5..11) ở cả hai bộ nam/nữ — phần trước chạy Idle/Walk
+        // (walk nữ gốc hướng PHẢI, walkr là bản lật — ngược bộ nam).
         boolean fem = trialFemale();
-        boolean up = !fem && trialDirName.startsWith("back");
+        boolean up = trialDirIdx >= 5 && trialDirIdx <= 11;
         if (trialMoving && !up) {
             int f = (int) (now / 90) % 8;
             boolean rightish = trialDirName.equals("right")
@@ -11870,7 +11878,8 @@ public class WorldScreen extends ScreenAdapter {
             t = trialTex("idle" + f);
             if (t == null) t = trialTexture();
         } else {
-            t = trialTexture();
+            t = trialTex("d" + trialDirIdx);
+            if (t == null) t = trialTexture();
             if (trialMoving) {
                 bob = Math.abs((float) Math.sin(now / 85.0)) * 5f;
             }
