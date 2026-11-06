@@ -1565,7 +1565,11 @@ public class ScreenshotMain {
                             world.debugOpenPlayerPanel();
                             world.debugSeedOtherInfo();
                         }
-                        if (frame == 15) { shot("shot-player-info-couple.png"); stage = 121; frame = 0; }
+                        if (frame == 15) { shot("shot-player-info-couple.png"); stage = 170; frame = 0; }
+                        break;
+                    case 170: // Doll mặc bộ đồ mới nhập (Chú thuật + nón quỷ)
+                        if (frame == 1) world.debugPartnerNewSet();
+                        if (frame == 15) { shot("shot-new-outfit.png"); stage = 121; frame = 0; }
                         break;
                     case 121: // nền ban ngày ở thành phố (kiểm lớp trời/BGMap)
                         if (frame == 1) {

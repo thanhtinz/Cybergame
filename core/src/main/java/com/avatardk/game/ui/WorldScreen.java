@@ -11095,6 +11095,14 @@ public class WorldScreen extends ScreenAdapter {
 
     public void debugCloseCoupleBoard() { cpBoardOpen = false; charPanel = false; }
 
+    /** Doll đối tác mặc bộ đồ MỚI nhập từ bản chính (Chú thuật hồi
+     *  chiến, part 7064-7067) — kiểm ảnh/atlas của kho part mới. */
+    public void debugPartnerNewSet() {
+        debugOpenCouple();
+        partnerDoll = new PaperDoll(game.data,
+            new java.util.ArrayList<>(java.util.Arrays.asList(7064, 7065, 7066, 7067, 7932)));
+    }
+
     public void debugSeedOtherInfo() {
         if (panelPlayer == null) return;
         infoForId = panelPlayer.info.id;
