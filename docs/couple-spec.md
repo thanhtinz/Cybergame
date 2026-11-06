@@ -47,8 +47,14 @@ commandList}; GlobalService.doRequestCmdCouple; CoupleList
    hướng dẫn tới Chủ Hôn ở Khu lễ đường.
 
 ## Ghi nợ
-- Bảng xếp hạng cặp đôi (ListScr.readCoupleBoard / imgTopCouple /
-  CoupleList.idTitleCouple — danh hiệu cặp đôi theo cấp): chưa có
-  dữ liệu giao thức, để sau.
+- Bảng xếp hạng cặp đôi: ĐÃ LÀM [PORT] 2026-11-05 — phong bì riêng
+  Cmd.COUPLE −122 (CoupleBoardService): C→S sub 0; S→C sub 10
+  {byte n ≤ 20; n × {UTF tên nam, UTF tên nữ, byte level, byte per,
+  boolean là cặp của tôi}; short hạng của tôi}. Xếp level → per
+  giảm dần từ bảng marry. Client: nút "Top cặp đôi" (góc trái dưới
+  tab Cặp Đôi, cạnh nút Chia tay) → panel Top cặp đôi, hàng của
+  mình tô hồng. Test sống live_coupleboard_test.py ALL PASS.
+  Còn lại: danh hiệu cặp đôi theo cấp (CoupleList.idTitleCouple)
+  vẫn chưa có dữ liệu — chưa làm.
 - Mục hôn nhân ở panel thông tin NGƯỜI KHÁC: vẫn chưa làm (ghi nợ
   từ wedding-spec).

@@ -17,6 +17,7 @@ public class Cmd {
     public static final byte FARM2 = -115; // [PORT] Farm cap 2 + ong
     public static final byte PREVIEW_ITEM = -100; // ban chinh APPLY_PREVIEW_ITEM: thu do tam, khong luu
     public static final byte DAILY = -116; // [PORT] Diem danh + Nhiem vu ngay (docs/daily-auction-spec.md)
+    public static final byte COUPLE = -122; // [PORT] Bang xep hang cap doi (ListScr.readCoupleBoard ban chinh; docs/couple-spec.md)
     public static final byte AUCTION = -117;
     public static final byte BOX = -118;
     public static final byte SPLIT_ITEM = -119;

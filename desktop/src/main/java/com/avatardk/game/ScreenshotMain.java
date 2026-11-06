@@ -1548,7 +1548,11 @@ public class ScreenshotMain {
                         break;
                     case 167: // Panel BossShop -78 (shop sự kiện / kim hoàn)
                         if (frame == 1) world.debugOpenBossShop();
-                        if (frame == 15) { shot("shot-bossshop.png"); stage = 121; frame = 0; }
+                        if (frame == 15) { shot("shot-bossshop.png"); stage = 168; frame = 0; }
+                        break;
+                    case 168: // Bảng xếp hạng cặp đôi
+                        if (frame == 1) world.debugOpenCoupleBoard();
+                        if (frame == 15) { shot("shot-couple-board.png"); stage = 121; frame = 0; }
                         break;
                     case 121: // nền ban ngày ở thành phố (kiểm lớp trời/BGMap)
                         if (frame == 1) {

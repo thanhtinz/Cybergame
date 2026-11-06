@@ -3889,6 +3889,10 @@ public class WorldScreen extends ScreenAdapter {
                     handleAuctionPacket(m);
                     break;
                 }
+                case AvatarProtocol.COUPLE: {
+                    handleCouplePacket(m);
+                    break;
+                }
                 case AvatarProtocol.BOSS_SHOP: {
                     // gói -78 của gốc: shop sự kiện + nâng cấp kim hoàn
                     // {byte type, int idBoss, byte idShop, UTF tên,
@@ -5875,6 +5879,7 @@ public class WorldScreen extends ScreenAdapter {
         // panel clan + hộp lời mời clan
         if (clanTouch(x, y)) return;
         if (bsTouch(x, y)) return;
+        if (cpBoardTouch(x, y)) return;
         // chợ + giao dịch + hộp mời giao dịch
         if (tradeInviteTouch(x, y)) return;
         if (marketTouch(x, y)) return;
@@ -6042,6 +6047,12 @@ public class WorldScreen extends ScreenAdapter {
                         return;
                     }
                 }
+            }
+            // tab Cặp Đôi: nút Top cặp đôi mở bảng xếp hạng
+            if (charVariant == 3 && charTab == 2
+                    && x >= px + 24 && x <= px + 162 && y >= py + 12 && y <= py + 62) {
+                openCoupleBoard();
+                return;
             }
             // tab Cặp Đôi: nút hành động (Chia tay) ở đáy tab
             if (charVariant == 3 && charTab == 2 && partnerName != null
@@ -8022,6 +8033,7 @@ public class WorldScreen extends ScreenAdapter {
         dlPrizeOpen = false;
         clanOpen = false;
         bsOpen = false;
+        cpBoardOpen = false;
         marketOpen = false;
         tradeOpen = false;
         farm2Open = false;
@@ -8475,11 +8487,12 @@ public class WorldScreen extends ScreenAdapter {
 
     private void drawFriendPanel() {
         frScroll = MathUtils.clamp(frScroll, 0f, frMaxScroll());
-        batch.setColor(0f, 0f, 0f, 0.45f);
+        batch.setColor(0f, 0f, 0f, 0.62f);
         batch.draw(whiteTex, 0, 0, Ui.W, Ui.H);
         batch.setColor(Color.WHITE);
         float px = FR_PX, py = FR_PY, top = py + FR_PH;
-        batch.draw(Ui.roundedRect((int) FR_PW, (int) FR_PH, 16, GLASS_FILL_DARK, GLASS_RIM), px, py);
+        batch.draw(Ui.roundedRect((int) FR_PW, (int) FR_PH, 16,
+            new Color(0.04f, 0.08f, 0.14f, 0.98f), GLASS_RIM), px, py);
         Ui.faIcon(batch, Ui.fa26, Ui.FA_USER_GROUP, px + 40, top - 36, new Color(1f, 0.85f, 0.45f, 1f));
         Ui.fontTitle.setColor(1f, 0.85f, 0.45f, 1f);
         Ui.fontTitle.draw(batch, "Bạn bè", px + 64, top - 27);
@@ -9118,6 +9131,25 @@ public class WorldScreen extends ScreenAdapter {
 
     public void debugOpenFriendPanel() {
         debugSeedSocial();
+        Object[][] more = {
+            {1004, "Linh Chi", "Đang trực tuyến", new int[]{628, 474, 0, 80, 49}},
+            {1005, "Hoàng Nam", "Ngoại tuyến", new int[]{89, 88, 0, 4, 14}},
+            {1006, "Thu Hằng", "Đang trực tuyến", new int[]{89, 88, 0, 4, 49}},
+            {1007, "Đức Anh", "Ngoại tuyến", new int[]{494, 0, 302}},
+            {1008, "Minh Ngọc", "Đang trực tuyến", new int[]{628, 474, 0, 80, 46}},
+            {1009, "Người Chơi Tên Rất Dài 123", "Ngoại tuyến", new int[]{89, 88, 0, 4, 14}},
+            {1010, "Tuấn Anh", "Đang trực tuyến", new int[]{494, 0, 302}},
+        };
+        for (Object[] a : more) {
+            FriendEntry fe = new FriendEntry();
+            fe.id = (Integer) a[0];
+            fe.name = (String) a[1];
+            fe.status = (String) a[2];
+            fe.parts = new ArrayList<>();
+            for (int pid : (int[]) a[3]) fe.parts.add(pid);
+            fe.doll = new PaperDoll(game.data, fe.parts);
+            friends.add(fe);
+        }
         closeOtherPanels();
         msgOpen = false;
         friendOpen = true;
@@ -9429,6 +9461,12 @@ public class WorldScreen extends ScreenAdapter {
         }
         Ui.fontSmall.setColor(1f, 0.75f, 0.85f, 1f);
         Ui.fontSmall.draw(batch, (single ? 0 : partnerPct) + "%", px + 532, py + 91);
+        // nút Top cặp đôi (mở bảng xếp hạng) — trái nút Chia tay
+        batch.draw(Ui.roundedRect(138, 50, 14,
+            new Color(0.08f, 0.13f, 0.20f, 0.92f), GLASS_RIM), px + 24, py + 12);
+        Ui.faIcon(batch, Ui.fa20, Ui.FA_TROPHY, px + 46, py + 37, new Color(1f, 0.8f, 0.3f, 1f));
+        Ui.fontSmall.setColor(0.92f, 0.95f, 1f, 1f);
+        Ui.fontSmall.draw(batch, "Top cặp đôi", px + 64, py + 45);
         // nút Chia tay lớn (chỉ khi đang có cặp)
         if (!single) {
             batch.draw(Ui.roundedRect(300, 50, 14,
@@ -11796,6 +11834,7 @@ public class WorldScreen extends ScreenAdapter {
         if (mailOpen) drawMailPanel();
         if (clanOpen) drawClanPanel();
         if (bsOpen) drawBossShopPanel();
+        if (cpBoardOpen) drawCoupleBoardPanel();
         if (marketOpen) drawMarketPanel();
         if (tradeOpen) drawTradePanel();
         if (farm2Open) drawFarm2Panel();
@@ -13938,6 +13977,138 @@ public class WorldScreen extends ScreenAdapter {
         }
         clanBtn(bx + 60, by + 28, 220, 50, "Đồng ý", 1);
         clanBtn(bx + bw - 280, by + 28, 220, 50, "Huỷ", 2);
+    }
+
+    // ===== Bảng xếp hạng cặp đôi [PORT] (gói COUPLE -122) =====
+    // Bản chính có ListScr.readCoupleBoard + CoupleList; điểm vào là
+    // nút "Top cặp đôi" trong tab Cặp Đôi của panel nhân vật.
+    private static class CpRow {
+        String n1, n2;
+        int lv, per;
+        boolean mine;
+    }
+
+    private final List<CpRow> cpBoard = new ArrayList<>();
+    private boolean cpBoardOpen;
+    private int cpMyRank;
+
+    private void openCoupleBoard() {
+        if (online()) {
+            try {
+                AvatarProtocol.coupleBoard(game.connection);
+            } catch (IOException ignored) {
+            }
+        } else {
+            seedCoupleBoardSample();
+            cpBoardOpen = true;
+        }
+    }
+
+    private void seedCoupleBoardSample() {
+        cpBoard.clear();
+        Object[][] rows = {
+            {"Hoàng Nam", "Thu Hằng", 12, 30, false},
+            {"Sơn", "Linh Chi", 7, 45, true},
+            {"Đức Anh", "Minh Ngọc", 6, 80, false},
+            {"Tuấn Anh", "Phương Anh", 5, 15, false},
+            {"Văn Đức", "Thanh Thảo", 4, 60, false},
+            {"Quốc Bảo", "Khánh Ly", 3, 25, false},
+            {"Hải Đăng", "Trâm Anh", 2, 90, false},
+            {"Minh Tuấn", "Ngọc Trâm", 1, 40, false},
+        };
+        for (Object[] a : rows) {
+            CpRow r = new CpRow();
+            r.n1 = (String) a[0];
+            r.n2 = (String) a[1];
+            r.lv = (Integer) a[2];
+            r.per = (Integer) a[3];
+            r.mine = (Boolean) a[4];
+            cpBoard.add(r);
+        }
+        cpMyRank = 2;
+    }
+
+    private void handleCouplePacket(Msg m) throws IOException {
+        byte sub = m.reader().readByte();
+        if (sub != 10) return;
+        cpBoard.clear();
+        int n = m.reader().readByte();
+        for (int i = 0; i < n; i++) {
+            CpRow r = new CpRow();
+            r.n1 = m.reader().readUTF();
+            r.n2 = m.reader().readUTF();
+            r.lv = m.reader().readByte();
+            r.per = m.reader().readByte();
+            r.mine = m.reader().readBoolean();
+            cpBoard.add(r);
+        }
+        if (m.reader().available() >= 2) cpMyRank = m.reader().readShort();
+        cpBoardOpen = true;
+    }
+
+    private void drawCoupleBoardPanel() {
+        float pw = 760, ph = 580, px = (Ui.W - pw) / 2f, py = (Ui.H - ph) / 2f, top = py + ph;
+        batch.setColor(0f, 0f, 0f, 0.62f);
+        batch.draw(whiteTex, 0, 0, Ui.W, Ui.H);
+        batch.setColor(Color.WHITE);
+        batch.draw(Ui.roundedRect((int) pw, (int) ph, 16,
+            new Color(0.04f, 0.08f, 0.14f, 0.98f), GLASS_RIM), px, py);
+        Ui.faIcon(batch, Ui.fa26, Ui.FA_TROPHY, px + 42, top - 38, new Color(1f, 0.8f, 0.3f, 1f));
+        Ui.fontTitle.setColor(1f, 0.85f, 0.45f, 1f);
+        Ui.fontTitle.draw(batch, "Top cặp đôi", px + 66, top - 29);
+        batch.draw(Ui.roundedRect(36, 36, 10, Ui.BTN_CLOSE, GLASS_RIM), px + pw - 54, top - 54);
+        Ui.faIcon(batch, Ui.fa20, Ui.FA_XMARK, px + pw - 36, top - 36, new Color(0.9f, 0.93f, 1f, 1f));
+        batch.draw(Ui.roundedRect((int) (pw - 44), 2, 1, new Color(1f, 1f, 1f, 0.14f), null), px + 22, top - 66);
+        if (cpBoard.isEmpty()) {
+            Ui.centered(batch, Ui.fontSmall, "Chưa có cặp đôi nào trên bảng.",
+                px + pw / 2f, py + ph / 2f, new Color(0.75f, 0.82f, 0.95f, 0.85f));
+            return;
+        }
+        float cx = px + pw / 2f;
+        for (int i = 0; i < cpBoard.size(); i++) {
+            CpRow r = cpBoard.get(i);
+            float ry = top - 84 - i * 46;
+            if (ry - 40 < py + 40) break;
+            if (r.mine) {
+                batch.draw(Ui.roundedRect((int) (pw - 36), 42, 10,
+                    new Color(0.98f, 0.64f, 0.79f, 0.16f),
+                    new Color(1f, 0.75f, 0.88f, 0.5f)), px + 18, ry - 40);
+            }
+            Color rankCol = i == 0 ? new Color(1f, 0.8f, 0.3f, 1f)
+                : i == 1 ? new Color(0.85f, 0.89f, 0.95f, 1f)
+                : i == 2 ? new Color(0.9f, 0.62f, 0.4f, 1f)
+                : new Color(0.65f, 0.72f, 0.85f, 0.9f);
+            Ui.centered(batch, Ui.font, String.valueOf(i + 1), px + 52, ry - 12, rankCol);
+            layout.setText(Ui.font, truncTo(Ui.font, r.n1 != null ? r.n1 : "?", 190));
+            Ui.font.setColor(1f, 1f, 1f, 0.97f);
+            Ui.font.draw(batch, truncTo(Ui.font, r.n1 != null ? r.n1 : "?", 190),
+                cx - 26 - layout.width, ry - 12);
+            Ui.faIcon(batch, Ui.fa20, Ui.FA_HEART, cx, ry - 19, new Color(0.96f, 0.45f, 0.68f, 1f));
+            Ui.font.setColor(1f, 1f, 1f, 0.97f);
+            Ui.font.draw(batch, truncTo(Ui.font, r.n2 != null ? r.n2 : "?", 190), cx + 26, ry - 12);
+            Ui.centered(batch, Ui.fontSmall, "Cấp " + r.lv + " · " + r.per + "%",
+                px + pw - 92, ry - 13, new Color(0.75f, 0.82f, 0.95f, 0.9f));
+        }
+        if (cpMyRank > cpBoard.size()) {
+            Ui.centered(batch, Ui.fontSmall, "Cặp của bạn đang hạng " + cpMyRank,
+                cx, py + 34, new Color(1f, 0.75f, 0.88f, 0.95f));
+        }
+    }
+
+    private boolean cpBoardTouch(float x, float y) {
+        if (!cpBoardOpen) return false;
+        float pw = 760, ph = 580, px = (Ui.W - pw) / 2f, py = (Ui.H - ph) / 2f, top = py + ph;
+        if (inRect(x, y, px + pw - 54, top - 54, 36, 36)) {
+            cpBoardOpen = false;
+            return true;
+        }
+        return inRect(x, y, px, py, pw, ph);
+    }
+
+    public void debugOpenCoupleBoard() {
+        debugOpenCouple();
+        seedCoupleBoardSample();
+        cpBoardOpen = true;
     }
 
     private boolean bsTouch(float x, float y) {

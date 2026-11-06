@@ -411,6 +411,13 @@ public class MessageHandler implements IMessageHandler {
                         }
                         break;
                     }
+                    // [PORT] Bảng xếp hạng cặp đôi (gói −122)
+                    case Cmd.COUPLE: {
+                        if (this.client.user != null) {
+                            new avatar.service.CoupleBoardService(this.client).onMessage(mss);
+                        }
+                        break;
+                    }
                     // [PORT] Điểm danh + Nhiệm vụ ngày (gói −116)
                     case Cmd.DAILY: {
                         if (this.client.user != null) {

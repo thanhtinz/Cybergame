@@ -725,6 +725,9 @@ public final class AvatarProtocol {
     public static void farm2BeeUpgrade(GameConnection conn) throws IOException { conn.send(farm2Msg(F2_BEE_UPGRADE)); }
 
     // ---- ĐIỂM DANH + NHIỆM VỤ NGÀY ([PORT]: gói −116, docs/daily-auction-spec.md) ----
+    // [PORT] Bảng xếp hạng cặp đôi (ListScr.readCoupleBoard bản chính)
+    public static final byte COUPLE = -122;
+
     public static final byte DAILY = -116;
     public static final byte D_DASHBOARD = 0, D_BAODANH = 1, D_MILESTONE = 2,
         D_GUIDE = 3, D_RESULT = 4, D_QSHOW = 10, D_QCHANGE = 11, D_QDONE = 12, D_QBOX = 13;
@@ -733,6 +736,13 @@ public final class AvatarProtocol {
         Msg m = new Msg(DAILY); m.writer().writeByte(sub); return m;
     }
     public static void dailyDashboard(GameConnection conn) throws IOException { conn.send(dailyMsg(D_DASHBOARD)); }
+
+    public static void coupleBoard(GameConnection conn) throws IOException {
+        Msg m = new Msg(COUPLE);
+        m.writer().writeByte(0);
+        m.writer().flush();
+        conn.send(m);
+    }
     public static void dailyBaoDanh(GameConnection conn) throws IOException { conn.send(dailyMsg(D_BAODANH)); }
     public static void dailyMilestone(GameConnection conn, int idx) throws IOException {
         Msg m = dailyMsg(D_MILESTONE); m.writer().writeByte(idx); conn.send(m);
