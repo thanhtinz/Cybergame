@@ -54,6 +54,13 @@ public class GameConnection {
         var loc = $wnd.location;
         var m = /[?&]server=([^&]+)/.exec(loc.search || "");
         var h = host, p = port + 2;
+        // Test ở máy nhà: server chọn trong game là 127.0.0.1 (máy chạy
+        // server) nhưng trang lại mở trên điện thoại — khi đó dùng luôn
+        // tên máy đã phục vụ trang này (cùng một máy với game server).
+        if ((h === "127.0.0.1" || h === "localhost") && loc.hostname
+                && loc.hostname !== "127.0.0.1" && loc.hostname !== "localhost") {
+            h = loc.hostname;
+        }
         if (m) {
             var v = decodeURIComponent(m[1]);
             var c = v.lastIndexOf(":");
