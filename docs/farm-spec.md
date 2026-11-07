@@ -140,3 +140,22 @@ nhau, cần đối chiếu [CL] trước khi chốt kinh tế farm.
    giảm sức khoẻ theo thời gian trước khi hứa hẹn hành vi offline.
 
 *Kiểm kê này không sửa code nào; file duy nhất được tạo là tài liệu này.*
+
+## Nấu nhanh (gói 93) — 2026-11-06
+
+Theo bản chính (FarmService.nauNhanh trong source C# gốc):
+C->S 93 {byte step}; step 0 -> S->C {byte 0, UTF info} hiện hộp OK
+(OK = gửi step 1); step 1 -> S->C {byte != 0, int giá, int lượng,
+int lượng khoá}, món chín ngay (remainTime = 0).
+
+- Server: FarmService.nauNhanh trong FarmMsgHandler (handler farm 10;
+  gói 93 ở park là WEDDING_BIGIN — client rẽ theo ngữ cảnh farmIn).
+- Giá [PORT]: 1 lượng mỗi 5 phút còn lại, tối thiểu 1 (server gốc
+  không còn để tra giá).
+- Client: nút "Nấu nhanh" trong dải trạng thái bếp của panel Nhà bếp
+  (cùng vị trí nút Nhận món, không thêm nút nổi); hộp xác nhận riêng
+  trong panel; đồng thời nối luôn trả lời 91 (đặt foodId/thời gian
+  chín) và 92 (bếp trống + xin lại kho) vốn trước đây client bỏ qua.
+- Gói 91 client rẽ nhánh farmIn (park = FISH_BITE cá cắn).
+- Test sống live_quickcook_test.py ALL PASS (nấu món 3 -> hỏi giá 6
+  lượng -> trừ còn 94 -> nhận món 207 vào kho).

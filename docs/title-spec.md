@@ -89,3 +89,23 @@
   {2,3,6,9,11,12,18,20,21}); bump quiz đã kiểm bằng live_quiz_test
   (quiz_ok của 1001 tăng lên 1). Kiểm mắt: kiem-title-anh-tab-v1.png
   + kiem-title-anh-dau-v1.png.
+
+## Danh hiệu CÓ HẠN (timeTitle) — 2026-11-06
+
+Bản chính có `PlayerInfo.timeTitle` (int, giây) + `PlayerInfoCmd.TITLE`;
+bản port nay hỗ trợ hạn dùng thật:
+
+- Bảng `player_titles` thêm cột `expires_at` (epoch ms; -1 = vĩnh viễn).
+  Danh hiệu mở khoá bằng thành tích (grantCheck) vẫn VĨNH VIỄN như cũ.
+- `TitleService.grantTimed(userId, titleId, days)`: cấp có hạn (admin/
+  sự kiện); cấp chồng lên bản ghi có hạn thì lấy hạn xa hơn, không ghi
+  đè bản ghi vĩnh viễn.
+- `ownedMap()` tự XOÁ bản ghi đã hết hạn khỏi DB; `loadEquipped()` tự
+  gỡ danh hiệu đang đeo đã hết hạn (players.title_id -> 0).
+- Gói TITLE sub 0 thêm ĐUÔI mở rộng [PORT]: {short n, n × {short tid,
+  long expiresAt}} theo đúng thứ tự danh sách sở hữu. Client đọc bằng
+  guard available(), hiện "Còn X ngày/giờ/phút" màu cam trên thẻ.
+- Admin API: POST /api/titles/grant {userId, titleId, days} — người
+  đang online được pushState ngay.
+- Test sống live_title_expiry_test.py ALL PASS (cấp còn hạn + đuôi,
+  xoá bản ghi hết hạn, tự gỡ khi hết hạn lúc đăng nhập lại).

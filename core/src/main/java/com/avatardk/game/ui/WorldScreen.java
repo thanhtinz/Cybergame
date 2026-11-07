@@ -553,11 +553,24 @@ public class WorldScreen extends ScreenAdapter {
     }
 
     private static String fmtMoney(int v) {
+        return fmtMoney((long) v);
+    }
+
+    private static String fmtMoney(long v) {
         String s = String.valueOf(v);
         StringBuilder b = new StringBuilder();
         for (int i = 0; i < s.length(); i++) {
-            if (i > 0 && (s.length() - i) % 3 == 0) b.append('.');
-            b.append(s.charAt(i));
+            char ch = s.charAt(i);
+            if (ch == '-') {
+                b.append(ch);
+                continue;
+            }
+            int digitsLeft = 0;
+            for (int j = i; j < s.length(); j++) {
+                if (Character.isDigit(s.charAt(j))) digitsLeft++;
+            }
+            if (i > 0 && digitsLeft % 3 == 0 && s.charAt(i - 1) != '-') b.append('.');
+            b.append(ch);
         }
         return b.toString();
     }
@@ -2390,13 +2403,21 @@ public class WorldScreen extends ScreenAdapter {
             String st = remain > 0
                 ? "Đang nấu: " + cooking.name + " — còn " + (remain / 60) + " phút " + (remain % 60) + " giây"
                 : "Đã chín: " + cooking.name + " — bấm Nhận món!";
-            Ui.fontSmall.draw(batch, st, FC_PX + 74, topY - 21);
+            Ui.fontSmall.draw(batch,
+                truncTo(Ui.fontSmall, st, FC_PW - 44 - 74 - 162), FC_PX + 74, topY - 21);
             Ui.fontSmall.setColor(Color.WHITE);
             if (remain <= 0) {
                 float bw = 130f, bh = 40f, bx = FC_PX + FC_PW - 22 - bw, byy = topY - 47;
                 batch.draw(Ui.gradientRect((int) bw, (int) bh, 10, EntryUi.ORANGE_TOP, EntryUi.ORANGE_BOT), bx, byy);
                 Ui.centered(batch, Ui.fontSmall, "Nhận món", bx + bw / 2f, byy + 26, new Color(1f, 1f, 1f, 1f));
                 farmCookBtns.add(new float[]{bx, byy, bw, bh, -2});
+            } else {
+                // Nấu nhanh (gói 93 bản chính): nút trong chính dải
+                // trạng thái bếp, cùng vị trí nút Nhận món
+                float bw = 150f, bh = 40f, bx = FC_PX + FC_PW - 22 - bw, byy = topY - 47;
+                batch.draw(Ui.gradientRect((int) bw, (int) bh, 10, EntryUi.ORANGE_TOP, EntryUi.ORANGE_BOT), bx, byy);
+                Ui.centered(batch, Ui.fontSmall, "Nấu nhanh", bx + bw / 2f, byy + 26, new Color(1f, 1f, 1f, 1f));
+                farmCookBtns.add(new float[]{bx, byy, bw, bh, -3});
             }
             topY -= 66f;
         }
@@ -2496,9 +2517,52 @@ public class WorldScreen extends ScreenAdapter {
                 Ui.centered(batch, Ui.fontSmall, "Thiếu nguyên liệu", bx + bw / 2f, byy + 32, new Color(1f, 1f, 1f, 0.6f));
             }
         }
+        if (cookQuickInfo != null) drawCookQuickConfirm();
+    }
+
+    /** Hộp xác nhận NẤU NHANH (gói 93): đúng khuôn hộp OK của bản
+     *  chính — Đồng ý thì gửi step 1 trả lượng cho chín ngay. */
+    private String cookQuickInfo = null;
+    private static final float CQ_PW = 560, CQ_PH = 190;
+    private static final float CQ_PX = (Ui.W - CQ_PW) / 2f, CQ_PY = (Ui.H - CQ_PH) / 2f;
+
+    private void drawCookQuickConfirm() {
+        batch.setColor(0f, 0f, 0f, 0.5f);
+        batch.draw(whiteTex, 0, 0, Ui.W, Ui.H);
+        batch.setColor(Color.WHITE);
+        batch.draw(Ui.roundedRect((int) CQ_PW, (int) CQ_PH, 16,
+            new Color(0.04f, 0.08f, 0.14f, 0.98f), GLASS_RIM), CQ_PX, CQ_PY);
+        java.util.List<String> lines = wrapText(cookQuickInfo, Ui.fontSmall, CQ_PW - 56);
+        float ly = CQ_PY + CQ_PH - 44;
+        for (String ln : lines) {
+            Ui.centered(batch, Ui.fontSmall, ln, CQ_PX + CQ_PW / 2f, ly, new Color(1f, 1f, 1f, 0.97f));
+            ly -= 26;
+        }
+        batch.draw(Ui.roundedRect(160, 46, 12, Ui.BTN_CANCEL, GLASS_RIM),
+            CQ_PX + CQ_PW / 2f - 170, CQ_PY + 20);
+        Ui.centered(batch, Ui.font, "Huỷ", CQ_PX + CQ_PW / 2f - 90, CQ_PY + 42, Color.WHITE);
+        batch.draw(Ui.gradientRect(160, 46, 12, EntryUi.ORANGE_TOP, EntryUi.ORANGE_BOT),
+            CQ_PX + CQ_PW / 2f + 10, CQ_PY + 20);
+        Ui.centered(batch, Ui.font, "Đồng ý", CQ_PX + CQ_PW / 2f + 90, CQ_PY + 42, Color.WHITE);
     }
 
     private void farmCookTouch(float x, float y) {
+        if (cookQuickInfo != null) {
+            if (inRect(x, y, CQ_PX + CQ_PW / 2f + 10, CQ_PY + 20, 160, 46)) {
+                cookQuickInfo = null;
+                if (online()) {
+                    try {
+                        AvatarProtocol.farmQuickCook(game.connection, 1);
+                    } catch (Exception ignored) {
+                    }
+                } else {
+                    farm.cookEndEpoch = System.currentTimeMillis() / 1000L;
+                }
+            } else if (inRect(x, y, CQ_PX + CQ_PW / 2f - 170, CQ_PY + 20, 160, 46)) {
+                cookQuickInfo = null;
+            }
+            return;
+        }
         if (x >= FC_PX + FC_PW - 54 && x <= FC_PX + FC_PW - 18
                 && y >= FC_PY + FC_PH - 54 && y <= FC_PY + FC_PH - 18) {
             farmCookOpen = false;
@@ -2526,6 +2590,21 @@ public class WorldScreen extends ScreenAdapter {
                     Msg m = new Msg(AvatarProtocol.FARM_HARVEST_COOK);
                     farmSend(m);
                     if (!online()) farm.foodId = 0;
+                } else if (code == -3) {
+                    // Nấu nhanh: hỏi giá trước (step 0)
+                    if (online()) {
+                        try {
+                            AvatarProtocol.farmQuickCook(game.connection, 0);
+                        } catch (Exception ignored) {
+                        }
+                    } else {
+                        long remain = farm.cookEndEpoch - System.currentTimeMillis() / 1000L;
+                        int price = (int) Math.max(1, (remain + 299) / 300);
+                        FarmWorld.FoodDef c2 = null;
+                        for (FarmWorld.FoodDef f : farm.foods) if (f.id == farm.foodId) c2 = f;
+                        cookQuickInfo = "Nấu xong ngay món " + (c2 != null ? c2.name : "?")
+                            + " với giá " + price + " lượng?";
+                    }
                 } else {
                     farmCookSel = code;
                 }
@@ -2546,6 +2625,24 @@ public class WorldScreen extends ScreenAdapter {
         farmSeedOpen = farmFertOpen = farmLandOpen = farmStoreOpen = farmShopOpen = false;
         farmCookSel = 1;
         farmCookOpen = true;
+    }
+
+    /** Sân khấu NẤU NHANH: bếp đang nấu (còn 25 phút) — hiện nút
+     *  Nấu nhanh trong dải trạng thái; confirm = true thì mở luôn
+     *  hộp xác nhận giá như gói 93 step 0 trả về. */
+    public void debugCookQuick(boolean confirm) {
+        closeOtherPanels();
+        debugOpenFarmCook();
+        FarmWorld.FoodDef f0 = null;
+        for (FarmWorld.FoodDef f : farm.foods) if (f.id == 1) f0 = f;
+        if (f0 == null && !farm.foods.isEmpty()) f0 = farm.foods.get(0);
+        if (f0 != null) {
+            farm.foodId = f0.id;
+            farm.cookEndEpoch = System.currentTimeMillis() / 1000L + 25 * 60L;
+        }
+        cookQuickInfo = confirm
+            ? "Nấu xong ngay món " + (f0 != null ? f0.name : "?") + " với giá 5 lượng?"
+            : null;
     }
 
     /** Đứng trước nửa TRÁI nhà kho rơm (điểm tương tác mở Kho). */
@@ -3463,6 +3560,15 @@ public class WorldScreen extends ScreenAdapter {
                             addChatLog(TAB_SYSTEM, null,
                                 "Nhận danh hiệu mới: " + (d != null ? d.name : "?"), true);
                         }
+                        titleExpiry.clear();
+                        if (r.available() >= 2) {
+                            int ne = r.readShort();
+                            for (int i = 0; i < ne; i++) {
+                                int tid2 = r.readShort();
+                                long exp2 = r.readLong();
+                                if (exp2 > 0) titleExpiry.put(tid2, exp2);
+                            }
+                        }
                         if (myTitleId > 0) remoteTitles.put(ownId(), myTitleId);
                         else remoteTitles.remove(ownId());
                     } else if (sub == 3) {
@@ -3662,6 +3768,7 @@ public class WorldScreen extends ScreenAdapter {
                         partnerDate = null;
                         partnerActId = -1;
                         partnerActName = null;
+                        partnerCoupleTitle = 0;
                         try {
                             if (r.available() >= 4) {
                                 int pid = r.readInt();
@@ -3706,6 +3813,12 @@ public class WorldScreen extends ScreenAdapter {
                                 String cd = r.readUTF();
                                 partnerDate = cd.isEmpty() ? null : cd;
                             }
+                        } catch (Exception ignored) {
+                        }
+                        // Đuôi 3 [PORT]: byte huy chương cặp đôi
+                        // (1/2/3 = vàng/bạc/đồng Rank_Couple, 0 = không)
+                        try {
+                            if (r.available() >= 1) partnerCoupleTitle = r.readByte();
                         } catch (Exception ignored) {
                         }
                     } else {
@@ -3925,6 +4038,10 @@ public class WorldScreen extends ScreenAdapter {
                     handleRankPacket(m);
                     break;
                 }
+                case AvatarProtocol.TAIXIU: {
+                    handleTaixiuPacket(m);
+                    break;
+                }
                 case AvatarProtocol.BOSS_SHOP: {
                     // gói -78 của gốc: shop sự kiện + nâng cấp kim hoàn
                     // {byte type, int idBoss, byte idShop, UTF tên,
@@ -3964,6 +4081,16 @@ public class WorldScreen extends ScreenAdapter {
                     break;
                 }
                 case AvatarProtocol.FISH_BITE: {
+                    // gói 91 dùng CHUNG: trong farm = trả lời bắt đầu
+                    // nấu {short món, short phút}; ngoài farm = cá cắn
+                    // câu (khối dưới đây)
+                    if (farmIn) {
+                        java.io.DataInputStream fr = m.reader();
+                        farm.foodId = fr.readShort();
+                        int mins = fr.readShort();
+                        farm.cookEndEpoch = System.currentTimeMillis() / 1000L + mins * 60L;
+                        break;
+                    }
                     // gói 91 chỉ tới người câu: {int id, short id cá,
                     // short ms/bước, byte n, n × {short len, PNG mũi tên}}
                     java.io.DataInputStream r = m.reader();
@@ -4436,6 +4563,46 @@ public class WorldScreen extends ScreenAdapter {
                         c.vitality = 100;
                         c.hervestPer = 0;
                         c.arid = true;
+                    }
+                    break;
+                }
+                case AvatarProtocol.FARM_HARVEST_COOK: {
+                    // gói 92 trả lời nhận món (thân rỗng): bếp trống
+                    // lại, xin lại kho cho khớp số nông sản
+                    farm.foodId = 0;
+                    farm.cookEndEpoch = 0;
+                    if (farmIn) {
+                        try {
+                            game.connection.send(new Msg(AvatarProtocol.FARM_INVENTORY));
+                        } catch (Exception ignored) {
+                        }
+                    }
+                    break;
+                }
+                case AvatarProtocol.FARM_QUICK_COOK: {
+                    // gói 93 dùng CHUNG: trong farm = nấu nhanh
+                    // {byte step...}; ngoài farm (park) = WEDDING_BIGIN
+                    // phát cả khu {int idNam, int idNu} — client port
+                    // xử lý lễ cưới bằng đường khác nên bỏ qua ở đây
+                    if (!farmIn) break;
+                    // {byte 0, UTF info} = hỏi giá; {byte 1, int giá,
+                    // int lượng, int lượng khoá} = đã trả, chín ngay
+                    java.io.DataInputStream r = m.reader();
+                    int b = r.readByte();
+                    if (b == 0) {
+                        cookQuickInfo = r.readUTF();
+                    } else {
+                        r.readInt();
+                        int lg = r.readInt();
+                        int lgk = r.readInt();
+                        farm.cookEndEpoch = System.currentTimeMillis() / 1000L;
+                        if (game.player != null) {
+                            game.player.luong = lg;
+                            game.player.luongKhoa = lgk;
+                        }
+                        cookQuickInfo = null;
+                        addChatLog(TAB_SYSTEM, null,
+                            "Đã nấu nhanh xong — bấm Nhận món để lấy món!", true);
                     }
                     break;
                 }
@@ -5912,6 +6079,7 @@ public class WorldScreen extends ScreenAdapter {
         if (clanTouch(x, y)) return;
         if (bsTouch(x, y)) return;
         if (cpBoardTouch(x, y)) return;
+        if (tsTouch(x, y)) return;
         if (rankTouch(x, y)) return;
         // chợ + giao dịch + hộp mời giao dịch
         if (tradeInviteTouch(x, y)) return;
@@ -8081,6 +8249,7 @@ public class WorldScreen extends ScreenAdapter {
         bsOpen = false;
         cpBoardOpen = false;
         rankOpen = false;
+        tsOpen = false;
         marketOpen = false;
         tradeOpen = false;
         farm2Open = false;
@@ -9216,6 +9385,9 @@ public class WorldScreen extends ScreenAdapter {
     private int partnerActId = -1;
     private String partnerActName;
     private int partnerLv, partnerPct;
+    /** [PORT] Huy chương cặp đôi top BXH (Rank_Couple bản chính):
+     *  1 vàng, 2 bạc, 3 đồng, 0 = không có. */
+    private int partnerCoupleTitle = 0;
     private PaperDoll partnerDoll;
 
     private void openCharPanel() {
@@ -9519,6 +9691,16 @@ public class WorldScreen extends ScreenAdapter {
         }
         Ui.fontSmall.setColor(1f, 0.75f, 0.85f, 1f);
         Ui.fontSmall.draw(batch, (single ? 0 : partnerPct) + "%", px + 532, py + 91);
+        // [PORT] huy chương cặp đôi top 3 BXH (Rank_Couple gốc):
+        // cuối hàng tiến độ, cạnh số %
+        if (!single && partnerCoupleTitle >= 1 && partnerCoupleTitle <= 3) {
+            try {
+                Texture medal = game.texture("couple/rank-" + (partnerCoupleTitle - 1) + ".png");
+                float mh = 40f, mw = mh * medal.getWidth() / medal.getHeight();
+                batch.draw(medal, px + 640 - 12 - mw, py + 84 - mh / 2f, mw, mh);
+            } catch (Exception ignored) {
+            }
+        }
         // (Nút Top cặp đôi đã gỡ 2026-11-06: mọi BXH gom về panel
         // Bảng Xếp Hạng riêng trong menu — lệnh chủ dự án.)
         // nút Chia tay lớn (chỉ khi đang có cặp)
@@ -9581,9 +9763,22 @@ public class WorldScreen extends ScreenAdapter {
             // điều kiện + nhãn hành động CHUNG một hàng cy+28,
             // mực nằm trọn trong thẻ (bản cũ nhãn ở cy+14 làm
             // chữ cưỡi lên mép dưới thẻ, bị cắt nửa)
-            Ui.fontTiny.setColor(1f, 1f, 1f, ownedT ? 0.70f : 0.42f);
-            Ui.fontTiny.draw(batch,
-                truncTo(Ui.fontTiny, d.req, cw - 104), cx + 12, cy + 28);
+            Long expL = titleExpiry.get(d.id);
+            if (ownedT && expL != null && expL > 0) {
+                // danh hiệu CÓ HẠN: hiện thời gian còn lại thay điều kiện
+                long leftMs = expL - System.currentTimeMillis();
+                String left = leftMs >= 86400000L
+                    ? "Còn " + ((leftMs + 86399999L) / 86400000L) + " ngày"
+                    : leftMs >= 3600000L
+                        ? "Còn " + ((leftMs + 3599999L) / 3600000L) + " giờ"
+                        : "Còn " + Math.max(1, (leftMs + 59999L) / 60000L) + " phút";
+                Ui.fontTiny.setColor(1f, 0.72f, 0.35f, 1f);
+                Ui.fontTiny.draw(batch, left, cx + 12, cy + 28);
+            } else {
+                Ui.fontTiny.setColor(1f, 1f, 1f, ownedT ? 0.70f : 0.42f);
+                Ui.fontTiny.draw(batch,
+                    truncTo(Ui.fontTiny, d.req, cw - 104), cx + 12, cy + 28);
+            }
             Color tagC = equipped ? new Color(1f, 0.85f, 0.38f, 1f)
                 : ownedT ? new Color(0.55f, 0.95f, 0.65f, 1f) : new Color(1f, 1f, 1f, 0.4f);
             layout.setText(Ui.fontTiny, tag);
@@ -9862,6 +10057,9 @@ public class WorldScreen extends ScreenAdapter {
         return titleDefs.isEmpty() ? FALLBACK_TITLE_DEFS : titleDefs;
     }
     private final java.util.Set<Integer> titleOwned = new java.util.HashSet<>();
+    /** Hạn dùng danh hiệu (epoch ms; -1/vắng = vĩnh viễn) — đuôi
+     *  mở rộng của gói TITLE sub 0 phía server. */
+    private final java.util.Map<Integer, Long> titleExpiry = new java.util.HashMap<>();
     private final java.util.Map<Integer, Integer> remoteTitles = new java.util.HashMap<>();
     private int myTitleId = 0;
     private boolean titleAsked = false;
@@ -12069,6 +12267,7 @@ public class WorldScreen extends ScreenAdapter {
         if (bsOpen) drawBossShopPanel();
         if (cpBoardOpen) drawCoupleBoardPanel();
         if (rankOpen) drawRankPanel();
+        if (tsOpen) drawTsPanel();
         if (marketOpen) drawMarketPanel();
         if (tradeOpen) drawTradePanel();
         if (farm2Open) drawFarm2Panel();
@@ -14398,8 +14597,19 @@ public class WorldScreen extends ScreenAdapter {
                 : i == 2 ? new Color(0.9f, 0.62f, 0.4f, 1f)
                 : new Color(0.65f, 0.72f, 0.85f, 0.9f);
             Ui.centered(batch, Ui.font, String.valueOf(i + 1), lx + 26, ry - 11, rankCol);
+            float nameX = lx + 56;
+            if (rankCat == 2 && i < 3) {
+                // [PORT] huy chương Rank_Couple gốc cho top 3 cặp đôi
+                try {
+                    Texture medal = game.texture("couple/rank-" + i + ".png");
+                    float mh = 30f, mw = mh * medal.getWidth() / medal.getHeight();
+                    batch.draw(medal, lx + 48, ry - 34, mw, mh);
+                    nameX = lx + 48 + mw + 6;
+                } catch (Exception ignored) {
+                }
+            }
             Ui.font.setColor(1f, 1f, 1f, 0.97f);
-            Ui.font.draw(batch, truncTo(Ui.font, r[0], 330), lx + 56, ry - 11);
+            Ui.font.draw(batch, truncTo(Ui.font, r[0], 330), nameX, ry - 11);
             layout.setText(Ui.fontSmall, r[1]);
             Ui.fontSmall.setColor(0.75f, 0.82f, 0.95f, 0.95f);
             Ui.fontSmall.draw(batch, r[1], lx + lw - 14 - layout.width, ry - 12);
@@ -14451,6 +14661,198 @@ public class WorldScreen extends ScreenAdapter {
         rankMine.clear();
         seedRankSample();
         rankOpen = true;
+    }
+
+    public void debugOpenRankCouple() {
+        debugOpenRank();
+        rankCat = 2;
+        rankPage = 0;
+        rankRows.clear();
+        rankMine.clear();
+        seedRankSample();
+    }
+
+    // ===== BẢNG TÀI XỈU [PORT] (gói −124; cược vẫn qua menu NPC 864) =====
+    private boolean tsOpen = false;
+    private int tsRoundId = 0, tsSecs = 0, tsMyBets = 0, tsMyWins = 0;
+    private long tsAtMs = 0, tsMyNetXu = 0, tsMyNetLuong = 0;
+    private final long[] tsPools = new long[4];
+    private final int[] tsMine = new int[4];
+    private final java.util.ArrayList<String> tsHist = new java.util.ArrayList<>();
+    private final java.util.ArrayList<String[]> tsTopXu = new java.util.ArrayList<>();
+    private final java.util.ArrayList<String[]> tsTopLuong = new java.util.ArrayList<>();
+    private static final float TS_PW = 880, TS_PH = 600;
+    private static final float TS_PX = (Ui.W - TS_PW) / 2f, TS_PY = (Ui.H - TS_PH) / 2f;
+
+    private void handleTaixiuPacket(Msg m) throws IOException {
+        java.io.DataInputStream r = m.reader();
+        if (r.readByte() != 10) return;
+        tsRoundId = r.readInt();
+        tsSecs = r.readShort();
+        for (int i = 0; i < 4; i++) tsPools[i] = r.readLong();
+        for (int i = 0; i < 4; i++) tsMine[i] = r.readInt();
+        tsHist.clear();
+        int nh = r.readByte();
+        for (int i = 0; i < nh; i++) {
+            int gid = r.readInt();
+            tsHist.add("#" + gid + "  " + r.readUTF());
+        }
+        readTsTop(r, tsTopXu);
+        readTsTop(r, tsTopLuong);
+        tsMyBets = r.readInt();
+        tsMyWins = r.readInt();
+        tsMyNetXu = r.readLong();
+        tsMyNetLuong = r.readLong();
+        tsAtMs = System.currentTimeMillis();
+        closeOtherPanels();
+        tsOpen = true;
+    }
+
+    private void readTsTop(java.io.DataInputStream r,
+                           java.util.ArrayList<String[]> out) throws IOException {
+        out.clear();
+        int n = r.readByte();
+        for (int i = 0; i < n; i++) {
+            out.add(new String[]{r.readUTF(), fmtMoney(r.readLong())});
+        }
+    }
+
+    private int tsSecsLeft() {
+        long el = (System.currentTimeMillis() - tsAtMs) / 1000;
+        return (int) Math.max(0, tsSecs - el);
+    }
+
+    private void drawTsPanel() {
+        float px = TS_PX, py = TS_PY, pw = TS_PW, ph = TS_PH, top = py + ph;
+        batch.setColor(0f, 0f, 0f, 0.62f);
+        batch.draw(whiteTex, 0, 0, Ui.W, Ui.H);
+        batch.setColor(Color.WHITE);
+        batch.draw(Ui.roundedRect((int) pw, (int) ph, 16,
+            new Color(0.04f, 0.08f, 0.14f, 0.98f), GLASS_RIM), px, py);
+        Ui.faIcon(batch, Ui.fa26, Ui.FA_DICE, px + 42, top - 38, new Color(1f, 0.8f, 0.3f, 1f));
+        Ui.fontTitle.setColor(1f, 0.85f, 0.45f, 1f);
+        Ui.fontTitle.draw(batch, "Tài Xỉu", px + 66, top - 29);
+        String round = "Phiên #" + tsRoundId + " — còn " + tsSecsLeft() + "s";
+        layout.setText(Ui.fontSmall, round);
+        Ui.fontSmall.setColor(1f, 1f, 1f, 0.9f);
+        Ui.fontSmall.draw(batch, round, px + pw - 70 - layout.width, top - 30);
+        batch.draw(Ui.roundedRect(36, 36, 10, Ui.BTN_CLOSE, GLASS_RIM), px + pw - 54, top - 54);
+        Ui.faIcon(batch, Ui.fa20, Ui.FA_XMARK, px + pw - 36, top - 36, new Color(0.9f, 0.93f, 1f, 1f));
+        batch.draw(Ui.roundedRect((int) (pw - 44), 2, 1, new Color(1f, 1f, 1f, 0.14f), null), px + 22, top - 66);
+        // hai cửa Tài / Xỉu
+        drawTsSide(px + 20, top - 84, true);
+        drawTsSide(px + 276, top - 84, false);
+        // thành tích của tôi
+        float ay = top - 84 - 150;
+        Ui.fontSmall.setColor(1f, 0.85f, 0.55f, 1f);
+        Ui.fontSmall.draw(batch, "Thành tích của bạn", px + 20, ay);
+        Ui.font.setColor(1f, 1f, 1f, 0.95f);
+        Ui.font.draw(batch, tsMyBets + " ván cược — thắng " + tsMyWins + " ván",
+            px + 20, ay - 30);
+        Ui.font.draw(batch, "Lời/lỗ Xu: " + (tsMyNetXu >= 0 ? "+" : "") + fmtMoney(tsMyNetXu)
+            + "   ·   Lượng: " + (tsMyNetLuong >= 0 ? "+" : "") + fmtMoney(tsMyNetLuong),
+            px + 20, ay - 58);
+        Ui.fontTiny.setColor(0.75f, 0.82f, 0.95f, 0.8f);
+        Ui.fontTiny.draw(batch, "Đặt cược: gặp Thần Tài Xỉu ở Công viên, chọn mục Cược.", px + 20, ay - 88);
+        // nút làm mới
+        batch.draw(Ui.roundedRect(170, 44, 12,
+            new Color(0.98f, 0.58f, 0.16f, 0.95f), new Color(1f, 0.75f, 0.45f, 1f)), px + 20, py + 18);
+        Ui.centered(batch, Ui.font, "Làm mới", px + 105, py + 40, new Color(1f, 1f, 1f, 1f));
+        // cột phải: lịch sử + top
+        float rx = px + 548, rw = pw - 548 - 20;
+        float ry = top - 84;
+        Ui.fontSmall.setColor(1f, 0.85f, 0.55f, 1f);
+        Ui.fontSmall.draw(batch, "Lịch sử 10 phiên", rx, ry);
+        ry -= 26;
+        if (tsHist.isEmpty()) {
+            Ui.fontTiny.setColor(0.75f, 0.82f, 0.95f, 0.8f);
+            Ui.fontTiny.draw(batch, "Chưa có phiên nào kết thúc.", rx, ry);
+            ry -= 20;
+        }
+        for (String h : tsHist) {
+            Ui.fontTiny.setColor(1f, 1f, 1f, 0.9f);
+            Ui.fontTiny.draw(batch, truncTo(Ui.fontTiny, h, rw), rx, ry);
+            ry -= 20;
+        }
+        ry -= 8;
+        drawTsTop(rx, ry, rw, "Top thắng Xu", tsTopXu);
+        drawTsTop(rx, ry - 148, rw, "Top thắng Lượng", tsTopLuong);
+    }
+
+    private void drawTsSide(float cx, float topY, boolean tai) {
+        float cw = 244, chh = 132;
+        Color fill = tai ? new Color(0.62f, 0.20f, 0.16f, 0.92f) : new Color(0.14f, 0.30f, 0.55f, 0.92f);
+        batch.draw(Ui.roundedRect((int) cw, (int) chh, 14, fill, GLASS_RIM), cx, topY - chh);
+        Ui.centered(batch, Ui.fontTitle, tai ? "TÀI" : "XỈU", cx + cw / 2f, topY - 16,
+            new Color(1f, 1f, 1f, 1f));
+        int pi = tai ? 0 : 1, li = tai ? 2 : 3;
+        Ui.font.setColor(1f, 1f, 1f, 0.95f);
+        Ui.font.draw(batch, "Xu: " + fmtMoney(tsPools[pi]), cx + 16, topY - 52);
+        Ui.font.draw(batch, "Lượng: " + fmtMoney(tsPools[li]), cx + 16, topY - 80);
+        Ui.fontTiny.setColor(1f, 1f, 1f, 0.85f);
+        Ui.fontTiny.draw(batch, "Tôi cược: " + fmtMoney(tsMine[pi]) + " xu · "
+            + fmtMoney(tsMine[li]) + " lượng", cx + 16, topY - 108);
+    }
+
+    private void drawTsTop(float rx, float ry, float rw, String title,
+                           java.util.ArrayList<String[]> rows) {
+        Ui.fontSmall.setColor(1f, 0.85f, 0.55f, 1f);
+        Ui.fontSmall.draw(batch, title, rx, ry);
+        ry -= 24;
+        if (rows.isEmpty()) {
+            Ui.fontTiny.setColor(0.75f, 0.82f, 0.95f, 0.8f);
+            Ui.fontTiny.draw(batch, "Chưa có ai.", rx, ry);
+            return;
+        }
+        for (int i = 0; i < rows.size(); i++) {
+            String[] t = rows.get(i);
+            Ui.fontTiny.setColor(1f, 1f, 1f, 0.9f);
+            Ui.fontTiny.draw(batch, (i + 1) + ". " + truncTo(Ui.fontTiny, t[0], rw - 110), rx, ry);
+            layout.setText(Ui.fontTiny, "+" + t[1]);
+            Ui.fontTiny.setColor(0.55f, 0.95f, 0.65f, 1f);
+            Ui.fontTiny.draw(batch, "+" + t[1], rx + rw - layout.width, ry);
+            ry -= 20;
+        }
+    }
+
+    private boolean tsTouch(float x, float y) {
+        if (!tsOpen) return false;
+        float px = TS_PX, py = TS_PY, pw = TS_PW, ph = TS_PH, top = py + ph;
+        if (inRect(x, y, px + pw - 54, top - 54, 36, 36)) {
+            tsOpen = false;
+            return true;
+        }
+        if (inRect(x, y, px + 20, py + 18, 170, 44)) {
+            if (online()) {
+                try {
+                    AvatarProtocol.taixiuBoard(game.connection);
+                } catch (IOException ignored) {
+                }
+            }
+            return true;
+        }
+        return inRect(x, y, px, py, pw, ph);
+    }
+
+    public void debugOpenTaixiu() {
+        closeOtherPanels();
+        tsRoundId = 1234;
+        tsSecs = 27;
+        tsPools[0] = 1250000; tsPools[1] = 860000; tsPools[2] = 320; tsPools[3] = 145;
+        tsMine[0] = 50000; tsMine[1] = 0; tsMine[2] = 10; tsMine[3] = 0;
+        tsHist.clear();
+        tsHist.add("#1233  5, 5, 2  12 Tài");
+        tsHist.add("#1232  1, 3, 2  6 Xỉu");
+        tsHist.add("#1231  6, 6, 3  15 Tài");
+        tsHist.add("#1230  2, 2, 4  8 Xỉu");
+        tsTopXu.clear();
+        tsTopXu.add(new String[]{"Hoàng Nam", "450.000"});
+        tsTopXu.add(new String[]{"Sơn", "320.500"});
+        tsTopLuong.clear();
+        tsTopLuong.add(new String[]{"Minh Ngọc", "1.250"});
+        tsMyBets = 42; tsMyWins = 23; tsMyNetXu = 135000; tsMyNetLuong = -40;
+        tsAtMs = System.currentTimeMillis();
+        tsOpen = true;
     }
 
     private void handleCouplePacket(Msg m) throws IOException {
@@ -26955,6 +27357,10 @@ public class WorldScreen extends ScreenAdapter {
         titleOwned.add(18);
         titleOwned.add(20);
         titleOwned.add(21);
+        // mẫu danh hiệu CÓ HẠN: 3 còn 3 ngày, 6 còn 5 giờ
+        titleExpiry.clear();
+        titleExpiry.put(3, System.currentTimeMillis() + 3L * 86400000L);
+        titleExpiry.put(6, System.currentTimeMillis() + 5L * 3600000L);
         myTitleId = 1;
         titlePage = 0;
         charPanel = withPanel;
@@ -26978,6 +27384,7 @@ public class WorldScreen extends ScreenAdapter {
         partnerDate = "14/02/2025";
         partnerActId = 37;
         partnerActName = "Chia tay";
+        partnerCoupleTitle = 1; // huy chương vàng Rank_Couple
         charPanel = true;
         charVariant = 3;
         charTab = 2;

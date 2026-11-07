@@ -63,3 +63,17 @@ commandList}; GlobalService.doRequestCmdCouple; CoupleList
   (<per>%)” dưới 5 thanh chỉ số của thẻ thông tin (thẻ cao 130 ->
   172 khi người đó có cặp). Test sống live_otherinfo_test.py
   ALL PASS.
+
+## Huy chương cặp đôi (Rank_Couple) — 2026-11-06
+
+Bản chính 3.4.4 có asset `Rank_Couple_0/1/2` (huy chương VÀNG/BẠC/ĐỒNG
+khắc số 1/2/3) + field `CoupleList.idTitleCouple/imgTitle`. Bản port:
+
+- Asset gốc chép nguyên bản: assets/couple/rank-0..2.png (+ .b64).
+- Server: gói −22 (của chính mình) thêm byte CUỐI = hạng của cặp đôi
+  trên bảng marry (đếm số cặp có level/perLevel cao hơn; hạng 1–3 trả
+  đúng hạng, ngoài top 3 trả 0; độc thân trả 0). Client đọc bằng guard.
+- Hiện: (1) tab Cặp Đôi — huy chương cao 40px cuối hàng thanh tiến độ;
+  (2) panel BXH thể loại Cặp đôi — huy chương 30px cạnh tên 3 dòng đầu.
+- Test sống live_couple_title_test.py ALL PASS (hạng 2 -> bạc, hạng 1
+  -> vàng, hạng 4 -> 0).

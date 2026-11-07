@@ -969,6 +969,7 @@ public class AvatarService extends Service {
                 ds.writeShort(us.getLeverMain());
                 writeJoinDate(ds, us);
                 ds.writeUTF("");
+                ds.writeByte(0); // [PORT] huy chuong cap doi: doc than = 0
                 ds.flush();
                 sendMessage(ms);
                 return;
@@ -996,12 +997,38 @@ public class AvatarService extends Service {
             writeJoinDate(ds, us);
             // Duoi mo rong ban port: ngay bat dau quan he (dateDay)
             ds.writeUTF(us.getMarryDate() != null ? us.getMarryDate() : "");
+            // [PORT] Huy chuong cap doi (Rank_Couple ban chinh): hang
+            // cua cap doi tren bang marry: 1/2/3 -> huy chuong
+            // vang/bac/dong, ngoai top 3 -> 0.
+            ds.writeByte(coupleRankTitle(us));
             ds.flush();
 
             sendMessage(ms);
         } catch (IOException e) {
             e.printStackTrace();
         }
+    }
+
+    /** [PORT] Hạng của cặp đôi của user trên bảng marry (theo cấp +
+     *  % giống thứ tự panel BXH Cặp đôi): hạng 1–3 trả đúng hạng
+     *  (huy chương vàng/bạc/đồng Rank_Couple), ngoài top 3 trả 0. */
+    private int coupleRankTitle(User us) {
+        try (java.sql.Connection c = avatar.db.DbManager.getInstance().getConnection();
+             java.sql.PreparedStatement ps = c.prepareStatement(
+                 "SELECT COUNT(*) FROM marry WHERE level > ?"
+                 + " OR (level = ? AND perLevel > ?)")) {
+            ps.setInt(1, us.getLevelMarry());
+            ps.setInt(2, us.getLevelMarry());
+            ps.setInt(3, us.getPerLevelMarry());
+            java.sql.ResultSet rs = ps.executeQuery();
+            if (rs.next()) {
+                int rank = rs.getInt(1) + 1;
+                return rank <= 3 ? rank : 0;
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        return 0;
     }
 
 

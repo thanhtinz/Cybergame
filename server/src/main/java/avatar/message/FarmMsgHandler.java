@@ -145,6 +145,12 @@ public class FarmMsgHandler extends MessageHandler {
                     this.service.harvestCook(mss);
                     break;
                 }
+                case Cmd.NAU_NHANH: {
+                    // Nấu nhanh theo bản chính (93): step 0 hỏi giá,
+                    // step 1 trả lượng cho chín ngay.
+                    this.service.nauNhanh(mss);
+                    break;
+                }
                 case Cmd.COMMUNICATE: {
                     // this.service.serverDialog("lãi buôn");
                     NpcHandler.handlerCommunicate(Npc.ID_ADD+NpcName.LAI_BUON,this.client.user);

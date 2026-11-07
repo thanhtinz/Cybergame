@@ -37,7 +37,9 @@ import java.util.Set;
  *
  * Danh hiệu được CẤP TỰ ĐỘNG khi quét điều kiện (mở panel) từ các
  * hệ đã có: cấp bậc, xu, mini game, câu cá, clan, kết hôn, farm 2,
- * điểm danh, sưu tầm đồ. Sở hữu là vĩnh viễn (bảng player_titles);
+ * điểm danh, sưu tầm đồ. Sở hữu thường là vĩnh viễn; sự kiện/admin
+ * cấp được danh hiệu CÓ HẠN qua grantTimed (cột expires_at, hết hạn
+ * tự xoá khi quét) (bảng player_titles);
  * danh hiệu đang đeo lưu ở players.title_id.
  */
 public class TitleService extends Service {
@@ -89,7 +91,15 @@ public class TitleService extends Service {
                 c.createStatement().execute(
                         "CREATE TABLE IF NOT EXISTS player_titles ("
                         + "user_id INT NOT NULL, title_id INT NOT NULL,"
+                        + " expires_at BIGINT NOT NULL DEFAULT -1,"
                         + " PRIMARY KEY (user_id, title_id))");
+                try {
+                    c.createStatement().execute(
+                            "ALTER TABLE player_titles ADD COLUMN"
+                            + " expires_at BIGINT NOT NULL DEFAULT -1");
+                } catch (Exception ignored) {
+                    // cột đã tồn tại
+                }
                 try {
                     c.createStatement().execute(
                             "ALTER TABLE players ADD COLUMN title_id INT DEFAULT 0");
@@ -170,7 +180,8 @@ public class TitleService extends Service {
         return m;
     }
 
-    /** Nạp danh hiệu đang đeo từ DB vào RAM (an toàn khi chưa có cột). */
+    /** Nạp danh hiệu đang đeo từ DB vào RAM (an toàn khi chưa có cột).
+     *  Danh hiệu có hạn đã hết hạn thì tự gỡ (cập nhật cả DB). */
     public static void loadEquipped(User u) {
         ensureSchema();
         try (Connection c = DbManager.getInstance().getConnection();
@@ -181,6 +192,16 @@ public class TitleService extends Service {
             if (rs.next()) u.titleId = rs.getInt(1);
         } catch (Exception ignored) {
             u.titleId = 0;
+        }
+        if (u.titleId > 0 && !ownedMap(u).containsKey(u.titleId)) {
+            u.titleId = 0;
+            try (Connection c = DbManager.getInstance().getConnection();
+                 PreparedStatement ps = c.prepareStatement(
+                         "UPDATE players SET title_id = 0 WHERE user_id = ?")) {
+                ps.setInt(1, u.getId());
+                ps.executeUpdate();
+            } catch (Exception ignored) {
+            }
         }
     }
 
@@ -241,17 +262,77 @@ public class TitleService extends Service {
     }
 
     private Set<Integer> owned(User u) {
-        Set<Integer> out = new LinkedHashSet<>();
+        return ownedMap(u).keySet();
+    }
+
+    /** Danh hiệu đang sở hữu kèm hạn dùng (epoch ms; -1 = vĩnh viễn).
+     *  Bản ghi đã hết hạn bị xoá luôn khỏi DB khi quét qua. */
+    public static java.util.Map<Integer, Long> ownedMap(User u) {
+        java.util.Map<Integer, Long> out = new java.util.LinkedHashMap<>();
+        long now = System.currentTimeMillis();
+        List<Integer> expired = new ArrayList<>();
         try (Connection c = DbManager.getInstance().getConnection();
              PreparedStatement ps = c.prepareStatement(
-                     "SELECT title_id FROM player_titles WHERE user_id = ?")) {
+                     "SELECT title_id, expires_at FROM player_titles"
+                     + " WHERE user_id = ?")) {
             ps.setInt(1, u.getId());
             ResultSet rs = ps.executeQuery();
-            while (rs.next()) out.add(rs.getInt(1));
+            while (rs.next()) {
+                int tid = rs.getInt(1);
+                long exp = rs.getLong(2);
+                if (exp >= 0 && exp <= now) {
+                    expired.add(tid);
+                } else {
+                    out.put(tid, exp);
+                }
+            }
         } catch (Exception e) {
             e.printStackTrace();
         }
+        for (int tid : expired) {
+            try (Connection c = DbManager.getInstance().getConnection();
+                 PreparedStatement ps = c.prepareStatement(
+                         "DELETE FROM player_titles"
+                         + " WHERE user_id = ? AND title_id = ?")) {
+                ps.setInt(1, u.getId());
+                ps.setInt(2, tid);
+                ps.executeUpdate();
+            } catch (Exception ignored) {
+            }
+        }
         return out;
+    }
+
+    /** Cấp danh hiệu CÓ HẠN (sự kiện/admin): hạn = now + days ngày.
+     *  Đang có vĩnh viễn thì giữ vĩnh viễn; đang có hạn thì lấy hạn
+     *  xa hơn. Trả false nếu titleId không tồn tại. */
+    public static boolean grantTimed(int userId, int titleId, int days) {
+        ensureSchema();
+        boolean known = false;
+        for (Object[] d : DEFS) if ((Integer) d[0] == titleId) known = true;
+        if (!known || days <= 0) return false;
+        long exp = System.currentTimeMillis() + days * 86400000L;
+        try (Connection c = DbManager.getInstance().getConnection();
+             PreparedStatement ps = c.prepareStatement(
+                     "INSERT INTO player_titles (user_id, title_id, expires_at)"
+                     + " VALUES (?, ?, ?)"
+                     + " ON DUPLICATE KEY UPDATE expires_at ="
+                     + " IF(expires_at = -1, -1,"
+                     + " GREATEST(expires_at, VALUES(expires_at)))")) {
+            ps.setInt(1, userId);
+            ps.setInt(2, titleId);
+            ps.setLong(3, exp);
+            ps.executeUpdate();
+            return true;
+        } catch (Exception e) {
+            e.printStackTrace();
+            return false;
+        }
+    }
+
+    /** Đẩy lại trạng thái danh hiệu cho người chơi (admin cấp xong gọi). */
+    public void pushState(User u) throws IOException {
+        sendState(u, new ArrayList<Integer>());
     }
 
     /** Quét điều kiện theo bộ đếm, cấp danh hiệu mới đạt; trả
@@ -294,11 +375,18 @@ public class TitleService extends Service {
             ds.writeByte((Integer) d[2]);
             ds.writeUTF((String) d[3]);
         }
-        Set<Integer> own = owned(u);
+        java.util.Map<Integer, Long> own = ownedMap(u);
         ds.writeShort(own.size());
-        for (int tid : own) ds.writeShort(tid);
+        for (int tid : own.keySet()) ds.writeShort(tid);
         ds.writeByte(fresh.size());
         for (int tid : fresh) ds.writeShort(tid);
+        // Đuôi mở rộng [PORT]: hạn dùng của từng danh hiệu đang có
+        // (cùng thứ tự với danh sách sở hữu ở trên; -1 = vĩnh viễn).
+        ds.writeShort(own.size());
+        for (java.util.Map.Entry<Integer, Long> e : own.entrySet()) {
+            ds.writeShort(e.getKey());
+            ds.writeLong(e.getValue());
+        }
         ds.flush();
         this.session.sendMessage(ms);
     }

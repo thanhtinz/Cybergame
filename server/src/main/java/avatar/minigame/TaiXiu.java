@@ -48,6 +48,15 @@ public class TaiXiu {
         return new ArrayList<>(TaiXiu);
     }
 
+    /** [PORT] Phiên đang chạy + giây còn lại (cho bảng Tài Xỉu −124). */
+    public int currentGameId() {
+        return gameId;
+    }
+
+    public int secondsLeft() {
+        return Math.max(0, countdown);
+    }
+
     public void startCountdown() {
         new Thread(() -> {
             long startTime = System.currentTimeMillis();

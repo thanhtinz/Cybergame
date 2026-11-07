@@ -198,6 +198,15 @@ public final class AvatarProtocol {
     public static final byte FARM_HARVEST_STAR = 85;
     public static final byte FARM_COOK = 91;
     public static final byte FARM_HARVEST_COOK = 92;
+    public static final byte FARM_QUICK_COOK = 93;
+
+    /** Nấu nhanh (gói 93 bản chính): step 0 hỏi giá, step 1 trả. */
+    public static void farmQuickCook(GameConnection conn, int step) throws IOException {
+        Msg m = new Msg(FARM_QUICK_COOK);
+        m.writer().writeByte(step);
+        m.writer().flush();
+        conn.send(m);
+    }
     public static final byte FARM_CELL_UPDATE = 78;
     public static final byte FARM_ANIMAL_UPDATE = 79;
     public static final byte FARM_GET_IMG = 82;
@@ -749,6 +758,16 @@ public final class AvatarProtocol {
 
     public static void coupleBoard(GameConnection conn) throws IOException {
         Msg m = new Msg(COUPLE);
+        m.writer().writeByte(0);
+        m.writer().flush();
+        conn.send(m);
+    }
+
+    // [PORT] Bảng Tài Xỉu (phiên/lịch sử/top — cược vẫn qua menu NPC 864)
+    public static final byte TAIXIU = -124;
+
+    public static void taixiuBoard(GameConnection conn) throws IOException {
+        Msg m = new Msg(TAIXIU);
         m.writer().writeByte(0);
         m.writer().flush();
         conn.send(m);

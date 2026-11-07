@@ -239,6 +239,13 @@ public class NpcHandler {
             switch (npcIdCase) {
                 case NpcName.Than_Tai_Xiu: {
                     List<Menu> menuList = List.of(
+                            Menu.builder().name("Bảng Tài Xỉu").action(() -> {
+                                try {
+                                    new avatar.service.TaiXiuPanelService(us.session)
+                                        .sendSnapshot(us);
+                                } catch (Exception ignored) {
+                                }
+                            }).build(),
                             Menu.builder().name("Cược bằng Xu").menus(
                                     List.of(
                                             Menu.builder().name("Cược Tài (Xu)").action(() -> {

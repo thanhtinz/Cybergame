@@ -260,6 +260,7 @@ public class AdminServer {
                 case "/api/mail/send": mailSend(ex); break;
                 case "/api/flags": flags(ex); break;
                 case "/api/flags/set": flagSet(ex); break;
+                case "/api/titles/grant": titleGrant(ex); break;
                 case "/api/announce": announce(ex); break;
                 default: sendJson(ex, 404, err("Không có API này"));
             }
@@ -1060,6 +1061,27 @@ public class AdminServer {
             return;
         }
         FeatureFlags.set(name, value);
+        sendJson(ex, 200, ok());
+    }
+
+    /** Cấp danh hiệu CÓ HẠN cho người chơi (body: userId, titleId,
+     *  days). Người đang online được đẩy lại trạng thái ngay. */
+    private static void titleGrant(HttpExchange ex) throws Exception {
+        JSONObject body = readJson(ex);
+        int userId = (int) num(body, "userId", -1);
+        int titleId = (int) num(body, "titleId", -1);
+        int days = (int) num(body, "days", 0);
+        if (userId <= 0 || !avatar.service.TitleService.grantTimed(userId, titleId, days)) {
+            sendJson(ex, 400, err("Không cấp được (sai userId/titleId/days)"));
+            return;
+        }
+        User live = UserManager.getInstance().find(userId);
+        if (live != null && live.session != null) {
+            try {
+                new avatar.service.TitleService(live.session).pushState(live);
+            } catch (Exception ignored) {
+            }
+        }
         sendJson(ex, 200, ok());
     }
 

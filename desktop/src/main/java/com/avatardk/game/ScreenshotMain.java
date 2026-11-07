@@ -1581,7 +1581,23 @@ public class ScreenshotMain {
                         break;
                     case 174: // Nhan vat thu NU trong the gioi (huong cheo)
                         if (frame == 1) { world.debugCloseCoupleBoard(); world.debugTrialFemalePose(); }
-                        if (frame == 15) { shot("shot-trial-female.png"); stage = 121; frame = 0; }
+                        if (frame == 15) { shot("shot-trial-female.png"); stage = 175; frame = 0; }
+                        break;
+                    case 175: // Bang Tai Xiu [PORT] (menu NPC Than Tai 864)
+                        if (frame == 1) { world.debugCloseCoupleBoard(); world.debugOpenTaixiu(); }
+                        if (frame == 15) { shot("shot-taixiu.png"); stage = 176; frame = 0; }
+                        break;
+                    case 176: // BXH the loai Cap doi: huy chuong Rank_Couple top 3
+                        if (frame == 1) { world.debugOpenRankCouple(); }
+                        if (frame == 15) { shot("shot-rank-couple.png"); stage = 177; frame = 0; }
+                        break;
+                    case 177: // Nha bep dang nau: nut Nau nhanh (goi 93)
+                        if (frame == 1) { world.debugCookQuick(false); }
+                        if (frame == 15) { shot("shot-farm-quickcook.png"); stage = 178; frame = 0; }
+                        break;
+                    case 178: // Hop xac nhan gia nau nhanh
+                        if (frame == 1) { world.debugCookQuick(true); }
+                        if (frame == 15) { shot("shot-farm-quickcook-confirm.png"); stage = 121; frame = 0; }
                         break;
                     case 121: // nền ban ngày ở thành phố (kiểm lớp trời/BGMap)
                         if (frame == 1) {

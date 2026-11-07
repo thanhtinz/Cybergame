@@ -615,6 +615,71 @@ public class FarmService extends Service {
         this.session.sendMessage(ms);
     }
 
+    // ---- Nấu nhanh (gói 93) theo bản chính: FarmScr case 11/22 ----
+    // C->S {byte step}: step 0 = hỏi giá, step 1 = xác nhận trả.
+    // S->C step 0: {byte 0, UTF info} (client hiện hộp OK, OK gửi
+    // tiếp step 1); S->C step 1: {byte 1, int giá, int lượng mới,
+    // int lượng khoá mới} và món chín ngay (remainTime = 0).
+    // Giá [PORT]: 1 lượng mỗi 5 phút còn lại, tối thiểu 1 — server
+    // gốc không còn để tra giá.
+    public void nauNhanh(Message ms) throws IOException {
+        byte step = ms.reader().readByte();
+        User u = this.session.user;
+        if (u.foodId <= 0) {
+            return;
+        }
+        avatar.Farm.FarmFoodData.Food food = avatar.Farm.FarmFoodData.FOODS.get(u.foodId);
+        if (food == null) {
+            return;
+        }
+        long nowSec = System.currentTimeMillis() / 1000L;
+        long remain = u.cookFinish - nowSec;
+        Message out = new Message(Cmd.NAU_NHANH);
+        DataOutputStream ds = out.writer();
+        if (remain <= 0) {
+            ds.writeByte(1);
+            ds.writeInt(0);
+            ds.writeInt(u.getLuong());
+            ds.writeInt(u.luongKhoa);
+            ds.flush();
+            this.session.sendMessage(out);
+            return;
+        }
+        int price = (int) Math.max(1, (remain + 299) / 300);
+        if (step == 0) {
+            // Tên món: sản phẩm farm không có tên ở bảng items nên
+            // chỉ ghép tên khi tra được, tránh câu cụt/duplicated
+            String fname = null;
+            try {
+                avatar.item.Part p = avatar.item.PartManager.getInstance()
+                    .findPartById(food.productId);
+                if (p != null && p.getName() != null && !p.getName().isEmpty()) {
+                    fname = p.getName();
+                }
+            } catch (Exception ignored) {
+            }
+            ds.writeByte(0);
+            ds.writeUTF(fname != null
+                ? "Nấu xong ngay món " + fname + " với giá " + price + " lượng?"
+                : "Nấu xong ngay với giá " + price + " lượng?");
+            ds.flush();
+            this.session.sendMessage(out);
+            return;
+        }
+        if (u.getLuong() + u.luongKhoa < price) {
+            u.getAvatarService().serverDialog("Không đủ lượng để nấu nhanh.");
+            return;
+        }
+        u.updateLuong(-price);
+        u.cookFinish = nowSec;
+        ds.writeByte(1);
+        ds.writeInt(price);
+        ds.writeInt(u.getLuong());
+        ds.writeInt(u.luongKhoa);
+        ds.flush();
+        this.session.sendMessage(out);
+    }
+
 
     public void setBigFarm(Message ms) throws IOException {
 
