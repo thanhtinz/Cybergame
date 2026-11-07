@@ -11526,31 +11526,8 @@ public class WorldScreen extends ScreenAdapter {
                     break;
                 }
                 case DrawItem.NPC:
-                    if (it.npc.data.id == 525 && priestTexture() != null) {
-                        // Chủ Hôn: hình cha xứ chủ dự án gửi 2026-11-06
-                        // (thay doll gốc của NPC 525; tương tác giữ nguyên)
-                        Texture pt = priestTexture();
-                        float ph = 68f, pw = ph * pt.getWidth() / pt.getHeight();
-                        batch.setColor(0f, 0f, 0f, 0.30f);
-                        batch.draw(circleTexture(), it.npc.feetX - 26, it.npc.feetY - 4, 52, 9);
-                        batch.setColor(Color.WHITE);
-                        batch.draw(pt, it.npc.feetX - pw / 2f, it.npc.feetY, pw, ph);
-                        if (com.avatardk.game.data.GameSettings.showName) {
-                            NameTag tag = new NameTag();
-                            tag.feetX = it.npc.feetX;
-                            tag.topY = it.npc.feetY + ph;
-                            tag.name = it.npc.data.name;
-                            tag.color = new Color(1f, 0.9f, 0.35f, 1f);
-                            tag.titleId = 0;
-                            tag.clanIcon = -1;
-                            tag.doll = it.npc.doll;
-                            nameTags.add(tag);
-                        }
-                        if (it.npc.bubble != null) {
-                            drawBubble(it.npc.doll, it.npc.anim, it.npc.feetX, it.npc.feetY, it.npc.bubble);
-                        }
-                        break;
-                    }
+                    // Chủ Hôn 525 dùng doll gốc (Tín chốt quay về doll gốc
+                    // 2026-11-06 sau khi bác bản cha xứ chibi lẫn bản pixel vẽ lại)
                     drawFigure(it.npc.doll, it.npc.anim, it.npc.feetX, it.npc.feetY,
                         com.avatardk.game.data.GameSettings.showName ? it.npc.data.name : null,
                         false);
@@ -11848,21 +11825,6 @@ public class WorldScreen extends ScreenAdapter {
 
     private Texture trialTexture() {
         return trialTex(trialDirName);
-    }
-
-    /** Sprite cha xứ của NPC Chủ Hôn (525) — nạp lười, cache lại. */
-    private Texture priestTex = null;
-    private boolean priestTexTried = false;
-
-    private Texture priestTexture() {
-        if (!priestTexTried) {
-            priestTexTried = true;
-            try {
-                Texture t = game.texture("npc/chaxu.png");
-                if (t != null && t.getWidth() > 0) priestTex = t;
-            } catch (Exception ignored) { }
-        }
-        return priestTex;
     }
 
     /** Nhân vật thử NỮ (asset chủ dự án gửi 2026-11-06): dùng khi
