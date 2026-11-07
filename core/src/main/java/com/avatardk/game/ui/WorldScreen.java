@@ -1442,7 +1442,7 @@ public class WorldScreen extends ScreenAdapter {
         int kind = farmTargetKind();
         if (kind == 0) return false;
         if (kind == 5) { farmAskLand(); return true; }
-        if (kind == 3) { farmCookOpen = true; return true; }
+        if (kind == 3) { farmCookOpen = true; farmCookPage = 0; return true; }
         if (kind == 4) {
             if (playerX < FARM_SHED_X) {
                 farmStoreOpen = true;
@@ -2360,7 +2360,8 @@ public class WorldScreen extends ScreenAdapter {
     // --- Panel NẤU ĂN (bếp) ---
     private boolean farmCookOpen;
     private int farmCookSel = 1;
-    private static final float FC_PW = 820f, FC_PH = 592f;
+    private int farmCookPage = 0;
+    private static final float FC_PW = 820f, FC_PH = 640f;
     private static final float FC_PX = (Ui.W - FC_PW) / 2f, FC_PY = (Ui.H - FC_PH) / 2f;
     private final java.util.List<float[]> farmCookBtns = new java.util.ArrayList<>();
 
@@ -2412,40 +2413,46 @@ public class WorldScreen extends ScreenAdapter {
             }
             topY -= 66f;
         }
-        // Danh sách món: thẻ hàng 2 cột x 15 hàng, mỗi hàng có số phút nấu
-        // (rowH 26: 15 hàng x 26 + dải bếp 66 + đầu 92 = 548 < FC_PH 592,
-        // hàng cuối không tràn đáy panel như bản rowH 30)
-        float colW = 252f, rowH = 26f;
-        for (int i = 0; i < farm.foods.size(); i++) {
-            FarmWorld.FoodDef f = farm.foods.get(i);
-            int col = i / 15, row = i % 15;
+        // Danh sách món: lưới THẺ 2 cột x 8 hàng/trang (icon món + tên
+        // + dòng thời gian/giá), phân trang như Kho/Cửa hàng farm — bản
+        // cũ là 30 dòng chữ trơn bị chê xấu và tên bị cắt cụt giữa chữ.
+        float colW = 252f, cardH = 56f, gapY = 6f;
+        int perPage = 14;
+        int cookPages = Math.max(1, (farm.foods.size() + perPage - 1) / perPage);
+        if (farmCookPage >= cookPages) farmCookPage = cookPages - 1;
+        if (farmCookPage < 0) farmCookPage = 0;
+        int startK = farmCookPage * perPage;
+        for (int k = 0; k < perPage && startK + k < farm.foods.size(); k++) {
+            FarmWorld.FoodDef f = farm.foods.get(startK + k);
+            int col = k % 2, row = k / 2;
             float rx = FC_PX + 22 + col * (colW + 12);
-            float ry = topY - (row + 1) * rowH;
+            float ry = topY - (row + 1) * (cardH + gapY) + gapY;
             boolean selected = f.id == farmCookSel;
             if (selected) {
-                batch.draw(Ui.gradientRect((int) colW, (int) rowH - 4, 8,
-                    EntryUi.ORANGE_TOP, EntryUi.ORANGE_BOT), rx, ry - 4);
+                batch.draw(Ui.gradientRect((int) colW, (int) cardH, 10,
+                    EntryUi.ORANGE_TOP, EntryUi.ORANGE_BOT), rx, ry);
             } else {
-                batch.draw(Ui.roundedRect((int) colW, (int) rowH - 4, 8,
-                    new Color(0.09f, 0.14f, 0.22f, 0.80f), GLASS_RIM), rx, ry - 4);
+                batch.draw(Ui.roundedRect((int) colW, (int) cardH, 10,
+                    new Color(0.09f, 0.14f, 0.22f, 0.92f), GLASS_RIM), rx, ry);
             }
-            String dn = f.name;
-            String timeTxt = f.cookMinutes + "p";
-            layout.setText(Ui.fontSmall, timeTxt);
-            float timeW = layout.width;
-            layout.setText(Ui.fontSmall, dn);
-            while (layout.width > colW - 24 - timeW && dn.length() > 4) {
-                dn = dn.substring(0, dn.length() - 2);
-                layout.setText(Ui.fontSmall, dn + "…");
-            }
-            if (!dn.equals(f.name)) dn = dn + "…";
-            Ui.fontSmall.setColor(1f, 1f, 1f, 0.95f);
-            Ui.fontSmall.draw(batch, dn, rx + 10, ry + 10);
-            Ui.fontSmall.setColor(selected ? new Color(1f, 1f, 1f, 0.85f) : new Color(1f, 0.85f, 0.38f, 1f));
-            Ui.fontSmall.draw(batch, timeTxt, rx + colW - 10 - timeW, ry + 10);
+            FarmWorld.ProductDef fpd = farm.productDefs.get(f.productId);
+            drawFarmMedallion(rx + 7, ry + 7, 42);
+            drawProductIcon(f.productId, fpd, rx + 11, ry + 11, 34);
+            Ui.fontSmall.setColor(1f, 1f, 1f, 0.97f);
+            Ui.fontSmall.draw(batch, truncTo(Ui.fontSmall, f.name, colW - 64),
+                rx + 56, ry + 39);
+            String sub = f.cookMinutes + " phút"
+                + (fpd != null && fpd.priceXu > 0 ? " · " + fmtMoney(fpd.priceXu) + " xu" : "");
+            Ui.fontTiny.setColor(selected ? new Color(1f, 1f, 1f, 0.85f)
+                : new Color(1f, 0.85f, 0.38f, 1f));
+            Ui.fontTiny.draw(batch, truncTo(Ui.fontTiny, sub, colW - 64), rx + 56, ry + 18);
+            Ui.fontTiny.setColor(Color.WHITE);
             Ui.fontSmall.setColor(Color.WHITE);
-            farmCookBtns.add(new float[]{rx, ry - 4, colW, rowH, f.id});
+            farmCookBtns.add(new float[]{rx, ry, colW, cardH, f.id});
         }
+        float cookListBot = topY - 7 * (cardH + gapY) + gapY;
+        drawFarmPager(farmCookBtns, FC_PX + 22 + (2 * colW + 12) / 2f,
+            cookListBot - 42, farmCookPage, cookPages);
         // Thẻ chi tiết món đang chọn (cột phải)
         FarmWorld.FoodDef sel = null;
         for (FarmWorld.FoodDef f : farm.foods) if (f.id == farmCookSel) sel = f;
@@ -2579,6 +2586,10 @@ public class WorldScreen extends ScreenAdapter {
                             farm.cookEndEpoch = System.currentTimeMillis() / 1000L + sel.cookMinutes * 60L;
                         }
                     }
+                } else if (code == -200) {
+                    if (farmCookPage > 0) farmCookPage--;
+                } else if (code == -201) {
+                    farmCookPage++;
                 } else if (code == -2) {
                     Msg m = new Msg(AvatarProtocol.FARM_HARVEST_COOK);
                     farmSend(m);
@@ -9860,12 +9871,12 @@ public class WorldScreen extends ScreenAdapter {
         // dạng thông tin ở header — KHÔNG phải nút mở clan (điểm vào
         // clan là ô Clan ở menu burger + NPC Hội Nhóm).
         {
-            Texture clIc = null;
-            if (selfClanName != null && game.player != null
-                    && game.player.clanIcon >= 0 && game.player.clanIcon <= 3) {
-                clIc = game.texture("clan/logo-" + game.player.clanIcon + ".png");
-            }
-            if (clIc == null) clIc = game.texture("iconmenu/clan.png");
+            // Icon clan = khiên vàng (iconmenu/clan.png) — KHÔNG dùng
+            // logo mây clan/logo-*.png ở đây: ảnh mây 308x80 ép vào ô
+            // vuông 30px méo thành vệt trắng (Tín lệnh đổi icon khác).
+            // Logo mây vẫn dùng đúng chỗ của nó: thẻ tên trên map +
+            // panel clan (vẽ giữ tỉ lệ).
+            Texture clIc = game.texture("iconmenu/clan.png");
             if (selfClanName != null) {
                 batch.setColor(1f, 1f, 1f, 1f);
                 batch.draw(clIc, px + 204, py + 428, 30, 30);
