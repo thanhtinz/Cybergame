@@ -19,7 +19,6 @@ public class GameSettings {
     public static boolean showName = true;
     /** Nhân vật pixel mới (bản THỬ theo ảnh chủ dự án gửi 2026-11-06):
      *  bật = nhân vật của mình vẽ bằng bộ sprite mới thay doll gốc. */
-    public static boolean trialChar = true;
     public static boolean showDir = true;
     public static int volume = 100;
     /** Mức âm lượng trước khi tắt tiếng, để bật lại khôi phục đúng mức cũ. */
@@ -33,7 +32,6 @@ public class GameSettings {
         try {
             Preferences p = prefs();
             showName = p.getBoolean("showName", true);
-            trialChar = p.getBoolean("trialChar", true);
             showDir = p.getBoolean("showDir", true);
             volume = p.getInteger("volume", 100);
             lastVolume = p.getInteger("lastVolume", 100);
@@ -48,7 +46,6 @@ public class GameSettings {
         try {
             Preferences p = prefs();
             p.putBoolean("showName", showName);
-            p.putBoolean("trialChar", trialChar);
             p.putBoolean("showDir", showDir);
             p.putInteger("volume", volume);
             p.putInteger("lastVolume", lastVolume);

@@ -970,6 +970,7 @@ public class AvatarService extends Service {
                 writeJoinDate(ds, us);
                 ds.writeUTF("");
                 ds.writeByte(0); // [PORT] huy chuong cap doi: doc than = 0
+                ds.writeUTF(clanNameOf(us)); // [PORT] ten clan (thong tin)
                 ds.flush();
                 sendMessage(ms);
                 return;
@@ -1001,12 +1002,34 @@ public class AvatarService extends Service {
             // cua cap doi tren bang marry: 1/2/3 -> huy chuong
             // vang/bac/dong, ngoai top 3 -> 0.
             ds.writeByte(coupleRankTitle(us));
+            // [PORT] Tên clan của người chơi — chỉ là THÔNG TIN hiện
+            // ở panel nhân vật (không phải nút mở clan).
+            ds.writeUTF(clanNameOf(us));
             ds.flush();
 
             sendMessage(ms);
         } catch (IOException e) {
             e.printStackTrace();
         }
+    }
+
+    /** [PORT] Tên clan của user (rỗng nếu chưa có clan). */
+    private String clanNameOf(User us) {
+        try (java.sql.Connection c = avatar.db.DbManager.getInstance().getConnection();
+             java.sql.PreparedStatement ps = c.prepareStatement(
+                 "SELECT cl.name FROM clans cl JOIN clan_members cm"
+                 + " ON cm.clan_id = cl.id"
+                 + " WHERE cm.user_id = ? AND cm.accept = 1")) {
+            ps.setInt(1, us.getId());
+            java.sql.ResultSet rs = ps.executeQuery();
+            if (rs.next()) {
+                String n = rs.getString(1);
+                return n != null ? n : "";
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        return "";
     }
 
     /** [PORT] Hạng của cặp đôi của user trên bảng marry (theo cấp +

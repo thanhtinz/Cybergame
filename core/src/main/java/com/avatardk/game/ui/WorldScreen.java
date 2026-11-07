@@ -373,7 +373,7 @@ public class WorldScreen extends ScreenAdapter {
     // burger; 3 hàng Tên / Chỉ đường / Âm thanh với nút bước ‹ › hai bên
     // như gốc, nút "Xong" đóng và lưu (gốc lưu RMS khi đóng).
     private boolean settingsOpen = false;
-    private static final float SET_PW = 560f, SET_PH = 560f;
+    private static final float SET_PW = 560f, SET_PH = 484f;
     private static final float SET_PX = (Ui.W - SET_PW) / 2f, SET_PY = (Ui.H - SET_PH) / 2f;
 
     private float setRowCenter(int i) { return SET_PY + SET_PH - 118 - i * 76; }
@@ -526,15 +526,6 @@ public class WorldScreen extends ScreenAdapter {
 
     private PaperDoll playerDoll;
     private final AvatarAnimator playerAnim = new AvatarAnimator();
-    // ---- Nhân vật THỬ (sprite pixel mới, asset chủ dự án gửi
-    // 2026-11-06; sau này thay asset thật): hướng 8 chiều + nhún khi
-    // đi. drawingTrial dùng cơ chế cờ như drawingTitleId.
-    private boolean drawingTrial = false;
-    private boolean trialMoving = false;
-    private String trialDirName = "front";
-    /** Chỉ số hướng 16 nấc (sheet xoay chủ dự án gửi 2026-11-06):
-     *  0 = mặt trước, 4 = phải, 8 = lưng, 12 = trái; mỗi nấc 22.5°. */
-    private int trialDirIdx = 0;
     private float playerX = 200f, playerY = 150f; // medium, gốc trên–trái
 
     // Thông tin hiển thị trên card: mặc định là nhân vật mẫu "Sơn" (chế độ offline);
@@ -1777,7 +1768,7 @@ public class WorldScreen extends ScreenAdapter {
     }
 
     // --- Panel KHO nông trại ---
-    private static final float FK_PW = 800f, FK_PH = 560f;
+    private static final float FK_PW = 800f, FK_PH = 592f;
     private static final float FK_PX = (Ui.W - FK_PW) / 2f, FK_PY = (Ui.H - FK_PH) / 2f;
     private final java.util.List<float[]> farmSellBtns = new java.util.ArrayList<>();
 
@@ -2049,7 +2040,7 @@ public class WorldScreen extends ScreenAdapter {
     }
 
     // --- Panel CỬA HÀNG farm (mua hạt + vật phẩm) ---
-    private static final float FH_PW = 720f, FH_PH = 560f;
+    private static final float FH_PW = 720f, FH_PH = 604f;
     private static final float FH_PX = (Ui.W - FH_PW) / 2f, FH_PY = (Ui.H - FH_PH) / 2f;
     private final java.util.List<float[]> farmShopBtns = new java.util.ArrayList<>();
 
@@ -2369,7 +2360,7 @@ public class WorldScreen extends ScreenAdapter {
     // --- Panel NẤU ĂN (bếp) ---
     private boolean farmCookOpen;
     private int farmCookSel = 1;
-    private static final float FC_PW = 820f, FC_PH = 560f;
+    private static final float FC_PW = 820f, FC_PH = 592f;
     private static final float FC_PX = (Ui.W - FC_PW) / 2f, FC_PY = (Ui.H - FC_PH) / 2f;
     private final java.util.List<float[]> farmCookBtns = new java.util.ArrayList<>();
 
@@ -2422,7 +2413,9 @@ public class WorldScreen extends ScreenAdapter {
             topY -= 66f;
         }
         // Danh sách món: thẻ hàng 2 cột x 15 hàng, mỗi hàng có số phút nấu
-        float colW = 252f, rowH = 30f;
+        // (rowH 26: 15 hàng x 26 + dải bếp 66 + đầu 92 = 548 < FC_PH 592,
+        // hàng cuối không tràn đáy panel như bản rowH 30)
+        float colW = 252f, rowH = 26f;
         for (int i = 0; i < farm.foods.size(); i++) {
             FarmWorld.FoodDef f = farm.foods.get(i);
             int col = i / 15, row = i % 15;
@@ -3769,6 +3762,7 @@ public class WorldScreen extends ScreenAdapter {
                         partnerActId = -1;
                         partnerActName = null;
                         partnerCoupleTitle = 0;
+                        selfClanName = null;
                         try {
                             if (r.available() >= 4) {
                                 int pid = r.readInt();
@@ -3819,6 +3813,15 @@ public class WorldScreen extends ScreenAdapter {
                         // (1/2/3 = vàng/bạc/đồng Rank_Couple, 0 = không)
                         try {
                             if (r.available() >= 1) partnerCoupleTitle = r.readByte();
+                        } catch (Exception ignored) {
+                        }
+                        // Đuôi 4 [PORT]: UTF tên clan của mình — chỉ để
+                        // HIỂN THỊ thông tin ở panel nhân vật.
+                        try {
+                            if (r.available() >= 2) {
+                                String cn = r.readUTF();
+                                selfClanName = cn.isEmpty() ? null : cn;
+                            }
                         } catch (Exception ignored) {
                         }
                     } else {
@@ -6227,12 +6230,8 @@ public class WorldScreen extends ScreenAdapter {
                 charPanel = false;
                 return;
             }
-            // nút Clan ở header (bản Cards): mở panel clan
-            if (charVariant == 3 && x >= px + 210 && x <= px + 360
-                    && y >= py + 424 && y <= py + 462) {
-                openClanPanel();
-                return;
-            }
+            // (dải Clan ở header chỉ là THÔNG TIN tên clan — không
+            // bấm được; mở clan bằng ô Clan ở menu / NPC Hội Nhóm)
             // thanh tab Thông tin | Danh hiệu | Cặp Đôi (chỉ bản Cards)
             if (charVariant == 3 && y >= py + 378 && y <= py + 416) {
                 for (int t = 0; t < CHAR_TABS.length; t++) {
@@ -8500,11 +8499,12 @@ public class WorldScreen extends ScreenAdapter {
 
     private void drawMsgPanel() {
         msgScroll = MathUtils.clamp(msgScroll, 0f, msgMaxScroll());
-        batch.setColor(0f, 0f, 0f, 0.45f);
+        batch.setColor(0f, 0f, 0f, 0.62f);
         batch.draw(whiteTex, 0, 0, Ui.W, Ui.H);
         batch.setColor(Color.WHITE);
         float px = MSG_PX, py = MSG_PY, top = py + MSG_PH;
-        batch.draw(Ui.roundedRect((int) MSG_PW, (int) MSG_PH, 16, GLASS_FILL_DARK, GLASS_RIM), px, py);
+        batch.draw(Ui.roundedRect((int) MSG_PW, (int) MSG_PH, 16,
+            new Color(0.04f, 0.08f, 0.14f, 0.98f), GLASS_RIM), px, py);
         Ui.faIcon(batch, Ui.fa26, Ui.FA_ENVELOPE, px + 40, top - 36, new Color(1f, 0.85f, 0.45f, 1f));
         Ui.fontTitle.setColor(1f, 0.85f, 0.45f, 1f);
         Ui.fontTitle.draw(batch, "Tin nhắn", px + 64, top - 27);
@@ -9017,10 +9017,11 @@ public class WorldScreen extends ScreenAdapter {
 
     private void drawMailPanel() {
         float px = (Ui.W - ML_PW) / 2f, py = (Ui.H - ML_PH) / 2f, top = py + ML_PH;
-        batch.setColor(0f, 0f, 0f, 0.45f);
+        batch.setColor(0f, 0f, 0f, 0.62f);
         batch.draw(whiteTex, 0, 0, Ui.W, Ui.H);
         batch.setColor(Color.WHITE);
-        batch.draw(Ui.roundedRect((int) ML_PW, (int) ML_PH, 16, GLASS_FILL_DARK, GLASS_RIM), px, py);
+        batch.draw(Ui.roundedRect((int) ML_PW, (int) ML_PH, 16,
+            new Color(0.04f, 0.08f, 0.14f, 0.98f), GLASS_RIM), px, py);
         // header kiểu panel Bạn bè: icon vàng + tiêu đề vàng + số thư
         Ui.faIcon(batch, Ui.fa26, Ui.FA_ENVELOPE, px + 40, top - 36,
             new Color(1f, 0.85f, 0.45f, 1f));
@@ -9388,6 +9389,9 @@ public class WorldScreen extends ScreenAdapter {
     /** [PORT] Huy chương cặp đôi top BXH (Rank_Couple bản chính):
      *  1 vàng, 2 bạc, 3 đồng, 0 = không có. */
     private int partnerCoupleTitle = 0;
+    /** [PORT] Tên clan của mình (đuôi gói −22) — chỉ hiển thị
+     *  thông tin ở header panel nhân vật, KHÔNG phải nút mở clan. */
+    private String selfClanName;
     private PaperDoll partnerDoll;
 
     private void openCharPanel() {
@@ -9626,19 +9630,8 @@ public class WorldScreen extends ScreenAdapter {
         }
         batch.draw(circleTexture(), cx + 92 - 46, stY + 5, 92, 14);
         batch.setColor(Color.WHITE);
-        if (com.avatardk.game.data.GameSettings.trialChar) {
-            Texture tt = trialTex("front");
-            if (tt != null && tt.getWidth() > 0) {
-                float th2 = 110f, tw2 = th2 * tt.getWidth() / tt.getHeight();
-                batch.draw(tt, cx - 92 - tw2 / 2f, floorY, tw2, th2);
-            } else {
-                game.dollRenderer.draw(batch, playerDoll, playerAnim.frameIndex(),
-                    cx - 92, floorY, 2.9f, false);
-            }
-        } else {
-            game.dollRenderer.draw(batch, playerDoll, playerAnim.frameIndex(),
-                cx - 92, floorY, 2.9f, false);
-        }
+        game.dollRenderer.draw(batch, playerDoll, playerAnim.frameIndex(),
+            cx - 92, floorY, 2.9f, false);
         if (!single) {
             game.dollRenderer.draw(batch, partnerDoll, playerAnim.frameIndex(),
                 cx + 92, floorY, 2.9f, true);
@@ -9842,18 +9835,7 @@ public class WorldScreen extends ScreenAdapter {
         ScissorStack.calculateScissors(hudViewport.getCamera(), batch.getTransformMatrix(), clip, scissors);
         batch.flush();
         if (ScissorStack.pushScissors(scissors)) {
-            Texture at = null;
-            if (com.avatardk.game.data.GameSettings.trialChar) {
-                at = trialTex("front");
-            }
-            if (at != null && at.getWidth() > 0) {
-                // mặt ở 56% chiều cao sprite đo từ đáy (đo pixel
-                // trên front.png) — neo để tâm mặt trùng tâm vòng
-                float ah = 165f, aw = ah * at.getWidth() / at.getHeight();
-                batch.draw(at, avCx - aw / 2f, avCy - 95, aw, ah);
-            } else {
-                game.dollRenderer.draw(batch, playerDoll, playerAnim.frameIndex(), feetX, feetY, unit, false);
-            }
+            game.dollRenderer.draw(batch, playerDoll, playerAnim.frameIndex(), feetX, feetY, unit, false);
             batch.flush();
             ScissorStack.popScissors();
         }
@@ -9874,20 +9856,38 @@ public class WorldScreen extends ScreenAdapter {
             new Color(0.30f, 0.16f, 0.02f, 1f));
         Ui.fontSmall.setColor(1f, 1f, 1f, 0.92f);
         Ui.fontSmall.draw(batch, st != null ? "" + st[0] : "—", px + 162, avCy - 18);
+        // THÔNG TIN clan (lệnh Tín 2026-11-06): chỉ hiện TÊN clan
+        // dạng thông tin ở header — KHÔNG phải nút mở clan (điểm vào
+        // clan là ô Clan ở menu burger + NPC Hội Nhóm).
+        {
+            Texture clIc = null;
+            if (selfClanName != null && game.player != null
+                    && game.player.clanIcon >= 0 && game.player.clanIcon <= 3) {
+                clIc = game.texture("clan/logo-" + game.player.clanIcon + ".png");
+            }
+            if (clIc == null) clIc = game.texture("iconmenu/clan.png");
+            if (selfClanName != null) {
+                batch.setColor(1f, 1f, 1f, 1f);
+                batch.draw(clIc, px + 204, py + 428, 30, 30);
+                Ui.fontTiny.setColor(1f, 1f, 1f, 0.60f);
+                Ui.fontTiny.draw(batch, "Clan:", px + 244, py + 456);
+                Ui.fontSmall.setColor(1f, 0.83f, 0.38f, 1f);
+                Ui.fontSmall.draw(batch,
+                    truncTo(Ui.fontSmall, selfClanName, 168), px + 244, py + 436);
+                Ui.fontSmall.setColor(Color.WHITE);
+            } else {
+                batch.setColor(1f, 1f, 1f, 0.45f);
+                batch.draw(clIc, px + 204, py + 428, 30, 30);
+                batch.setColor(Color.WHITE);
+                Ui.fontSmall.setColor(1f, 1f, 1f, 0.45f);
+                Ui.fontSmall.draw(batch, "Chưa có clan", px + 244, py + 441);
+                Ui.fontSmall.setColor(Color.WHITE);
+            }
+        }
         // phía trên dòng người yêu: ngày vào game (đuôi mở rộng gói −22),
         // canh phải thẳng hàng với dòng người yêu ở dưới
         if (selfJoinDate != null) {
             batch.setColor(1f, 1f, 1f, 0.22f);
-            // nút CLAN dưới khối ngày vào game: icon clan GỐC
-            // (cl00 — mây logo clan) + chữ Clan; điểm vào clan
-            // thay ô menu (đã gỡ khỏi menu theo lệnh Tín)
-            batch.draw(Ui.roundedRect(150, 38, 12, GLASS_FILL, GLASS_RIM),
-                px + 210, py + 424);
-            Texture clIc = game.texture("iconmenu/clan.png");
-            batch.draw(clIc, px + 220, py + 430, 26, 26);
-            Ui.fontSmall.setColor(1f, 1f, 1f, 0.95f);
-            Ui.fontSmall.draw(batch, "Clan", px + 254, py + 449);
-            Ui.fontSmall.setColor(Color.WHITE);
             batch.draw(whiteTex, px + 424, avCy - 30, 2, 56);
             batch.setColor(Color.WHITE);
             Ui.faIcon(batch, Ui.fa30, Ui.FA_CALENDAR, px + 460, avCy + 2,
@@ -11322,25 +11322,6 @@ public class WorldScreen extends ScreenAdapter {
 
     public void debugCloseCoupleBoard() { cpBoardOpen = false; charPanel = false; }
 
-    /** Pose nhân vật thử cho tour chụp: hướng chéo + đang di chuyển. */
-    public void debugTrialPose() {
-        trialDirName = "front_right";
-        trialDirIdx = 2;
-        trialMoving = true;
-    }
-
-    /** Pose nhân vật thử NỮ cho tour chụp (ép cờ nữ bất kể doll mẫu). */
-    public void debugTrialFemalePose() {
-        rankOpen = false; // stage 173 de lai panel BXH mo chong
-        weddingOn = false; // cuoi/cau ca nhường doll chuyen dung -> tat
-        fishState = FISH_NONE;
-        trialFemaleFlag = true;
-        // dung yen nhin tu sau lung: kiem sprite d8 cua sheet xoay 16 huong
-        trialDirName = "back";
-        trialDirIdx = 8;
-        trialMoving = false;
-    }
-
     /** Doll đối tác mặc bộ đồ MỚI nhập từ bản chính (Chú thuật hồi
      *  chiến, part 7064-7067) — kiểm ảnh/atlas của kho part mới. */
     public void debugPartnerNewSet() {
@@ -11459,7 +11440,6 @@ public class WorldScreen extends ScreenAdapter {
             moving = false;
             mx = 0f; my = 0f;
         }
-        trialMoving = false;
         if (moving) {
             mx /= Math.max(1f, len); my /= Math.max(1f, len);
             // di chuyển tách trục + va chạm: trục nào đụng vật thể thì
@@ -11474,10 +11454,6 @@ public class WorldScreen extends ScreenAdapter {
             if (canStand(playerX, ny)) playerY = ny;
             else tryPortal(playerX, ny);
             if (Math.abs(mx) > 0.05f) playerAnim.facingLeft = mx < 0;
-            trialMoving = true;
-            trialDirName = trialDirFor(mx, my);
-            trialDirIdx = ((int) Math.round(
-                Math.toDegrees(Math.atan2(mx, my)) / 22.5)) & 15;
             // di chuyển huỷ mọi tư thế hành động (đúng gốc)
             playerPose = 0;
             playerJumpT = -1f;
@@ -11903,8 +11879,6 @@ public class WorldScreen extends ScreenAdapter {
                     drawingTitleId = myTitleId;
                     drawingClanIcon = myClanIconSv >= 0 ? myClanIconSv
                         : (game.player != null ? game.player.clanIcon : -1);
-                    drawingTrial = com.avatardk.game.data.GameSettings.trialChar
-                        && fishState == FISH_NONE && !weddingOn;
                     drawFigure(pdoll, playerAnim, pDrawX, pDrawY, displayName, true);
                     if (chatBubble != null) {
                         drawBubble(pdoll, playerAnim, playerFeetX,
@@ -12011,90 +11985,6 @@ public class WorldScreen extends ScreenAdapter {
         batch.end();
     }
 
-    /** Hướng 8 chiều cho nhân vật thử từ vector di chuyển (my > 0 =
-     *  đi xuống màn hình = hướng mặt về người xem). */
-    private static String trialDirFor(float mx, float my) {
-        float ax = Math.abs(mx), ay = Math.abs(my);
-        if (ax > ay * 1.4f) return mx < 0 ? "left" : "right";
-        if (ay > ax * 1.4f) return my > 0 ? "front" : "back";
-        if (my > 0) return mx < 0 ? "front_left" : "front_right";
-        return mx < 0 ? "back_left" : "back_right";
-    }
-
-    private Texture trialTexture() {
-        return trialTex(trialDirName);
-    }
-
-    /** Nhân vật thử NỮ (asset chủ dự án gửi 2026-11-06): dùng khi
-     *  nhân vật của mình là nữ (gender == 2); forceTrialFemale chỉ
-     *  để tour chụp kiểm chứng. */
-    private boolean trialFemaleFlag = false;
-
-    private boolean trialFemale() {
-        return trialFemaleFlag
-            || (game.player != null && game.player.gender == 2);
-    }
-
-    private Texture trialTex(String name) {
-        try {
-            Texture t = game.texture("trialchar/"
-                + (trialFemale() ? "f/" : "") + name + ".png");
-            return t != null && t.getWidth() > 0 ? t : null;
-        } catch (Exception e) {
-            return null;
-        }
-    }
-
-    /** Vẽ nhân vật thử tại chân (feetX, feetY): sprite theo hướng,
-     *  nhún nhẹ khi di chuyển + bóng chân. Trả chiều cao đã dùng. */
-    private float drawTrialFigure(float feetX, float feetY) {
-        // Asset mới (chủ dự án gửi bản nét 2026-11-06): có chu kỳ
-        // Walk 8 frame + Idle 8 frame. Đi lên (hướng back*) dùng
-        // sprite hướng + nhún; đi các hướng còn lại chạy Walk (bản
-        // lật ngang walkr* khi đi sang phải). Đứng hướng trước chạy
-        // Idle chậm.
-        Texture t;
-        float bob = 0f;
-        long now = System.currentTimeMillis();
-        // Sprite tĩnh theo 16 hướng (d<idx>): dùng cho nửa lưng
-        // (idx 5..11) ở cả hai bộ nam/nữ — phần trước chạy Idle/Walk
-        // (walk nữ gốc hướng PHẢI, walkr là bản lật — ngược bộ nam).
-        boolean fem = trialFemale();
-        boolean up = trialDirIdx >= 5 && trialDirIdx <= 11;
-        if (trialMoving && !up) {
-            int f = (int) (now / 90) % 8;
-            boolean rightish = trialDirName.equals("right")
-                || trialDirName.equals("front_right");
-            String pref;
-            if (fem) {
-                pref = trialDirName.contains("left") ? "walkr" : "walk";
-            } else {
-                pref = rightish ? "walkr" : "walk";
-            }
-            t = trialTex(pref + f);
-            if (t == null) t = trialTexture();
-        } else if (!trialMoving && !up) {
-            int f = (int) (now / 260) % 8;
-            t = trialTex("idle" + f);
-            if (t == null) t = trialTexture();
-        } else {
-            t = trialTex("d" + trialDirIdx);
-            if (t == null) t = trialTexture();
-            if (trialMoving) {
-                bob = Math.abs((float) Math.sin(now / 85.0)) * 5f;
-            }
-        }
-        // Cao bằng nhân vật doll gốc (đo trên bản dựng: doll ~68px)
-        // — lệnh chủ dự án 2026-11-06, bản thử 114px trông quá khổ.
-        float th = 68f;
-        float tw = th * t.getWidth() / t.getHeight();
-        batch.setColor(0f, 0f, 0f, 0.30f);
-        batch.draw(circleTexture(), feetX - 26, feetY - 4, 52, 9);
-        batch.setColor(Color.WHITE);
-        batch.draw(t, feetX - tw / 2f, feetY + bob, tw, th);
-        return th;
-    }
-
     private void drawFigure(PaperDoll doll, AvatarAnimator anim, float feetX, float feetY, String name, boolean isPlayer) {
         // tên trên đầu: người chơi màu đỏ, NPC màu vàng — đúng Avatar.paintName của gốc
         drawFigure(doll, anim, feetX, feetY, name,
@@ -12160,15 +12050,10 @@ public class WorldScreen extends ScreenAdapter {
     private void drawFigure(PaperDoll doll, AvatarAnimator anim, float feetX, float feetY, String name, Color nameColor) {
         int frame = anim.frameIndex();
         float topY;
-        if (drawingTrial && trialTexture() != null) {
-            topY = feetY + drawTrialFigure(feetX, feetY);
-        } else {
-            game.dollRenderer.draw(batch, doll, frame, feetX, feetY, AvatarDkGame.HD, anim.facingLeft);
-            topY = feetY + game.dollRenderer.heightPx(doll, frame, AvatarDkGame.HD);
-        }
+        game.dollRenderer.draw(batch, doll, frame, feetX, feetY, AvatarDkGame.HD, anim.facingLeft);
+        topY = feetY + game.dollRenderer.heightPx(doll, frame, AvatarDkGame.HD);
         if (name == null) {
             drawingTitleId = 0;
-            drawingTrial = false;
             return; // cài đặt "Tên: ẩn" — nơi gọi truyền null cho người khác/NPC
         }
         NameTag tag = new NameTag();
@@ -12182,7 +12067,6 @@ public class WorldScreen extends ScreenAdapter {
         nameTags.add(tag);
         drawingClanIcon = -1;
         drawingTitleId = 0;
-        drawingTrial = false;
     }
 
     /** Danh hiệu của một doll đang vẽ: chính mình dùng myTitleId,
@@ -12719,8 +12603,8 @@ public class WorldScreen extends ScreenAdapter {
             SET_PX + SET_PW - 54, SET_PY + SET_PH - 54);
         Ui.faIcon(batch, Ui.fa20, Ui.FA_XMARK, SET_PX + SET_PW - 36, SET_PY + SET_PH - 36,
             new Color(1f, 1f, 1f, 0.9f));
-        String[] labels = {"Tên", "Chỉ đường", "Âm thanh", "Đổi mật khẩu", "Giftcode", "Nhân vật mới"};
-        for (int i = 0; i < 6; i++) {
+        String[] labels = {"Tên", "Chỉ đường", "Âm thanh", "Đổi mật khẩu", "Giftcode"};
+        for (int i = 0; i < 5; i++) {
             float cy = setRowCenter(i);
             if (i > 0) {
                 batch.draw(Ui.roundedRect((int) SET_PW - 48, 2, 1,
@@ -12744,7 +12628,6 @@ public class WorldScreen extends ScreenAdapter {
     private boolean setRowOn(int i) {
         if (i == 0) return com.avatardk.game.data.GameSettings.showName;
         if (i == 1) return com.avatardk.game.data.GameSettings.showDir;
-        if (i == 5) return com.avatardk.game.data.GameSettings.trialChar;
         return com.avatardk.game.data.GameSettings.volume > 0;
     }
 
@@ -12753,7 +12636,7 @@ public class WorldScreen extends ScreenAdapter {
     private void drawSetToggle(int i, float cy) {
         boolean on = setRowOn(i);
         float cx = SET_PX + SET_PW - 70;
-        String st = (i == 2 || i == 5) ? (on ? "bật" : "tắt") : (on ? "hiện" : "ẩn");
+        String st = i == 2 ? (on ? "bật" : "tắt") : (on ? "hiện" : "ẩn");
         layout.setText(Ui.fontSmall, st);
         Ui.fontSmall.setColor(on ? new Color(0.55f, 0.95f, 0.60f, 1f)
             : new Color(0.62f, 0.65f, 0.70f, 1f));
@@ -12780,9 +12663,6 @@ public class WorldScreen extends ScreenAdapter {
         } else if (row == 1) {
             com.avatardk.game.data.GameSettings.showDir =
                 !com.avatardk.game.data.GameSettings.showDir;
-        } else if (row == 5) {
-            com.avatardk.game.data.GameSettings.trialChar =
-                !com.avatardk.game.data.GameSettings.trialChar;
         } else if (row == 2) {
             if (com.avatardk.game.data.GameSettings.volume > 0) {
                 com.avatardk.game.data.GameSettings.lastVolume =
@@ -12803,9 +12683,9 @@ public class WorldScreen extends ScreenAdapter {
             closeSettings();
             return;
         }
-        for (int i = 0; i < 6; i++) {
+        for (int i = 0; i < 5; i++) {
             if (Math.abs(y - setRowCenter(i)) <= 36) {
-                if (i < 3 || i == 5) {
+                if (i < 3) {
                     applySettingsToggle(i);
                 } else if (i == 3) {
                     openPassForm();
@@ -15613,26 +15493,26 @@ public class WorldScreen extends ScreenAdapter {
         Ui.font.draw(batch, "Góp quỹ clan", x, contentTop - 10);
         Ui.fontSmall.setColor(0.85f, 0.92f, 1f, 1f);
         Ui.fontSmall.draw(batch, "Bạn đã góp: " + fmtMoney(clanMyDonXu) + " xu · "
-            + fmtMoney(clanMyDonLuong) + " lượng", x, contentTop - 40);
+            + fmtMoney(clanMyDonLuong) + " lượng", x, contentTop - 38);
         Ui.fontSmall.setColor(Color.WHITE);
-        // hàng chọn mức góp
-        float ry = contentTop - 88;
+        // hàng chọn mức góp (đẩy xuống cho khỏi đè dòng "Bạn đã góp")
+        float ry = contentTop - 102;
         Ui.fontSmall.draw(batch, "Xu góp:", x, ry + 24);
         int[] xuSteps = {10000, 50000, 100000};
         for (int i = 0; i < xuSteps.length; i++) {
             clanBtn(x + 130 + i * 150, ry, 138, 42, "+" + fmtMoney(xuSteps[i]),
                 clanDonXu == xuSteps[i] ? 1 : 0);
         }
-        float ry2 = ry - 56;
+        float ry2 = ry - 54;
         Ui.fontSmall.draw(batch, "Lượng góp:", x, ry2 + 24);
         int[] lgSteps = {10, 50, 100};
         for (int i = 0; i < lgSteps.length; i++) {
             clanBtn(x + 130 + i * 150, ry2, 138, 42, "+" + lgSteps[i],
                 clanDonLuong == lgSteps[i] ? 1 : 0);
         }
-        clanBtn(x, ry2 - 62, 200, 48, "Góp quỹ", clanDonXu > 0 || clanDonLuong > 0 ? 1 : 3);
+        clanBtn(x, ry2 - 58, 200, 48, "Góp quỹ", clanDonXu > 0 || clanDonLuong > 0 ? 1 : 3);
         // khối cấp clan
-        float ly = ry2 - 136;
+        float ly = ry2 - 128;
         Ui.font.draw(batch, "Cấp clan", x, ly);
         if (clanLevelInfo != null) {
             Ui.fontSmall.setColor(0.85f, 0.92f, 1f, 1f);
@@ -15985,7 +15865,7 @@ public class WorldScreen extends ScreenAdapter {
     private boolean clanFundTouch(float x, float y, float px, float contentTop)
             throws java.io.IOException {
         float fx = px + 40;
-        float ry = contentTop - 88;
+        float ry = contentTop - 102;
         int[] xuSteps = {10000, 50000, 100000};
         for (int i = 0; i < xuSteps.length; i++) {
             if (inRect(x, y, fx + 130 + i * 150, ry, 138, 42)) {
@@ -15993,7 +15873,7 @@ public class WorldScreen extends ScreenAdapter {
                 return true;
             }
         }
-        float ry2 = ry - 56;
+        float ry2 = ry - 54;
         int[] lgSteps = {10, 50, 100};
         for (int i = 0; i < lgSteps.length; i++) {
             if (inRect(x, y, fx + 130 + i * 150, ry2, 138, 42)) {
@@ -16001,13 +15881,13 @@ public class WorldScreen extends ScreenAdapter {
                 return true;
             }
         }
-        if (inRect(x, y, fx, ry2 - 62, 200, 48) && (clanDonXu > 0 || clanDonLuong > 0)) {
+        if (inRect(x, y, fx, ry2 - 58, 200, 48) && (clanDonXu > 0 || clanDonLuong > 0)) {
             AvatarProtocol.clanDonate(game.connection, clanDonXu, clanDonLuong);
             clanDonXu = 0;
             clanDonLuong = 0;
             return true;
         }
-        float ly = ry2 - 136;
+        float ly = ry2 - 128;
         if (clanLevelInfo != null && inRect(x, y, fx, ly - 122, 220, 48)) {
             boolean canUp = clanRole >= 1 && clanLevelInfo[1] >= clanLevelInfo[2]
                 && clanFundXu >= clanLevelInfo[3] && clanFundLuong >= clanLevelInfo[4];
@@ -17111,9 +16991,9 @@ public class WorldScreen extends ScreenAdapter {
         int infoX = px + 28 + 7 * (cw + gap) + 16;
         int infoW = px + DL_PW - 28 - infoX;
         Ui.font.setColor(Color.WHITE);
-        Ui.font.draw(batch, "Điểm chuyên cần: " + dlTotalPoint, infoX, gy - 8);
+        Ui.font.draw(batch, "Điểm chuyên cần: " + dlTotalPoint, infoX, gy + 2);
         Ui.fontSmall.setColor(1f, 1f, 1f, 0.78f);
-        Ui.fontSmall.draw(batch, "Đã báo danh: " + dlDayCount + " ngày", infoX, gy - 36);
+        Ui.fontSmall.draw(batch, "Đã báo danh: " + dlDayCount + " ngày", infoX, gy - 26);
         if (!dlTodayDone) {
             mkBtn(infoX, gy - 96, infoW, 46, "Báo danh hôm nay", 1);
         } else {
@@ -17377,11 +17257,11 @@ public class WorldScreen extends ScreenAdapter {
         Ui.font.draw(batch, "Lịch sử đấu giá", hx, cy + 196);
         if (aucHist.isEmpty()) {
             Ui.fontSmall.setColor(1f, 1f, 1f, 0.7f);
-            Ui.fontSmall.draw(batch, "Chưa có phiên nào kết thúc.", hx, cy + 160);
+            Ui.fontSmall.draw(batch, "Chưa có phiên nào kết thúc.", hx, cy + 148);
         }
         for (int i = 0; i < aucHist.size() && i < 6; i++) {
             AucHist h = aucHist.get(i);
-            int yy = cy + 168 - i * 52;
+            int yy = cy + 156 - i * 52;
             drawPartIcon(h.partId, hx + 20, yy - 8, 30);
             Ui.fontSmall.setColor(Color.WHITE);
             Ui.fontSmall.draw(batch, truncTo(Ui.fontSmall, h.winner, 130), hx + 44, yy + 8);
@@ -20352,9 +20232,10 @@ public class WorldScreen extends ScreenAdapter {
                 new Color(0.10f, 0.16f, 0.24f, 0.97f), GLASS_RIM), cx, cy);
             Ui.font.setColor(1f, 0.85f, 0.38f, 1f);
             Ui.font.draw(batch, "Bàn " + (b.id + 1), cx + 20, cTop - 38);
-            String badge = b.playing ? "Đang chơi" : b.pass ? "Có mật khẩu" : "";
+            String badge = b.n >= 5 ? "Bàn đầy" : b.playing ? "Đang chơi" : b.pass ? "Có mật khẩu" : "";
             if (!badge.isEmpty()) {
-                Ui.fontTiny.setColor(1f, 0.75f, 0.4f, 1f);
+                Ui.fontTiny.setColor(b.n >= 5 ? new Color(1f, 0.6f, 0.5f, 1f)
+                    : new Color(1f, 0.75f, 0.4f, 1f));
                 layout.setText(Ui.fontTiny, badge);
                 Ui.fontTiny.draw(batch, badge, cx + cw - 20 - layout.width, cTop - 36);
             }
@@ -20366,12 +20247,12 @@ public class WorldScreen extends ScreenAdapter {
                 ? "Mức cược: " + fmtMoney(b.money) + " xu / đơn vị" : "Mức cược: chưa đặt",
                 cx + 20, cTop - 122);
             if (b.n >= 5) {
+                // bàn đầy: phủ mờ cả thẻ (nhãn "Bàn đầy" đã nằm cùng hàng
+                // huy hiệu góc trên-phải với các bàn khác)
                 batch.setColor(0f, 0f, 0f, 0.45f);
                 batch.draw(Ui.roundedRect((int) cw, (int) chh, 14,
                     new Color(0f, 0f, 0f, 0.45f), GLASS_RIM), cx, cy);
                 batch.setColor(Color.WHITE);
-                Ui.centered(batch, Ui.font, "Bàn đầy", cx + cw / 2f, cy + 100,
-                    new Color(1f, 0.6f, 0.5f, 1f));
             }
         }
         if (!csStatus.isEmpty()) {
@@ -27385,6 +27266,7 @@ public class WorldScreen extends ScreenAdapter {
         partnerActId = 37;
         partnerActName = "Chia tay";
         partnerCoupleTitle = 1; // huy chương vàng Rank_Couple
+        selfClanName = "Hội Mặt Trời"; // thông tin clan ở header
         charPanel = true;
         charVariant = 3;
         charTab = 2;

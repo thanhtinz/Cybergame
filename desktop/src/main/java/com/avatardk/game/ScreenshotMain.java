@@ -449,6 +449,11 @@ public class ScreenshotMain {
                                 // đuôi mở rộng: short cấp của mình + UTF ngày vào game
                                 w.writeShort(50);
                                 w.writeUTF("12/09/2024");
+                                // đuôi 2/3/4: ngày quan hệ + huy chương
+                                // cặp đôi + tên clan (thông tin header)
+                                w.writeUTF("14/02/2025");
+                                w.writeByte(1);
+                                w.writeUTF("Hội Mặt Trời");
                                 w.flush();
                                 world.debugInjectNet((byte) -22, bos.toByteArray());
                             } catch (java.io.IOException ioe) {
@@ -1569,19 +1574,11 @@ public class ScreenshotMain {
                         break;
                     case 170: // Doll mặc bộ đồ mới nhập (Chú thuật + nón quỷ)
                         if (frame == 1) world.debugPartnerNewSet();
-                        if (frame == 15) { shot("shot-new-outfit.png"); stage = 172; frame = 0; }
-                        break;
-                    case 172: // Nhân vật THỬ trong thế giới (hướng chéo)
-                        if (frame == 1) { world.debugCloseCoupleBoard(); world.debugTrialPose(); }
-                        if (frame == 15) { shot("shot-trial-char.png"); stage = 173; frame = 0; }
+                        if (frame == 15) { shot("shot-new-outfit.png"); stage = 173; frame = 0; }
                         break;
                     case 173: // Panel Bang xep hang tong hop (o BXH trong menu)
                         if (frame == 1) { world.debugCloseCoupleBoard(); world.debugOpenRank(); }
-                        if (frame == 15) { shot("shot-rank.png"); stage = 174; frame = 0; }
-                        break;
-                    case 174: // Nhan vat thu NU trong the gioi (huong cheo)
-                        if (frame == 1) { world.debugCloseCoupleBoard(); world.debugTrialFemalePose(); }
-                        if (frame == 15) { shot("shot-trial-female.png"); stage = 175; frame = 0; }
+                        if (frame == 15) { shot("shot-rank.png"); stage = 175; frame = 0; }
                         break;
                     case 175: // Bang Tai Xiu [PORT] (menu NPC Than Tai 864)
                         if (frame == 1) { world.debugCloseCoupleBoard(); world.debugOpenTaixiu(); }
