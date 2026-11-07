@@ -2438,12 +2438,12 @@ public class WorldScreen extends ScreenAdapter {
             drawProductIcon(f.productId, fpd, rx + 11, ry + 11, 34);
             Ui.fontSmall.setColor(1f, 1f, 1f, 0.97f);
             Ui.fontSmall.draw(batch, truncTo(Ui.fontSmall, f.name, colW - 64),
-                rx + 56, ry + 39);
+                rx + 56, ry + 45);
             String sub = f.cookMinutes + " phút"
                 + (fpd != null && fpd.priceXu > 0 ? " · " + fmtMoney(fpd.priceXu) + " xu" : "");
             Ui.fontTiny.setColor(selected ? new Color(1f, 1f, 1f, 0.85f)
                 : new Color(1f, 0.85f, 0.38f, 1f));
-            Ui.fontTiny.draw(batch, truncTo(Ui.fontTiny, sub, colW - 64), rx + 56, ry + 18);
+            Ui.fontTiny.draw(batch, truncTo(Ui.fontTiny, sub, colW - 64), rx + 56, ry + 24);
             Ui.fontTiny.setColor(Color.WHITE);
             Ui.fontSmall.setColor(Color.WHITE);
             farmCookBtns.add(new float[]{rx, ry, colW, cardH, f.id});
@@ -2470,10 +2470,10 @@ public class WorldScreen extends ScreenAdapter {
             // để cạnh nhau sẽ đè chữ (đã dính khi chụp kiểm chứng).
             Ui.faIcon(batch, Ui.fa20, Ui.FA_CLOCK, dx + 102, cy - 36, new Color(1f, 0.85f, 0.38f, 1f));
             Ui.fontSmall.setColor(1f, 1f, 1f, 0.85f);
-            Ui.fontSmall.draw(batch, sel.cookMinutes + " phút", dx + 118, cy - 30);
+            Ui.fontSmall.draw(batch, sel.cookMinutes + " phút", dx + 118, cy - 32);
             if (pd != null && pd.priceXu > 0) {
                 Ui.faIcon(batch, Ui.fa20, Ui.FA_COINS, dx + 102, cy - 62, new Color(1f, 0.85f, 0.38f, 1f));
-                Ui.fontSmall.draw(batch, fmtMoney(pd.priceXu) + " xu", dx + 118, cy - 56);
+                Ui.fontSmall.draw(batch, fmtMoney(pd.priceXu) + " xu", dx + 118, cy - 58);
             }
             Ui.fontSmall.setColor(Color.WHITE);
             float my = cy - 92f;
@@ -2498,7 +2498,7 @@ public class WorldScreen extends ScreenAdapter {
                 float pillW = layout.width + 18f;
                 Ui.fontSmall.setColor(1f, 1f, 1f, 0.95f);
                 Ui.fontSmall.draw(batch,
-                    truncTo(Ui.fontSmall, mn, dw - 24 - pillW - 52), dx + 44, my + 8);
+                    truncTo(Ui.fontSmall, mn, dw - 24 - pillW - 52), dx + 44, my + 10);
                 drawFarmQtyPill(dx + dw - 24, my + 7, hv);
             }
             Ui.fontSmall.setColor(Color.WHITE);
