@@ -45,6 +45,15 @@ def call(method, url, token, payload=None, tries=4):
     raise last
 
 
+def save_state(entries):
+    # ghi nguyen tu: file tam + rename, tien trinh bi giet giua chung
+    # khong pha cache cu (ban truoc ghi thang lam STATE thanh 0 byte)
+    tmp = STATE + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(entries, f)
+    os.replace(tmp, STATE)
+
+
 def main():
     message = sys.argv[1] if len(sys.argv) > 1 else "Cap nhat ban web"
     token = subprocess.run(["gh", "auth", "token"], capture_output=True,
@@ -62,11 +71,16 @@ def main():
 
     entries = []
     if os.path.exists(STATE):
-        with open(STATE, encoding="utf-8") as f:
-            saved = json.load(f)
-        if [e["path"] for e in saved] == [p for p, _ in paths]:
-            entries = saved
-            print("reuse saved entries:", len(entries))
+        try:
+            with open(STATE, encoding="utf-8") as f:
+                saved = json.load(f)
+            if [e["path"] for e in saved] == [p for p, _ in paths]:
+                entries = saved
+                print("reuse saved entries:", len(entries))
+        except Exception as e:
+            # cache hong (file 0 byte do ghi do dang bi giet) — bo qua,
+            # upload lai tu dau thay vi chet ngay (vap 2026-11-07)
+            print("saved entries unreadable, start fresh:", e)
     if not entries:
         for i, (rel, full) in enumerate(paths):
             with open(full, "rb") as f:
@@ -77,10 +91,8 @@ def main():
                             "sha": blob["sha"]})
             if (i + 1) % 50 == 0:
                 print("  blobs", i + 1, "/", len(paths), flush=True)
-                with open(STATE, "w", encoding="utf-8") as f:
-                    json.dump(entries, f)
-        with open(STATE, "w", encoding="utf-8") as f:
-            json.dump(entries, f)
+                save_state(entries)
+        save_state(entries)
 
     all_entries = entries + [{"path": ".nojekyll", "mode": "100644",
                               "type": "blob", "content": ""}]
