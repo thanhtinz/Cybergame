@@ -967,7 +967,7 @@ i:trialchar/d13.png:trialchar/d13-af923674ed49dbb90d488bf01bd9c660.png:70465:ima
 i:trialchar/d14.png:trialchar/d14-d17d105ccdb24ca9996d5398f33d41f7.png:80112:image/png:1
 i:trialchar/d15.png:trialchar/d15-3394be592e2ecc018408beae9e03aa51.png:79708:image/png:1
 d:npc:npc:0:application/unknown:1
-i:npc/chaxu.png:npc/chaxu-ca5276358b3b09b0c6dd6cbfeb3174ab.png:19273:image/png:1
+i:npc/chaxu.png:npc/chaxu-82a1200da0420acafee10540f6d2806d.png:3844:image/png:1
 t:com/badlogic/gdx/graphics/g3d/particles/particles.fragment.glsl:particles.fragment-b90524761fdf09b0a836056d590c30b8.glsl:820:application/unknown:1
 t:com/badlogic/gdx/graphics/g3d/particles/particles.vertex.glsl:particles.vertex-f25b8b2fae10b9bfa09bfdd484923148.glsl:2886:application/unknown:1
 t:com/badlogic/gdx/graphics/g3d/shaders/default.fragment.glsl:default.fragment-e1c018bd48044c8b67c7bbc53145e540.glsl:5874:application/unknown:1
