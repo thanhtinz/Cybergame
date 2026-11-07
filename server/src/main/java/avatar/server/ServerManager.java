@@ -237,6 +237,8 @@ public class ServerManager {
             ServerManager.numClients = 0;
             ServerManager.start = true;
             System.out.println("Start server Success !");
+            // Cổng WebSocket cho bản web (cổng game + 2), cùng tiến trình
+            WsServer.start(ServerManager.port + 2);
             List<Integer> mapIds = List.of(11, 1, 7, 2, 3, 5, 8);
             for (int mapId : mapIds) {
                 Boss.spawnBossesForMap(mapId, 2);

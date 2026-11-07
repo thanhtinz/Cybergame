@@ -89,13 +89,20 @@ public class Session implements ISession {
     private static final long ACTION_COOLDOWN_MS = 100; //
 
     public Session(Socket sc, int id) throws IOException {
+        this(sc.getInputStream(), sc.getOutputStream(), id,
+            ((InetSocketAddress) sc.getRemoteSocketAddress()).getAddress().toString().replace("/", ""));
+        this.sc = sc;
+    }
+
+    /** Phiên qua luồng byte tự do (cầu WebSocket cho bản web — xem
+     *  avatar.server.WsServer): sc để null, đóng phiên đi qua dis/dos. */
+    public Session(java.io.InputStream in, java.io.OutputStream out, int id, String ip) throws IOException {
         this.obj = new Object();
         this.resourceType = 0;
-        this.sc = sc;
         this.id = id;
-        this.ip = ((InetSocketAddress) this.sc.getRemoteSocketAddress()).getAddress().toString().replace("/", "");
-        this.dis = new DataInputStream(sc.getInputStream());
-        this.dos = new DataOutputStream(sc.getOutputStream());
+        this.ip = ip;
+        this.dis = new DataInputStream(in);
+        this.dos = new DataOutputStream(out);
         this.setHandler(new MessageHandler(this));
         this.sendThread = new Thread(this.sender = new Sender());
         (this.collectorThread = new Thread(new MessageCollector())).start();
@@ -212,7 +219,7 @@ public class Session implements ISession {
                 this.dos.close();
             } catch (Exception ex2) {
                 try {
-                    this.sc.close();
+                    if (this.sc != null) this.sc.close();
                 } catch (Exception ex3) {
                 } finally {
                     this.sendThread = null;
@@ -221,7 +228,7 @@ public class Session implements ISession {
                 }
             } finally {
                 try {
-                    this.sc.close();
+                    if (this.sc != null) this.sc.close();
                 } catch (Exception ex4) {
                     this.sendThread = null;
                     this.collectorThread = null;
@@ -237,7 +244,7 @@ public class Session implements ISession {
                 this.dos.close();
             } catch (Exception ex5) {
                 try {
-                    this.sc.close();
+                    if (this.sc != null) this.sc.close();
                 } catch (Exception ex6) {
                     this.sendThread = null;
                     this.collectorThread = null;
@@ -249,7 +256,7 @@ public class Session implements ISession {
                 }
             } finally {
                 try {
-                    this.sc.close();
+                    if (this.sc != null) this.sc.close();
                 } catch (Exception ex7) {
                     this.sendThread = null;
                     this.collectorThread = null;

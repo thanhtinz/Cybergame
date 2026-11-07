@@ -51,6 +51,12 @@ public class LoginScreen extends ScreenAdapter {
     private boolean statusError = false;
     private boolean busy = false;
     private boolean pendingRegister = false;
+    // Kết nối đang chờ bắt tay xong (kiểu chờ theo khung hình trong
+    // pollReplies thay cho vòng chờ ngủ — bản web đơn luồng không thể
+    // vừa chờ vừa nhận sự kiện WebSocket nếu đứng quay tại chỗ).
+    private GameConnection pendingConn = null;
+    private String pendingUser = "", pendingPass = "", pendingLabel = "";
+    private long pendingDeadline = 0;
 
     public LoginScreen(AvatarDkGame game) {
         this.game = game;
@@ -172,28 +178,44 @@ public class LoginScreen extends ScreenAdapter {
             sendAuth(existing, register, user, pass);
             return;
         }
+        // Mở kết nối rồi chờ bắt tay theo khung hình trong pollReplies()
+        // (không quay chờ tại chỗ: bản web đơn luồng phải nhả luồng cho
+        // sự kiện WebSocket về mới bắt tay xong được).
         new BgThread(() -> {
             try {
                 GameConnection conn = new GameConnection();
-                conn.connect(host, port);
                 game.connection = conn;
-                long deadline = System.currentTimeMillis() + 8000;
-                while (!conn.isKeyReady() && !conn.isClosed()
-                    && System.currentTimeMillis() < deadline) {
-                    BgThread.sleep(30);
-                }
-                if (!conn.isKeyReady()) {
-                    busy = false;
-                    setStatus("Không nối được tới máy chủ " + target.label + ".", true);
-                    return;
-                }
-                AvatarProtocol.sendIntro(conn, (int) Ui.W, (int) Ui.H);
-                sendAuth(conn, register, user, pass);
+                conn.connect(host, port);
+                pendingConn = conn;
+                pendingUser = user;
+                pendingPass = pass;
+                pendingLabel = target.label;
+                pendingDeadline = System.currentTimeMillis() + 10000;
             } catch (Exception e) {
                 busy = false;
                 setStatus("Lỗi kết nối: " + e.getMessage(), true);
             }
         }, "login-connect").start();
+    }
+
+    /** Phục vụ kết nối đang chờ bắt tay: xong thì gửi intro + auth. */
+    private void servicePendingConn() {
+        GameConnection conn = pendingConn;
+        if (conn == null) return;
+        if (conn.isKeyReady()) {
+            pendingConn = null;
+            try {
+                AvatarProtocol.sendIntro(conn, (int) Ui.W, (int) Ui.H);
+                sendAuth(conn, pendingRegister, pendingUser, pendingPass);
+            } catch (Exception e) {
+                busy = false;
+                setStatus("Không gửi được: " + e.getMessage(), true);
+            }
+        } else if (conn.isClosed() || System.currentTimeMillis() > pendingDeadline) {
+            pendingConn = null;
+            busy = false;
+            setStatus("Không nối được tới máy chủ " + pendingLabel + ".", true);
+        }
     }
 
     private void sendAuth(GameConnection conn, boolean register, String user, String pass) {
@@ -209,6 +231,7 @@ public class LoginScreen extends ScreenAdapter {
     }
 
     private void pollReplies() {
+        servicePendingConn();
         GameConnection conn = game.connection;
         if (conn == null) return;
         Msg m;
