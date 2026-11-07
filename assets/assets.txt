@@ -183,7 +183,7 @@ i:iconmenu/music.png:iconmenu/music-fa10366cd6a3f105debd67a6ec5d7000.png:17175:i
 i:iconmenu/gender-male.png:iconmenu/gender-male-0757df984ca3000b7613281708b6e353.png:7241:image/png:1
 i:iconmenu/gender-female.png:iconmenu/gender-female-ad37fd0e72b8fcd8b60f136b155cfb24.png:7074:image/png:1
 i:iconmenu/minigame.png:iconmenu/minigame-113fe7175014620c7ec0b6b97c4b5667.png:8173:image/png:1
-i:iconmenu/clan.png:iconmenu/clan-54110c10779b7b3eeb63c0ff8d901021.png:24621:image/png:1
+i:iconmenu/clan.png:iconmenu/clan-6b2131ac318e18190b0b4b5d15be0de8.png:6102:image/png:1
 i:iconmenu/bxh.png:iconmenu/bxh-c55d8ca1a0ff86ff4a1d4a29a37530a9.png:4455:image/png:1
 i:minimap.png:minimap-e2d2c624cc68ce6a85cd60c2055146c9.png:2108645:image/png:1
 i:banner.jpg:banner-73a584eae638d90d937492b732fa750d.jpg:304159:image/jpeg:1
