@@ -9944,9 +9944,14 @@ public class WorldScreen extends ScreenAdapter {
             float cx = px + 24 + i * 302;
             float cy = py + 332;
             batch.draw(Ui.roundedRect(290, 36, 10, new Color(0f, 0f, 0f, 0.35f), GLASS_RIM), cx, cy);
-            batch.draw(game.texture("myinfo/icon" + icons[i] + ".png"), cx + 8, cy + 7, 22, 22);
+            // icon + số tiền CAN GIUA trong chip (lệnh Tín cân đối lại
+            // chỗ hiện 2 tiền tệ: trước đây nội dung dồn trái, nửa phải
+            // chip trống nhìn lệch hẳn)
+            float contentW = 22 + 8 + Ui.textWidth(Ui.fontSmall, vals[i]);
+            float ix = cx + (290 - contentW) / 2f;
+            batch.draw(game.texture("myinfo/icon" + icons[i] + ".png"), ix, cy + 7, 22, 22);
             Ui.fontSmall.setColor(1f, 1f, 1f, 0.94f);
-            Ui.fontSmall.draw(batch, vals[i], cx + 38, cy + 24);
+            Ui.fontSmall.draw(batch, vals[i], ix + 30, cy + 24);
         }
         // lưới 6 thẻ chỉ số 3×2 — thẻ cao lấp đầy khoảng giữa
         // (sân khấu doll đã bỏ hẳn khỏi tab Thông tin theo lệnh Tín)
