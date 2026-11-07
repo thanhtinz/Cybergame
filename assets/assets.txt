@@ -863,6 +863,9 @@ i:diamond/ko1.png:diamond/ko1-ffc4bfc30fcd0de9712fc9da71f80192.png:2625:image/pn
 i:diamond/ko2.png:diamond/ko2-7ff6799ce88c9210cd7bc1ff0a55268a.png:3050:image/png:1
 d:couple:couple:0:application/unknown:1
 i:couple/stage.png:couple/stage-b5f2384ff276eca0d800702f83b4e4de.png:409173:image/png:1
+i:couple/rank-0.png:couple/rank-0-adf360c8c671b6726cf757d319bd83a6.png:10926:image/png:1
+i:couple/rank-1.png:couple/rank-1-1ebed14b6bdc48f8c5a1f60111292866.png:11468:image/png:1
+i:couple/rank-2.png:couple/rank-2-89668cfe3b6c126763ca9ab340e9aa31.png:10398:image/png:1
 d:clan:clan:0:application/unknown:1
 i:clan/logo-0.png:clan/logo-0-54110c10779b7b3eeb63c0ff8d901021.png:24621:image/png:1
 i:clan/logo-1.png:clan/logo-1-a2d52a7d8be34676e6c8a7e6ec0d149f.png:31812:image/png:1
