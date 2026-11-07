@@ -113,7 +113,14 @@ def main():
     if os.path.isdir(OUT):
         shutil.rmtree(OUT)
     os.makedirs(OUT)
-    cmd = [JDK, "-Xmx3g", "-Dfile.encoding=UTF-8", "-cp", classpath,
+    # /tmp của sandbox chỉ 512MB (chung nhiều tiến trình) — GWT ghi file
+    # tạm permutation vào java.io.tmpdir và chết "No space left" dù code
+    # không lỗi (vấp 2026-11-07); JVM không đọc biến TMPDIR nên phải ép
+    # bằng -D về thư mục tạm trong workspace.
+    gwt_tmp = os.path.join(ROOT, "build", "tmp-gwt")
+    os.makedirs(gwt_tmp, exist_ok=True)
+    cmd = [JDK, "-Xmx3g", "-Dfile.encoding=UTF-8",
+           "-Djava.io.tmpdir=" + gwt_tmp, "-cp", classpath,
            "com.google.gwt.dev.Compiler",
            "-war", OUT, "-localWorkers", "2",
            "-style", "PRETTY" if DRAFT else "OBF",
