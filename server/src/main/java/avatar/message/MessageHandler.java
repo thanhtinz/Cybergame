@@ -439,6 +439,13 @@ public class MessageHandler implements IMessageHandler {
                         }
                         break;
                     }
+                    // [PORT] Đơn hàng ủy thác Lái Buôn (gói −125)
+                    case Cmd.ORDER: {
+                        if (this.client.user != null) {
+                            new avatar.service.OrderService(this.client).onMessage(mss);
+                        }
+                        break;
+                    }
                     // [PORT] Đấu giá ngược (gói −117)
                     case Cmd.AUCTION: {
                         if (this.client.user != null) {

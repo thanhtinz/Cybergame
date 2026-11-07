@@ -108,7 +108,10 @@ public class FarmMsgHandler extends MessageHandler {
                     break;
                 }
                 case Cmd.GET_CARD: {
-                    this.service.sellFarmitm(this.client.user, mss);
+                    // [PORT lệnh Tín 2026-11-07] Bỏ bán thẳng trong
+                    // Kho — nông sản chỉ bán qua Đơn hàng ủy thác của
+                    // Lái Buôn (docs/order-spec.md).
+                    this.service.serverDialog("Nông sản giờ giao theo Đơn hàng ủy thác của Lái Buôn ở Đường ra nông trại nhé.");
                     break;
                 }
                 case Cmd.UPDATE_FARM_CATTLE: {

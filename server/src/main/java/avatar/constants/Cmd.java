@@ -19,7 +19,8 @@ public class Cmd {
     public static final byte DAILY = -116; // [PORT] Diem danh + Nhiem vu ngay (docs/daily-auction-spec.md)
     public static final byte COUPLE = -122;
     public static final byte RANK = -123; // [PORT] Bang xep hang tong hop (moi the loai, mot panel rieng) // [PORT] Bang xep hang cap doi (ListScr.readCoupleBoard ban chinh; docs/couple-spec.md)
-    public static final byte TAIXIU = -124; // [PORT] Bang Tai Xiu: phien dang chay, lich su, top (ban chinh khong co TaiXiuScr; cuoc van qua menu NPC 864)
+    public static final byte TAIXIU = -124;
+    public static final byte ORDER = -125; // [PORT] Don hang uy thac Lai Buon (docs/order-spec.md) // [PORT] Bang Tai Xiu: phien dang chay, lich su, top (ban chinh khong co TaiXiuScr; cuoc van qua menu NPC 864)
     public static final byte AUCTION = -117;
     public static final byte BOX = -118;
     public static final byte SPLIT_ITEM = -119;

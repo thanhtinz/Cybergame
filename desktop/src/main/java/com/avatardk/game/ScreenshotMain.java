@@ -1592,7 +1592,11 @@ public class ScreenshotMain {
                         break;
                     case 178: // Hop xac nhan gia nau nhanh
                         if (frame == 1) { world.debugCookQuick(true); }
-                        if (frame == 15) { shot("shot-farm-quickcook-confirm.png"); stage = 121; frame = 0; }
+                        if (frame == 15) { shot("shot-farm-quickcook-confirm.png"); stage = 179; frame = 0; }
+                        break;
+                    case 179: // Panel Don hang uy thac cua Lai Buon [PORT]
+                        if (frame == 1) { world.debugOpenOrders(); }
+                        if (frame == 15) { shot("shot-orders.png"); stage = 121; frame = 0; }
                         break;
                     case 121: // nền ban ngày ở thành phố (kiểm lớp trời/BGMap)
                         if (frame == 1) {

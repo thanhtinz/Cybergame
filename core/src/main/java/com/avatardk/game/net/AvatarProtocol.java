@@ -766,6 +766,24 @@ public final class AvatarProtocol {
     // [PORT] Bảng Tài Xỉu (phiên/lịch sử/top — cược vẫn qua menu NPC 864)
     public static final byte TAIXIU = -124;
 
+    // ---- ĐƠN HÀNG ỦY THÁC LÁI BUÔN ([PORT]: gói −125, docs/order-spec.md) ----
+    public static final byte ORDER = -125;
+    public static final byte O_OPEN = 0, O_DELIVER = 1, O_TRASH = 2,
+        O_STATE = 10, O_RESULT = 11;
+
+    public static Msg orderMsg(byte sub) throws IOException {
+        Msg m = new Msg(ORDER); m.writer().writeByte(sub); return m;
+    }
+    public static void orderOpen(GameConnection conn) throws IOException {
+        conn.send(orderMsg(O_OPEN));
+    }
+    public static void orderDeliver(GameConnection conn, int slot) throws IOException {
+        Msg m = orderMsg(O_DELIVER); m.writer().writeByte(slot); m.writer().flush(); conn.send(m);
+    }
+    public static void orderTrash(GameConnection conn, int slot) throws IOException {
+        Msg m = orderMsg(O_TRASH); m.writer().writeByte(slot); m.writer().flush(); conn.send(m);
+    }
+
     public static void taixiuBoard(GameConnection conn) throws IOException {
         Msg m = new Msg(TAIXIU);
         m.writer().writeByte(0);

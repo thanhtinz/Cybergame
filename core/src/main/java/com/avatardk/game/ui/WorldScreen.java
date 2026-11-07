@@ -1715,15 +1715,6 @@ public class WorldScreen extends ScreenAdapter {
         farmSend(m);
     }
 
-    private void farmSell(int id) {
-        Msg m = new Msg(AvatarProtocol.FARM_SELL);
-        try {
-            m.writer().writeShort(id);
-        } catch (Exception ignored) {
-        }
-        farmSend(m);
-    }
-
     /** Đầu panel farm dùng chung: huy hiệu icon FA trong ô màu + tiêu đề
      *  vàng + dòng phụ + nút tắt ô vuông đỏ theo hệ nút thống nhất. */
     private void drawFarmPanelHeader(float px, float py, float pw, float ph,
@@ -1844,7 +1835,7 @@ public class WorldScreen extends ScreenAdapter {
         drawFarmPanelHeader(FK_PX, FK_PY, FK_PW, FK_PH, Ui.FA_BOX_ARCHIVE,
             new Color(0.10f, 0.45f, 0.55f, 0.95f), "Kho nông trại",
             "Cấp " + farm.lvFarm + " · Sức chứa " + fmtMoney(farm.capacity)
-                + (farmStoreTab == 2 ? " · Bấm Bán để bán cả chồng" : ""));
+                + (farmStoreTab == 2 ? " · Giao đơn hàng tại Lái Buôn" : ""));
         // 3 tab (mã nút -100-tab)
         String[] tabs = {"Hạt giống", "Vật phẩm", "Nông sản"};
         float tw = 168f, th = 42f, tx0 = FK_PX + 26, ty = FK_PY + FK_PH - 122f;
@@ -1931,39 +1922,16 @@ public class WorldScreen extends ScreenAdapter {
         }
     }
 
-    /** Thẻ nông sản trong Kho: icon + tên + giá/tổng + nút Bán + số lượng. */
+    /** Thẻ nông sản trong Kho: icon + tên + số lượng — cùng bố cục
+     *  thẻ hạt giống/vật phẩm. Bán đồ chỉ còn qua Đơn hàng ủy thác ở
+     *  Lái Buôn (lệnh Tín 2026-11-07, docs/order-spec.md). */
     private void drawFarmStoreProductCard(float cx, float cy, float cw, float ch, int[] e) {
         FarmWorld.ProductDef pd = farm.productDefs.get(e[0]);
         String name = pd != null ? pd.name : ("Sản phẩm " + e[0]);
-        int price = pd != null ? pd.priceXu : 0;
-        // Bố cục đo lại sau khi chụp thấy dòng giá đè lên nút Bán: mỗi
-        // dòng chữ cách nhau >= 20px baseline, nút thấp xuống đáy thẻ.
-        drawFarmMedallion(cx + cw / 2f - 19, cy + 78, 38);
-        drawProductIcon(e[0], pd, cx + cw / 2f - 14, cy + 83, 28);
-        Ui.centered(batch, Ui.fontSmall, truncTo(Ui.fontSmall, name, cw - 10),
-            cx + cw / 2f, cy + 70, new Color(1f, 1f, 1f, 0.97f));
-        if (price > 0) {
-            // Dòng giá: đủ chỗ thì kèm tổng tiền, chật thì chỉ giá/cái —
-            // không cắt giữa chữ (bản chụp trước ra chữ "tổn..." rất xấu).
-            String priceLine = fmtMoney(price) + " xu/cái · tổng " + fmtMoney(price * e[1]) + " xu";
-            layout.setText(Ui.fontSmall, priceLine);
-            if (layout.width > cw - 10) priceLine = fmtMoney(price) + " xu/cái";
-            Ui.centered(batch, Ui.fontSmall, priceLine,
-                cx + cw / 2f, cy + 50, new Color(1f, 1f, 1f, 0.62f));
-            float bw = 76f, bh = 24f, bx = cx + 8, byy = cy + 4;
-            batch.draw(Ui.gradientRect((int) bw, (int) bh, 9, EntryUi.ORANGE_TOP, EntryUi.ORANGE_BOT), bx, byy);
-            Ui.centered(batch, Ui.fontSmall, "Bán", bx + bw / 2f, byy + 17, new Color(1f, 1f, 1f, 1f));
-            farmSellBtns.add(new float[]{bx, byy, bw, bh, e[0]});
-            Ui.fontSmall.setColor(1f, 0.85f, 0.38f, 1f);
-            layout.setText(Ui.fontSmall, "x" + e[1]);
-            Ui.fontSmall.draw(batch, "x" + e[1], cx + cw - 10 - layout.width, cy + 21);
-            Ui.fontSmall.setColor(Color.WHITE);
-        } else {
-            Ui.centered(batch, Ui.fontSmall, "Chưa bán được", cx + cw / 2f, cy + 43,
-                new Color(1f, 1f, 1f, 0.5f));
-            Ui.centered(batch, Ui.fontSmall, "x" + e[1], cx + cw / 2f, cy + 20,
-                new Color(1f, 0.85f, 0.38f, 1f));
-        }
+        drawFarmMedallion(cx + cw / 2f - 26, cy + ch - 64, 52);
+        drawProductIcon(e[0], pd, cx + cw / 2f - 20, cy + ch - 58, 40);
+        drawFarmCardName(cx, cw, cy, name);
+        drawFarmQtyPillCentered(cx + cw / 2f, cy + 18, "x" + e[1]);
     }
 
     /** Icon cây (giai đoạn icon img[7]) tại (x, y) cỡ size. */
@@ -2028,8 +1996,6 @@ public class WorldScreen extends ScreenAdapter {
                     farmStorePage = Math.max(0, farmStorePage - 1);
                 } else if (code == -201) {
                     farmStorePage++;
-                } else if (code >= 0) {
-                    farmSell(code);
                 }
                 return;
             }
@@ -2378,7 +2344,7 @@ public class WorldScreen extends ScreenAdapter {
         batch.draw(Ui.roundedRect((int) FC_PW, (int) FC_PH, 16, GLASS_FILL_DARK, GLASS_RIM), FC_PX, FC_PY);
         drawFarmPanelHeader(FC_PX, FC_PY, FC_PW, FC_PH, Ui.FA_FIRE,
             new Color(0.72f, 0.30f, 0.07f, 0.95f), "Nhà bếp",
-            "Nấu món từ nông sản trong kho — món chín bán lại trong Kho");
+            "Nấu món từ nông sản trong kho — món chín giao đơn ở Lái Buôn");
         float topY = FC_PY + FC_PH - 92f;
         // Trạng thái bếp: dải trạng thái có icon lửa
         FarmWorld.FoodDef cooking = null;
@@ -4039,6 +4005,10 @@ public class WorldScreen extends ScreenAdapter {
                 }
                 case AvatarProtocol.DAILY: {
                     handleDailyPacket(m);
+                    break;
+                }
+                case AvatarProtocol.ORDER: {
+                    handleOrderPacket(m);
                     break;
                 }
                 case AvatarProtocol.AUCTION: {
@@ -6098,6 +6068,7 @@ public class WorldScreen extends ScreenAdapter {
         if (tradeTouch(x, y)) return;
         if (farm2Touch(x, y)) return;
         if (dailyTouch(x, y)) return;
+        if (orderTouch(x, y)) return;
         if (auctionTouch(x, y)) return;
         // hộp xác nhận nâng cấp rương (−90) là modal trên cùng
         if (chestUpTouch(x, y)) return;
@@ -8262,6 +8233,7 @@ public class WorldScreen extends ScreenAdapter {
         farm2Open = false;
         dailyOpen = false;
         auctionOpen = false;
+        orderOpen = false;
     }
 
     private void openMsgPanel() {
@@ -12114,7 +12086,8 @@ public class WorldScreen extends ScreenAdapter {
     private boolean inMiniGameScreen() {
         return mgOpen || tcOpen || crOpen || txOpen || aiOpen || snOpen
             || casinoIn || csPending || raceIn || dlOpen || dlPrizeOpen
-            || marketOpen || tradeOpen || farm2Open || dailyOpen || auctionOpen;
+            || marketOpen || tradeOpen || farm2Open || dailyOpen || auctionOpen
+            || orderOpen;
     }
 
     private void drawHud(float playerFeetX, float playerFeetY) {
@@ -12169,6 +12142,7 @@ public class WorldScreen extends ScreenAdapter {
         if (tradeOpen) drawTradePanel();
         if (farm2Open) drawFarm2Panel();
         if (dailyOpen) drawDailyPanel();
+        if (orderOpen) drawOrderPanel();
         if (auctionOpen) drawAuctionPanel();
         drawTradeInviteBox();
         if (friendOpen) drawFriendPanel();
@@ -14062,6 +14036,7 @@ public class WorldScreen extends ScreenAdapter {
         npcMenuTitle = "Lái buôn";
         npcMenuItems.clear();
         npcMenuItems.add("Điểm Danh");
+        npcMenuItems.add("Đơn hàng ủy thác");
         npcMenuItems.add("Chợ người chơi");
         npcMenuItems.add("Xem hướng dẫn");
         npcMenuItems.add("Thoát");
@@ -14081,8 +14056,10 @@ public class WorldScreen extends ScreenAdapter {
                 chatTimer = 3f;
             }
         } else if (i == 1) {
-            openMarketPanel();
+            openOrderPanel();
         } else if (i == 2) {
+            openMarketPanel();
+        } else if (i == 3) {
             openGuide("Hướng dẫn", LAI_BUON_GUIDE);
         }
     }
@@ -16934,6 +16911,279 @@ public class WorldScreen extends ScreenAdapter {
         } catch (IOException e) { }
     }
 
+    // ---------- ĐƠN HÀNG ỦY THÁC LÁI BUÔN (gói −125, docs/order-spec.md) ----------
+    // Kiểu bảng đơn Hay Day theo lệnh Tín 2026-11-07: 6 ô đơn, khách
+    // cần món gì mình giao món đó, thưởng 130% giá gốc (+ điểm nhiệm
+    // vụ ngày). Bán thẳng trong Kho đã gỡ — đây là kênh bán duy nhất
+    // cho nông sản (chợ người chơi vẫn riêng).
+    private static class OrderSlot {
+        boolean waiting;
+        long waitEnd; // mốc millis local khi có đơn mới
+        String customer = "";
+        int avatar;
+        final java.util.List<int[]> items = new java.util.ArrayList<>(); // pid, cần, đang có
+        int rewardXu, rewardLuong;
+    }
+
+    private boolean orderOpen;
+    private final OrderSlot[] orderSlots = new OrderSlot[6];
+    private final java.util.List<float[]> orderBtns = new java.util.ArrayList<>();
+    private String orderMsg = "";
+    private boolean orderMsgOk;
+    private long orderMsgAt;
+    private static final int OD_PW = 920, OD_PH = 600;
+    private static final int OD_PX = (1280 - OD_PW) / 2, OD_PY = (720 - OD_PH) / 2;
+    private static final int[][] ORDER_DOLL_PARTS = {
+        {628, 474, 0, 80, 49}, {89, 88, 0, 4, 46}, {628, 474, 0, 80, 46},
+        {89, 88, 0, 4, 14}, {89, 88, 0, 4, 49}, {494, 474, 0, 80, 49},
+        {628, 0, 302}, {89, 474, 0, 80, 14}, {494, 88, 0, 4, 46},
+        {628, 88, 0, 80, 49},
+    };
+    private final PaperDoll[] orderDolls = new PaperDoll[ORDER_DOLL_PARTS.length];
+
+    private PaperDoll orderDoll(int idx) {
+        int i = Math.floorMod(idx, ORDER_DOLL_PARTS.length);
+        if (orderDolls[i] == null) {
+            java.util.List<Integer> ps = new java.util.ArrayList<>();
+            for (int pid : ORDER_DOLL_PARTS[i]) ps.add(pid);
+            orderDolls[i] = game.newDoll(ps);
+        }
+        return orderDolls[i];
+    }
+
+    private void openOrderPanel() {
+        if (!online()) {
+            addChatLog(TAB_SYSTEM, null,
+                "Đơn hàng ủy thác cần chơi online — bản chơi thử không có.", true);
+            return;
+        }
+        closeOtherPanels();
+        orderOpen = true;
+        orderMsg = "";
+        farm.load(game);
+        try { AvatarProtocol.orderOpen(game.connection); } catch (IOException e) { }
+    }
+
+    /** Harness: dữ liệu mẫu để chụp kiểm chứng panel đơn hàng. */
+    public void debugOpenOrders() {
+        closeOtherPanels();
+        farm.load(game);
+        seedOrderSample();
+        orderOpen = true;
+    }
+
+    private void seedOrderSample() {
+        String[] names = {"Cô Ba", "Chú Tư", "Bà Năm", "Anh Sáu", "Chị Bảy", "Ông Tám"};
+        int[][][] sample = {
+            {{215, 20}, {200, 10}},
+            {{205, 2}},
+            {{249, 12}, {253, 12}, {288, 6}},
+            {{50, 8}},
+            {{203, 16}, {204, 16}},
+            {},
+        };
+        int[][] haves = {{24, 12}, {2}, {12, 5, 6}, {3}, {16, 16}, {}};
+        for (int i = 0; i < 6; i++) {
+            OrderSlot sl = new OrderSlot();
+            sl.customer = names[i];
+            sl.avatar = i;
+            if (i == 5) {
+                sl.waiting = true;
+                sl.waitEnd = System.currentTimeMillis() + 240_000L;
+            } else {
+                long base = 0;
+                for (int j = 0; j < sample[i].length; j++) {
+                    int[] it = sample[i][j];
+                    sl.items.add(new int[]{it[0], it[1], haves[i][j]});
+                    FarmWorld.ProductDef pd = farm.productDefs.get(it[0]);
+                    base += (long) (pd != null ? pd.priceXu : 0) * it[1];
+                }
+                sl.rewardXu = (int) Math.round(base * 1.3);
+                sl.rewardLuong = i == 2 ? 2 : 0;
+            }
+            orderSlots[i] = sl;
+        }
+        orderMsg = "";
+    }
+
+    private void handleOrderPacket(Msg m) {
+        try {
+            java.io.DataInputStream r = m.reader();
+            if (r.available() < 1) return;
+            int sub = r.readByte();
+            if (sub == AvatarProtocol.O_STATE) {
+                int n = r.readByte();
+                for (int i = 0; i < n && i < orderSlots.length; i++) {
+                    OrderSlot sl = new OrderSlot();
+                    int kind = r.readByte();
+                    if (kind == 1) {
+                        sl.waiting = true;
+                        sl.waitEnd = System.currentTimeMillis() + r.readInt() * 1000L;
+                    } else {
+                        sl.customer = r.readUTF();
+                        sl.avatar = r.readByte();
+                        int ni = r.readByte();
+                        for (int j = 0; j < ni; j++) {
+                            sl.items.add(new int[]{r.readShort(), r.readShort(), r.readShort()});
+                        }
+                        sl.rewardXu = r.readInt();
+                        sl.rewardLuong = r.readByte();
+                    }
+                    orderSlots[i] = sl;
+                }
+            } else if (sub == AvatarProtocol.O_RESULT) {
+                orderMsgOk = r.readBoolean();
+                orderMsg = r.readUTF();
+                orderMsgAt = System.currentTimeMillis();
+                if (!orderOpen) addChatLog(TAB_SYSTEM, null, orderMsg, true);
+            }
+        } catch (IOException e) { }
+    }
+
+    private void drawOrderPanel() {
+        orderBtns.clear();
+        batch.setColor(0f, 0f, 0f, 0.62f);
+        batch.draw(whiteTex, 0, 0, Ui.W, Ui.H);
+        batch.setColor(Color.WHITE);
+        batch.draw(Ui.roundedRect(OD_PW, OD_PH, 16,
+            new Color(0.04f, 0.08f, 0.14f, 0.98f), GLASS_RIM), OD_PX, OD_PY);
+        drawFarmPanelHeader(OD_PX, OD_PY, OD_PW, OD_PH, Ui.FA_COINS,
+            new Color(0.72f, 0.30f, 0.07f, 0.95f), "Đơn hàng ủy thác",
+            "Giao hàng cho khách, thưởng hơn giá bán 30%");
+        float gridTop = OD_PY + OD_PH - 104f;
+        if (!orderMsg.isEmpty() && System.currentTimeMillis() - orderMsgAt < 6000) {
+            Ui.fontSmall.setColor(orderMsgOk
+                ? new Color(0.55f, 0.95f, 0.55f, 1f) : new Color(1f, 0.6f, 0.5f, 1f));
+            Ui.fontSmall.draw(batch, truncTo(Ui.fontSmall, orderMsg, OD_PW - 48),
+                OD_PX + 24, gridTop + 26);
+            Ui.fontSmall.setColor(Color.WHITE);
+            gridTop -= 30f;
+        }
+        float cw = 282f, chh = 212f, gap = 12f;
+        float x0 = OD_PX + (OD_PW - (3 * cw + 2 * gap)) / 2f;
+        for (int i = 0; i < 6; i++) {
+            float cx = x0 + (i % 3) * (cw + gap);
+            float cy = gridTop - (i / 3 + 1) * (chh + gap) + gap;
+            drawOrderCard(i, cx, cy, cw, chh);
+        }
+    }
+
+    private void drawOrderCard(int idx, float cx, float cy, float cw, float chh) {
+        OrderSlot sl = orderSlots[idx];
+        batch.draw(Ui.roundedRect((int) cw, (int) chh, 12,
+            new Color(0.09f, 0.14f, 0.22f, 0.92f), GLASS_RIM), cx, cy);
+        if (sl == null) {
+            Ui.centered(batch, Ui.fontSmall, "Đang tải đơn...",
+                cx + cw / 2f, cy + chh / 2f + 8, new Color(1f, 1f, 1f, 0.5f));
+            return;
+        }
+        if (sl.waiting) {
+            long remain = Math.max(0, (sl.waitEnd - System.currentTimeMillis()) / 1000L);
+            Ui.centered(batch, Ui.fontSmall, "Đơn mới sau",
+                cx + cw / 2f, cy + chh / 2f + 36, new Color(1f, 1f, 1f, 0.55f));
+            String mmss = (remain / 60) + ":" + (remain % 60 < 10 ? "0" : "") + (remain % 60);
+            Ui.centered(batch, Ui.font, mmss,
+                cx + cw / 2f, cy + chh / 2f + 6, new Color(1f, 0.85f, 0.38f, 1f));
+            return;
+        }
+        // khách đặt: doll mẫu đứng cột trái, tên khách trên cùng
+        game.dollRenderer.draw(batch, orderDoll(sl.avatar), 0, cx + 42, cy + 50, 2.4f, false);
+        Ui.fontSmall.setColor(1f, 1f, 1f, 0.97f);
+        Ui.fontSmall.draw(batch, truncTo(Ui.fontSmall, sl.customer, cw - 128),
+            cx + 82, cy + chh - 22);
+        Ui.fontSmall.setColor(Color.WHITE);
+        // nút bỏ đơn ở góc trên phải của thẻ
+        float tbx = cx + cw - 40, tby = cy + chh - 40;
+        batch.draw(Ui.roundedRect(30, 30, 8,
+            new Color(0.16f, 0.10f, 0.10f, 0.9f), GLASS_RIM), tbx, tby);
+        Ui.faIcon(batch, Ui.fa20, Ui.FA_XMARK, tbx + 15, tby + 15,
+            new Color(1f, 0.65f, 0.55f, 0.95f));
+        orderBtns.add(new float[]{tbx, tby, 30, 30, 100 + idx});
+        // các món khách cần: icon + tên + đang có/cần
+        boolean can = true;
+        float iy = cy + chh - 62f;
+        for (int[] it : sl.items) {
+            FarmWorld.ProductDef pd = farm.productDefs.get(it[0]);
+            drawFarmMedallion(cx + 80, iy - 4, 28);
+            drawProductIcon(it[0], pd, cx + 82, iy - 2, 24);
+            Ui.fontSmall.setColor(0.92f, 0.95f, 1f, 1f);
+            Ui.fontSmall.draw(batch,
+                truncTo(Ui.fontSmall, pd != null ? pd.name : ("Món " + it[0]), 104),
+                cx + 116, iy + 13);
+            boolean ok = it[2] >= it[1];
+            if (!ok) can = false;
+            String hv = it[2] + "/" + it[1];
+            layout.setText(Ui.fontSmall, hv);
+            Ui.fontSmall.setColor(ok
+                ? new Color(0.55f, 0.95f, 0.55f, 1f) : new Color(1f, 0.6f, 0.5f, 1f));
+            Ui.fontSmall.draw(batch, hv, cx + cw - 12 - layout.width, iy + 13);
+            Ui.fontSmall.setColor(Color.WHITE);
+            iy -= 32f;
+        }
+        // dòng thưởng: xu + chip lượng riêng (icon đá quý) để dòng
+        // thưởng dài không tràn khỏi thẻ như bản chụp đầu
+        String rew = "+" + fmtMoney(sl.rewardXu) + " xu";
+        Ui.faIcon(batch, Ui.fa20, Ui.FA_COINS, cx + 92, cy + 56,
+            new Color(1f, 0.85f, 0.38f, 1f));
+        Ui.fontSmall.setColor(1f, 0.85f, 0.38f, 1f);
+        Ui.fontSmall.draw(batch, rew, cx + 106, cy + 62);
+        if (sl.rewardLuong > 0) {
+            float lx = cx + 106 + Ui.textWidth(Ui.fontSmall, rew) + 12;
+            Ui.faIcon(batch, Ui.fa20, Ui.FA_GEM, lx + 9, cy + 56,
+                new Color(0.55f, 0.85f, 1f, 1f));
+            Ui.fontSmall.draw(batch, "+" + sl.rewardLuong, lx + 22, cy + 62);
+        }
+        Ui.fontSmall.setColor(Color.WHITE);
+        // nút giao đơn
+        float bw = 190f, bh = 36f, bx = cx + 80, byy = cy + 8;
+        if (can) {
+            batch.draw(Ui.gradientRect((int) bw, (int) bh, 10,
+                EntryUi.ORANGE_TOP, EntryUi.ORANGE_BOT), bx, byy);
+            Ui.centered(batch, Ui.fontSmall, "Giao đơn",
+                bx + bw / 2f, byy + 24, new Color(1f, 1f, 1f, 1f));
+            orderBtns.add(new float[]{bx, byy, bw, bh, idx});
+        } else {
+            batch.draw(Ui.roundedRect((int) bw, (int) bh, 10,
+                new Color(0.22f, 0.24f, 0.30f, 0.9f), GLASS_RIM), bx, byy);
+            Ui.centered(batch, Ui.fontSmall, "Chưa đủ hàng",
+                bx + bw / 2f, byy + 24, new Color(1f, 1f, 1f, 0.55f));
+        }
+    }
+
+    private boolean orderTouch(float x, float y) {
+        if (!orderOpen) return false;
+        if (x >= OD_PX + OD_PW - 54 && x <= OD_PX + OD_PW - 18
+                && y >= OD_PY + OD_PH - 54 && y <= OD_PY + OD_PH - 18) {
+            orderOpen = false;
+            return true;
+        }
+        for (float[] b : orderBtns) {
+            if (x >= b[0] && x <= b[0] + b[2] && y >= b[1] && y <= b[1] + b[3]) {
+                int code = (int) b[4];
+                if (online()) {
+                    try {
+                        if (code >= 100) AvatarProtocol.orderTrash(game.connection, code - 100);
+                        else AvatarProtocol.orderDeliver(game.connection, code);
+                    } catch (IOException e) { }
+                } else {
+                    // bản chụp kiểm chứng: mô phỏng giao/bỏ đơn tại chỗ
+                    OrderSlot sl = orderSlots[Math.min(code >= 100 ? code - 100 : code, 5)];
+                    if (sl != null) {
+                        sl.waiting = true;
+                        sl.waitEnd = System.currentTimeMillis()
+                            + (code >= 100 ? 300_000L : 600_000L);
+                        sl.items.clear();
+                    }
+                }
+                return true;
+            }
+        }
+        if (x < OD_PX || x > OD_PX + OD_PW || y < OD_PY || y > OD_PY + OD_PH) {
+            orderOpen = false;
+        }
+        return true;
+    }
+
     private String dqRewardText(int[] rw) {
         FarmWorld.ProductDef pd;
         switch (rw[0]) {
@@ -17816,7 +18066,7 @@ public class WorldScreen extends ScreenAdapter {
         if (npcMenuOpen && npcMenuLocal) {
             npcMenuOpen = false;
             npcMenuLocal = false;
-            laiBuonLocalSelect(1);
+            laiBuonLocalSelect(3);
         }
     }
 

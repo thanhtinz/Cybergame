@@ -427,6 +427,17 @@ public class DailyService extends Service {
         sendQuest(me);
     }
 
+    /** [PORT] Cộng điểm nhiệm vụ ngày từ hệ khác (Đơn hàng ủy thác
+     *  của Lái Buôn: +5 điểm mỗi đơn giao thành công). */
+    public static void addQuestScore(Session s, int add) {
+        if (s == null || s.user == null) return;
+        DailyService d = new DailyService(s);
+        State st = d.load(s.user.getId());
+        d.rollDay(st, LocalDate.now(ZONE));
+        st.score += add;
+        d.save(s.user.getId(), st);
+    }
+
     void doQuestBox(User me, int idx) {
         if (idx < 0 || idx >= BOX_POINTS.length) return;
         State st = load(me.getId());
