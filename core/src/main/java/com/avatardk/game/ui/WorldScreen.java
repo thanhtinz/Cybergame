@@ -536,7 +536,7 @@ public class WorldScreen extends ScreenAdapter {
     private String displayLevel = "Lv.50";
     /** Số tiền dạng số (khớp hai chuỗi hiển thị ở trên) — panel shop dùng để
      *  xét đủ/thiếu tiền theo giá thật; cập nhật từ gói −4/−33/−24. */
-    private int myXu = 12500, myLuong = 260, myLuongKhoa = 0, myXeng = 0;
+    private int myXu = 12500, myLuong = 260;
 
     private void syncMoneyText() {
         displayXu = fmtMoney(myXu);
@@ -572,8 +572,6 @@ public class WorldScreen extends ScreenAdapter {
         displayName = p.username;
         myXu = p.xu;
         myLuong = p.luong;
-        myLuongKhoa = p.luongKhoa;
-        myXeng = p.xeng;
         syncMoneyText();
         displayLevel = "Lv." + p.levelMain;
         java.util.List<Integer> parts = new ArrayList<>();
@@ -3940,14 +3938,17 @@ public class WorldScreen extends ScreenAdapter {
                     break;
                 }
                 case AvatarProtocol.UPDATE_MONEY: {
-                    // gói −33: {int xèng, byte type, int xu, int lượng,
-                    // int lượng khoá} — server báo lại số tiền hiện tại
+                    // gói −33: {byte type, int xu, int lượng} — server
+                    // báo lại số tiền hiện tại (game chỉ còn 2 loại tiền
+                    // Xu + Lượng theo lệnh Tín 2026-11-06)
                     java.io.DataInputStream r = m.reader();
-                    myXeng = r.readInt();
                     r.readByte();
                     myXu = r.readInt();
                     myLuong = r.readInt();
-                    myLuongKhoa = r.readInt();
+                    if (game.player != null) {
+                        game.player.xu = myXu;
+                        game.player.luong = myLuong;
+                    }
                     syncMoneyText();
                     break;
                 }
@@ -4192,8 +4193,8 @@ public class WorldScreen extends ScreenAdapter {
                 }
                 case AvatarProtocol.BUY_ITEM: {
                     // gói −24 báo mua thành công: {short idPart, int giá,
-                    // byte 1, UTF thông báo, int xu, int lượng, int lượng
-                    // khoá}. Server đã tự mặc món mới và phát −48 (về trước
+                    // byte 1, UTF thông báo, int xu, int lượng}.
+                    // Server đã tự mặc món mới và phát −48 (về trước
                     // gói này) nên ở đây chỉ cập nhật tiền + báo người chơi;
                     // panel shop đang mở thì dựng lại doll mặc thử theo
                     // đúng bộ đồ hiện tại.
@@ -4204,7 +4205,6 @@ public class WorldScreen extends ScreenAdapter {
                     String msgBuy = r.readUTF();
                     myXu = r.readInt();
                     myLuong = r.readInt();
-                    myLuongKhoa = r.readInt();
                     syncMoneyText();
                     addChatLog(TAB_SYSTEM, null, msgBuy, true);
                     if (shopOpen) refreshShopTryDoll();
@@ -4511,7 +4511,7 @@ public class WorldScreen extends ScreenAdapter {
                 }
                 case AvatarProtocol.FARM_OPEN_LAND: {
                     // gói 70: {int idFarm, int curMoney, byte type, UTF báo,
-                    // int xu, int lượng, int lượng khoá} -> cập nhật tiền +
+                    // int xu, int lượng} -> cập nhật tiền +
                     // xin lại dữ liệu farm cho thấy ô mới (gốc cũng doJoinFarm lại)
                     java.io.DataInputStream r = m.reader();
                     r.readInt();
@@ -4520,7 +4520,6 @@ public class WorldScreen extends ScreenAdapter {
                     String text = r.readUTF();
                     myXu = r.readInt();
                     myLuong = r.readInt();
-                    myLuongKhoa = r.readInt();
                     syncMoneyText();
                     addChatLog(TAB_SYSTEM, null, text, true);
                     Msg join = new Msg(AvatarProtocol.FARM_JOIN);
@@ -4600,7 +4599,7 @@ public class WorldScreen extends ScreenAdapter {
                     // xử lý lễ cưới bằng đường khác nên bỏ qua ở đây
                     if (!farmIn) break;
                     // {byte 0, UTF info} = hỏi giá; {byte 1, int giá,
-                    // int lượng, int lượng khoá} = đã trả, chín ngay
+                    // int lượng} = đã trả, chín ngay
                     java.io.DataInputStream r = m.reader();
                     int b = r.readByte();
                     if (b == 0) {
@@ -4608,11 +4607,9 @@ public class WorldScreen extends ScreenAdapter {
                     } else {
                         r.readInt();
                         int lg = r.readInt();
-                        int lgk = r.readInt();
                         farm.cookEndEpoch = System.currentTimeMillis() / 1000L;
                         if (game.player != null) {
                             game.player.luong = lg;
-                            game.player.luongKhoa = lgk;
                         }
                         cookQuickInfo = null;
                         addChatLog(TAB_SYSTEM, null,
@@ -9475,16 +9472,16 @@ public class WorldScreen extends ScreenAdapter {
             new Color(0.9f, 0.93f, 1f, 1f));
         int[] st = charStats();
         // cột tiền bằng icon myinfo gốc: Xu, Lượng, Lượng khoá, Xèng, Cấp
-        int[] icons = {0, 1, 4, 2};
-        String[] vals = {fmtMoney(p.xu), fmtMoney(p.luong), fmtMoney(p.luongKhoa), fmtMoney(p.xeng)};
+        int[] icons = {0, 1};
+        String[] vals = {fmtMoney(p.xu), fmtMoney(p.luong)};
         float rowTop = py + CP_H - 78;
-        for (int i = 0; i < 4; i++) {
+        for (int i = 0; i < 2; i++) {
             float ry = rowTop - i * 46;
             batch.draw(game.texture("myinfo/icon" + icons[i] + ".png"), px + 24, ry, 26, 26);
             Ui.fontSmall.setColor(cText);
             Ui.fontSmall.draw(batch, vals[i], px + 62, ry + 19);
         }
-        float ry = rowTop - 4 * 46;
+        float ry = rowTop - 2 * 46;
         batch.draw(game.texture("myinfo/icon3.png"), px + 24, ry, 26, 26);
         Ui.fontSmall.setColor(cText);
         Ui.fontSmall.draw(batch, st != null ? st[0] + " + " + st[1] + "%" : "—", px + 62, ry + 19);
@@ -9550,15 +9547,15 @@ public class WorldScreen extends ScreenAdapter {
         Ui.font.setColor(blue);
         Ui.font.draw(batch, p.username, px + 24, py + CP_H - 24);
         // cột tiền icon gốc + dòng cấp
-        int[] icons = {0, 1, 4, 2};
-        String[] vals = {fmtMoney(p.xu), fmtMoney(p.luong), fmtMoney(p.luongKhoa), fmtMoney(p.xeng)};
-        for (int i = 0; i < 4; i++) {
+        int[] icons = {0, 1};
+        String[] vals = {fmtMoney(p.xu), fmtMoney(p.luong)};
+        for (int i = 0; i < 2; i++) {
             float ry = py + CP_H - 104 - i * 40;
             batch.draw(game.texture("myinfo/icon" + icons[i] + ".png"), px + 24, ry, 28, 28);
             Ui.fontSmall.setColor(blue);
             Ui.fontSmall.draw(batch, vals[i], px + 64, ry + 20);
         }
-        float ry = py + CP_H - 104 - 4 * 40;
+        float ry = py + CP_H - 104 - 2 * 40;
         batch.draw(game.texture("myinfo/icon3.png"), px + 24, ry, 28, 28);
         Ui.fontSmall.setColor(blue);
         Ui.fontSmall.draw(batch, st != null ? st[0] + " + " + st[1] + "%" : "—", px + 64, ry + 20);
@@ -9940,13 +9937,13 @@ public class WorldScreen extends ScreenAdapter {
             drawCharCoupleTab(px, py);
             return;
         }
-        // hàng chip tiền (4 chip ngang dưới header)
-        int[] icons = {0, 1, 4, 2};
-        String[] vals = {fmtMoney(p.xu), fmtMoney(p.luong), fmtMoney(p.luongKhoa), fmtMoney(p.xeng)};
-        for (int i = 0; i < 4; i++) {
-            float cx = px + 24 + i * 152;
+        // hàng chip tiền (2 chip ngang dưới header: Xu + Lượng)
+        int[] icons = {0, 1};
+        String[] vals = {fmtMoney(p.xu), fmtMoney(p.luong)};
+        for (int i = 0; i < 2; i++) {
+            float cx = px + 24 + i * 302;
             float cy = py + 332;
-            batch.draw(Ui.roundedRect(140, 36, 10, new Color(0f, 0f, 0f, 0.35f), GLASS_RIM), cx, cy);
+            batch.draw(Ui.roundedRect(290, 36, 10, new Color(0f, 0f, 0f, 0.35f), GLASS_RIM), cx, cy);
             batch.draw(game.texture("myinfo/icon" + icons[i] + ".png"), cx + 8, cy + 7, 22, 22);
             Ui.fontSmall.setColor(1f, 1f, 1f, 0.94f);
             Ui.fontSmall.draw(batch, vals[i], cx + 38, cy + 24);
@@ -13552,19 +13549,17 @@ public class WorldScreen extends ScreenAdapter {
         Ui.fontTiny.draw(batch, "XP", barX, barY + 30);
     }
 
-    /** Hàng 4 chip tiền ngang ngay BÊN TRÁI nút menu burger
-     *  (lệnh Tín): Xu · Lượng · Lượng khóa · Xèng — icon myinfo
-     *  gốc, chip co theo độ dài số. */
+    /** Hàng chip tiền ngang ngay BÊN TRÁI nút menu burger:
+     *  game chỉ còn 2 loại tiền Xu · Lượng (lệnh Tín 2026-11-06
+     *  bỏ Lượng khóa + Xèng) — icon myinfo gốc, chip co theo số. */
     private void drawCurrencyBar() {
         com.avatardk.game.net.PlayerInfo p = game.player;
-        int[] icons = {0, 1, 4, 2};
-        String[] vals = {displayXu, displayLuong,
-            fmtMoney(p == null ? 0 : p.luongKhoa),
-            fmtMoney(p == null ? 0 : p.xeng)};
+        int[] icons = {0, 1};
+        String[] vals = {displayXu, displayLuong};
         float chipH = 34;
         float cy = BURGER_Y + BURGER_S / 2f - chipH / 2f;
         float right = BURGER_X - 12;
-        for (int i = 3; i >= 0; i--) {
+        for (int i = icons.length - 1; i >= 0; i--) {
             float w = 34 + Ui.textWidth(Ui.fontSmall, vals[i]) + 12;
             float cx = right - w;
             batch.draw(Ui.roundedRect((int) w, (int) chipH, 10,

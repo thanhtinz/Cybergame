@@ -346,7 +346,7 @@ public class AdminServer {
             }
             try (PreparedStatement ps = c.prepareStatement(
                     "SELECT u.id, u.username, u.role, u.ban, u.login_lock, u.timeCreate, "
-                    + "p.xu, p.luong, p.luong_khoa, p.xeng, p.is_online, p.gender "
+                    + "p.xu, p.luong, p.is_online, p.gender "
                     + "FROM users u LEFT JOIN players p ON p.user_id = u.id " + where
                     + " ORDER BY u.id ASC LIMIT ? OFFSET ?")) {
                 int i = 1;
@@ -364,8 +364,6 @@ public class AdminServer {
                         p.put("timeCreate", String.valueOf(rs.getDate("timeCreate")));
                         p.put("xu", rs.getLong("xu"));
                         p.put("luong", rs.getInt("luong"));
-                        p.put("luongKhoa", rs.getInt("luong_khoa"));
-                        p.put("xeng", rs.getInt("xeng"));
                         p.put("online", rs.getInt("is_online"));
                         arr.add(p);
                     }
@@ -387,8 +385,6 @@ public class AdminServer {
         if (live != null) {
             if (body.containsKey("xu")) live.xu = num(body, "xu", live.xu);
             if (body.containsKey("luong")) live.luong = (int) num(body, "luong", live.luong);
-            if (body.containsKey("luongKhoa")) live.luongKhoa = (int) num(body, "luongKhoa", live.luongKhoa);
-            if (body.containsKey("xeng")) live.xeng = (int) num(body, "xeng", live.xeng);
             try {
                 live.getAvatarService().updateMoney(0);
             } catch (Exception ignore) {
@@ -399,12 +395,10 @@ public class AdminServer {
         }
         try (Connection c = DbManager.getInstance().getConnection();
              PreparedStatement ps = c.prepareStatement(
-                 "UPDATE players SET xu = ?, luong = ?, luong_khoa = ?, xeng = ? WHERE user_id = ?")) {
+                 "UPDATE players SET xu = ?, luong = ? WHERE user_id = ?")) {
             ps.setLong(1, num(body, "xu", 0));
             ps.setInt(2, (int) num(body, "luong", 0));
-            ps.setInt(3, (int) num(body, "luongKhoa", 0));
-            ps.setInt(4, (int) num(body, "xeng", 0));
-            ps.setInt(5, id);
+            ps.setInt(3, id);
             ps.executeUpdate();
         }
         sendJson(ex, 200, ok());

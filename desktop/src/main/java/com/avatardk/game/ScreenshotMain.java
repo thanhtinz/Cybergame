@@ -425,8 +425,6 @@ public class ScreenshotMain {
                             // Sơn (id 999) kèm khối người yêu (Linh) rồi mở
                             game.player.xu = 12500;
                             game.player.luong = 260;
-                            game.player.luongKhoa = 1500;
-                            game.player.xeng = 42;
                             game.player.gender = 1; // Sơn = Nam
                             try {
                                 java.io.ByteArrayOutputStream bos = new java.io.ByteArrayOutputStream();

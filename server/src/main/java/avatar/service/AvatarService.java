@@ -325,9 +325,8 @@ public class AvatarService extends Service {
                 ds.writeShort(-1);
 
             ds.writeBoolean(session.isNewVersion());//new version
-            if (session.isNewVersion()) {
-                ds.writeInt(us.getXeng());
-            }
+            // (ban cu ghi them xeng o day — game chi con Xu + Luong
+            // tu 2026-11-06 nen khong ghi nua, client cung khong doc)
             int m = 4;
             ds.writeByte((byte) m);
             short[] IDAction = {103, 102, 104, 107};
@@ -344,7 +343,6 @@ public class AvatarService extends Service {
                 ds.writeByte(typeMoney[i2]);
             }
             ds.writeInt(us.getLuong());
-            ds.writeInt(us.getLuongKhoa());
             ds.writeByte(1);
             ds.writeUTF(us.getDisplayName());
             ds.flush();
@@ -861,11 +859,9 @@ public class AvatarService extends Service {
         try {
             Message ms = new Message(Cmd.UPDATE_MONEY);
             DataOutputStream ds = ms.writer();
-            ds.writeInt(session.user.xeng);
             ds.writeByte((byte) type);
             ds.writeInt(Math.toIntExact(session.user.xu));
             ds.writeInt(session.user.luong);
-            ds.writeInt(session.user.luongKhoa);
             ds.flush();
             sendMessage(ms);
         } catch (IOException ex) {

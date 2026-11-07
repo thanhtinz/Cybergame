@@ -48,12 +48,12 @@ def main():
         assert "6 lượng" in info, info
         print(f"PASS step 0 hỏi giá: {info}")
 
-        # step 1: trả lượng -> {1, int giá, int lượng mới, int khoá}
+        # step 1: trả lượng -> {1, int giá, int lượng mới}
         c.send(93, bytes([1]))
         r = R(wait_cmd(c, 93))
         assert r.byte() == 1
-        price, luong, khoa = r.int(), r.int(), r.int()
-        assert price == 6 and luong == 94, (price, luong, khoa)
+        price, luong = r.int(), r.int()
+        assert price == 6 and luong == 94, (price, luong)
         print(f"PASS step 1: trừ {price} lượng, còn {luong}")
 
         # nhận món ngay bằng 92, kiểm kho có sản phẩm 207

@@ -131,7 +131,6 @@ public class User {
     private byte gender;
     public long xu;
     public int luong;
-    public int luongKhoa;
 
     private List<Integer> availableSkills;
     private int useSkill;
@@ -141,7 +140,6 @@ public class User {
     public long lastTimeSet;
     public int correctAnswer; // Biến lưu trữ kết quả đúng của phép toán
 
-    public int xeng;
     private short clanID;
     private byte role;
     private byte star;
@@ -385,16 +383,14 @@ public class User {
         this.xu_from_boss = xuFromBoss;
     }
 
-    public User(String username, int xeng, int TopPhaoLuong) {
+    public User(String username, int ignored, int TopPhaoLuong) {
         this.username = username;
-        this.xeng = xeng;
         this.TopPhaoLuong = TopPhaoLuong;
     }
 
     public User(String username, int id, int xeng, int TopPhaoXu) {
         this.username = username;
         this.id = id;
-        this.xeng = xeng;
         this.TopPhaoXu = TopPhaoXu;
     }
 
@@ -481,14 +477,6 @@ public class User {
 
     public synchronized void updateScores(int ScoresUp) {
         this.scores += ScoresUp;
-    }
-
-    public synchronized void updateLuongKhoa(int luongUp) {
-        this.luong += luongUp;
-    }
-
-    public synchronized void updateXeng(int xengUp) {
-        this.xeng += xengUp;
     }
 
     public synchronized void updateChestSlot(int chestslot) {
@@ -619,8 +607,8 @@ public class User {
     protected void saveData() {
         DbManager.getInstance().executeUpdate("UPDATE `players` SET `gender` = ?, `friendly` = ?, `crazy` = ?, `stylish` = ?, `happy` = ?, `hunger` = ?, `chest_slot` = ? , `chest_home_slot` = ? WHERE `user_id` = ? LIMIT 1;",
                 this.gender, this.friendly, this.crazy, this.stylish, this.happy, this.hunger, this.chestSlot, this.chestHomeSlot, this.id);
-        DbManager.getInstance().executeUpdate("UPDATE `players` SET `xu` = ?, `luong` = ?, `luong_khoa` = ?, `xeng` = ?, `level_main` = ?, `exp_main` = ?,`scores` = ? , `xu_from_boss` = ? , `TopPhaoLuong` = ?, `TopPhaoXu` = ? WHERE `user_id` = ? LIMIT 1;",
-                this.xu, this.luong, this.luongKhoa, this.xeng, this.leverMain, this.expMain, this.scores, this.xu_from_boss, this.TopPhaoLuong, this.TopPhaoXu, this.id);
+        DbManager.getInstance().executeUpdate("UPDATE `players` SET `xu` = ?, `luong` = ?, `level_main` = ?, `exp_main` = ?,`scores` = ? , `xu_from_boss` = ? , `TopPhaoLuong` = ?, `TopPhaoXu` = ? WHERE `user_id` = ? LIMIT 1;",
+                this.xu, this.luong, this.leverMain, this.expMain, this.scores, this.xu_from_boss, this.TopPhaoLuong, this.TopPhaoXu, this.id);
         JSONArray jChests = new JSONArray();
         for (Item item : this.chests) {
             JSONObject obj = new JSONObject();
@@ -1141,8 +1129,6 @@ public class User {
                     Utils.writeLog(this,"xu load :" + this.xu);
                     this.luong = res.getInt("luong");
                     Utils.writeLog(this,"luong load :" + this.luong);
-                    this.luongKhoa = res.getInt("luong_khoa");
-                    this.xeng = res.getInt("xeng");
                     this.clanID = res.getShort("clan_id");
                     this.friendly = res.getByte("friendly");
                     this.crazy = res.getShort("crazy");//vp sk/

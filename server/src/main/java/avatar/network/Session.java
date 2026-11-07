@@ -1283,7 +1283,6 @@ public void NhanThuongEventXuBoss() throws IOException {
                 fds.writeUTF("Bạn đã mua vật phẩm thành công.");
                 fds.writeInt(Math.toIntExact(user.getXu()));
                 fds.writeInt(user.getLuong());
-                fds.writeInt(user.getLuongKhoa());
                 fds.flush();
                 this.sendMessage(fms);
                 return;
@@ -1373,7 +1372,6 @@ public void NhanThuongEventXuBoss() throws IOException {
                 ds.writeUTF("Bạn đã mua vật phẩm thành công.");
                 ds.writeInt(Math.toIntExact(user.getXu()));
                 ds.writeInt(user.getLuong());
-                ds.writeInt(user.getLuongKhoa());
                 ds.flush();
                 this.sendMessage(ms);
             } else {

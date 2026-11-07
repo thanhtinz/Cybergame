@@ -19,8 +19,6 @@ public class PlayerInfo {
     public int levelPercent;
     public int xu;
     public int luong;
-    public int luongKhoa;
-    public int xeng;
     /** Icon/logo clan của người chơi (gói info có sẵn, gốc đọc bỏ) —
      *  -1 = chưa có clan; 0..3 = bộ logo clan gốc. */
     public int clanIcon = -1;
@@ -69,8 +67,8 @@ public class PlayerInfo {
         r.readByte(); // hằng 1
         r.readShort(); // level chính (lần 2)
         r.readShort(); // mã trạng thái hôn nhân
-        boolean newVersion = r.readBoolean();
-        if (newVersion) p.xeng = r.readInt();
+        r.readBoolean(); // newVersion (bản cũ đọc thêm xèng ở đây —
+        // game chỉ còn Xu + Lượng từ 2026-11-06, server không gửi nữa)
         int nAction = r.readByte();
         for (int i = 0; i < nAction; i++) {
             r.readShort();
@@ -80,7 +78,6 @@ public class PlayerInfo {
             r.readByte();
         }
         p.luong = r.readInt();
-        p.luongKhoa = r.readInt();
         r.readByte(); // hằng 1
         p.username = r.readUTF();
         return p;

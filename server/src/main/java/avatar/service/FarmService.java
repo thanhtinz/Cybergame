@@ -229,7 +229,7 @@ public class FarmService extends Service {
 
 //mở ô đất (gói 70): {int idFarm, byte typeBuy 1=xu 2=lượng} -> trừ tiền thật,
 //trả đúng khuôn onOpenLand của client gốc {int idFarm, int curMoney, byte typeBuy,
-//UTF text, int xu, int luong, int luongKhoa}. Bản fan cộng ô MIỄN PHÍ + curMoney=1.
+//UTF text, int xu, int luong}. Bản fan cộng ô MIỄN PHÍ + curMoney=1.
     public void openLand(Message ms) throws IOException {
         int id = ms.reader().readInt(); // ID của nông trại
         byte typeBuy = ms.reader().readByte(); // 1 = xu, 2 = lượng
@@ -261,7 +261,6 @@ public class FarmService extends Service {
         ds.writeUTF("Đã mở ô đất thành công");
         ds.writeInt((int) this.session.user.getXu());
         ds.writeInt((int) this.session.user.getLuong());
-        ds.writeInt((int) this.session.user.getLuongKhoa());
         ds.flush();
         this.session.sendMessage(ms);
     }
@@ -640,8 +639,7 @@ public class FarmService extends Service {
             ds.writeByte(1);
             ds.writeInt(0);
             ds.writeInt(u.getLuong());
-            ds.writeInt(u.luongKhoa);
-            ds.flush();
+                        ds.flush();
             this.session.sendMessage(out);
             return;
         }
@@ -666,7 +664,7 @@ public class FarmService extends Service {
             this.session.sendMessage(out);
             return;
         }
-        if (u.getLuong() + u.luongKhoa < price) {
+        if (u.getLuong() < price) {
             u.getAvatarService().serverDialog("Không đủ lượng để nấu nhanh.");
             return;
         }
@@ -675,8 +673,7 @@ public class FarmService extends Service {
         ds.writeByte(1);
         ds.writeInt(price);
         ds.writeInt(u.getLuong());
-        ds.writeInt(u.luongKhoa);
-        ds.flush();
+                ds.flush();
         this.session.sendMessage(out);
     }
 

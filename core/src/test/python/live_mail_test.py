@@ -66,9 +66,9 @@ def recv_until_multi(c, wants, tries=16):
 
 
 def parse_money(body: bytes):
-    xeng, typ, xu, luong, luong_khoa = struct.unpack(">ibiii", body[:17])
-    return {"xeng": xeng, "type": typ, "xu": xu, "luong": luong,
-            "luongKhoa": luong_khoa}
+    # UPDATE_MONEY -33 moi: {byte type, int xu, int luong}
+    typ, xu, luong = struct.unpack(">bii", body[:9])
+    return {"type": typ, "xu": xu, "luong": luong}
 
 
 def main():

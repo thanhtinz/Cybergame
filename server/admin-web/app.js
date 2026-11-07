@@ -109,8 +109,6 @@ async function loadPlayers() {
     return "<tr><td>" + p.id + "</td><td><b>" + esc(p.username) + "</b></td><td>" + status + "</td>" +
       '<td><input type="number" id="xu-' + p.id + '" value="' + p.xu + '"></td>' +
       '<td><input type="number" id="luong-' + p.id + '" value="' + p.luong + '"></td>' +
-      '<td><input type="number" id="lk-' + p.id + '" value="' + p.luongKhoa + '"></td>' +
-      '<td><input type="number" id="xeng-' + p.id + '" value="' + p.xeng + '"></td>' +
       '<td><input type="number" id="role-' + p.id + '" value="' + p.role + '" title="Role: -1 thường, 0/1 là admin"></td>' +
       "<td>" + esc(p.timeCreate) + "</td>" +
       '<td><button class="btn small primary" data-money="' + p.id + '">Lưu tiền + role</button>' + banBtn + "</td></tr>";
@@ -125,7 +123,7 @@ async function saveMoney(id) {
   await api("/api/players/money", {
     id: id,
     xu: +$("xu-" + id).value, luong: +$("luong-" + id).value,
-    luongKhoa: +$("lk-" + id).value, xeng: +$("xeng-" + id).value
+    
   });
   await api("/api/players/role", { id: id, role: +$("role-" + id).value });
   toast("Đã lưu người chơi " + id);
