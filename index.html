@@ -18,6 +18,10 @@
             display: block;
             margin: 0 auto;
             outline: none;
+            /* game pixel art: trình duyệt KHÔNG được làm mịn khi phóng
+               canvas (mặc định Safari/Chrome nội suy mượt gây mờ hình) */
+            image-rendering: pixelated;
+            image-rendering: -webkit-optimize-contrast;
         }
         #embed-html {
             width: 100%;
