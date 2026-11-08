@@ -4011,6 +4011,10 @@ public class WorldScreen extends ScreenAdapter {
                     handleOrderPacket(m);
                     break;
                 }
+                case AvatarProtocol.NPCFUN: {
+                    handleNpcFunPacket(m);
+                    break;
+                }
                 case AvatarProtocol.AUCTION: {
                     handleAuctionPacket(m);
                     break;
@@ -6068,6 +6072,8 @@ public class WorldScreen extends ScreenAdapter {
         if (tradeTouch(x, y)) return;
         if (farm2Touch(x, y)) return;
         if (dailyTouch(x, y)) return;
+        if (lotTouch(x, y)) return;
+        if (nqzTouch(x, y)) return;
         if (orderTouch(x, y)) return;
         if (auctionTouch(x, y)) return;
         // hộp xác nhận nâng cấp rương (−90) là modal trên cùng
@@ -7552,6 +7558,9 @@ public class WorldScreen extends ScreenAdapter {
         switch (id) {
             case 95: case 165: case 185: case 186: case 430: case 761: case 850:
             case 857: case 858: case 859: case 860: case 861: case 862: case 863: case 864:
+            // [CREATE] 12 NPC dung + chat co tinh nang (docs/npc-fun-spec.md)
+            case 50: case 315: case 335: case 425: case 465: case 535: case 540:
+            case 590: case 645: case 646: case 741: case 760:
                 return true;
             default: return false;
         }
@@ -8234,6 +8243,8 @@ public class WorldScreen extends ScreenAdapter {
         dailyOpen = false;
         auctionOpen = false;
         orderOpen = false;
+        lotOpen = false;
+        nqzOpen = false;
     }
 
     private void openMsgPanel() {
@@ -12087,7 +12098,7 @@ public class WorldScreen extends ScreenAdapter {
         return mgOpen || tcOpen || crOpen || txOpen || aiOpen || snOpen
             || casinoIn || csPending || raceIn || dlOpen || dlPrizeOpen
             || marketOpen || tradeOpen || farm2Open || dailyOpen || auctionOpen
-            || orderOpen;
+            || orderOpen || lotOpen || nqzOpen;
     }
 
     private void drawHud(float playerFeetX, float playerFeetY) {
@@ -12143,6 +12154,8 @@ public class WorldScreen extends ScreenAdapter {
         if (farm2Open) drawFarm2Panel();
         if (dailyOpen) drawDailyPanel();
         if (orderOpen) drawOrderPanel();
+        if (lotOpen) drawLotteryPanel();
+        if (nqzOpen) drawNpcQuizPanel();
         if (auctionOpen) drawAuctionPanel();
         drawTradeInviteBox();
         if (friendOpen) drawFriendPanel();
@@ -17180,6 +17193,336 @@ public class WorldScreen extends ScreenAdapter {
         }
         if (x < OD_PX || x > OD_PX + OD_PW || y < OD_PY || y > OD_PY + OD_PH) {
             orderOpen = false;
+        }
+        return true;
+    }
+
+    /** Harness: nhảy tới đứng cạnh 1 NPC (chụp kiểm doll + thẻ tên). */
+    public void debugGotoNpc(int npcId) {
+        for (MapDef md : maps) {
+            for (MapNpc mn : md.npcs) {
+                if (mn.id == npcId) {
+                    loadMap(md);
+                    playerX = Math.max(10, mn.x - 26);
+                    playerY = mn.y;
+                    debugBusSkip();
+                    return;
+                }
+            }
+        }
+    }
+
+    // ==================== XỔ SỐ + QUIZ NPC [CREATE gói −126] ====================
+    // docs/npc-fun-spec.md: panel xổ số của Vé Số 465 + panel quiz
+    // phiên của 645/646/315/760. Mở khi server gửi STATE/Q (qua menu
+    // NPC), không tự mở từ client.
+    private boolean lotOpen;
+    private String lotInfo = "";
+    private final java.util.List<Integer> lotTickets = new ArrayList<>();
+    private int lotLeft, lotPrice = 5000, lotPick = 17;
+    private String lotMsg = "";
+    private boolean lotMsgOk;
+    private final java.util.List<float[]> lotBtns = new ArrayList<>();
+    private static final int LT_PW = 680, LT_PH = 560;
+    private static final int LT_PX = (1280 - LT_PW) / 2, LT_PY = (720 - LT_PH) / 2;
+
+    private boolean nqzOpen;
+    private int nqzNpc, nqzPos = 1, nqzTotal = 5, nqzSeconds = 30;
+    private String nqzQuestion = "";
+    private final String[] nqzAnswers = new String[4];
+    private long nqzDeadline;
+    private boolean nqzAnswered;
+    private String nqzResult = "";
+
+    private void handleNpcFunPacket(Msg m) {
+        try {
+            java.io.DataInputStream r = m.reader();
+            if (r.available() < 1) return;
+            int sub = r.readByte();
+            if (sub == AvatarProtocol.NF_S_LOTTERY) {
+                lotInfo = r.readUTF();
+                lotTickets.clear();
+                int n = r.readByte();
+                for (int i = 0; i < n; i++) lotTickets.add(r.readByte() & 0xFF);
+                lotLeft = r.readByte();
+                lotPrice = r.readInt();
+                int claimed = r.readInt();
+                lotOpen = true;
+                if (claimed > 0) {
+                    lotMsg = "Bạn trúng " + fmtMoney(claimed) + " xu từ kỳ trước, đã cộng vào tài khoản!";
+                    lotMsgOk = true;
+                }
+            } else if (sub == AvatarProtocol.NF_S_QUIZ_Q) {
+                nqzNpc = r.readShort();
+                nqzPos = r.readByte();
+                nqzTotal = r.readByte();
+                nqzQuestion = r.readUTF();
+                for (int i = 0; i < 4; i++) nqzAnswers[i] = r.readUTF();
+                nqzSeconds = r.readShort();
+                nqzDeadline = System.currentTimeMillis() + nqzSeconds * 1000L;
+                nqzAnswered = false;
+                nqzResult = "";
+                nqzOpen = true;
+            } else if (sub == AvatarProtocol.NF_S_QUIZ_END) {
+                nqzResult = r.readUTF();
+                nqzOpen = true;
+            } else if (sub == AvatarProtocol.NF_S_MSG) {
+                boolean ok = r.readBoolean();
+                String text = r.readUTF();
+                if (lotOpen) {
+                    lotMsg = text;
+                    lotMsgOk = ok;
+                } else {
+                    addChatLog(TAB_SYSTEM, null, text, true);
+                }
+            }
+        } catch (IOException e) { }
+    }
+
+    /** Harness: dữ liệu mẫu chụp panel xổ số. */
+    public void debugOpenLottery() {
+        closeOtherPanels();
+        lotInfo = "Kỳ 6/11: số trúng 42 · Kỳ tới quay 20:00 ngày 7/11";
+        lotTickets.clear();
+        lotTickets.add(7); lotTickets.add(42); lotTickets.add(85);
+        lotLeft = 2; lotPrice = 5000; lotPick = 17;
+        lotMsg = "Đã mua vé số 42 kỳ 7/11. Chúc bạn may mắn!";
+        lotMsgOk = true;
+        lotOpen = true;
+    }
+
+    /** Harness: dữ liệu mẫu chụp panel quiz NPC. */
+    public void debugOpenNpcQuiz() {
+        closeOtherPanels();
+        nqzNpc = 645; nqzPos = 2; nqzTotal = 5;
+        nqzQuestion = "\"Good morning\" là lời chào vào lúc nào?";
+        nqzAnswers[0] = "Buổi sáng"; nqzAnswers[1] = "Buổi trưa";
+        nqzAnswers[2] = "Buổi tối"; nqzAnswers[3] = "Ban đêm";
+        nqzSeconds = 30;
+        nqzDeadline = System.currentTimeMillis() + 24_000L;
+        nqzAnswered = false; nqzResult = "";
+        nqzOpen = true;
+    }
+
+    private void drawLotteryPanel() {
+        lotBtns.clear();
+        float px = LT_PX, py = LT_PY, top = py + LT_PH;
+        batch.setColor(0f, 0f, 0f, 0.62f);
+        batch.draw(whiteTex, 0, 0, Ui.W, Ui.H);
+        batch.setColor(Color.WHITE);
+        batch.draw(Ui.roundedRect(LT_PW, LT_PH, 16,
+            new Color(0.04f, 0.08f, 0.14f, 0.98f), GLASS_RIM), px, py);
+        drawFarmPanelHeader(px, py, LT_PW, LT_PH, Ui.FA_DICE,
+            new Color(0.85f, 0.45f, 0.1f, 1f), "Xổ số may mắn",
+            "Vé Số · quay lúc 20:00 mỗi ngày");
+        float cx = px + LT_PW / 2f;
+        // thông tin kỳ (server gửi)
+        java.util.List<String> infoLines = wrapText(lotInfo, Ui.fontSmall, LT_PW - 56);
+        float iy = top - 104;
+        Ui.fontSmall.setColor(1f, 1f, 1f, 0.88f);
+        for (int i = 0; i < Math.min(2, infoLines.size()); i++) {
+            Ui.fontSmall.draw(batch, infoLines.get(i), px + 28, iy);
+            iy -= 22;
+        }
+        // vé đã mua
+        Ui.font.setColor(1f, 0.85f, 0.38f, 1f);
+        Ui.font.draw(batch, "Vé của bạn cho kỳ tới:", px + 28, top - 168);
+        float chipY = top - 244, chipW = 104, chipH = 48, chipGap = 12;
+        for (int i = 0; i < 5; i++) {
+            float bx = px + 28 + i * (chipW + chipGap);
+            boolean has = i < lotTickets.size();
+            batch.draw(Ui.roundedRect((int) chipW, (int) chipH, 12,
+                has ? new Color(0.16f, 0.24f, 0.34f, 0.95f) : new Color(0f, 0f, 0f, 0.3f),
+                GLASS_RIM), bx, chipY);
+            Ui.centered(batch, Ui.font, has ? String.format("%02d", lotTickets.get(i)) : "--",
+                bx + chipW / 2f, chipY + 31,
+                has ? Color.WHITE : new Color(1f, 1f, 1f, 0.4f));
+        }
+        // chọn số
+        Ui.font.setColor(1f, 0.85f, 0.38f, 1f);
+        Ui.font.draw(batch, "Chọn số:", px + 28, top - 272);
+        float pickY = top - 332;
+        batch.draw(Ui.roundedRect(104, 56, 12, new Color(0f, 0f, 0f, 0.4f), GLASS_RIM),
+            cx - 52, pickY);
+        Ui.centered(batch, Ui.fontTitle, String.format("%02d", lotPick), cx, pickY + 40,
+            new Color(1f, 0.85f, 0.38f, 1f));
+        String[] stepLbl = {"-10", "-1", "+1", "+10"};
+        float[] stepX = {cx - 52 - 16 - 60 - 8 - 60, cx - 52 - 16 - 60, cx + 52 + 16, cx + 52 + 16 + 60 + 8};
+        for (int i = 0; i < 4; i++) {
+            batch.draw(Ui.roundedRect(60, 56, 12, Ui.BTN_CANCEL, GLASS_RIM), stepX[i], pickY);
+            Ui.centered(batch, Ui.font, stepLbl[i], stepX[i] + 30, pickY + 36, Color.WHITE);
+            lotBtns.add(new float[]{stepX[i], pickY, 60, 56, i});
+        }
+        // nút ngẫu nhiên
+        batch.draw(Ui.roundedRect(170, 44, 10, Ui.BTN_CANCEL, GLASS_RIM), cx - 85, top - 396);
+        Ui.centered(batch, Ui.font, "Số ngẫu nhiên", cx, top - 396 + 29, Color.WHITE);
+        lotBtns.add(new float[]{cx - 85, top - 396, 170, 44, 4});
+        // nút mua
+        boolean ownedPick = lotTickets.contains(lotPick);
+        boolean canBuy = lotLeft > 0 && !ownedPick;
+        batch.draw(Ui.roundedRect(320, 54, 12,
+            canBuy ? new Color(0.95f, 0.55f, 0.15f, 1f) : new Color(0.3f, 0.3f, 0.32f, 0.9f),
+            canBuy ? new Color(0.95f, 0.55f, 0.15f, 1f) : GLASS_RIM), cx - 160, py + 84);
+        Ui.centered(batch, Ui.font,
+            lotLeft <= 0 ? "Đã mua đủ 5 vé kỳ này"
+                : ownedPick ? "Bạn đã mua số này rồi"
+                : "Mua vé · " + fmtMoney(lotPrice) + " xu",
+            cx, py + 84 + 35, Color.WHITE);
+        lotBtns.add(new float[]{cx - 160, py + 84, 320, 54, 5});
+        // thông báo + ghi chú
+        if (!lotMsg.isEmpty()) {
+            Ui.centered(batch, Ui.fontSmall, lotMsg, cx, py + 62,
+                lotMsgOk ? new Color(0.55f, 0.95f, 0.6f, 1f) : new Color(1f, 0.55f, 0.5f, 1f));
+        }
+        Ui.centered(batch, Ui.fontTiny,
+            "Trúng cả 2 số: 200.000 xu · Trúng chữ số cuối: 25.000 xu · Tối đa 5 vé mỗi kỳ",
+            cx, py + 30, new Color(1f, 1f, 1f, 0.55f));
+        Ui.font.setColor(Color.WHITE);
+    }
+
+    private boolean lotTouch(float x, float y) {
+        if (!lotOpen) return false;
+        float px = LT_PX, py = LT_PY;
+        if (x >= px + LT_PW - 54 && x <= px + LT_PW - 18
+                && y >= py + LT_PH - 54 && y <= py + LT_PH - 18) {
+            lotOpen = false;
+            return true;
+        }
+        for (float[] b : lotBtns) {
+            if (x >= b[0] && x <= b[0] + b[2] && y >= b[1] && y <= b[1] + b[3]) {
+                int code = (int) b[4];
+                switch (code) {
+                    case 0: lotPick = Math.floorMod(lotPick - 10, 100); break;
+                    case 1: lotPick = Math.floorMod(lotPick - 1, 100); break;
+                    case 2: lotPick = Math.floorMod(lotPick + 1, 100); break;
+                    case 3: lotPick = Math.floorMod(lotPick + 10, 100); break;
+                    case 4: lotPick = (int) (Math.random() * 100); break;
+                    case 5:
+                        if (lotLeft > 0 && !lotTickets.contains(lotPick)) {
+                            if (online()) {
+                                try { AvatarProtocol.npcFunLotteryBuy(game.connection, lotPick); }
+                                catch (IOException e) { }
+                            } else {
+                                lotTickets.add(lotPick);
+                                lotLeft--;
+                                lotMsg = "Đã mua vé số " + String.format("%02d", lotPick) + ". Chúc bạn may mắn!";
+                                lotMsgOk = true;
+                            }
+                        }
+                        break;
+                    default: break;
+                }
+                return true;
+            }
+        }
+        if (x < px || x > px + LT_PW || y < py || y > py + LT_PH) lotOpen = false;
+        return true;
+    }
+
+    private void drawNpcQuizPanel() {
+        float px = (Ui.W - QZ_W) / 2f, py = (Ui.H - QZ_H) / 2f, top = py + QZ_H;
+        batch.setColor(0f, 0f, 0f, 0.55f);
+        batch.draw(whiteTex, 0, 0, Ui.W, Ui.H);
+        batch.setColor(Color.WHITE);
+        batch.draw(Ui.roundedRect((int) QZ_W, (int) QZ_H, 18,
+            new Color(0.07f, 0.11f, 0.17f, 0.97f), GLASS_RIM), px, py);
+        drawFarmPanelHeader(px, py, QZ_W, QZ_H, Ui.FA_STAR,
+            new Color(0.5f, 0.35f, 0.85f, 1f), npcDisplayName(nqzNpc),
+            nqzResult.isEmpty() ? "Câu " + nqzPos + "/" + nqzTotal : "Kết quả");
+        if (!nqzResult.isEmpty()) {
+            java.util.List<String> lines = wrapText(nqzResult, Ui.font, QZ_W - 96);
+            float ly = py + QZ_H / 2f + lines.size() * 17;
+            Ui.font.setColor(Color.WHITE);
+            for (String ln : lines) {
+                Ui.centered(batch, Ui.font, ln, px + QZ_W / 2f, ly, Color.WHITE);
+                ly -= 34;
+            }
+            batch.draw(Ui.roundedRect(200, 48, 12, Ui.BTN_CANCEL, GLASS_RIM),
+                px + QZ_W / 2f - 100, py + 30);
+            Ui.centered(batch, Ui.font, "Đóng", px + QZ_W / 2f, py + 30 + 32, Color.WHITE);
+            return;
+        }
+        // hết giờ tại client: gửi 1 đáp án để server chốt phiên
+        long remainMs = nqzDeadline - System.currentTimeMillis();
+        if (remainMs <= 0 && !nqzAnswered && online()) {
+            nqzAnswered = true;
+            try { AvatarProtocol.npcFunQuizAnswer(game.connection, 0); }
+            catch (IOException ignored) { }
+            remainMs = 0;
+        }
+        float frac = nqzSeconds > 0
+            ? Math.max(0f, Math.min(1f, remainMs / (nqzSeconds * 1000f))) : 0f;
+        batch.draw(Ui.roundedRect((int) (QZ_W - 56), 14, 7, new Color(0f, 0f, 0f, 0.45f), GLASS_RIM),
+            px + 28, top - 104);
+        if (frac > 0.01f) {
+            Color tc = frac > 0.34f ? new Color(0.45f, 0.85f, 0.5f, 1f)
+                : new Color(0.95f, 0.45f, 0.4f, 1f);
+            batch.draw(Ui.roundedRect(Math.max(14, (int) ((QZ_W - 56) * frac)), 14, 7, tc, tc),
+                px + 28, top - 104);
+        }
+        Ui.fontSmall.setColor(1f, 1f, 1f, 0.8f);
+        String timeTxt = "Còn " + Math.max(0, (remainMs + 999) / 1000) + " giây";
+        layout.setText(Ui.fontSmall, timeTxt);
+        Ui.fontSmall.draw(batch, timeTxt, px + QZ_W - 28 - layout.width, top - 82);
+        java.util.List<String> lines = wrapText(nqzQuestion, Ui.font, QZ_W - 56);
+        float ly = top - 146;
+        Ui.font.setColor(Color.WHITE);
+        for (String ln : lines) {
+            Ui.font.draw(batch, ln, px + 28, ly);
+            ly -= 30;
+        }
+        float bw = 282, bh = 64, gap = 16;
+        float gridTop = py + 178;
+        String[] abc = {"A", "B", "C", "D"};
+        for (int i = 0; i < 4; i++) {
+            int col = i % 2, row = i / 2;
+            float bx = px + 28 + col * (bw + gap);
+            float by = gridTop - row * (bh + gap);
+            batch.draw(Ui.roundedRect((int) bw, (int) bh, 12,
+                nqzAnswered ? new Color(0f, 0f, 0f, 0.25f) : new Color(0.16f, 0.24f, 0.34f, 0.95f),
+                GLASS_RIM), bx, by);
+            Ui.font.setColor(1f, 0.85f, 0.38f, 1f);
+            Ui.font.draw(batch, abc[i] + ".", bx + 16, by + 41);
+            Ui.font.setColor(1f, 1f, 1f, nqzAnswered ? 0.5f : 0.95f);
+            Ui.font.draw(batch, truncTo(Ui.font,
+                nqzAnswers[i] == null ? "" : nqzAnswers[i], bw - 64), bx + 52, by + 41);
+        }
+        Ui.font.setColor(Color.WHITE);
+    }
+
+    private boolean nqzTouch(float x, float y) {
+        if (!nqzOpen) return false;
+        float px = (Ui.W - QZ_W) / 2f, py = (Ui.H - QZ_H) / 2f, top = py + QZ_H;
+        if (x >= px + QZ_W - 54 && x <= px + QZ_W - 18
+                && y >= top - 54 && y <= top - 18) {
+            if (nqzResult.isEmpty() && online()) {
+                try { AvatarProtocol.npcFunQuizQuit(game.connection); }
+                catch (IOException ignored) { }
+            }
+            nqzOpen = false;
+            return true;
+        }
+        if (!nqzResult.isEmpty()) {
+            if (x >= px + QZ_W / 2f - 100 && x <= px + QZ_W / 2f + 100
+                    && y >= py + 30 && y <= py + 78) {
+                nqzOpen = false;
+            }
+            return true;
+        }
+        if (x < px || x > px + QZ_W || y < py || y > py + QZ_H) return true;
+        if (nqzAnswered || !online()) return true;
+        float bw = 282, bh = 64, gap = 16;
+        float gridTop = py + 178;
+        for (int i = 0; i < 4; i++) {
+            int col = i % 2, row = i / 2;
+            float bx = px + 28 + col * (bw + gap);
+            float by = gridTop - row * (bh + gap);
+            if (x >= bx && x <= bx + bw && y >= by && y <= by + bh) {
+                nqzAnswered = true;
+                try { AvatarProtocol.npcFunQuizAnswer(game.connection, i); }
+                catch (IOException ignored) { }
+                return true;
+            }
         }
         return true;
     }

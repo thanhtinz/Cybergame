@@ -784,6 +784,28 @@ public final class AvatarProtocol {
         Msg m = orderMsg(O_TRASH); m.writer().writeByte(slot); m.writer().flush(); conn.send(m);
     }
 
+    // ---- TINH NANG NPC [CREATE] (goi -126, docs/npc-fun-spec.md) ----
+    public static final byte NPCFUN = -126;
+    public static final byte NF_LOTTERY_STATE = 0, NF_LOTTERY_BUY = 1,
+        NF_QUIZ_ANSWER = 3, NF_QUIZ_QUIT = 4,
+        NF_S_LOTTERY = 10, NF_S_QUIZ_Q = 11, NF_S_QUIZ_END = 12, NF_S_MSG = 13;
+
+    public static Msg npcFunMsg(byte sub) throws IOException {
+        Msg m = new Msg(NPCFUN); m.writer().writeByte(sub); return m;
+    }
+    public static void npcFunLotteryState(GameConnection conn) throws IOException {
+        conn.send(npcFunMsg(NF_LOTTERY_STATE));
+    }
+    public static void npcFunLotteryBuy(GameConnection conn, int number) throws IOException {
+        Msg m = npcFunMsg(NF_LOTTERY_BUY); m.writer().writeByte(number); m.writer().flush(); conn.send(m);
+    }
+    public static void npcFunQuizAnswer(GameConnection conn, int idx) throws IOException {
+        Msg m = npcFunMsg(NF_QUIZ_ANSWER); m.writer().writeByte(idx); m.writer().flush(); conn.send(m);
+    }
+    public static void npcFunQuizQuit(GameConnection conn) throws IOException {
+        conn.send(npcFunMsg(NF_QUIZ_QUIT));
+    }
+
     public static void taixiuBoard(GameConnection conn) throws IOException {
         Msg m = new Msg(TAIXIU);
         m.writer().writeByte(0);

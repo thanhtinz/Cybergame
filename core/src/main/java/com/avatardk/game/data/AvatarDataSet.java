@@ -38,6 +38,83 @@ public class AvatarDataSet {
     public final List<NpcData> npcs = new ArrayList<>();
 
 
+    /** Tên hiển thị tiếng Việt của NPC: dữ liệu gốc (npcs.json /
+     *  maps.json) chỉ có KHOÁ bản địa hoá kiểu "ve.so" — client gốc tra
+     *  khoá trong bảng ngôn ngữ của nó; bản port bổ sung bảng tra này
+     *  để thẻ tên trên map hiện đúng tên thay vì nguyên khoá. */
+    public static final java.util.Map<Integer, String> NPC_NAMES = new java.util.HashMap<>();
+    /** Câu thoại bổ sung cho NPC có chat rỗng trong gốc (chỉ dùng cho
+     *  bong bóng khi tương tác offline / NPC không có menu). */
+    public static final java.util.Map<Integer, String[]> NPC_CHATS = new java.util.HashMap<>();
+    static {
+        NPC_NAMES.put(50, "Tiên Cá");
+        NPC_NAMES.put(95, "Thợ Kim Hoàn");
+        NPC_NAMES.put(165, "Saitama");
+        NPC_NAMES.put(185, "Quay Số");
+        NPC_NAMES.put(186, "Đấu Giá");
+        NPC_NAMES.put(315, "Giám Thị");
+        NPC_NAMES.put(335, "Phi Hành Gia");
+        NPC_NAMES.put(425, "Phù Thủy Bóng Tối");
+        NPC_NAMES.put(430, "Thợ Câu");
+        NPC_NAMES.put(465, "Vé Số");
+        NPC_NAMES.put(525, "Chủ Hôn");
+        NPC_NAMES.put(535, "Zombie");
+        NPC_NAMES.put(540, "Bậc Thầy Phù Thủy");
+        NPC_NAMES.put(590, "Pretty Witch");
+        NPC_NAMES.put(645, "Cô Giáo Tiếng Anh");
+        NPC_NAMES.put(646, "Cô Giáo Tiếng Việt");
+        NPC_NAMES.put(741, "Ăn Xin");
+        NPC_NAMES.put(760, "Pharaoh");
+        NPC_NAMES.put(761, "Cửa Hàng");
+        NPC_NAMES.put(850, "Lái Buôn");
+        NPC_NAMES.put(857, "Chủ Đầu Tư");
+        NPC_NAMES.put(858, "Bạch Vô Thường");
+        NPC_NAMES.put(859, "Hắc Vô Thường");
+        NPC_NAMES.put(860, "Bà Tiên Tri");
+        NPC_NAMES.put(861, "Shop Lượng");
+        NPC_NAMES.put(862, "Pay To Win");
+        NPC_NAMES.put(863, "Chay To Win");
+        NPC_NAMES.put(864, "Thần Tài Xỉu");
+        NPC_NAMES.put(870, "NPC Hội Nhóm");
+        NPC_NAMES.put(871, "Thị Trưởng");
+        NPC_CHATS.put(465, new String[]{
+            "Vé số đây, vé số đây! 5.000 xu một vé, trúng tới 200.000 xu!",
+            "20 giờ tối nay quay số, mua nhanh kẻo hết giờ!"});
+        NPC_CHATS.put(645, new String[]{
+            "Hello! Muốn kiểm tra tiếng Anh với cô không?",
+            "Học tiếng Anh mỗi ngày, làm bài đúng nhận xu thưởng nhé!"});
+        NPC_CHATS.put(646, new String[]{
+            "Chào em, hôm nay học tục ngữ ca dao nhé!",
+            "Tiếng Việt mình giàu đẹp lắm, vào làm bài kiểm tra với cô nào!"});
+        NPC_CHATS.put(50, new String[]{
+            "Ta là Tiên Cá, hát hay và ban phước cho người tốt.",
+            "Mỗi ngày ta ban phước biển một lần, đừng bỏ lỡ nhé!"});
+        NPC_CHATS.put(315, new String[]{
+            "Vào phòng thi phải nghiêm túc, không quay cóp đâu nhé!",
+            "Thi chỉ 15 giây một câu, lo mà tập trung!"});
+        NPC_CHATS.put(335, new String[]{
+            "Ta sắp phóng tàu thám hiểm vũ trụ, bạn đi cùng không?",
+            "Ngoài vũ trụ có Đá ngũ sắc quý hiếm lắm đấy!"});
+        NPC_CHATS.put(425, new String[]{
+            "Khà khà, nồi dược của ta đang sôi đây...",
+            "Luyện dược đen không? Hên xui do trời, khà khà!"});
+        NPC_CHATS.put(540, new String[]{
+            "Ta xem bói chuẩn lắm, một ngày một quẻ thôi.",
+            "Quẻ hôm nay của bạn chưa gieo đấy, vào xem đi!"});
+        NPC_CHATS.put(590, new String[]{
+            "Ta có quà ma thuật xinh lắm, đổi không?",
+            "Đồ của ta mặc lên là xinh nhất hội phù thủy!"});
+        NPC_CHATS.put(535, new String[]{
+            "Đói... đói... Có gì... ăn... không...",
+            "Ta chỉ ăn món đã nấu chín thôi, sống không ăn được..."});
+        NPC_CHATS.put(741, new String[]{
+            "Thí chủ ơi, cho lão xin ít xu mua cơm...",
+            "Cho đi là còn mãi, tích điểm Phúc đổi được lượng đấy thí chủ."});
+        NPC_CHATS.put(760, new String[]{
+            "Ta là Pharaoh, canh giữ kim tự tháp ngàn năm.",
+            "Giải được câu đố của Nhân Sư mới mong có thưởng!"});
+    }
+
     public static AvatarDataSet fromJson(String itemsJson, String imgDataJson, String npcsJson) {
         AvatarDataSet ds = new AvatarDataSet();
         JsonReader reader = new JsonReader();
@@ -88,8 +165,10 @@ public class AvatarDataSet {
 
         JsonValue npcs = reader.parse(npcsJson);
         for (JsonValue r = npcs.child; r != null; r = r.next) {
+            int npcId = r.getInt("id");
+            String pretty = NPC_NAMES.get(npcId);
             NpcData n = new NpcData(
-                r.getInt("id"), r.getString("name", ""),
+                npcId, pretty != null ? pretty : r.getString("name", ""),
                 r.getInt("map"), r.getInt("x"), r.getInt("y"));
             // items của NPC: bản cài là chuỗi "[628, 474]"; bản WEB có thể
             // là mảng số nguyên (cùng lý do với animation ở trên).
@@ -125,6 +204,12 @@ public class AvatarDataSet {
                         String t = s.trim();
                         if (!t.isEmpty()) n.chat.add(t);
                     }
+                }
+            }
+            if (n.chat.isEmpty()) {
+                String[] extra = NPC_CHATS.get(n.id);
+                if (extra != null) {
+                    for (String line : extra) n.chat.add(line);
                 }
             }
             ds.npcs.add(n);

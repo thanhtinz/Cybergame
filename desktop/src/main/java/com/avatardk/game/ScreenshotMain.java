@@ -1596,8 +1596,61 @@ public class ScreenshotMain {
                         break;
                     case 179: // Panel Don hang uy thac cua Lai Buon [PORT]
                         if (frame == 1) { world.debugOpenOrders(); }
-                        if (frame == 15) { shot("shot-orders.png"); stage = 121; frame = 0; }
+                        if (frame == 15) { shot("shot-orders.png"); stage = 180; frame = 0; }
                         break;
+                    case 180: // Panel Xo so cua Ve So 465 [CREATE]
+                        if (frame == 1) { world.debugOpenLottery(); }
+                        if (frame == 15) { shot("shot-lottery.png"); stage = 181; frame = 0; }
+                        break;
+                    case 181: // Panel quiz phien NPC (Co giao tieng Anh) [CREATE]
+                        if (frame == 1) { world.debugOpenNpcQuiz(); }
+                        if (frame == 15) { shot("shot-npcquiz.png"); stage = 182; frame = 0; }
+                        break;
+                    case 182: // NPC 645 tren map [CREATE kiem doll + the ten]
+                        if (frame == 1) { world.debugCloseHubGames(); world.debugGotoNpc(645); }
+                        if (frame == 15) { shot("shot-npc-teachers.png"); stage = 183; frame = 0; }
+                        break;
+                    case 183: // NPC 465 tren map [CREATE kiem doll + the ten]
+                        if (frame == 1) { world.debugCloseHubGames(); world.debugGotoNpc(465); }
+                        if (frame == 15) { shot("shot-npc-veso.png"); stage = 184; frame = 0; }
+                        break;
+                    case 184: // NPC 741 tren map [CREATE kiem doll + the ten]
+                        if (frame == 1) { world.debugCloseHubGames(); world.debugGotoNpc(741); }
+                        if (frame == 15) { shot("shot-npc-anxin.png"); stage = 185; frame = 0; }
+                        break;
+                    case 185: // NPC 50 tren map [CREATE kiem doll + the ten]
+                        if (frame == 1) { world.debugCloseHubGames(); world.debugGotoNpc(50); }
+                        if (frame == 15) { shot("shot-npc-tienca.png"); stage = 186; frame = 0; }
+                        break;
+                    case 186: // NPC 315 tren map [CREATE kiem doll + the ten]
+                        if (frame == 1) { world.debugCloseHubGames(); world.debugGotoNpc(315); }
+                        if (frame == 15) { shot("shot-npc-giamthi.png"); stage = 187; frame = 0; }
+                        break;
+                    case 187: // NPC 335 tren map [CREATE kiem doll + the ten]
+                        if (frame == 1) { world.debugCloseHubGames(); world.debugGotoNpc(335); }
+                        if (frame == 15) { shot("shot-npc-phihanhgia.png"); stage = 188; frame = 0; }
+                        break;
+                    case 188: // NPC 760 tren map [CREATE kiem doll + the ten]
+                        if (frame == 1) { world.debugCloseHubGames(); world.debugGotoNpc(760); }
+                        if (frame == 15) { shot("shot-npc-pharaoh.png"); stage = 189; frame = 0; }
+                        break;
+                    case 189: // NPC 535 tren map [CREATE kiem doll + the ten]
+                        if (frame == 1) { world.debugCloseHubGames(); world.debugGotoNpc(535); }
+                        if (frame == 15) { shot("shot-npc-zombie.png"); stage = 190; frame = 0; }
+                        break;
+                    case 190: // NPC 425 tren map [CREATE kiem doll + the ten]
+                        if (frame == 1) { world.debugCloseHubGames(); world.debugGotoNpc(425); }
+                        if (frame == 15) { shot("shot-npc-darkwitch.png"); stage = 191; frame = 0; }
+                        break;
+                    case 191: // NPC 590 tren map [CREATE kiem doll + the ten]
+                        if (frame == 1) { world.debugCloseHubGames(); world.debugGotoNpc(590); }
+                        if (frame == 15) { shot("shot-npc-prettywitch.png"); stage = 192; frame = 0; }
+                        break;
+                    case 192: // NPC 540 tren map [CREATE kiem doll + the ten]
+                        if (frame == 1) { world.debugCloseHubGames(); world.debugGotoNpc(540); }
+                        if (frame == 15) { shot("shot-npc-witchmaster.png"); stage = 121; frame = 0; }
+                        break;
+
                     case 121: // nền ban ngày ở thành phố (kiểm lớp trời/BGMap)
                         if (frame == 1) {
                             world.debugCloseHubGames();

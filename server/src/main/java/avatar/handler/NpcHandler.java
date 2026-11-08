@@ -518,6 +518,243 @@ public class NpcHandler {
                     us.getAvatarService().serverDialog("đấu giá đang bảo trì các bạn vui lòng quay lại sau");
                     break;
                 }
+                // ===== [CREATE] 12 NPC đứng + chat có tính năng (docs/npc-fun-spec.md) =====
+                case NpcName.VE_SO: {
+                    List<Menu> vs = new ArrayList<>();
+                    vs.add(Menu.builder().name("Mua vé số").action(() -> {
+                        try {
+                            new avatar.service.NpcFunService(us.session).sendLottery(us);
+                        } catch (IOException e) {
+                            throw new RuntimeException(e);
+                        }
+                    }).build());
+                    vs.add(Menu.builder().name("Xem hướng dẫn").action(() -> {
+                        us.getAvatarService().customTab("Hướng dẫn", "Mỗi vé 5.000 xu, chọn 1 số từ 00 đến 99, mỗi kỳ mua tối đa 5 vé. Quay số lúc 20:00 mỗi ngày: vé mua trước 20:00 thuộc kỳ hôm nay, sau 20:00 thuộc kỳ ngày mai. Trúng cả 2 số nhận 200.000 xu, trúng chữ số cuối nhận 25.000 xu. Tiền trúng tự cộng khi bạn mở panel xổ số sau giờ quay.");
+                    }).build());
+                    vs.add(Menu.builder().name("Thoát").build());
+                    us.setMenus(vs);
+                    us.getAvatarService().openMenuOption(npcId, 0, vs);
+                    break;
+                }
+                case NpcName.CO_GIAO_TIENG_ANH: {
+                    List<Menu> ga = new ArrayList<>();
+                    ga.add(Menu.builder().name("Làm bài kiểm tra").action(() -> {
+                        try {
+                            new avatar.service.NpcFunService(us.session).startQuiz(us, 645);
+                        } catch (IOException e) {
+                            throw new RuntimeException(e);
+                        }
+                    }).build());
+                    ga.add(Menu.builder().name("Xem hướng dẫn").action(() -> {
+                        us.getAvatarService().customTab("Hướng dẫn", "Bài kiểm tra tiếng Anh gồm 5 câu, mỗi câu 30 giây. Đúng mỗi câu được 400 xu, đúng cả 5 câu thưởng thêm 2.000 xu. Mỗi ngày làm được 1 lần.");
+                    }).build());
+                    ga.add(Menu.builder().name("Thoát").build());
+                    us.setMenus(ga);
+                    us.getAvatarService().openMenuOption(npcId, 0, ga);
+                    break;
+                }
+                case NpcName.CO_GIAO_TIENG_VIET: {
+                    List<Menu> gv = new ArrayList<>();
+                    gv.add(Menu.builder().name("Làm bài kiểm tra").action(() -> {
+                        try {
+                            new avatar.service.NpcFunService(us.session).startQuiz(us, 646);
+                        } catch (IOException e) {
+                            throw new RuntimeException(e);
+                        }
+                    }).build());
+                    gv.add(Menu.builder().name("Xem hướng dẫn").action(() -> {
+                        us.getAvatarService().customTab("Hướng dẫn", "Bài kiểm tra tiếng Việt gồm 5 câu về tục ngữ, ca dao và chính tả, mỗi câu 30 giây. Đúng mỗi câu được 400 xu, đúng cả 5 câu thưởng thêm 2.000 xu. Mỗi ngày làm được 1 lần.");
+                    }).build());
+                    gv.add(Menu.builder().name("Thoát").build());
+                    us.setMenus(gv);
+                    us.getAvatarService().openMenuOption(npcId, 0, gv);
+                    break;
+                }
+                case NpcName.GIAM_THI: {
+                    List<Menu> gt = new ArrayList<>();
+                    gt.add(Menu.builder().name("Vào phòng thi").action(() -> {
+                        try {
+                            new avatar.service.NpcFunService(us.session).startQuiz(us, 315);
+                        } catch (IOException e) {
+                            throw new RuntimeException(e);
+                        }
+                    }).build());
+                    gt.add(Menu.builder().name("Xem hướng dẫn").action(() -> {
+                        us.getAvatarService().customTab("Hướng dẫn", "Kỳ thi gồm 8 câu trộn tiếng Anh, tiếng Việt và kiến thức chung, mỗi câu chỉ 15 giây. Đúng mỗi câu được 600 xu, đúng cả 8 câu thưởng thêm 5.000 xu. Mỗi ngày thi được 1 lần. Hết giờ giữa chừng thì phiên thi kết thúc và nhận phần đã đạt.");
+                    }).build());
+                    gt.add(Menu.builder().name("Thoát").build());
+                    us.setMenus(gt);
+                    us.getAvatarService().openMenuOption(npcId, 0, gt);
+                    break;
+                }
+                case NpcName.PHARAOH: {
+                    List<Menu> ph = new ArrayList<>();
+                    ph.add(Menu.builder().name("Giải đố kim tự tháp").action(() -> {
+                        try {
+                            new avatar.service.NpcFunService(us.session).startQuiz(us, 760);
+                        } catch (IOException e) {
+                            throw new RuntimeException(e);
+                        }
+                    }).build());
+                    ph.add(Menu.builder().name("Xem hướng dẫn").action(() -> {
+                        us.getAvatarService().customTab("Hướng dẫn", "Nhân Sư canh kim tự tháp ra 3 câu đố dân gian, mỗi câu 45 giây. Giải đúng mỗi câu được 1.500 xu. Mỗi ngày giải được 1 lần.");
+                    }).build());
+                    ph.add(Menu.builder().name("Thoát").build());
+                    us.setMenus(ph);
+                    us.getAvatarService().openMenuOption(npcId, 0, ph);
+                    break;
+                }
+                case NpcName.TIEN_CA: {
+                    List<Menu> tc = new ArrayList<>();
+                    tc.add(Menu.builder().name("Nhận phước biển").action(() -> {
+                        try {
+                            avatar.service.NpcFunService.mermaidGift(us);
+                        } catch (IOException e) {
+                            throw new RuntimeException(e);
+                        }
+                    }).build());
+                    tc.add(Menu.builder().name("Nghe Tiên Cá hát").action(() -> {
+                        us.getAvatarService().serverDialog("Tiên Cá ngân một khúc ca biển cả, sóng vỗ nhè nhẹ theo nhịp hát...");
+                    }).build());
+                    tc.add(Menu.builder().name("Thoát").build());
+                    us.setMenus(tc);
+                    us.getAvatarService().openMenuOption(npcId, 0, tc);
+                    break;
+                }
+                case NpcName.PHI_HANH_GIA: {
+                    List<Menu> hg = new ArrayList<>();
+                    hg.add(Menu.builder().name("Phóng tàu thám hiểm").action(() -> {
+                        try {
+                            avatar.service.NpcFunService.astronautLaunch(us);
+                        } catch (IOException e) {
+                            throw new RuntimeException(e);
+                        }
+                    }).build());
+                    hg.add(Menu.builder().name("Xem hướng dẫn").action(() -> {
+                        us.getAvatarService().customTab("Hướng dẫn", "Mỗi ngày chuyến bay đầu tiên miễn phí, các chuyến sau tốn 10.000 xu nhiên liệu, tối đa 6 chuyến/ngày. Tàu có thể mang về xu, lượng, Đá ngũ sắc, hoặc lạc vào vành đai thiên thạch và về tay trắng.");
+                    }).build());
+                    hg.add(Menu.builder().name("Thoát").build());
+                    us.setMenus(hg);
+                    us.getAvatarService().openMenuOption(npcId, 0, hg);
+                    break;
+                }
+                case NpcName.BAC_THAY_PHU_THUY: {
+                    List<Menu> bt = new ArrayList<>();
+                    bt.add(Menu.builder().name("Xem bói hôm nay").action(() -> {
+                        try {
+                            avatar.service.NpcFunService.witchFortune(us);
+                        } catch (IOException e) {
+                            throw new RuntimeException(e);
+                        }
+                    }).build());
+                    bt.add(Menu.builder().name("Thoát").build());
+                    us.setMenus(bt);
+                    us.getAvatarService().openMenuOption(npcId, 0, bt);
+                    break;
+                }
+                case NpcName.PHU_THUY_BONG_TOI: {
+                    List<Menu> bd = new ArrayList<>();
+                    bd.add(Menu.builder().name("Luyện dược đen (3.000 xu)").action(() -> {
+                        try {
+                            avatar.service.NpcFunService.darkBrew(us);
+                        } catch (IOException e) {
+                            throw new RuntimeException(e);
+                        }
+                    }).build());
+                    bd.add(Menu.builder().name("Xem hướng dẫn").action(() -> {
+                        us.getAvatarService().customTab("Hướng dẫn", "Mỗi lần luyện dược tốn 3.000 xu, tối đa 3 lần/ngày. Nồi dược có thể nổ tung mất trắng, hoá vàng lỏng bán được xu, kết tinh lượng, hoặc luyện ra một món đồ ma quái (hạn 15 ngày).");
+                    }).build());
+                    bd.add(Menu.builder().name("Thoát").build());
+                    us.setMenus(bd);
+                    us.getAvatarService().openMenuOption(npcId, 0, bd);
+                    break;
+                }
+                case NpcName.PRETTY_WITCH: {
+                    List<Menu> pw = new ArrayList<>();
+                    pw.add(Menu.builder().name("Đổi quà ma thuật (20.000 xu)").action(() -> {
+                        try {
+                            avatar.service.NpcFunService.prettyGacha(us);
+                        } catch (IOException e) {
+                            throw new RuntimeException(e);
+                        }
+                    }).build());
+                    pw.add(Menu.builder().name("Xem hướng dẫn").action(() -> {
+                        us.getAvatarService().customTab("Hướng dẫn", "Mỗi lần đổi quà tốn 20.000 xu, tối đa 2 lần/ngày. Quà là một món đồ theo giới tính của bạn: 85% hạn dùng 7 ngày, 15% may mắn được món vĩnh viễn.");
+                    }).build());
+                    pw.add(Menu.builder().name("Thoát").build());
+                    us.setMenus(pw);
+                    us.getAvatarService().openMenuOption(npcId, 0, pw);
+                    break;
+                }
+                case NpcName.ZOMBIE: {
+                    List<Menu> zb = new ArrayList<>();
+                    List<int[]> dishes = avatar.service.NpcFunService.zombieDishes(us);
+                    if (dishes.isEmpty()) {
+                        zb.add(Menu.builder().name("Cho Zombie ăn").action(() -> {
+                            us.getAvatarService().serverDialog("Zombie: Đói... Ta chỉ ăn món ĐÃ NẤU trong Kho nông sản. Vào Bếp nấu món gì đó rồi mang tới đây nhé!");
+                        }).build());
+                    } else {
+                        List<Menu> subs = new ArrayList<>();
+                        for (int[] d : dishes) {
+                            final int pid = d[0];
+                            subs.add(Menu.builder().name(
+                                    avatar.service.NpcFunService.DISH_NAMES.getOrDefault(pid, "Món ngon")
+                                    + " (có " + d[1] + ")").action(() -> {
+                                try {
+                                    avatar.service.NpcFunService.feedZombie(us, pid);
+                                } catch (IOException e) {
+                                    throw new RuntimeException(e);
+                                }
+                            }).build());
+                        }
+                        zb.add(Menu.builder().name("Cho Zombie ăn").menus(subs).build());
+                    }
+                    zb.add(Menu.builder().name("Xem hướng dẫn").action(() -> {
+                        us.getAvatarService().customTab("Hướng dẫn", "Zombie chỉ ăn món đã nấu chín (trong Kho nông sản). Cho ăn 1 món, tối đa 3 lần/ngày: Zombie vui sẽ nhả xu hoặc lượng tặng bạn, xui thì ói ra hết.");
+                    }).build());
+                    zb.add(Menu.builder().name("Thoát").build());
+                    us.setMenus(zb);
+                    us.getAvatarService().openMenuOption(npcId, 0, zb);
+                    break;
+                }
+                case NpcName.AN_XIN: {
+                    List<Menu> ax = new ArrayList<>();
+                    ax.add(Menu.builder().name("Cho 1.000 xu (+1 Phúc)").action(() -> {
+                        try {
+                            avatar.service.NpcFunService.beggarGive(us, 1000);
+                        } catch (IOException e) {
+                            throw new RuntimeException(e);
+                        }
+                    }).build());
+                    ax.add(Menu.builder().name("Cho 5.000 xu (+3 Phúc)").action(() -> {
+                        try {
+                            avatar.service.NpcFunService.beggarGive(us, 5000);
+                        } catch (IOException e) {
+                            throw new RuntimeException(e);
+                        }
+                    }).build());
+                    ax.add(Menu.builder().name("Cho 20.000 xu (+8 Phúc)").action(() -> {
+                        try {
+                            avatar.service.NpcFunService.beggarGive(us, 20000);
+                        } catch (IOException e) {
+                            throw new RuntimeException(e);
+                        }
+                    }).build());
+                    ax.add(Menu.builder().name("Đổi 20 điểm Phúc lấy 5 lượng").action(() -> {
+                        try {
+                            avatar.service.NpcFunService.beggarExchange(us);
+                        } catch (IOException e) {
+                            throw new RuntimeException(e);
+                        }
+                    }).build());
+                    ax.add(Menu.builder().name("Xem hướng dẫn").action(() -> {
+                        us.getAvatarService().customTab("Hướng dẫn", "Cho tiền ông lão để tích điểm Phúc: 1.000 xu = 1 Phúc, 5.000 xu = 3 Phúc, 20.000 xu = 8 Phúc, tối đa 10 lần cho/ngày. Đủ 20 Phúc đổi được 5 lượng. Nghe nói ông lão này giàu ngầm, thỉnh thoảng sẽ trả ơn gấp đôi...");
+                    }).build());
+                    ax.add(Menu.builder().name("Thoát").build());
+                    us.setMenus(ax);
+                    us.getAvatarService().openMenuOption(npcId, 0, ax);
+                    break;
+                }
 //                    case NpcName.VE_SO:{
 //                        List<Menu> listet = new ArrayList<>();
 //                        List<Item> Items = Part.shopByPart(PartManager.getInstance().getParts());

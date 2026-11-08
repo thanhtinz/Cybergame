@@ -446,6 +446,13 @@ public class MessageHandler implements IMessageHandler {
                         }
                         break;
                     }
+                    // [CREATE] Tính năng 12 NPC đứng + chat (gói −126)
+                    case Cmd.NPCFUN: {
+                        if (this.client.user != null) {
+                            new avatar.service.NpcFunService(this.client).onMessage(mss);
+                        }
+                        break;
+                    }
                     // [PORT] Đấu giá ngược (gói −117)
                     case Cmd.AUCTION: {
                         if (this.client.user != null) {
