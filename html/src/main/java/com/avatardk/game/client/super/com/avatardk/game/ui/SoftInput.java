@@ -68,6 +68,13 @@ public class SoftInput {
     public static void beginFrame() {
         SEEN.clear();
         SEEN_KEEP.clear();
+        // Cài listener chạm DOM NGAY từ khung hình đầu tiên: trước đây
+        // nativeInstall chỉ được gọi trong openActive, mà openActive lại
+        // chỉ chạy từ chính listener đó — vòng tròn chết khiến listener
+        // không bao giờ được cài và bàn phím không bao giờ mở (lỗi thật
+        // trên điện thoại, bản desktop bị che vì gõ phím vật lý vẫn chạy
+        // qua đường keyTyped riêng của game).
+        if (!domReady) domReady = nativeInstall();
         pushMap();
     }
 
@@ -146,8 +153,7 @@ public class SoftInput {
 
     private static void openActive(String id, Reg r) {
         if (!domReady) {
-            nativeInstall();
-            domReady = true;
+            domReady = nativeInstall();
             pushMap();
         }
         if (id.equals(activeId)) {
@@ -179,10 +185,10 @@ public class SoftInput {
 
     // ---------- JSNI ----------
 
-    private static native void nativeInstall() /*-{
+    private static native boolean nativeInstall() /*-{
         var doc = $doc;
         var canvas = doc.querySelector('canvas');
-        if (!canvas) return;
+        if (!canvas) return false;
         var el = doc.getElementById('avatardk-softinput');
         if (!el) {
             el = doc.createElement('input');
@@ -226,6 +232,7 @@ public class SoftInput {
         canvas.addEventListener('touchstart', handler, {passive: true});
         canvas.addEventListener('touchend', handler, {passive: true});
         canvas.addEventListener('mousedown', handler);
+        return true;
     }-*/;
 
     private static native void nativeSetMap(double vx, double vy, double vw, double vh) /*-{
