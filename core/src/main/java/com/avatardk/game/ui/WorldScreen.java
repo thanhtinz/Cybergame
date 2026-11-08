@@ -6565,9 +6565,9 @@ public class WorldScreen extends ScreenAdapter {
         if (!mgScreen && Math.hypot(x - ACT_CX, y - ACT_CY) <= ACT_R + 10) { interact(); return; }
         // chạm vào người chơi khác trên phố: mở panel tương tác của họ
         for (RemoteFigure f : remotes.values()) {
-            float sx = f.feetX - lastCamX + Ui.W / 2f;
-            float sy = f.feetY - lastCamY + Ui.H / 2f;
-            if (Math.abs(x - sx) <= 32 && y >= sy - 8 && y <= sy + 112) {
+            float sx = (f.feetX - lastCamX) * lastZoomS + Ui.W / 2f;
+            float sy = (f.feetY - lastCamY) * lastZoomS + Ui.H / 2f;
+            if (Math.abs(x - sx) <= 32 * lastZoomS && y >= sy - 8 * lastZoomS && y <= sy + 112 * lastZoomS) {
                 panelPlayer = f;
                 panelSub = false;
                 return;
@@ -6584,8 +6584,8 @@ public class WorldScreen extends ScreenAdapter {
         // trong nhà: chạm vào một ô = chọn ô đặt (khi đang cầm đồ) hoặc
         // chọn món nội thất tại ô đó để hiện sheet hành động
         if (houseIn) {
-            float wx = x + lastCamX - Ui.W / 2f;
-            float wy = y + lastCamY - Ui.H / 2f;
+            float wx = (x - Ui.W / 2f) / lastZoomS + lastCamX;
+            float wy = (y - Ui.H / 2f) / lastZoomS + lastCamY;
             int cx = (int) (wx / (24 * AvatarDkGame.HD));
             int cy = (int) ((mapBottomPx - wy) / (24 * AvatarDkGame.HD));
             if (cx >= 0 && cy >= 0 && cx < house.w && cy < house.h) {
@@ -7738,6 +7738,8 @@ public class WorldScreen extends ScreenAdapter {
 
     private float ppInfoH() { return infoPartnerName != null ? 172f : 130f; }
     private float lastCamX = 640f, lastCamY = 360f;
+    /** Hệ số phóng camera cho map nhỏ (nội thất): 1 = không phóng. */
+    private float lastZoomS = 1f;
 
     /** Hiệu ứng Đánh/Hôn (gói 59) đang chạy trên đầu một nhân vật. */
     private static class ActFx {
@@ -7758,12 +7760,12 @@ public class WorldScreen extends ScreenAdapter {
         if (panelPlayer == null) {
             return new float[]{(Ui.W - PP_W) / 2f, CHAT_Y + chatH + 14f, 1f};
         }
-        float sx = panelPlayer.feetX - lastCamX + Ui.W / 2f;
-        float feetScr = panelPlayer.feetY - lastCamY + Ui.H / 2f;
+        float sx = (panelPlayer.feetX - lastCamX) * lastZoomS + Ui.W / 2f;
+        float feetScr = (panelPlayer.feetY - lastCamY) * lastZoomS + Ui.H / 2f;
         // đỉnh đầu thật theo bounds của doll (mỗi doll cao thấp khác nhau)
         // + khoảng cho tên nhân vật vẽ trên đầu
         int[] b = panelPlayer.doll.bounds(panelPlayer.anim.frameIndex());
-        float headTop = feetScr + (-b[1]) * AvatarDkGame.HD + 28f;
+        float headTop = feetScr + (-b[1]) * AvatarDkGame.HD * lastZoomS + 28f;
         float px = MathUtils.clamp(sx - PP_W / 2f, 8f, Ui.W - PP_W - 8f);
         float py = Math.min(headTop + PP_TAIL, Ui.H - PP_H - 6f);
         return new float[]{px, Math.max(py, 8f), 1f};
@@ -7794,7 +7796,7 @@ public class WorldScreen extends ScreenAdapter {
     }
     private float panelTailCx() {
         float[] g = playerPanelGeom();
-        float sx = panelPlayer != null ? panelPlayer.feetX - lastCamX + Ui.W / 2f : Ui.W / 2f;
+        float sx = panelPlayer != null ? (panelPlayer.feetX - lastCamX) * lastZoomS + Ui.W / 2f : Ui.W / 2f;
         return MathUtils.clamp(sx, g[0] + 26f, g[0] + PP_W - 26f);
     }
     private Texture tailTexture() {
@@ -11541,16 +11543,25 @@ public class WorldScreen extends ScreenAdapter {
         if (raceIn && racePets[raceFocus] != null) {
             focusX = racePets[raceFocus].x * AvatarDkGame.HD;
         }
-        float camX = MathUtils.clamp(focusX, Ui.W / 2f, Math.max(Ui.W / 2f, worldW - Ui.W / 2f));
+        // Map nội thất nhỏ hơn màn hình (không nền trời, có lưới thật) và
+        // nhà người chơi: PHÓNG camera cho phòng phủ kín màn hình như trên
+        // màn điện thoại hẹp của bản gốc, thay vì lọt thỏm giữa nền đen.
+        float zoomS = 1f;
+        if ((houseIn || (mapDef.bg == null && mapDef.gridW > 0))
+                && (worldW < Ui.W || worldH < Ui.H)) {
+            zoomS = Math.min(2.5f, Math.max(Ui.W / worldW, Ui.H / worldH));
+        }
+        float vw = Ui.W / zoomS, vh = Ui.H / zoomS;
+        float camX = MathUtils.clamp(focusX, vw / 2f, Math.max(vw / 2f, worldW - vw / 2f));
         // Camera dọc theo AvCamera của gốc: mặc định NEO ĐÁY map vào đáy màn hình
         // (yTo = Hmap*w - hCan). Ngoại lệ căn giữa dọc: TYPEMAP 57/58/59 (client
         // 58/59/60) trong AvCamera.init và các map không nền (bg = -1) trong setLimit.
         float camY;
-        if (worldH <= Ui.H) {
-            // neo đáy: camY = H/2 (đáy map ở đáy màn hình); căn giữa: camY = tâm map
-            camY = centerVertically() ? worldH / 2f : Ui.H / 2f;
+        if (worldH <= vh) {
+            // neo đáy: camY = vh/2 (đáy map ở đáy màn hình); căn giữa: camY = tâm map
+            camY = centerVertically() ? worldH / 2f : vh / 2f;
         } else {
-            camY = MathUtils.clamp(playerFeetY + 120, Ui.H / 2f, worldH - Ui.H / 2f);
+            camY = MathUtils.clamp(playerFeetY + 120, vh / 2f, worldH - vh / 2f);
         }
         // Xe buýt đang chạy (sự kiện đến nơi): NÂNG khung hình lên khỏi khung
         // chat để thấy trọn xe + biển trạm + người chơi lúc xuống xe — khung
@@ -11562,9 +11573,11 @@ public class WorldScreen extends ScreenAdapter {
             busLift = chatH + 20f;
             camY -= busLift; // hạ tâm camera = thế giới nhô lên trên màn hình
         }
-        if (worldW <= Ui.W) camX = worldW / 2f;
+        if (worldW <= vw) camX = worldW / 2f;
         lastCamX = camX;
         lastCamY = camY;
+        lastZoomS = zoomS;
+        worldCam.zoom = 1f / zoomS;
         worldCam.position.set(camX, camY, 0);
         worldCam.update();
 
@@ -11903,10 +11916,11 @@ public class WorldScreen extends ScreenAdapter {
     /** Hai cột ĐEN hai bên khi map hẹp hơn màn hình — cuối paintM của gốc:
      *  phần ngoài chiều rộng map được tô đen (setColor(0)) thay vì để nền trời. */
     private void drawSideBars(float camX) {
-        if (worldW >= Ui.W || whiteTex == null) return;
-        float visLeft = camX - Ui.W / 2f;
-        float mapLeftOnScreen = -visLeft;
-        float mapRightOnScreen = worldW - visLeft;
+        float vw = Ui.W / lastZoomS;
+        if (worldW >= vw || whiteTex == null) return;
+        float visLeft = camX - vw / 2f;
+        float mapLeftOnScreen = -visLeft * lastZoomS;
+        float mapRightOnScreen = (worldW - visLeft) * lastZoomS;
         hudViewport.apply();
         batch.setProjectionMatrix(hudViewport.getCamera().combined);
         batch.begin();
