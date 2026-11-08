@@ -17235,6 +17235,11 @@ public class WorldScreen extends ScreenAdapter {
     private boolean nqzAnswered;
     private String nqzResult = "";
 
+    /** "%02d" tự viết — GWT không có String.format cho số nguyên. */
+    private static String pad2(int n) {
+        return n < 10 ? "0" + n : "" + n;
+    }
+
     private void handleNpcFunPacket(Msg m) {
         try {
             java.io.DataInputStream r = m.reader();
@@ -17335,7 +17340,7 @@ public class WorldScreen extends ScreenAdapter {
             batch.draw(Ui.roundedRect((int) chipW, (int) chipH, 12,
                 has ? new Color(0.16f, 0.24f, 0.34f, 0.95f) : new Color(0f, 0f, 0f, 0.3f),
                 GLASS_RIM), bx, chipY);
-            Ui.centered(batch, Ui.font, has ? String.format("%02d", lotTickets.get(i)) : "--",
+            Ui.centered(batch, Ui.font, has ? pad2(lotTickets.get(i)) : "--",
                 bx + chipW / 2f, chipY + 31,
                 has ? Color.WHITE : new Color(1f, 1f, 1f, 0.4f));
         }
@@ -17345,7 +17350,7 @@ public class WorldScreen extends ScreenAdapter {
         float pickY = top - 332;
         batch.draw(Ui.roundedRect(104, 56, 12, new Color(0f, 0f, 0f, 0.4f), GLASS_RIM),
             cx - 52, pickY);
-        Ui.centered(batch, Ui.fontTitle, String.format("%02d", lotPick), cx, pickY + 40,
+        Ui.centered(batch, Ui.fontTitle, pad2(lotPick), cx, pickY + 40,
             new Color(1f, 0.85f, 0.38f, 1f));
         String[] stepLbl = {"-10", "-1", "+1", "+10"};
         float[] stepX = {cx - 52 - 16 - 60 - 8 - 60, cx - 52 - 16 - 60, cx + 52 + 16, cx + 52 + 16 + 60 + 8};
@@ -17406,7 +17411,7 @@ public class WorldScreen extends ScreenAdapter {
                             } else {
                                 lotTickets.add(lotPick);
                                 lotLeft--;
-                                lotMsg = "Đã mua vé số " + String.format("%02d", lotPick) + ". Chúc bạn may mắn!";
+                                lotMsg = "Đã mua vé số " + pad2(lotPick) + ". Chúc bạn may mắn!";
                                 lotMsgOk = true;
                             }
                         }
