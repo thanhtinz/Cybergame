@@ -1648,7 +1648,12 @@ public class ScreenshotMain {
                         break;
                     case 192: // NPC 540 tren map [CREATE kiem doll + the ten]
                         if (frame == 1) { world.debugCloseHubGames(); world.debugGotoNpc(540); }
-                        if (frame == 15) { shot("shot-npc-witchmaster.png"); stage = 121; frame = 0; }
+                        if (frame == 15) { shot("shot-npc-witchmaster.png"); stage = 193; frame = 0; }
+                        break;
+                    case 193: // Diem cua mini game map 10 (dung gan NPC 185):
+                        // kiem nhan noi + vong sang, khong con khoi cua kinh
+                        if (frame == 1) { world.debugCloseHubGames(); world.debugGotoMiniDoor(); }
+                        if (frame == 15) { shot("shot-minidoor.png"); stage = 121; frame = 0; }
                         break;
 
                     case 121: // nền ban ngày ở thành phố (kiểm lớp trời/BGMap)

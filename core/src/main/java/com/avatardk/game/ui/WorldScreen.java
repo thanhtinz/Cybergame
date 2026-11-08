@@ -11711,20 +11711,31 @@ public class WorldScreen extends ScreenAdapter {
                     break;
                 case DrawItem.DOOR: {
                     // CỬA MINI GAME trong park (bản chính có
-                    // doorMiniGame — điểm vào hub thay cho ô menu)
+                    // doorMiniGame — điểm vào hub thay cho ô menu).
+                    // Gốc KHÔNG có asset cánh cửa riêng: điểm vào là một
+                    // vị trí trong map như trạm xe buýt (điểm vô hình).
+                    // Khối cửa kính tự vẽ trước đây bị Tín chê "thêm vào
+                    // xấu quá" (2026-11-07) — đã gỡ; giờ chỉ khi đứng gần
+                    // mới hiện vòng sáng dưới chân điểm + nhãn tên nổi.
                     float dx = it.x, dy = it.y;
-                    batch.draw(Ui.roundedRect(84, 16, 8,
-                        new Color(0.30f, 0.85f, 1f, 0.30f),
-                        new Color(0, 0, 0, 0)), dx - 42, dy - 6);
-                    batch.draw(Ui.roundedRect(76, 118, 34,
-                        new Color(0.07f, 0.13f, 0.24f, 0.94f), GLASS_RIM),
-                        dx - 38, dy);
-                    Texture mgIc = game.texture("iconmenu/minigame.png");
-                    batch.draw(mgIc, dx - 23, dy + 56, 46, 46);
-                    Ui.centered(batch, Ui.fontTiny, "MINI GAME", dx, dy + 44,
-                        new Color(1f, 0.85f, 0.45f, 1f));
-                    Ui.centered(batch, Ui.fontSmall, "Cửa mini game", dx, dy + 142,
-                        Color.WHITE);
+                    if (nearMiniDoor()) {
+                        float pulse = 0.55f + 0.3f * (float) Math.sin(netTime * 5f);
+                        batch.draw(Ui.roundedRect(76, 20, 10,
+                            new Color(0f, 0f, 0f, 0f),
+                            new Color(0.45f, 0.95f, 1f, pulse)), dx - 38, dy - 8);
+                        // nhãn qua lượt thẻ tên (vẽ sau cùng, không bị
+                        // biển hiệu/vật thể của map che như vẽ tại chỗ)
+                        NameTag tag = new NameTag();
+                        tag.feetX = dx;
+                        // nhãn nằm DƯỚI chân điểm (trên mặt đường): đặt
+                        // phía trên đầu sẽ chồng biển danh hiệu của chính
+                        // người chơi đang đứng ở điểm (đã dính khi kiểm)
+                        tag.topY = dy - 54;
+                        tag.name = "Cửa mini game";
+                        tag.color = Color.WHITE;
+                        tag.clanIcon = -1;
+                        nameTags.add(tag);
+                    }
                     break;
                 }
                 case DrawItem.NPC:
@@ -23562,6 +23573,22 @@ public class WorldScreen extends ScreenAdapter {
             if (f.data.id == 185) return f.feetY;
         }
         return -1;
+    }
+
+    /** Harness: đứng ngay điểm cửa mini game (map 10) để chụp kiểm. */
+    public void debugGotoMiniDoor() {
+        closeOtherPanels();
+        for (MapDef md : maps) {
+            if (md.id == 10) {
+                loadMap(md);
+                playerX = MINI_DOOR_X / 2f;
+                for (NpcFigure f : npcFigures) {
+                    if (f.data.id == 185) { playerY = f.data.y; break; }
+                }
+                debugBusSkip();
+                return;
+            }
+        }
     }
 
     private boolean nearMiniDoor() {
