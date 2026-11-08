@@ -17199,6 +17199,7 @@ public class WorldScreen extends ScreenAdapter {
 
     /** Harness: nhảy tới đứng cạnh 1 NPC (chụp kiểm doll + thẻ tên). */
     public void debugGotoNpc(int npcId) {
+        closeOtherPanels();
         for (MapDef md : maps) {
             for (MapNpc mn : md.npcs) {
                 if (mn.id == npcId) {
