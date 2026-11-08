@@ -784,6 +784,7 @@ public class WorldScreen extends ScreenAdapter {
         {"50", "Map"}, {"msg0", "Thư"}, {"balo", "Balo"},
         {"40", "Bạn bè"}, {"20", "Cá nhân"}, {"gear", "Cài đặt"},
         {"music", "Nhạc"}, {"clan", "Clan"}, {"bxh", "BXH"},
+        {"minigame", "Mini game"},
     };
     private static final float MENU_PX = Ui.W - 330f, MENU_PW = 312f;
     private static final float MENU_HEADER = 40f, MENU_CELL = 96f, MENU_CELL_H = 92f;
@@ -6442,6 +6443,11 @@ public class WorldScreen extends ScreenAdapter {
                             openClanPanel();
                         } else if (i == 8) {
                             openRankPanel();
+                        } else if (i == 9) {
+                            // Mini game vào menu theo lệnh Tín 2026-11-07
+                            // (trước gỡ khỏi menu theo điểm cửa trên map;
+                            // nay có cả hai điểm vào, hub mở như nhau)
+                            openMiniGameHub();
                         } else {
                             addChatLog(TAB_SYSTEM, null, "Tính năng " + MENU_ITEMS[i][1] + " đang được port ở đợt tiếp theo.", true);
                         }
