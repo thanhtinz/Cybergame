@@ -10566,7 +10566,7 @@ public class WorldScreen extends ScreenAdapter {
                 isSel ? new Color(1f, 0.78f, 0.30f, 1f)
                     : worn ? new Color(0.35f, 0.85f, 0.45f, 1f) : GLASS_RIM), cx, cy);
             if (has) {
-                drawPartIcon(items.get(gi).partId, cx + cell / 2f, cy + cell / 2f, 58);
+                drawPartIcon(items.get(gi).partId, cx + cell / 2f, cy + cell / 2f, 66);
                 if (worn) {
                     batch.draw(Ui.roundedRect(44, 22, 6,
                         new Color(0.20f, 0.55f, 0.28f, 0.95f), GLASS_RIM), cx + 4, cy + cell - 25);
@@ -10777,7 +10777,7 @@ public class WorldScreen extends ScreenAdapter {
                     has ? new Color(0.16f, 0.24f, 0.34f, 0.9f) : new Color(0f, 0f, 0f, 0.18f),
                     isSel ? new Color(1f, 0.78f, 0.30f, 1f) : GLASS_RIM), cx, cy);
                 if (has) {
-                    drawPartIcon(items.get(idx).partId, cx + cell / 2f, cy + cell / 2f, 58);
+                    drawPartIcon(items.get(idx).partId, cx + cell / 2f, cy + cell / 2f, 66);
                     if (items.get(idx).qty > 1) {
                         String qs = "x" + items.get(idx).qty;
                         float qw = Ui.textWidth(Ui.fontTiny, qs) + 12;
@@ -10959,7 +10959,7 @@ public class WorldScreen extends ScreenAdapter {
             batch.draw(Ui.roundedRect(cell, cell, 12,
                 has ? new Color(0.16f, 0.24f, 0.34f, 0.9f) : new Color(0f, 0f, 0f, 0.18f),
                 isSel ? new Color(1f, 0.78f, 0.30f, 1f) : GLASS_RIM), cx, cy);
-            if (has) drawPartIcon(items.get(idx).partId, cx + cell / 2f, cy + cell / 2f, 58);
+            if (has) drawPartIcon(items.get(idx).partId, cx + cell / 2f, cy + cell / 2f, 66);
         }
         // rương phụ đang khoá: phủ khoá lên lưới, không có thanh dưới
         if (boxSide && !boxUnlocked) {
@@ -27527,7 +27527,7 @@ public class WorldScreen extends ScreenAdapter {
                 batch.draw(Ui.roundedRect(SHOP_CELL, SHOP_CELL, 12,
                     new Color(0.16f, 0.24f, 0.34f, 0.9f),
                     isSel ? new Color(1f, 0.78f, 0.30f, 1f) : GLASS_RIM), cx, cy);
-                drawPartIcon(it.id, cx + SHOP_CELL / 2f, cy + SHOP_CELL / 2f + 2, 56);
+                drawPartIcon(it.id, cx + SHOP_CELL / 2f, cy + SHOP_CELL / 2f + 2, 76);
                 if (shopOtherGender(it)) {
                     // đồ giới khác: phủ mờ cả ô cho khác hẳn đồ mặc được
                     batch.draw(Ui.roundedRect(SHOP_CELL, SHOP_CELL, 12,

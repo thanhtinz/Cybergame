@@ -16,7 +16,8 @@ public class HtmlLauncher extends GwtApplication {
         GwtApplicationConfiguration cfg = new GwtApplicationConfiguration(true);
         cfg.padHorizontal = 0;
         cfg.padVertical = 0;
-        cfg.antialiasing = true;
+        // tắt khử răng cưa: MSAA làm mềm cạnh pixel art gây cảm giác mờ
+        cfg.antialiasing = false;
         return cfg;
     }
 
