@@ -11544,12 +11544,13 @@ public class WorldScreen extends ScreenAdapter {
             focusX = racePets[raceFocus].x * AvatarDkGame.HD;
         }
         // Map nội thất nhỏ hơn màn hình (không nền trời, có lưới thật) và
-        // nhà người chơi: PHÓNG camera cho phòng phủ kín màn hình như trên
-        // màn điện thoại hẹp của bản gốc, thay vì lọt thỏm giữa nền đen.
+        // nhà người chơi: chỉnh camera VỪA MÀN — thấy trọn cả phòng trong
+        // một khung hình, căn giữa, không phải cuộn (lệnh Tín 2026-11-07).
         float zoomS = 1f;
         if ((houseIn || (mapDef.bg == null && mapDef.gridW > 0))
                 && (worldW < Ui.W || worldH < Ui.H)) {
-            zoomS = Math.min(2.5f, Math.max(Ui.W / worldW, Ui.H / worldH));
+            zoomS = Math.max(0.7f, Math.min(2.5f,
+                    Math.min(Ui.W / worldW, Ui.H / worldH)));
         }
         float vw = Ui.W / zoomS, vh = Ui.H / zoomS;
         float camX = MathUtils.clamp(focusX, vw / 2f, Math.max(vw / 2f, worldW - vw / 2f));
@@ -11558,8 +11559,10 @@ public class WorldScreen extends ScreenAdapter {
         // 58/59/60) trong AvCamera.init và các map không nền (bg = -1) trong setLimit.
         float camY;
         if (worldH <= vh) {
-            // neo đáy: camY = vh/2 (đáy map ở đáy màn hình); căn giữa: camY = tâm map
-            camY = centerVertically() ? worldH / 2f : vh / 2f;
+            // neo đáy: camY = vh/2 (đáy map ở đáy màn hình); căn giữa: camY = tâm map.
+            // Riêng map đã chỉnh vừa màn (zoomS != 1) thì luôn căn giữa dọc
+            // cho phòng cân đối giữa khung hình.
+            camY = (zoomS != 1f || centerVertically()) ? worldH / 2f : vh / 2f;
         } else {
             camY = MathUtils.clamp(playerFeetY + 120, vh / 2f, worldH - vh / 2f);
         }
