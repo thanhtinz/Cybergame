@@ -11570,7 +11570,12 @@ public class WorldScreen extends ScreenAdapter {
         // nguyên camera neo đáy. Mọi map có trạm đều thấp (Hmap <= 8) nên
         // chỉ áp dụng ở nhánh neo đáy; xe rời trạm xong camera tự trả về.
         float busLift = 0f;
-        if (busPhase > 0 && worldH <= Ui.H && !centerVertically()) {
+        // Map co tram xe giu khung hinh nang THUONG TRUC (Tin bao
+        // 2026-11-07: bus di xong camera ha xuong, lan duong o day map
+        // chui xuong sau khung chat nen "mat luon phan duong xe") —
+        // cac map khac chi nang trong luc bus chay.
+        if ((busPhase > 0 || (mapDef != null && mapDef.stopX >= 0))
+                && worldH <= Ui.H && !centerVertically()) {
             busLift = chatH + 20f;
             camY -= busLift; // hạ tâm camera = thế giới nhô lên trên màn hình
         }
