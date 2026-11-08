@@ -11592,12 +11592,25 @@ public class WorldScreen extends ScreenAdapter {
         batch.setProjectionMatrix(worldCam.combined);
         batch.begin();
         if (houseIn) drawHouseTiles();
-        // dải tối dưới đáy map khi camera nâng vì xe buýt (che khoảng trống
-        // dưới đường vừa lộ ra, cùng tông hai cột đen hai bên của gốc)
-        if (busLift > 0 && whiteTex != null) {
-            batch.setColor(0.03f, 0.04f, 0.05f, 1f);
-            batch.draw(whiteTex, -60f, -busLift, worldW + 120f, busLift);
-            batch.setColor(Color.WHITE);
+        // Khoảng trống dưới đáy map khi camera nâng: lấp bằng chính mép
+        // dưới của map kéo dài xuống (mặt đường/vỉa hè nối tiếp xuống mép
+        // màn hình, như khi map neo đáy bình thường). Trước đây lấp một
+        // dải đen — Tín hỏi 2026-11-07 "bên dưới đen thui vậy bản gốc có
+        // vậy ko": gốc KHÔNG có dải đen đó, map của gốc kéo tới mép dưới
+        // màn hình luôn.
+        if (busLift > 0 && !houseIn) {
+            for (int i = 0; i < strips.size(); i++) {
+                Texture t = strips.get(i);
+                int sh = Math.min(4, t.getHeight());
+                batch.draw(t, stripLefts.get(i), -busLift,
+                    t.getWidth(), busLift,
+                    0, t.getHeight() - sh, t.getWidth(), sh);
+            }
+            if (strips.isEmpty() && whiteTex != null) {
+                batch.setColor(0.03f, 0.04f, 0.05f, 1f);
+                batch.draw(whiteTex, -60f, -busLift, worldW + 120f, busLift);
+                batch.setColor(Color.WHITE);
+            }
         }
         for (int i = 0; !houseIn && i < strips.size(); i++) {
             Texture t = strips.get(i);
